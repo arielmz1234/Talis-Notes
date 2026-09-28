@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
@@ -21,8 +22,9 @@ import androidx.compose.ui.unit.sp
 import com.tali.notes.R
 
 /**
- * Lilac studio: soft lilac surfaces from Tali's palette (#E6D8FE → #D1AEFF), plum-tinted ink for
- * text, and a deeper violet for actions so buttons stay readable on the pale tones.
+ * Lilac and sky: soft lilac surfaces from Tali's palette (#E6D8FE → #D1AEFF) meeting light blues
+ * (#E6F0FF → #7FA6F2), plum-tinted ink for text, and violet-to-blue for actions so buttons stay
+ * readable on the pale tones.
  */
 @Immutable
 data class TaliColors(
@@ -43,8 +45,22 @@ data class TaliColors(
   val danger: Color,
   val scrim: Color,
   val paper: Color,
+  /** Secondary blue for tools, handles and links. */
+  val blue: Color,
+  val blueSoft: Color,
+  val sky: Color,
+  /** Bottom of the sidebar gradient (lilac at the top fading to light blue). */
+  val sidebarEnd: Color,
   val isDark: Boolean,
-)
+) {
+  /** The signature violet-to-blue used on primary buttons. */
+  val accentBrush: Brush
+    get() = Brush.linearGradient(listOf(accent, blue))
+
+  /** Lilac-to-sky wash for highlights and selected rows. */
+  val washBrush: Brush
+    get() = Brush.horizontalGradient(listOf(lilac, sky))
+}
 
 /** Tali's palette, lightest to deepest. */
 object Lilac {
@@ -53,6 +69,17 @@ object Lilac {
   val L200 = Color(0xFFDFC4FF)
   val L300 = Color(0xFFD7BAFF)
   val L400 = Color(0xFFD1AEFF)
+}
+
+/** Light blues that pair with the lilacs, lightest to deepest. */
+object Sky {
+  val S50 = Color(0xFFE8F1FF)
+  val S100 = Color(0xFFD6E6FF)
+  val S200 = Color(0xFFBFD9FF)
+  val S300 = Color(0xFF9DC2FA)
+  val S400 = Color(0xFF7FA6F2)
+  val Blue = Color(0xFF4F7BE8)
+  val BlueDeep = Color(0xFF2F5AD1)
 }
 
 private val Light =
@@ -74,6 +101,10 @@ private val Light =
     danger = Color(0xFFD1435B),
     scrim = Color(0x661F1A2E),
     paper = Color(0xFFFDFCFF),
+    blue = Sky.Blue,
+    blueSoft = Sky.S50,
+    sky = Sky.S100,
+    sidebarEnd = Color(0xFFE6EFFF),
     isDark = false,
   )
 
@@ -96,6 +127,10 @@ private val Dark =
     danger = Color(0xFFFF7A8E),
     scrim = Color(0x99000000),
     paper = Color(0xFFFDFCFF),
+    blue = Color(0xFF8FB0FF),
+    blueSoft = Color(0xFF22304F),
+    sky = Color(0xFF2E4470),
+    sidebarEnd = Color(0xFF161C2B),
     isDark = true,
   )
 

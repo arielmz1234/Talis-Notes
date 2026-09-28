@@ -101,9 +101,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       if (field == value) return
       field = value
       selectionPaint.color = value
-      handleStroke.color = value
       lassoPaint.color = value
       lassoFill.color = (value and 0x00FFFFFF) or 0x1C000000
+      invalidate()
+    }
+
+  /** Colour of the drag handles on shapes and selections (blue, to stand apart from the lilac lasso). */
+  var handleColor = 0xFF4F7BE8.toInt()
+    set(value) {
+      if (field == value) return
+      field = value
+      handleStroke.color = value
       invalidate()
     }
 
@@ -192,7 +200,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.STROKE
       strokeWidth = 2f * density
-      color = accentColor
+      color = 0xFF4F7BE8.toInt()
     }
   private val eraserPaint =
     Paint(Paint.ANTI_ALIAS_FLAG).apply {

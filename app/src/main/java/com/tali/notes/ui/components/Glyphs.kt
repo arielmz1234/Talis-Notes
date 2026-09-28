@@ -162,11 +162,11 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
           y += step
         }
       }
-      PaperStyle.GRID -> grid(step, line, 1f, both = true)
-      PaperStyle.LINES -> grid(step * 1.4f, line, 1.2f, both = false)
+      PaperStyle.GRID -> grid(step, Color(0xFFC7DBF8), 1f, both = true)
+      PaperStyle.LINES -> grid(step * 1.4f, Color(0xFFB9D2F6), 1.2f, both = false)
       PaperStyle.ENGINEERING -> {
-        grid(step / 2.5f, Color(0xFFEBE3FB), 0.8f, both = true)
-        grid(step * 2f, Color(0xFFC9B3F0), 1.2f, both = true)
+        grid(step / 2.5f, Color(0xFFE4EDFC), 0.8f, both = true)
+        grid(step * 2f, Color(0xFFA9C1F2), 1.2f, both = true)
       }
     }
     drawRoundRect(c.line, cornerRadius = CornerRadius(8.dp.toPx()), style = Stroke(1.dp.toPx()))

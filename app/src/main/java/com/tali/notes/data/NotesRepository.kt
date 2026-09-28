@@ -41,9 +41,9 @@ data class NotebookMeta(
 
 data class Folder(val id: String, val name: String, val color: Int, val position: Int)
 
-/** Cover colours that sit well with the lilac theme: lavender, orchid, periwinkle, rose, mint, apricot, plum. */
+/** Cover colours that sit with the lilac and sky theme: lavender, sky, orchid, blue, rose, mint, plum. */
 val COVER_COLORS =
-  listOf(0xFF9B7BE0, 0xFFC78FD9, 0xFF7FA0E6, 0xFFE59BB8, 0xFF7DC4B2, 0xFFF0B97A, 0xFF5E4B8B).map { it.toInt() }
+  listOf(0xFF9B7BE0, 0xFF7FB5F0, 0xFFC78FD9, 0xFF4F7BE8, 0xFFE59BB8, 0xFF7DC4B2, 0xFF5E4B8B).map { it.toInt() }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotesRepository(private val context: Context) {

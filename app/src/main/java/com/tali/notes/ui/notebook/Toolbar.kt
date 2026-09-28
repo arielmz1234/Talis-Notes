@@ -70,14 +70,14 @@ fun MainToolbar(
       }
     }
     Divider()
-    ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER) { onTool(Tool.ERASER) }
-    ToolButton(TaliIcons.Lasso, "Lasso", selected = tool == Tool.LASSO) { onTool(Tool.LASSO) }
+    ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true) { onTool(Tool.ERASER) }
+    ToolButton(TaliIcons.Lasso, "Lasso", selected = tool == Tool.LASSO, blue = true) { onTool(Tool.LASSO) }
     Box(contentAlignment = Alignment.Center) {
-      ToolButton(Icons.Outlined.Category, "Shapes", selected = tool == Tool.SHAPE) { onTool(Tool.SHAPE) }
+      ToolButton(Icons.Outlined.Category, "Shapes", selected = tool == Tool.SHAPE, blue = true) { onTool(Tool.SHAPE) }
       if (tool == Tool.SHAPE) {
         // Show which shape the shape tool will draw.
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.accentSoft).clickable { onTool(Tool.SHAPE) }, contentAlignment = Alignment.Center) {
-          ShapeIcon(shapeKind, c.accent, size = 26.dp)
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.blueSoft).clickable { onTool(Tool.SHAPE) }, contentAlignment = Alignment.Center) {
+          ShapeIcon(shapeKind, c.blue, size = 26.dp)
         }
       }
     }

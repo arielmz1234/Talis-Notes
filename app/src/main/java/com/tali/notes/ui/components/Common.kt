@@ -111,7 +111,7 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
 
 /** Round icon button with a pressed scale and optional selected tint. */
 @Composable
-fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enabled: Boolean = true, size: Dp = 44.dp, onClick: () -> Unit) {
+fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enabled: Boolean = true, size: Dp = 44.dp, blue: Boolean = false, onClick: () -> Unit) {
   val c = Tali.colors
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
@@ -119,13 +119,13 @@ fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enab
     Modifier.size(size)
       .scale(if (pressed) 0.9f else 1f)
       .clip(RoundedCornerShape(14.dp))
-      .background(if (selected) c.accentSoft else Color.Transparent)
+      .background(if (selected) (if (blue) c.blueSoft else c.accentSoft) else Color.Transparent)
       .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
     contentAlignment = Alignment.Center,
   ) {
     Icon(icon, contentDescription = label, tint = when {
       !enabled -> c.inkFaint.copy(alpha = 0.5f)
-      selected -> c.accent
+      selected -> if (blue) c.blue else c.accent
       else -> c.ink
     }, modifier = Modifier.size(22.dp))
   }
@@ -186,7 +186,7 @@ fun PrimaryButton(text: String, icon: ImageVector? = null, modifier: Modifier = 
       .scale(if (pressed) 0.97f else 1f)
       .height(48.dp)
       .clip(RoundedCornerShape(16.dp))
-      .background(c.accent)
+      .background(c.accentBrush)
       .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
       .padding(horizontal = 20.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -242,7 +242,7 @@ fun RulerDivider(modifier: Modifier = Modifier) {
         i % 5 == 0 -> 6f
         else -> 3.5f
       } * density
-      drawLine(if (i % 10 == 0) c.inkFaint else c.line, Offset(x, baseY), Offset(x, baseY - h), 1f * density)
+      drawLine(if (i % 10 == 0) c.blue.copy(alpha = 0.55f) else c.line, Offset(x, baseY), Offset(x, baseY - h), 1f * density)
       if (i % 10 == 0 && i > 0) drawText(measurer, (i / 10).toString(), Offset(x + 3f * density, 0f), labelStyle)
       i++
       x += mm

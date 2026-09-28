@@ -181,6 +181,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
           v.shapeKind = vm.shapeKind
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
           v.accentColor = c.accent.toArgb()
+          v.handleColor = c.blue.toArgb()
         },
         onRelease = { v ->
           v.detach()
@@ -396,8 +397,8 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
     }
   }
   AnimatedVisibility(message != null, modifier = modifier, enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut()) {
-    Box(Modifier.clip(RoundedCornerShape(14.dp)).background(if (c.isDark) c.sunken else c.ink).padding(horizontal = 16.dp, vertical = 10.dp)) {
-      Text(message ?: "", style = MaterialTheme.typography.labelLarge, color = if (c.isDark) c.ink else c.surface)
+    Box(Modifier.clip(RoundedCornerShape(14.dp)).background(c.accentBrush).padding(horizontal = 16.dp, vertical = 10.dp)) {
+      Text(message ?: "", style = MaterialTheme.typography.labelLarge, color = c.onAccent)
     }
   }
 }

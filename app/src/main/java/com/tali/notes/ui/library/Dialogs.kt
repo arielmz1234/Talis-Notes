@@ -85,10 +85,15 @@ fun NewNotebookDialog(defaultPaper: PaperStyle, folderName: String? = null, onDi
   var title by remember { mutableStateOf(TextFieldValue("")) }
   var paper by remember { mutableStateOf(defaultPaper) }
   DialogCard(onDismiss, width = 600) {
-    Text("New notebook", style = MaterialTheme.typography.titleLarge, color = c.ink)
-    if (folderName != null) {
-      Spacer(Modifier.height(4.dp))
-      Text("In $folderName", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    Row(verticalAlignment = Alignment.Top) {
+      Column(Modifier.weight(1f)) {
+        Text("New notebook", style = MaterialTheme.typography.titleLarge, color = c.ink)
+        if (folderName != null) {
+          Spacer(Modifier.height(4.dp))
+          Text("In $folderName", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+        }
+      }
+      com.tali.notes.ui.components.DriftingCloud(width = 84.dp, variant = 2, driftDp = 5f)
     }
     Spacer(Modifier.height(18.dp))
     TitleField(title, { title = it }, "Statics, week 3") { onCreate(title.text, paper) }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -60,11 +61,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
@@ -81,8 +84,13 @@ import com.tali.notes.data.NotebookMeta
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.theme.Lilac
+import com.tali.notes.theme.Sky
 import com.tali.notes.theme.Tali
+import com.tali.notes.ui.components.SkyBand
+import com.tali.notes.ui.components.SkyClouds
+import com.tali.notes.ui.components.DriftingCloud
 import com.tali.notes.ui.components.PaperSwatch
+import com.tali.notes.ui.components.Sparkle
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.RulerDivider
 import com.tali.notes.ui.components.SectionLabel
@@ -114,7 +122,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   val context = LocalContext.current
   var crashReport by remember { mutableStateOf(CrashLog.pendingReport(context)) }
 
-  Row(Modifier.fillMaxSize().background(c.background)) {
+  // One continuous sky across the top of the whole screen; the sidebar and notebooks sit below it.
+  Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to c.background, 0.7f to c.background, 1f to c.sidebarEnd))) {
+  SkyBand(height = 360.dp)
+  SkyClouds()
+  Row(Modifier.fillMaxSize()) {
     Sidebar(
       folders = folders,
       notebooks = all,
@@ -125,8 +137,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       onRecolorFolder = vm::recolorFolder,
       onDeleteFolder = { deletingFolder = it },
     )
-    Column(Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 36.dp, end = 36.dp)) {
-      Spacer(Modifier.height(30.dp))
+    Box(Modifier.weight(1f).fillMaxHeight()) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 36.dp, end = 36.dp)) {
+      Spacer(Modifier.height(112.dp))
       Row(verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
           Text(currentFolder?.name ?: "All notebooks", style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -192,6 +205,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         }
       }
     }
+    }
+  }
   }
 
   if (creating) {
@@ -248,7 +263,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
 private fun CrashBanner(onSend: () -> Unit, onDismiss: () -> Unit) {
   val c = Tali.colors
   Row(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.accentSoft).border(1.dp, Lilac.L300, RoundedCornerShape(16.dp)).padding(horizontal = 18.dp, vertical = 12.dp),
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.horizontalGradient(listOf(c.accentSoft, c.blueSoft))).border(1.dp, Lilac.L300, RoundedCornerShape(16.dp)).padding(horizontal = 18.dp, vertical = 12.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Column(Modifier.weight(1f)) {
@@ -275,18 +290,18 @@ private fun Sidebar(
   onDeleteFolder: (Folder) -> Unit,
 ) {
   val c = Tali.colors
+  // No panel colour of its own: the sidebar shares the page, so there's no seam to see.
+  Box(Modifier.width(268.dp).fillMaxHeight()) {
   Column(
-    Modifier.width(268.dp)
-      .fillMaxHeight()
-      .background(c.sidebar)
+    Modifier.fillMaxSize()
       .windowInsetsPadding(WindowInsets.safeDrawing)
       .padding(horizontal = 18.dp)
   ) {
-    Spacer(Modifier.height(34.dp))
+    Spacer(Modifier.height(120.dp))
     Wordmark(Modifier.padding(start = 8.dp))
     Spacer(Modifier.height(30.dp))
     NavRow(
-      icon = { Icon(Icons.Outlined.AutoStories, null, tint = if (selected == null) c.accent else c.inkMuted, modifier = Modifier.size(20.dp)) },
+      icon = { Icon(Icons.Outlined.AutoStories, null, tint = if (selected == null) c.blue else c.inkMuted, modifier = Modifier.size(20.dp)) },
       label = "All notebooks",
       count = notebooks.size,
       selected = selected == null,
@@ -348,14 +363,15 @@ private fun Sidebar(
         }
       }
     }
-    Row(Modifier.padding(horizontal = 10.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-      Icon(Icons.Outlined.CheckCircle, null, tint = c.accent, modifier = Modifier.size(16.dp))
+    Row(Modifier.padding(horizontal = 10.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+      Icon(Icons.Outlined.CheckCircle, null, tint = c.blue, modifier = Modifier.size(16.dp))
       Spacer(Modifier.width(8.dp))
       Column {
         Text("Saved on this tablet", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
         Text("Every stroke saves as you write", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
       }
     }
+  }
   }
 }
 
@@ -375,7 +391,7 @@ private fun Wordmark(modifier: Modifier = Modifier) {
         lineTo(left - 2.dp.toPx(), top + h * 1.05f)
         close()
       }
-      drawPath(path, if (c.isDark) c.lilac else Lilac.L300)
+      drawPath(path, Brush.horizontalGradient(listOf(if (c.isDark) c.lilac else Lilac.L300, if (c.isDark) c.sky else Sky.S200), startX = left, endX = size.width))
     }
     Text("Tali's Notes", style = MaterialTheme.typography.headlineMedium, color = c.ink)
   }
@@ -388,7 +404,7 @@ private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, sele
     Modifier.fillMaxWidth()
       .height(44.dp)
       .clip(RoundedCornerShape(14.dp))
-      .background(if (selected) (if (c.isDark) c.accentSoft else Lilac.L200) else Color.Transparent)
+      .background(if (selected) c.washBrush else SolidColor(Color.Transparent))
       .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
       .padding(horizontal = 12.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -467,7 +483,7 @@ private fun NotebookCard(
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(1.32f)
-        .shadow(12.dp, shape, ambientColor = Color(0x227A4ED6), spotColor = Color(0x337A4ED6))
+        .shadow(12.dp, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6))
         .clip(shape)
         .background(c.paper)
         .border(1.dp, c.line, shape)
@@ -531,15 +547,20 @@ private fun NotebookCard(
 private fun EmptyLibrary(onCreate: () -> Unit) {
   val c = Tali.colors
   Column(Modifier.fillMaxWidth().padding(top = 50.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-    Box(Modifier.size(200.dp, 150.dp).clip(RoundedCornerShape(18.dp)).background(Lilac.L50.copy(alpha = if (c.isDark) 0.15f else 1f)).padding(14.dp)) {
+    Box(Modifier.size(320.dp, 190.dp), contentAlignment = Alignment.Center) {
+    DriftingCloud(Modifier.align(Alignment.TopStart).offset(y = 6.dp), width = 96.dp, variant = 1, driftDp = 8f)
+    DriftingCloud(Modifier.align(Alignment.BottomEnd).offset(y = (-4).dp), width = 110.dp, variant = 0, driftDp = 10f, periodMs = 12000)
+    Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = 18.dp), size = 12.dp, color = Sky.S400)
+    Box(Modifier.size(200.dp, 150.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Lilac.L50, Sky.S100)), alpha = if (c.isDark) 0.15f else 1f).padding(14.dp)) {
       PaperSwatch(PaperStyle.ENGINEERING, Modifier.fillMaxSize())
       Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         ShapeIcon(ShapeKind.PIN_SUPPORT, c.ink, size = 44.dp)
-        ShapeIcon(ShapeKind.POINT_LOAD, c.accent, size = 44.dp)
+        ShapeIcon(ShapeKind.POINT_LOAD, c.blue, size = 44.dp)
         ShapeIcon(ShapeKind.ROLLER_SUPPORT, c.ink, size = 44.dp)
       }
     }
-    Spacer(Modifier.height(28.dp))
+    }
+    Spacer(Modifier.height(20.dp))
     Text("Start your first notebook", style = MaterialTheme.typography.headlineMedium, color = c.ink)
     Spacer(Modifier.height(8.dp))
     Text("One endless page per notebook. Everything saves as you write.", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
@@ -552,7 +573,10 @@ private fun EmptyLibrary(onCreate: () -> Unit) {
 private fun EmptyFolder(onCreate: () -> Unit) {
   val c = Tali.colors
   Column(Modifier.fillMaxWidth().padding(top = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-    Icon(Icons.Outlined.FolderOpen, null, tint = Lilac.L400, modifier = Modifier.size(56.dp))
+    Box(contentAlignment = Alignment.Center) {
+      Icon(Icons.Outlined.FolderOpen, null, tint = Sky.S400, modifier = Modifier.size(64.dp).offset(y = 18.dp))
+      DriftingCloud(Modifier.offset(x = 34.dp, y = (-22).dp), width = 72.dp, variant = 2, driftDp = 6f)
+    }
     Spacer(Modifier.height(16.dp))
     Text("This folder is empty", style = MaterialTheme.typography.headlineMedium, color = c.ink)
     Spacer(Modifier.height(8.dp))

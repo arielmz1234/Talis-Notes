@@ -22,7 +22,8 @@ val DEFAULT_COLORS =
     0xFF7A4FD8, // violet
     0xFFFFD60A, // highlighter yellow
     0xFFFF6FA8, // pink
-    0xFF22B8CF, // cyan
+    0xFF9B6BF2, // lilac
+    0xFF5AA9E6, // sky blue
   ).map { it.toInt() }
 
 @Serializable

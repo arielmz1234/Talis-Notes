@@ -10,8 +10,11 @@ import kotlin.math.floor
 class PaperRenderer {
   var paperColor = 0xFFFDFCFF.toInt()
   var lineColor = 0xFFD9CCF2.toInt()
-  var engineeringMinor = 0xFFEBE3FB.toInt()
-  var engineeringMajor = 0xFFC9B3F0.toInt()
+
+  /** Ruled lines and grids use light blue, like a school notebook; dots stay lilac. */
+  var blueLine = 0xFFC7DBF8.toInt()
+  var engineeringMinor = 0xFFE4EDFC.toInt()
+  var engineeringMajor = 0xFFA9C1F2.toInt()
 
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
   private var buffer = FloatArray(4096)
@@ -22,8 +25,8 @@ class PaperRenderer {
     when (style) {
       PaperStyle.BLANK -> Unit
       PaperStyle.DOTS -> dots(canvas, camera, width, height, 5 * mm)
-      PaperStyle.GRID -> grid(canvas, camera, width, height, 5 * mm, lineColor, 1f, horizontalOnly = false)
-      PaperStyle.LINES -> grid(canvas, camera, width, height, 8 * mm, lineColor, 1.2f, horizontalOnly = true)
+      PaperStyle.GRID -> grid(canvas, camera, width, height, 5 * mm, blueLine, 1f, horizontalOnly = false)
+      PaperStyle.LINES -> grid(canvas, camera, width, height, 8 * mm, blueLine, 1.2f, horizontalOnly = true)
       PaperStyle.ENGINEERING -> {
         grid(canvas, camera, width, height, 2 * mm, engineeringMinor, 0.8f, horizontalOnly = false)
         grid(canvas, camera, width, height, 10 * mm, engineeringMajor, 1.3f, horizontalOnly = false)
