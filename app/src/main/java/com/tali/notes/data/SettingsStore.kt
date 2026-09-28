@@ -58,6 +58,10 @@ data class AppSettings(
 
   val activeSlot: PenSlot
     get() = pens.firstOrNull { it.id == activePen } ?: pens.first()
+
+  /** The pen the shape tool draws with: the active pen, unless that's a highlighter, then the first writing pen. */
+  val shapeSlot: PenSlot
+    get() = activeSlot.takeIf { it.type != PenType.HIGHLIGHTER } ?: pens.firstOrNull { it.type != PenType.HIGHLIGHTER } ?: activeSlot
 }
 
 class SettingsStore(context: Context) {

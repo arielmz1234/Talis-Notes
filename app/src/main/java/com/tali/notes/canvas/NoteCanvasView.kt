@@ -183,7 +183,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val selectionPaint =
     Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.STROKE
-      strokeWidth = 1.5f * density
+      strokeWidth = maxOf(2f, 1.5f * density)
       pathEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
       color = accentColor
     }
@@ -325,6 +325,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val r = screenRect(b, dragTransform.takeIf { mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION } ?: Affine.IDENTITY)
     val pad = 8f * density
     r.inset(-pad, -pad)
+    // Snap to the pixel grid so all four dashed edges look equally crisp.
+    r.set(Math.round(r.left) + 0.5f, Math.round(r.top) + 0.5f, Math.round(r.right) + 0.5f, Math.round(r.bottom) + 0.5f)
     canvas.drawRoundRect(r, 6f * density, 6f * density, selectionPaint)
     drawHandle(canvas, r.right, r.bottom, 7f)
   }
@@ -635,7 +637,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun buildShape(p0: Pt, p1: Pt): ShapeItem {
-    val slot = settings.activeSlot
+    val slot = settings.shapeSlot
     var geometry = shapeKind.create(p0, p1)
     if (geometry is LineShape) {
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)

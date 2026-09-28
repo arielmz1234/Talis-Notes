@@ -43,6 +43,9 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Search
@@ -347,7 +350,7 @@ private fun Sidebar(
             onLongClick = { menu = true },
           )
           DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-            DropdownMenuItem(text = { Text("Rename") }, onClick = {
+            DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = {
               menu = false
               onRenameFolder(f)
             })
@@ -355,7 +358,7 @@ private fun Sidebar(
               onRecolorFolder(f.id, it)
               menu = false
             }
-            DropdownMenuItem(text = { Text("Delete folder", color = c.danger) }, onClick = {
+            DropdownMenuItem(text = { Text("Delete folder", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = {
               menu = false
               onDeleteFolder(f)
             })
@@ -504,8 +507,8 @@ private fun NotebookCard(
       }
       DropdownMenu(expanded = menu, onDismissRequest = { menu = false; moving = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
         if (!moving) {
-          DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
-          DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; onDuplicate() })
+          DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
+          DropdownMenuItem(text = { Text("Duplicate") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; onDuplicate() })
           DropdownMenuItem(
             text = { Text("Move to folder") },
             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) },
@@ -516,7 +519,7 @@ private fun NotebookCard(
             menu = false
           }
           HorizontalDivider(color = c.line)
-          DropdownMenuItem(text = { Text("Delete", color = c.danger) }, onClick = { menu = false; onDelete() })
+          DropdownMenuItem(text = { Text("Delete", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = { menu = false; onDelete() })
         } else {
           Text("Move to", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
           DropdownMenuItem(

@@ -19,26 +19,33 @@ class PaperRenderer {
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
   private var buffer = FloatArray(4096)
 
+  /**
+   * When printing (PDF export), lines are hairlines in points and dense grids never fade out, so
+   * the page looks like real printed paper instead of a zoomed-out screen.
+   */
+  var print = false
+
   fun draw(canvas: Canvas, style: PaperStyle, camera: Camera, width: Int, height: Int) {
     canvas.drawColor(paperColor)
     val mm = 160f / 25.4f
+    val k = if (print) 0.45f else 1f
     when (style) {
       PaperStyle.BLANK -> Unit
       PaperStyle.DOTS -> dots(canvas, camera, width, height, 5 * mm)
-      PaperStyle.GRID -> grid(canvas, camera, width, height, 5 * mm, blueLine, 1f, horizontalOnly = false)
-      PaperStyle.LINES -> grid(canvas, camera, width, height, 8 * mm, blueLine, 1.2f, horizontalOnly = true)
+      PaperStyle.GRID -> grid(canvas, camera, width, height, 5 * mm, blueLine, 1f * k, horizontalOnly = false)
+      PaperStyle.LINES -> grid(canvas, camera, width, height, 8 * mm, blueLine, 1.2f * k, horizontalOnly = true)
       PaperStyle.ENGINEERING -> {
-        grid(canvas, camera, width, height, 2 * mm, engineeringMinor, 0.8f, horizontalOnly = false)
-        grid(canvas, camera, width, height, 10 * mm, engineeringMajor, 1.3f, horizontalOnly = false)
+        grid(canvas, camera, width, height, 2 * mm, engineeringMinor, 0.8f * k, horizontalOnly = false)
+        grid(canvas, camera, width, height, 10 * mm, engineeringMajor, 1.3f * k, horizontalOnly = false)
       }
     }
   }
 
   private fun grid(canvas: Canvas, camera: Camera, width: Int, height: Int, spacing: Float, color: Int, strokePx: Float, horizontalOnly: Boolean) {
     val step = spacing * camera.scale
-    if (step < 5f) return
+    if (step < 5f && !print) return
     // Fade dense grids out as they get small instead of popping.
-    val alpha = ((step - 5f) / 10f).coerceIn(0f, 1f)
+    val alpha = if (print) 1f else ((step - 5f) / 10f).coerceIn(0f, 1f)
     paint.color = color
     paint.alpha = (alpha * (color ushr 24)).toInt()
     paint.strokeWidth = strokePx
@@ -71,10 +78,10 @@ class PaperRenderer {
 
   private fun dots(canvas: Canvas, camera: Camera, width: Int, height: Int, spacing: Float) {
     val step = spacing * camera.scale
-    if (step < 7f) return
+    if (step < 7f && !print) return
     paint.color = lineColor
-    paint.alpha = (((step - 7f) / 10f).coerceIn(0f, 1f) * 255).toInt()
-    paint.strokeWidth = (1.6f * camera.scale).coerceIn(1.5f, 4f)
+    paint.alpha = if (print) 255 else (((step - 7f) / 10f).coerceIn(0f, 1f) * 255).toInt()
+    paint.strokeWidth = if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)
     paint.strokeCap = Paint.Cap.ROUND
     val world = camera.visibleWorld(width, height)
     var n = 0

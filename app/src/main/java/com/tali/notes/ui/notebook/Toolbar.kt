@@ -36,6 +36,7 @@ import com.tali.notes.model.PenSlot
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.model.Tool
 import com.tali.notes.theme.Tali
+import com.tali.notes.ui.components.CloudCrown
 import com.tali.notes.ui.components.FloatingBar
 import com.tali.notes.ui.components.PenGlyph
 import com.tali.notes.ui.components.ShapeIcon
@@ -53,7 +54,7 @@ fun MainToolbar(
   modifier: Modifier = Modifier,
 ) {
   val c = Tali.colors
-  FloatingBar(modifier.height(60.dp)) {
+  FloatingBar(modifier.height(60.dp), crown = CloudCrown.START) {
     // The pen tray: pens stand at the bottom edge, the active one lifted.
     Row(Modifier.height(56.dp).clipToBounds().padding(horizontal = 4.dp), verticalAlignment = Alignment.Bottom) {
       settings.pens.forEach { slot ->

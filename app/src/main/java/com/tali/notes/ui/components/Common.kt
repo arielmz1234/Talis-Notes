@@ -76,17 +76,11 @@ fun rememberThumbnail(file: File, version: Long): ImageBitmap? {
   return bitmap
 }
 
-/** Floating toolbar surface: white card, hairline border, soft shadow. */
+/** Floating toolbar surface: a soft white cloud with a pale belly, hairline edge and lilac shadow. */
 @Composable
-fun FloatingBar(modifier: Modifier = Modifier, shape: RoundedCornerShape = RoundedCornerShape(22.dp), content: @Composable RowScope.() -> Unit) {
-  val c = Tali.colors
+fun FloatingBar(modifier: Modifier = Modifier, crown: CloudCrown = CloudCrown.NONE, content: @Composable RowScope.() -> Unit) {
   Row(
-    modifier
-      .shadow(14.dp, shape, ambientColor = Color(0x22000000), spotColor = Color(0x33000000))
-      .clip(shape)
-      .background(c.surface)
-      .border(1.dp, c.line, shape)
-      .padding(horizontal = 6.dp, vertical = 4.dp),
+    modifier.cloudSurface(22.dp, crown).padding(horizontal = 6.dp, vertical = 4.dp),
     verticalAlignment = Alignment.CenterVertically,
     content = content,
   )
@@ -95,16 +89,7 @@ fun FloatingBar(modifier: Modifier = Modifier, shape: RoundedCornerShape = Round
 /** A popover panel that drops below the toolbar. */
 @Composable
 fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-  val c = Tali.colors
-  val shape = RoundedCornerShape(22.dp)
-  Box(
-    modifier
-      .shadow(24.dp, shape, ambientColor = Color(0x22000000), spotColor = Color(0x40000000))
-      .clip(shape)
-      .background(c.surface)
-      .border(1.dp, c.line, shape)
-      .padding(18.dp)
-  ) {
+  Box(modifier.cloudSurface(22.dp, shadowDepth = 10.dp).padding(18.dp)) {
     content()
   }
 }

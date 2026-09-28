@@ -2,6 +2,7 @@ package com.tali.notes
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -27,6 +28,7 @@ object CrashLog {
 
   /** Records an error the app survived; only shown if the app later crashes or on request. */
   fun recovered(context: Context, error: Throwable) {
+    Log.e("TaliNotes", "Recovered from an error", error)
     runCatching { record(error, fatal = false, versionName = versionOf(context)) }
   }
 

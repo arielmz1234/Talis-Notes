@@ -51,7 +51,7 @@ object Exporter {
       }
     val doc = PdfDocument()
     val r = renderer()
-    val paperRenderer = PaperRenderer()
+    val paperRenderer = PaperRenderer().apply { print = true }
     try {
       pages.forEachIndexed { i, world ->
         val wPt = ceil(world.width * PT_PER_DP).toInt()

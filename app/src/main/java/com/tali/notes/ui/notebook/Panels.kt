@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -43,6 +44,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.tali.notes.data.AppSettings
@@ -64,7 +66,9 @@ import com.tali.notes.ui.components.dashedCircle
 
 @Composable
 private fun PanelColumn(width: Int, content: @Composable () -> Unit) {
-  Column(Modifier.width(width.dp).heightIn(max = 620.dp).verticalScroll(rememberScrollState())) { content() }
+  // Never taller than the space under the toolbar, so the whole panel stays on screen.
+  val maxHeight = (LocalConfiguration.current.screenHeightDp - 190).coerceIn(280, 640)
+  Column(Modifier.width(width.dp).heightIn(max = maxHeight.dp).verticalScroll(rememberScrollState())) { content() }
 }
 
 @Composable
@@ -204,9 +208,39 @@ fun EraserPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(10.dp))
     SectionLabel("Erases")
     Spacer(Modifier.height(4.dp))
-    PenType.entries.forEach { type -> ToggleRow(type.label, settings.eraserHits(type), { vm.setEraserAffects(type, it) }) }
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(4.dp))
+    FilterChips {
+      PenType.entries.forEach { type -> FilterChip(type.label, settings.eraserHits(type)) { vm.setEraserAffects(type, it) } }
+    }
+    Spacer(Modifier.height(14.dp))
     Text("Tip: hold the S Pen button to erase with any tool.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+  }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterChips(content: @Composable () -> Unit) {
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+}
+
+/** A compact on/off chip: blue with a tick when on, quiet outline when off. */
+@Composable
+private fun FilterChip(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
+  val c = Tali.colors
+  val shape = RoundedCornerShape(12.dp)
+  Row(
+    Modifier.clip(shape)
+      .background(if (on) c.blueSoft else Color.Transparent)
+      .border(1.dp, if (on) c.sky else c.line, shape)
+      .clickable(role = Role.Checkbox, onClickLabel = label) { onChange(!on) }
+      .padding(start = if (on) 8.dp else 12.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    if (on) {
+      Icon(Icons.Outlined.Check, null, tint = c.blue, modifier = Modifier.size(16.dp))
+      Spacer(Modifier.width(4.dp))
+    }
+    Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) c.blue else c.inkMuted)
   }
 }
 
@@ -219,8 +253,11 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(14.dp))
     SectionLabel("Picks up")
     Spacer(Modifier.height(4.dp))
-    PenType.entries.forEach { type -> ToggleRow(type.label, settings.lassoHits(type), { vm.setLassoAffects(type, it) }) }
-    ToggleRow("Images", settings.lassoSelectsImages, vm::setLassoImages)
+    Spacer(Modifier.height(4.dp))
+    FilterChips {
+      PenType.entries.forEach { type -> FilterChip(type.label, settings.lassoHits(type)) { vm.setLassoAffects(type, it) } }
+      FilterChip("Images", settings.lassoSelectsImages, vm::setLassoImages)
+    }
   }
 }
 
@@ -228,7 +265,7 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
 @Composable
 fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel) {
   val c = Tali.colors
-  PanelColumn(452) {
+  PanelColumn(510) {
     PanelTitle("Shapes")
     ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a stroke and it snaps into a clean line or shape.")
     if (settings.holdToShape) {
@@ -248,14 +285,14 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
           Column(
             Modifier.width(80.dp)
               .clip(RoundedCornerShape(14.dp))
-              .background(if (on) c.accentSoft else c.background)
+              .background(if (on) c.blueSoft else c.background)
               .clickable(role = Role.Button, onClickLabel = kind.label) { vm.pickShape(kind) }
               .padding(vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
           ) {
-            ShapeIcon(kind, if (on) c.accent else c.ink, size = 32.dp)
+            ShapeIcon(kind, if (on) c.blue else c.ink, size = 30.dp)
             Spacer(Modifier.height(4.dp))
-            Text(kind.label, style = MaterialTheme.typography.labelSmall, color = if (on) c.accent else c.inkMuted, maxLines = 1)
+            Text(kind.label, style = MaterialTheme.typography.labelSmall, color = if (on) c.blue else c.inkMuted, maxLines = 1)
           }
         }
       }

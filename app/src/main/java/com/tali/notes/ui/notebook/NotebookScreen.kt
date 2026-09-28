@@ -83,6 +83,7 @@ import com.tali.notes.export.PdfLayout
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.Tool
 import com.tali.notes.theme.Tali
+import com.tali.notes.ui.components.CloudCrown
 import com.tali.notes.ui.components.ColorDot
 import com.tali.notes.ui.components.FloatingBar
 import com.tali.notes.ui.components.Panel
@@ -90,6 +91,8 @@ import com.tali.notes.ui.components.PaperSwatch
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.Segmented
+import com.tali.notes.ui.components.Sparkle
+import com.tali.notes.ui.components.cloudSurface
 import com.tali.notes.ui.components.ToolButton
 import com.tali.notes.ui.library.DialogCard
 import com.tali.notes.ui.library.RenameDialog
@@ -381,7 +384,7 @@ private fun MoreMenu(
 private fun ZoomChip(zoom: Float, modifier: Modifier = Modifier, onReset: () -> Unit) {
   val c = Tali.colors
   Box(
-    modifier.clip(RoundedCornerShape(12.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(12.dp)).clickable(onClickLabel = "Reset zoom", onClick = onReset).padding(horizontal = 12.dp, vertical = 7.dp)
+    modifier.cloudSurface(12.dp, shadowDepth = 3.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Reset zoom", onClick = onReset).padding(horizontal = 12.dp, vertical = 7.dp)
   ) {
     Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
   }
@@ -397,8 +400,14 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
     }
   }
   AnimatedVisibility(message != null, modifier = modifier, enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut()) {
-    Box(Modifier.clip(RoundedCornerShape(14.dp)).background(c.accentBrush).padding(horizontal = 16.dp, vertical = 10.dp)) {
-      Text(message ?: "", style = MaterialTheme.typography.labelLarge, color = c.onAccent)
+    // A little cloud carrying the message.
+    Row(
+      Modifier.padding(top = 18.dp, bottom = 4.dp).cloudSurface(20.dp, CloudCrown.CENTER, shadowDepth = 5.dp).padding(start = 14.dp, end = 18.dp, top = 11.dp, bottom = 11.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Sparkle(size = 12.dp, color = c.blue)
+      Spacer(Modifier.width(8.dp))
+      Text(message ?: "", style = MaterialTheme.typography.labelLarge, color = c.ink)
     }
   }
 }
@@ -412,18 +421,31 @@ private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () ->
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
       val gap = with(density) { 14.dp.roundToPx() }
-      val topLimit = with(density) { 90.dp.roundToPx() }
+      // Keep clear of the toolbars along the top.
+      val topLimit = with(density) { 128.dp.roundToPx() }
+      val bottomLimit = constraints.maxHeight - p.height - gap
       val cx = sel.screenRect.centerX().roundToInt()
       val x = (cx - p.width / 2).coerceIn(gap, constraints.maxWidth - p.width - gap)
       val above = sel.screenRect.top.roundToInt() - p.height - gap
-      val y = if (above > topLimit) above else (sel.screenRect.bottom.roundToInt() + gap).coerceAtMost(constraints.maxHeight - p.height - gap)
+      val below = sel.screenRect.bottom.roundToInt() + gap
+      val y = when {
+        above >= topLimit -> above
+        below <= bottomLimit -> below
+        // A big selection: float the menu just inside its top edge.
+        else -> (sel.screenRect.top.roundToInt() + gap).coerceIn(topLimit, bottomLimit.coerceAtLeast(topLimit))
+      }
       layout(constraints.maxWidth, constraints.maxHeight) { p.place(x, y) }
     }
   ) {
     FloatingBar(Modifier.height(52.dp)) {
       if (picking) {
         Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
-          colors.take(10).forEach { col -> ColorDot(Color(col), selected = false, size = 26.dp) { onColor(col) } }
+          colors.take(12).forEach { col ->
+            ColorDot(Color(col), selected = false, size = 26.dp) {
+              onColor(col)
+              picking = false
+            }
+          }
         }
       } else {
         if (!sel.hasImage || sel.count > 1) ToolButton(Icons.Outlined.Palette, "Colour") { picking = true }
