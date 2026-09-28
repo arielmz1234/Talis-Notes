@@ -14,8 +14,11 @@ import com.tali.notes.model.ShapeGeometry
 import kotlin.math.ceil
 
 object StrokeFactory {
-  /** Synthetic pen speed for generated shapes, in world units per millisecond. */
-  private const val SPEED = 1.2f
+  /**
+   * Synthetic pen speed for generated shapes, in world units per millisecond. Deliberately slow:
+   * Ink smooths input over a short time window, and a slow pen keeps corners sharp.
+   */
+  private const val SPEED = 0.08f
   private const val SPACING = 3f
 
   fun bounds(stroke: Stroke): Rect {
@@ -53,6 +56,21 @@ object StrokeFactory {
       for (k in 0 until n) add(a + (b - a) * (k.toFloat() / n))
     }
     add(path.last())
+    return Stroke(brush, batch)
+  }
+
+  /** A gentle S-curve with rising and falling pressure, used to preview a pen in its settings. */
+  fun previewStroke(brush: Brush, width: Float, height: Float): Stroke {
+    val batch = MutableStrokeInputBatch()
+    val n = 90
+    val margin = 14f
+    for (i in 0..n) {
+      val f = i.toFloat() / n
+      val x = margin + (width - 2 * margin) * f
+      val y = height / 2f + kotlin.math.sin(f * 2f * Math.PI.toFloat()) * height * 0.22f
+      val pressure = 0.35f + 0.55f * kotlin.math.sin(f * Math.PI.toFloat())
+      batch.add(InputToolType.STYLUS, x, y, (i * 6).toLong(), pressure = pressure)
+    }
     return Stroke(brush, batch)
   }
 

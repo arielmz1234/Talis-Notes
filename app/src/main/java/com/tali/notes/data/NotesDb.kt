@@ -5,8 +5,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-/** Plain SQLite: two tables, no code generation, fast on older tablets. */
-class NotesDb(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 1) {
+/** Plain SQLite: notebooks, folders and items; no code generation, fast on older tablets. */
+class NotesDb(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 2) {
   override fun onConfigure(db: SQLiteDatabase) {
     db.enableWriteAheadLogging()
     db.setForeignKeyConstraintsEnabled(true)
@@ -23,10 +23,12 @@ class NotesDb(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 1)
         cover INTEGER NOT NULL,
         paper TEXT NOT NULL,
         viewport TEXT,
-        thumb INTEGER NOT NULL DEFAULT 0
+        thumb INTEGER NOT NULL DEFAULT 0,
+        folder_id TEXT
       )
       """
     )
+    createFolders(db)
     db.execSQL(
       """
       CREATE TABLE items (
@@ -45,7 +47,16 @@ class NotesDb(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 1)
     db.execSQL("CREATE INDEX items_by_notebook ON items(notebook_id, z)")
   }
 
-  override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+  override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+    if (oldVersion < 2) {
+      db.execSQL("ALTER TABLE notebooks ADD COLUMN folder_id TEXT")
+      createFolders(db)
+    }
+  }
+
+  private fun createFolders(db: SQLiteDatabase) {
+    db.execSQL("CREATE TABLE folders (id TEXT PRIMARY KEY, name TEXT NOT NULL, color INTEGER NOT NULL, created INTEGER NOT NULL, position INTEGER NOT NULL)")
+  }
 }
 
 /** A stored item row, independent of Android graphics types so it can be backed up as-is. */

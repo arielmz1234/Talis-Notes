@@ -8,10 +8,10 @@ import kotlin.math.floor
 
 /** Paper patterns drawn in screen space each frame. Spacing is real-world: 1 mm = 160/25.4 dp. */
 class PaperRenderer {
-  var paperColor = 0xFFFCFCFA.toInt()
-  var lineColor = 0xFFD9DEE7.toInt()
-  var engineeringMinor = 0xFFCFE3DA.toInt()
-  var engineeringMajor = 0xFF9CC7B3.toInt()
+  var paperColor = 0xFFFDFCFF.toInt()
+  var lineColor = 0xFFD9CCF2.toInt()
+  var engineeringMinor = 0xFFEBE3FB.toInt()
+  var engineeringMajor = 0xFFC9B3F0.toInt()
 
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
   private var buffer = FloatArray(4096)

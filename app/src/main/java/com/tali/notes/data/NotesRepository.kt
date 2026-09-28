@@ -36,10 +36,14 @@ data class NotebookMeta(
   val viewport: Viewport?,
   /** Bumped whenever the preview image is regenerated, so the library reloads it. */
   val thumbVersion: Long,
+  val folderId: String?,
 )
 
+data class Folder(val id: String, val name: String, val color: Int, val position: Int)
+
+/** Cover colours that sit well with the lilac theme: lavender, orchid, periwinkle, rose, mint, apricot, plum. */
 val COVER_COLORS =
-  listOf(0xFF2E4A7D.toInt(), 0xFF3E7C6B.toInt(), 0xFFB5523B.toInt(), 0xFF7A5BA6.toInt(), 0xFFC9962B.toInt(), 0xFF3D4452.toInt())
+  listOf(0xFF9B7BE0, 0xFFC78FD9, 0xFF7FA0E6, 0xFFE59BB8, 0xFF7DC4B2, 0xFFF0B97A, 0xFF5E4B8B).map { it.toInt() }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotesRepository(private val context: Context) {
@@ -51,6 +55,9 @@ class NotesRepository(private val context: Context) {
 
   private val _notebooks = MutableStateFlow<List<NotebookMeta>>(emptyList())
   val notebooks: StateFlow<List<NotebookMeta>> = _notebooks.asStateFlow()
+
+  private val _folders = MutableStateFlow<List<Folder>>(emptyList())
+  val folders: StateFlow<List<Folder>> = _folders.asStateFlow()
 
   /** Increments on every saved edit; the backup worker watches it. */
   private val _revision = MutableStateFlow(0L)
@@ -67,7 +74,7 @@ class NotesRepository(private val context: Context) {
 
   private fun reload() {
     val list = mutableListOf<NotebookMeta>()
-    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb FROM notebooks ORDER BY updated DESC", null).use { c ->
+    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id FROM notebooks ORDER BY updated DESC", null).use { c ->
       while (c.moveToNext()) {
         list +=
           NotebookMeta(
@@ -79,13 +86,19 @@ class NotesRepository(private val context: Context) {
             paper = runCatching { PaperStyle.valueOf(c.getString(5)) }.getOrDefault(PaperStyle.DOTS),
             viewport = c.getString(6)?.let { runCatching { ItemCodec.json.decodeFromString(Viewport.serializer(), it) }.getOrNull() },
             thumbVersion = c.getLong(7),
+            folderId = if (c.isNull(8)) null else c.getString(8),
           )
       }
     }
+    val folders = mutableListOf<Folder>()
+    db.readableDatabase.rawQuery("SELECT id,name,color,position FROM folders ORDER BY position, created", null).use { c ->
+      while (c.moveToNext()) folders += Folder(c.getString(0), c.getString(1), c.getInt(2), c.getInt(3))
+    }
+    _folders.value = folders
     _notebooks.value = list
   }
 
-  suspend fun create(title: String, paper: PaperStyle): NotebookMeta =
+  suspend fun create(title: String, paper: PaperStyle, folderId: String? = null): NotebookMeta =
     withContext(writer) {
       val now = System.currentTimeMillis()
       val id = UUID.randomUUID().toString()
@@ -100,6 +113,7 @@ class NotesRepository(private val context: Context) {
           put("updated", now)
           put("cover", cover)
           put("paper", paper.name)
+          put("folder_id", folderId)
         },
       )
       reload()
@@ -107,6 +121,55 @@ class NotesRepository(private val context: Context) {
     }
 
   fun rename(id: String, title: String) = update(id) { put("title", title) }
+
+  fun moveToFolder(id: String, folderId: String?) = update(id, touch = false) { put("folder_id", folderId) }
+
+  suspend fun createFolder(name: String, color: Int): Folder =
+    withContext(writer) {
+      val id = UUID.randomUUID().toString()
+      db.writableDatabase.insertOrThrow(
+        "folders",
+        null,
+        ContentValues().apply {
+          put("id", id)
+          put("name", name)
+          put("color", color)
+          put("created", System.currentTimeMillis())
+          put("position", _folders.value.size)
+        },
+      )
+      reload()
+      _folders.value.first { it.id == id }
+    }
+
+  fun renameFolder(id: String, name: String) = updateFolder(id) { put("name", name) }
+
+  fun recolorFolder(id: String, color: Int) = updateFolder(id) { put("color", color) }
+
+  /** Deletes a folder. Its notebooks are kept and move back to "All notebooks". */
+  fun deleteFolder(id: String) {
+    scope.launch {
+      val w = db.writableDatabase
+      w.beginTransaction()
+      try {
+        w.execSQL("UPDATE notebooks SET folder_id = NULL WHERE folder_id = ?", arrayOf(id))
+        w.delete("folders", "id=?", arrayOf(id))
+        w.setTransactionSuccessful()
+      } finally {
+        w.endTransaction()
+      }
+      reload()
+      _revision.value++
+    }
+  }
+
+  private fun updateFolder(id: String, fill: ContentValues.() -> Unit) {
+    scope.launch {
+      db.writableDatabase.update("folders", ContentValues().apply(fill), "id=?", arrayOf(id))
+      reload()
+      _revision.value++
+    }
+  }
 
   fun setCover(id: String, color: Int) = update(id) { put("cover", color) }
 
@@ -144,7 +207,7 @@ class NotesRepository(private val context: Context) {
       w.beginTransaction()
       try {
         w.execSQL(
-          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb) SELECT ?,?,?,?,cover,paper,viewport,0 FROM notebooks WHERE id=?",
+          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id FROM notebooks WHERE id=?",
           arrayOf<Any>(newId, src.title + " (copy)", now, now, id),
         )
         readRows(id).forEach { w.insertOrThrow("items", null, it.toValues(newId).apply { put("id", UUID.randomUUID().toString()) }) }

@@ -96,12 +96,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       invalidate()
     }
 
-  var accentColor = 0xFF2458E6.toInt()
+  var accentColor = 0xFF7A4ED6.toInt()
     set(value) {
+      if (field == value) return
       field = value
       selectionPaint.color = value
       handleStroke.color = value
       lassoPaint.color = value
+      lassoFill.color = (value and 0x00FFFFFF) or 0x1C000000
+      invalidate()
     }
 
   // ---- Gesture state ----
@@ -183,7 +186,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       pathEffect = DashPathEffect(floatArrayOf(5f * density, 5f * density), 0f)
       color = accentColor
     }
-  private val lassoFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x142458E6 }
+  private val lassoFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x1C7A4ED6 }
   private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
   private val handleStroke =
     Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -195,9 +198,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.STROKE
       strokeWidth = 1.2f * density
-      color = 0xAA3D4452.toInt()
+      color = 0xAA5E4B8B.toInt()
     }
-  private val eraserFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x223D4452 }
+  private val eraserFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x22D1AEFF }
 
   init {
     setWillNotDraw(false)
@@ -249,8 +252,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   override fun onStrokesFinished(strokes: Map<InProgressStrokeId, Stroke>) {
     val d = doc
     if (d != null) {
-      val added = strokes.map { (id, s) -> InkItem(d.newId(), d.nextZ(), strokePens.remove(id) ?: PenType.FINELINER, s) }
-      d.commit(Change(emptyList(), added))
+      try {
+        val added = strokes.map { (id, s) -> InkItem(d.newId(), d.nextZ(), strokePens.remove(id) ?: PenType.FINELINER, s) }
+        d.commit(Change(emptyList(), added))
+      } catch (t: Throwable) {
+        com.tali.notes.CrashLog.recovered(context, t)
+      }
     }
     // Hand-off in the same frame the tiles pick the strokes up, so there's no flicker.
     inProgress.removeFinishedStrokes(strokes.keys)
@@ -268,7 +275,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     canvas.save()
     canvas.concat(camera.worldToScreen)
-    tiles.draw(canvas, visible, camera.scale, d)
+    try {
+      tiles.draw(canvas, visible, camera.scale, d)
+    } catch (t: Throwable) {
+      com.tali.notes.CrashLog.recovered(context, t)
+      tiles.invalidateAll()
+    }
     erasePieces.values.forEach { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     liveShape?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     liveEdit?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
@@ -363,6 +375,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   @SuppressLint("ClickableViewAccessibility")
   override fun dispatchTouchEvent(e: MotionEvent): Boolean {
     if (doc == null) return true
+    try {
+      handleTouch(e)
+    } catch (t: Throwable) {
+      // One bad gesture must never close the app or lose the notebook; drop the gesture instead.
+      com.tali.notes.CrashLog.recovered(context, t)
+      runCatching { abortDrawing() }
+      mode = Mode.NONE
+      host.onHint("That didn't work. Try again.")
+    }
+    return true
+  }
+
+  private fun handleTouch(e: MotionEvent) {
     when (e.actionMasked) {
       MotionEvent.ACTION_DOWN,
       MotionEvent.ACTION_POINTER_DOWN -> {
@@ -402,7 +427,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         mode = Mode.NONE
       }
     }
-    return true
   }
 
   override fun dispatchGenericMotionEvent(e: MotionEvent): Boolean {
@@ -578,6 +602,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   /** The pen stopped moving mid-stroke: try to turn the stroke into a clean shape. */
   private fun onHold() {
+    try {
+      snapToShape()
+    } catch (t: Throwable) {
+      com.tali.notes.CrashLog.recovered(context, t)
+    }
+  }
+
+  private fun snapToShape() {
     if (mode != Mode.INK) return
     val d = doc ?: return
     val id = strokeId ?: return
@@ -1010,9 +1042,29 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     afterCameraMove()
   }
 
-  // ---- Rendering helpers for export and previews ----
+  /** Runs a menu action (delete, undo, insert…) so that a failure shows a hint instead of crashing. */
+  fun runSafely(action: NoteCanvasView.() -> Unit) {
+    try {
+      action()
+    } catch (t: Throwable) {
+      com.tali.notes.CrashLog.recovered(context, t)
+      host.onHint("That didn't work. Try again.")
+      invalidate()
+    }
+  }
 
-  fun documentForExport(): Document? = doc
+  fun visibleWorld(): Rect = camera.visibleWorld(width, height)
+
+  /** Zooms out (or in, up to 150%) so everything in the notebook is on screen. */
+  fun fitContent() {
+    val b = doc?.contentBounds()?.outset(40f) ?: return
+    if (width == 0 || height == 0) return
+    val zoom = minOf(width / (b.width * density), height / (b.height * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
+    val scale = zoom * density
+    camera.set(Viewport(b.center.x - width / 2f / scale, b.center.y - height / 2f / scale, zoom))
+    settleCamera()
+    afterCameraMove()
+  }
 
   companion object {
     private val DRAW_MODES =
