@@ -220,6 +220,9 @@ fun SkyBand(modifier: Modifier = Modifier, height: Dp = 320.dp, fadeTo: Color = 
 /** Clouds scattered across a sky band. [layout] picks one of a few arrangements. */
 @Composable
 fun BoxScope.SkyClouds() {
+  // Two small, faded clouds further away, drifting slower: a little depth behind the big ones.
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 196.dp, y = 104.dp), width = 96.dp, variant = 1, driftDp = 5f, periodMs = 23000, alpha = 0.55f)
+  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-196).dp, y = 118.dp), width = 84.dp, variant = 2, driftDp = 4f, periodMs = 26000, alpha = 0.5f)
   DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (-24).dp, y = 18.dp), width = 190.dp, variant = 2, driftDp = 8f, periodMs = 14000)
   DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 300.dp, y = 8.dp), width = 230.dp, variant = 1, driftDp = 12f, periodMs = 17000)
   DriftingCloud(Modifier.align(Alignment.TopCenter).offset(x = 170.dp, y = 12.dp), width = 260.dp, variant = 0, driftDp = 14f, periodMs = 20000)
