@@ -12,7 +12,7 @@ import kotlin.math.floor
  * This keeps big notebooks smooth on the Tab S6 Lite.
  */
 class TileCache(private val renderer: ItemRenderer) {
-  private class Tile(val node: RenderNode, var dirty: Boolean = true, var lastUsed: Long = 0, var recordedScale: Float = 0f)
+  private class Tile(val node: RenderNode, var dirty: Boolean = true, var lastUsed: Long = 0, var recordedScale: Float = 0f, var waiting: Boolean = false)
 
   private val tiles = HashMap<Long, Tile>()
   private var frame = 0L
@@ -34,6 +34,18 @@ class TileCache(private val renderer: ItemRenderer) {
   }
 
   fun invalidateAll() = tiles.values.forEach { it.dirty = true }
+
+  /** Re-records tiles that left out strokes still being built. Returns whether there were any. */
+  fun refreshWaiting(): Boolean {
+    var any = false
+    tiles.values.forEach {
+      if (it.waiting) {
+        it.dirty = true
+        any = true
+      }
+    }
+    return any
+  }
 
   /** Draws visible tiles. The canvas must already be transformed to world coordinates. */
   fun draw(canvas: Canvas, visible: Rect, scale: Float, doc: Document) {
@@ -61,7 +73,7 @@ class TileCache(private val renderer: ItemRenderer) {
     try {
       c.translate(-left.toFloat(), -top.toFloat())
       hint.setScale(scale, scale)
-      renderer.drawAll(c, doc.intersecting(rect), hint, hidden)
+      tile.waiting = renderer.drawAll(c, doc.intersecting(rect), hint, hidden, deferUnbuilt = true)
     } finally {
       tile.node.endRecording()
     }

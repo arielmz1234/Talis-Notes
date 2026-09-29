@@ -126,6 +126,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
               else -> Unit
             }
           }
+          com.tali.notes.canvas.StrokeBuilds.progress()
         }
       }
     }

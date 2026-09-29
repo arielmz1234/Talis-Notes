@@ -84,6 +84,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val images = context.talisApp.repository.images
   private val itemRenderer = ItemRenderer(Brushes.renderer(), images)
 
+  /** More loaded strokes were built in the background: redraw the tiles that left them out. */
+  private val onStrokesBuilt: () -> Unit = { if (tiles.refreshWaiting()) invalidate() }
+
   /** A picture finished loading: redraw the tiles it covers. */
   private val onImageLoaded: (String) -> Unit = { file ->
     doc?.all?.forEach { if (it is ImageItem && it.file == file) tiles.invalidate(it.bounds) }
@@ -264,6 +267,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     doc = document
     document.listeners += docListener
     images.addListener(onImageLoaded)
+    StrokeBuilds.addListener(onStrokesBuilt)
     refreshPages()
     tiles.invalidateAll()
     if (viewport != null) camera.set(viewport)
@@ -275,6 +279,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun detach() {
     doc?.listeners?.remove(docListener)
     images.removeListener(onImageLoaded)
+    StrokeBuilds.removeListener(onStrokesBuilt)
     doc = null
   }
 

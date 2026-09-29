@@ -30,11 +30,26 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
    * Draws in three layers, each in stacking order: pictures and PDF pages at the bottom, then
    * highlighter (so it tints what's under it without covering writing), then all other ink.
    * [worldToScreen] is only a quality hint for the stroke renderer.
+   *
+   * With [deferUnbuilt], loaded strokes that haven't been built yet are left out instead of being
+   * built right here on the UI thread; returns true if any were, so the caller can redraw later.
    */
-  fun drawAll(canvas: Canvas, items: Iterable<CanvasItem>, worldToScreen: Matrix, skip: Set<String> = emptySet()) {
+  fun drawAll(canvas: Canvas, items: Iterable<CanvasItem>, worldToScreen: Matrix, skip: Set<String> = emptySet(), deferUnbuilt: Boolean = false): Boolean {
+    var deferred = false
+    fun ready(item: CanvasItem): Boolean {
+      val built =
+        when (item) {
+          is InkItem -> item.isBuilt
+          is ShapeItem -> item.isBuilt
+          is ImageItem -> true
+        }
+      if (!built && deferUnbuilt) deferred = true
+      return built || !deferUnbuilt
+    }
     for (item in items) if (item is ImageItem && item.id !in skip) draw(canvas, item, worldToScreen)
-    for (item in items) if (item.pen?.isHighlighter == true && item.id !in skip) draw(canvas, item, worldToScreen)
-    for (item in items) if (item !is ImageItem && item.pen?.isHighlighter != true && item.id !in skip) draw(canvas, item, worldToScreen)
+    for (item in items) if (item.pen?.isHighlighter == true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
+    for (item in items) if (item !is ImageItem && item.pen?.isHighlighter != true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
+    return deferred
   }
 
   fun draw(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {

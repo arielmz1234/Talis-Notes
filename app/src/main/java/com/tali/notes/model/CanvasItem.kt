@@ -69,7 +69,14 @@ class ShapeItem(
   /** Bounds saved with the shape, so a loaded shape can wait to build its strokes until it's drawn. */
   knownBounds: Rect? = null,
 ) : CanvasItem() {
-  val strokes: List<Stroke> by lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
+  private val built = lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
+
+  val strokes: List<Stroke>
+    get() = built.value
+
+  /** Whether the strokes exist yet (loaded shapes build them on first use). */
+  val isBuilt: Boolean
+    get() = built.isInitialized()
 
   override val bounds: Rect = knownBounds ?: strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)
 
