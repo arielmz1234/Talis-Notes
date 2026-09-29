@@ -56,6 +56,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.tali.notes.backup.DriveBackup
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -121,6 +124,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   var newFolder by remember { mutableStateOf(false) }
   var renamingFolder by remember { mutableStateOf<Folder?>(null) }
   var deletingFolder by remember { mutableStateOf<Folder?>(null) }
+  var backups by remember { mutableStateOf(false) }
   val currentFolder = folders.firstOrNull { it.id == selected }
   val context = LocalContext.current
   var crashReport by remember { mutableStateOf(CrashLog.pendingReport(context)) }
@@ -139,6 +143,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       onRenameFolder = { renamingFolder = it },
       onRecolorFolder = vm::recolorFolder,
       onDeleteFolder = { deletingFolder = it },
+      onBackup = { backups = true },
     )
     Box(Modifier.weight(1f).fillMaxHeight()) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 36.dp, end = 36.dp)) {
@@ -236,6 +241,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       deleting = null
     }
   }
+  if (backups) BackupDialog(onDismiss = { backups = false })
   if (newFolder) {
     NameDialog(title = "New folder", initial = "", placeholder = "Statics", confirm = "Create", onDismiss = { newFolder = false }) {
       vm.createFolder(it)
@@ -291,6 +297,7 @@ private fun Sidebar(
   onRenameFolder: (Folder) -> Unit,
   onRecolorFolder: (String, Int) -> Unit,
   onDeleteFolder: (Folder) -> Unit,
+  onBackup: () -> Unit,
 ) {
   val c = Tali.colors
   // No panel colour of its own: the sidebar shares the page, so there's no seam to see.
@@ -366,13 +373,28 @@ private fun Sidebar(
         }
       }
     }
-    Row(Modifier.padding(horizontal = 10.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-      Icon(Icons.Outlined.CheckCircle, null, tint = c.blue, modifier = Modifier.size(16.dp))
+    val context = LocalContext.current
+    val drive by DriveBackup.status(context).collectAsState()
+    Row(
+      Modifier.padding(bottom = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Backups", onClick = onBackup).padding(horizontal = 10.dp, vertical = 10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      val onDrive = DriveBackup.available && drive.enabled
+      Icon(if (onDrive) Icons.Outlined.CloudDone else Icons.Outlined.CheckCircle, null, tint = c.blue, modifier = Modifier.size(16.dp))
       Spacer(Modifier.width(8.dp))
-      Column {
-        Text("Saved on this tablet", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
-        Text("Every stroke saves as you write", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+      Column(Modifier.weight(1f)) {
+        Text(if (onDrive) "Backed up to Google Drive" else "Saved on this tablet", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
+        Text(
+          when {
+            onDrive && drive.error != null -> drive.error!!
+            onDrive && drive.lastSuccess > 0 -> "Last backup ${relativeTime(drive.lastSuccess)}"
+            else -> "Tap for backups"
+          },
+          style = MaterialTheme.typography.bodySmall,
+          color = if (onDrive && drive.error != null) c.danger else c.inkFaint,
+        )
       }
+      Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Backups", tint = c.inkFaint, modifier = Modifier.size(18.dp))
     }
   }
   }

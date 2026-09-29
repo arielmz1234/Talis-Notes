@@ -24,7 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -46,23 +49,29 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tali.notes.data.AppSettings
 import com.tali.notes.ink.Brushes
 import com.tali.notes.ink.StrokeFactory
 import com.tali.notes.model.EraserMode
+import com.tali.notes.model.CustomShape
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeGroup
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.ColorDot
 import com.tali.notes.ui.components.PenGlyph
+import com.tali.notes.ui.components.GeometryIcon
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.SectionLabel
 import com.tali.notes.ui.components.Segmented
 import com.tali.notes.ui.components.ShapeIcon
 import com.tali.notes.ui.components.ToggleRow
 import com.tali.notes.ui.components.dashedCircle
+import com.tali.notes.ui.library.NameDialog
+import com.tali.notes.ui.library.ConfirmDialog
+import com.tali.notes.ui.components.combinedClickableCompat
 
 @Composable
 private fun PanelColumn(width: Int, content: @Composable () -> Unit) {
@@ -265,7 +274,7 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
 @Composable
 fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel) {
   val c = Tali.colors
-  PanelColumn(510) {
+  PanelColumn(588) {
     PanelTitle("Shapes")
     ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a stroke and it snaps into a clean line or shape.")
     if (settings.holdToShape) {
@@ -281,21 +290,82 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
       Spacer(Modifier.height(8.dp))
       FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ShapeKind.entries.filter { it.group == group }.forEach { kind ->
-          val on = kind == current && vm.tool == com.tali.notes.model.Tool.SHAPE
-          Column(
-            Modifier.width(80.dp)
-              .clip(RoundedCornerShape(14.dp))
-              .background(if (on) c.blueSoft else c.background)
-              .clickable(role = Role.Button, onClickLabel = kind.label) { vm.pickShape(kind) }
-              .padding(vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-          ) {
-            ShapeIcon(kind, if (on) c.blue else c.ink, size = 30.dp)
-            Spacer(Modifier.height(4.dp))
-            Text(kind.label, style = MaterialTheme.typography.labelSmall, color = if (on) c.blue else c.inkMuted, maxLines = 1)
-          }
+          val on = kind == current && vm.customShapeId == null && vm.tool == com.tali.notes.model.Tool.SHAPE
+          ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
         }
       }
     }
+    MyShapes(settings.customShapes, vm)
+  }
+}
+
+/** Her own saved shapes: pick one to draw it, press and hold for rename and delete. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MyShapes(shapes: List<CustomShape>, vm: NotebookViewModel) {
+  val c = Tali.colors
+  var menuFor by remember { mutableStateOf<String?>(null) }
+  var renaming by remember { mutableStateOf<CustomShape?>(null) }
+  var deleting by remember { mutableStateOf<CustomShape?>(null) }
+  Spacer(Modifier.height(12.dp))
+  SectionLabel("My shapes")
+  Spacer(Modifier.height(8.dp))
+  if (shapes.isEmpty()) {
+    Row(
+      Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.blueSoft.copy(alpha = 0.55f)).padding(horizontal = 14.dp, vertical = 12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(Icons.Outlined.AutoAwesome, null, tint = c.blue, modifier = Modifier.size(20.dp))
+      Spacer(Modifier.width(10.dp))
+      Text(
+        "Draw a shape you use a lot, circle it with the lasso and tap “Save as shape”. Holding the pen at the end of a stroke will then snap to it too.",
+        style = MaterialTheme.typography.bodySmall,
+        color = c.inkMuted,
+      )
+    }
+    return
+  }
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    shapes.forEach { shape ->
+      val on = vm.customShapeId == shape.id && vm.tool == com.tali.notes.model.Tool.SHAPE
+      Box {
+        ShapeTile(shape.name, on, onClick = { vm.pickCustomShape(shape) }, onLongClick = { menuFor = shape.id }) { tint -> GeometryIcon(shape.geometry, tint, size = 30.dp) }
+        DropdownMenu(expanded = menuFor == shape.id, onDismissRequest = { menuFor = null }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+          DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menuFor = null; renaming = shape })
+          DropdownMenuItem(text = { Text("Delete", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = { menuFor = null; deleting = shape })
+        }
+      }
+    }
+  }
+  Spacer(Modifier.height(6.dp))
+  Text("Press and hold a shape to rename or delete it.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+  renaming?.let { shape ->
+    NameDialog("Rename shape", shape.name, "Shape name", "Rename", onDismiss = { renaming = null }) {
+      vm.renameCustomShape(shape.id, it)
+      renaming = null
+    }
+  }
+  deleting?.let { shape ->
+    ConfirmDialog("Delete “${shape.name}”?", "It will no longer be offered here or recognised when you hold the pen. Shapes already on your pages stay.", "Delete", destructive = true, onDismiss = { deleting = null }) {
+      vm.deleteCustomShape(shape.id)
+      deleting = null
+    }
+  }
+}
+
+@Composable
+private fun ShapeTile(label: String, on: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: @Composable (Color) -> Unit) {
+  val c = Tali.colors
+  Column(
+    Modifier.width(93.dp)
+      .clip(RoundedCornerShape(14.dp))
+      .background(if (on) c.blueSoft else c.background)
+      .combinedClickableCompat(onClick = onClick, onLongClick = onLongClick)
+      .padding(vertical = 8.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    icon(if (on) c.blue else c.ink)
+    Spacer(Modifier.height(4.dp))
+    Text(label, style = MaterialTheme.typography.labelSmall, color = if (on) c.blue else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
   }
 }

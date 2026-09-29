@@ -16,6 +16,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tali.notes.geometry.Rect
+import com.tali.notes.model.CustomShape
+import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.geometry.Pt
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenType
@@ -135,6 +138,29 @@ fun ShapeIcon(kind: ShapeKind, color: Color, modifier: Modifier = Modifier, size
       val path = Path().apply {
         moveTo(pts[0].x, pts[0].y)
         for (i in 1 until pts.size) lineTo(pts[i].x, pts[i].y)
+      }
+      drawPath(path, color, style = stroke)
+    }
+  }
+}
+
+/** Any shape geometry (such as one of her saved shapes), scaled to fit the icon. */
+@Composable
+fun GeometryIcon(geometry: ShapeGeometry, color: Color, modifier: Modifier = Modifier, size: Dp = 30.dp) {
+  Canvas(modifier.size(size)) {
+    val s = this.size.width
+    val m = s * 0.12f
+    val paths = geometry.paths(CustomShape.REFERENCE_PEN)
+    val box = Rect.around(paths.flatten()) ?: return@Canvas
+    val k = (s - 2 * m) / maxOf(box.width, box.height, 1f)
+    val ox = (s - box.width * k) / 2f - box.left * k
+    val oy = (s - box.height * k) / 2f - box.top * k
+    val stroke = Stroke(width = s * 0.055f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    paths.forEach { pts ->
+      if (pts.size < 2) return@forEach
+      val path = Path().apply {
+        moveTo(ox + pts[0].x * k, oy + pts[0].y * k)
+        for (i in 1 until pts.size) lineTo(ox + pts[i].x * k, oy + pts[i].y * k)
       }
       drawPath(path, color, style = stroke)
     }

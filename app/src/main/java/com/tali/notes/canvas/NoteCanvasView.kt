@@ -32,6 +32,8 @@ import com.tali.notes.geometry.Geo
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import com.tali.notes.geometry.ShapeRecognizer
+import com.tali.notes.model.CustomShape
+import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.ink.Brushes
 import com.tali.notes.ink.StrokeFactory
 import com.tali.notes.model.CanvasItem
@@ -58,7 +60,7 @@ interface CanvasHost {
 }
 
 /** Selection summary in screen pixels, for placing the selection menu. */
-data class SelectionInfo(val screenRect: RectF, val count: Int, val hasShape: Boolean, val hasImage: Boolean)
+data class SelectionInfo(val screenRect: RectF, val count: Int, val hasShape: Boolean, val hasImage: Boolean, val hasDrawing: Boolean = true)
 
 /**
  * The drawing surface. Finished content is drawn from GPU tiles; the pen stroke in progress is drawn
@@ -90,6 +92,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
 
   var shapeKind = ShapeKind.LINE
+
+  /** When set, the shape tool draws this saved shape instead of [shapeKind]. */
+  var customShape: CustomShape? = null
   var paperStyle = PaperStyle.DOTS
     set(value) {
       field = value
@@ -624,7 +629,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     val id = strokeId ?: return
     if (Geo.pathLength(strokePoints) * camera.scale < 24f * density) return
-    val geometry = ShapeRecognizer.recognize(strokePoints) ?: return
+    val geometry = ShapeRecognizer.recognize(strokePoints, settings.customShapes) ?: return
     val slot = settings.activeSlot
     val pen = strokePens[id] ?: slot.type
     inProgress.cancelStroke(id, null)
@@ -638,7 +643,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun buildShape(p0: Pt, p1: Pt): ShapeItem {
     val slot = settings.shapeSlot
-    var geometry = shapeKind.create(p0, p1)
+    var geometry = customShape?.fitInto(p0, p1) ?: shapeKind.create(p0, p1)
     if (geometry is LineShape) {
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
       geometry = geometry.copy(b = snapped.b)
@@ -853,7 +858,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       host.onSelectionChanged(null)
       return
     }
-    host.onSelectionChanged(SelectionInfo(screenRect(b, Affine.IDENTITY), selection.size, selection.any { it is ShapeItem }, selection.any { it is ImageItem }))
+    host.onSelectionChanged(SelectionInfo(screenRect(b, Affine.IDENTITY), selection.size, selection.any { it is ShapeItem }, selection.any { it is ImageItem }, selection.any { it !is ImageItem }))
   }
 
   fun clearSelection() {
@@ -879,6 +884,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     setSelection(moved)
     if (moved.size == 1 && moved[0] is ShapeItem) activeShapeId = moved[0].id
   }
+
+  /** The selection as one clean shape, for saving it to My shapes. */
+  fun selectionGeometry(): ShapeGeometry? = CustomShape.geometryFrom(selection)
 
   fun deleteSelection() {
     val d = doc ?: return

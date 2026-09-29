@@ -1,5 +1,6 @@
 package com.tali.notes.geometry
 
+import com.tali.notes.model.CustomShape
 import com.tali.notes.model.EllipseShape
 import com.tali.notes.model.LineShape
 import com.tali.notes.model.PolyShape
@@ -23,6 +24,36 @@ import kotlin.math.sqrt
  */
 object ShapeRecognizer {
   private const val DEG = (PI / 180).toFloat()
+
+  /**
+   * Like [recognize], but also tries her own saved shapes. A straight line always stays a line (so
+   * hold-to-straighten never surprises her); otherwise a close enough match with one of her shapes
+   * wins, since she saved it precisely because she draws it often.
+   */
+  fun recognize(raw: List<Pt>, custom: List<CustomShape>): ShapeGeometry? {
+    val builtin = recognize(raw)
+    if (custom.isEmpty() || builtin is LineShape) return builtin
+    val match = bestCustom(raw, custom) ?: return builtin
+    val box = Rect.around(raw) ?: return builtin
+    return match.placeOver(box)
+  }
+
+  /** The saved shape that the stroke looks most like, or null when none is close enough. */
+  fun bestCustom(raw: List<Pt>, custom: List<CustomShape>): CustomShape? {
+    val drawn = ShapeMatcher.cloud(listOf(dedupe(raw))) ?: return null
+    var best: CustomShape? = null
+    var bestD = ShapeMatcher.MATCH
+    for (shape in custom) {
+      val template = shape.cloud ?: continue
+      if (!ShapeMatcher.similarAspect(drawn, template)) continue
+      val d = ShapeMatcher.distance(drawn, template)
+      if (d < bestD) {
+        bestD = d
+        best = shape
+      }
+    }
+    return best
+  }
 
   fun recognize(raw: List<Pt>): ShapeGeometry? {
     val points = dedupe(raw)

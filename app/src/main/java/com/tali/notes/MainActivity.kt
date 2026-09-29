@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.tali.notes.backup.DriveBackup
 import com.tali.notes.theme.TaliTheme
 
 class MainActivity : ComponentActivity() {
@@ -11,5 +12,11 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent { TaliTheme { MainNavigation() } }
+  }
+
+  override fun onStop() {
+    super.onStop()
+    // She put the tablet down or switched apps: a good moment to back up.
+    DriveBackup.backupSoon(this)
   }
 }

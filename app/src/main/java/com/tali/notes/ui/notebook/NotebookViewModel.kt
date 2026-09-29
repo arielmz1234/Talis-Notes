@@ -16,10 +16,12 @@ import com.tali.notes.data.Viewport
 import com.tali.notes.export.Exporter
 import com.tali.notes.export.PdfLayout
 import com.tali.notes.geometry.Rect
+import com.tali.notes.model.CustomShape
 import com.tali.notes.model.EraserMode
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenSlot
 import com.tali.notes.model.PenType
+import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.model.Tool
 import com.tali.notes.talisApp
@@ -32,6 +34,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val CUSTOM_PREFIX = "custom:"
 
 enum class PanelKind {
   PEN,
@@ -66,6 +70,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   var selection by mutableStateOf<SelectionInfo?>(null)
   var zoom by mutableStateOf(1f)
   var shapeKind by mutableStateOf(runCatching { ShapeKind.valueOf(store.settings.value.lastShape) }.getOrDefault(ShapeKind.LINE))
+    private set
+
+  /** The saved shape the shape tool draws, if she picked one of hers. */
+  var customShapeId by mutableStateOf(store.settings.value.lastShape.removePrefix(CUSTOM_PREFIX).takeIf { store.settings.value.lastShape.startsWith(CUSTOM_PREFIX) })
     private set
 
   var hint by mutableStateOf<String?>(null)
@@ -115,9 +123,31 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun pickShape(kind: ShapeKind) {
     shapeKind = kind
+    customShapeId = null
     tool = Tool.SHAPE
     panel = null
     store.update { it.copy(lastShape = kind.name) }
+  }
+
+  fun pickCustomShape(shape: CustomShape) {
+    customShapeId = shape.id
+    tool = Tool.SHAPE
+    panel = null
+    store.update { it.copy(lastShape = CUSTOM_PREFIX + shape.id) }
+  }
+
+  fun saveCustomShape(name: String, geometry: ShapeGeometry) {
+    val shape = CustomShape(UUID.randomUUID().toString().take(8), name.trim().ifBlank { "My shape" }, geometry)
+    store.update { it.copy(customShapes = it.customShapes + shape) }
+  }
+
+  fun renameCustomShape(id: String, name: String) =
+    store.update { s -> s.copy(customShapes = s.customShapes.map { if (it.id == id) it.copy(name = name.trim().ifBlank { it.name }) else it }) }
+
+  fun deleteCustomShape(id: String) {
+    val wasCurrent = customShapeId == id
+    if (wasCurrent) customShapeId = null
+    store.update { s -> s.copy(customShapes = s.customShapes.filterNot { it.id == id }, lastShape = if (wasCurrent) shapeKind.name else s.lastShape) }
   }
 
   fun updateActivePen(transform: (PenSlot) -> PenSlot) =

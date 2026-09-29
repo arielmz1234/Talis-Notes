@@ -6,7 +6,11 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /** Plain SQLite: notebooks, folders and items; no code generation, fast on older tablets. */
-class NotesDb(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 2) {
+class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(context, name, null, VERSION) {
+  companion object {
+    const val VERSION = 2
+  }
+
   override fun onConfigure(db: SQLiteDatabase) {
     db.enableWriteAheadLogging()
     db.setForeignKeyConstraintsEnabled(true)

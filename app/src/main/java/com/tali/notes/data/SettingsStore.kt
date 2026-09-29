@@ -1,6 +1,7 @@
 package com.tali.notes.data
 
 import android.content.Context
+import com.tali.notes.model.CustomShape
 import com.tali.notes.model.EraserMode
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenSlot
@@ -51,6 +52,8 @@ data class AppSettings(
   val fingerDraws: Boolean? = null,
   val defaultPaper: PaperStyle = PaperStyle.DOTS,
   val lastShape: String = "LINE",
+  /** Shapes she saved from her own drawings; hold-to-shape recognises them too. */
+  val customShapes: List<CustomShape> = emptyList(),
 ) {
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 

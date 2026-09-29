@@ -33,11 +33,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.tali.notes.data.AppSettings
 import com.tali.notes.model.PenSlot
+import com.tali.notes.model.CustomShape
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.model.Tool
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.CloudCrown
 import com.tali.notes.ui.components.FloatingBar
+import com.tali.notes.ui.components.GeometryIcon
 import com.tali.notes.ui.components.PenGlyph
 import com.tali.notes.ui.components.ShapeIcon
 import com.tali.notes.ui.components.TaliIcons
@@ -48,6 +50,7 @@ fun MainToolbar(
   settings: AppSettings,
   tool: Tool,
   shapeKind: ShapeKind,
+  customShape: CustomShape?,
   onPen: (PenSlot) -> Unit,
   onTool: (Tool) -> Unit,
   onImage: () -> Unit,
@@ -78,7 +81,7 @@ fun MainToolbar(
       if (tool == Tool.SHAPE) {
         // Show which shape the shape tool will draw.
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.blueSoft).clickable { onTool(Tool.SHAPE) }, contentAlignment = Alignment.Center) {
-          ShapeIcon(shapeKind, c.blue, size = 26.dp)
+          if (customShape != null) GeometryIcon(customShape.geometry, c.blue, size = 26.dp) else ShapeIcon(shapeKind, c.blue, size = 26.dp)
         }
       }
     }

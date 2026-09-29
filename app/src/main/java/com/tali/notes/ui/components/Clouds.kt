@@ -1,6 +1,14 @@
 package com.tali.notes.ui.components
 
 import android.graphics.Bitmap
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.runtime.produceState
+import androidx.compose.animation.core.animateFloatAsState
+import android.util.LruCache
 import android.graphics.BlurMaskFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -23,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -143,22 +150,37 @@ private fun paintCloud(recipe: CloudRecipe, w: Float, tones: CloudTones): Bitmap
 /** The cloud bitmap is a little taller than the layout box so the floating shadow has room. */
 private const val CLOUD_BITMAP_ASPECT = 0.56f
 
+/** Painted clouds, shared across screens so coming back to the library costs nothing. */
+private val cloudCache = LruCache<String, ImageBitmap>(24)
+
 /**
  * One fluffy cartoon cloud: white, sunlit puffs on top, a soft blue-lilac underside with little
- * scallops, and a gentle shadow floating beneath. It is painted once into a bitmap, so drifting
- * and scrolling cost nothing.
+ * scallops, and a gentle shadow floating beneath. It is painted once, off the main thread, and
+ * fades in when ready; after that drifting and scrolling cost nothing.
  */
 @Composable
 fun Cloud(modifier: Modifier = Modifier, width: Dp = 160.dp, variant: Int = 0, alpha: Float = 1f) {
   val c = Tali.colors
-  val tones =
-    if (c.isDark) CloudTones(0xFFE4E1F7.toInt(), 0xFF9AA0DC.toInt(), 0xFF7C7CC8.toInt(), 0x40000000)
-    else CloudTones(0xFFFFFFFF.toInt(), 0xFFD3D9FA.toInt(), 0xFFB3B8EF.toInt(), 0x296256C8)
-  Spacer(
-    modifier.size(width, width * 0.5f).graphicsLayer { this.alpha = alpha }.drawWithCache {
-      val bmp = paintCloud(RECIPES[variant % RECIPES.size], size.width, tones).asImageBitmap()
-      onDrawBehind { drawImage(bmp) }
+  val px = with(LocalDensity.current) { width.toPx() }
+  val dark = c.isDark
+  val key = "$variant/${px.toInt()}/$dark"
+  val image by
+    produceState(cloudCache.get(key), key) {
+      if (value == null) {
+        val tones =
+          if (dark) CloudTones(0xFFE4E1F7.toInt(), 0xFF9AA0DC.toInt(), 0xFF7C7CC8.toInt(), 0x40000000)
+          else CloudTones(0xFFFFFFFF.toInt(), 0xFFD3D9FA.toInt(), 0xFFB3B8EF.toInt(), 0x296256C8)
+        value =
+          withContext(Dispatchers.Default) {
+            val bmp = paintCloud(RECIPES[variant % RECIPES.size], px, tones)
+            bmp.prepareToDraw()
+            bmp.asImageBitmap().also { cloudCache.put(key, it) }
+          }
+      }
     }
+  val shown by animateFloatAsState(if (image != null) 1f else 0f, tween(700), label = "cloud")
+  Spacer(
+    modifier.size(width, width * 0.5f).graphicsLayer { this.alpha = alpha * shown }.drawBehind { image?.let { drawImage(it) } }
   )
 }
 

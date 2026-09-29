@@ -305,13 +305,70 @@ class NotesRepository(private val context: Context) {
   private fun isImageUsedElsewhere(file: String): Boolean =
     db.readableDatabase.rawQuery("SELECT 1 FROM items WHERE kind=? AND payload LIKE ? LIMIT 1", arrayOf(ItemCodec.KIND_IMAGE.toString(), "%$file%")).use { it.moveToFirst() }
 
-  /** Closes the database so a restore can replace its file. */
-  fun closeForRestore() = db.close()
+  /**
+   * Copies the database to [target] as one consistent file. Runs on the writer thread, so no edit
+   * can land halfway through; the write-ahead log is folded in first so the copy is complete.
+   */
+  suspend fun snapshotDatabase(target: File) =
+    withContext(writer) {
+      db.writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+      databaseFile.copyTo(target, overwrite = true)
+    }
 
-  suspend fun reopenAfterRestore() = withContext(writer) {
-    reload()
-    _revision.value++
-  }
+  /** What a restore did, for the message she sees. */
+  data class MergeResult(val added: Int, val updated: Int, val kept: Int, val changed: Set<String>)
+
+  /**
+   * Brings notebooks and folders from a backup database into this one. Nothing on the tablet is
+   * lost: a notebook only in the backup is added, one in both is replaced only if the backup copy
+   * was edited more recently, and everything else stays as it is.
+   */
+  suspend fun mergeFrom(backup: File): MergeResult =
+    withContext(writer) {
+      val w = db.writableDatabase
+      // ATTACH can't run inside a transaction, and needs a plain path.
+      w.execSQL("ATTACH DATABASE ? AS bk", arrayOf(backup.path))
+      try {
+        var added = 0
+        var updated = 0
+        var kept = 0
+        val incoming = mutableListOf<Pair<String, Boolean>>()
+        w.beginTransaction()
+        try {
+          w.execSQL("INSERT OR IGNORE INTO folders (id,name,color,created,position) SELECT id,name,color,created,position FROM bk.folders")
+          w.rawQuery("SELECT b.id, m.id IS NOT NULL, b.updated > IFNULL(m.updated, 0) FROM bk.notebooks b LEFT JOIN main.notebooks m ON m.id = b.id", null).use { c ->
+            while (c.moveToNext()) {
+              val exists = c.getInt(1) == 1
+              val newer = c.getInt(2) == 1
+              when {
+                !exists -> { incoming += c.getString(0) to false; added++ }
+                newer -> { incoming += c.getString(0) to true; updated++ }
+                else -> kept++
+              }
+            }
+          }
+          for ((id, exists) in incoming) {
+            if (exists) {
+              w.execSQL("DELETE FROM main.items WHERE notebook_id = ?", arrayOf(id))
+              w.execSQL("DELETE FROM main.notebooks WHERE id = ?", arrayOf(id))
+            }
+            w.execSQL(
+              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id FROM bk.notebooks WHERE id = ?",
+              arrayOf(id),
+            )
+            w.execSQL("INSERT OR REPLACE INTO main.items SELECT * FROM bk.items WHERE notebook_id = ?", arrayOf(id))
+          }
+          w.setTransactionSuccessful()
+        } finally {
+          w.endTransaction()
+        }
+        reload()
+        _revision.value++
+        MergeResult(added, updated, kept, incoming.map { it.first }.toSet())
+      } finally {
+        w.execSQL("DETACH DATABASE bk")
+      }
+    }
 
   companion object {
     const val MAX_IMAGE_SIDE = 2048

@@ -95,6 +95,11 @@ import com.tali.notes.ui.components.Sparkle
 import com.tali.notes.ui.components.cloudSurface
 import com.tali.notes.ui.components.ToolButton
 import com.tali.notes.ui.library.DialogCard
+import com.tali.notes.model.ShapeGeometry
+import com.tali.notes.ui.components.GeometryIcon
+import androidx.compose.material.icons.outlined.AutoAwesome
+import com.tali.notes.ui.library.TitleField
+import androidx.compose.ui.text.input.TextFieldValue
 import com.tali.notes.ui.library.RenameDialog
 import java.io.File
 import kotlin.math.roundToInt
@@ -118,6 +123,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   val scope = rememberCoroutineScope()
   var renaming by remember { mutableStateOf(false) }
   var exporting by remember { mutableStateOf(false) }
+  var savingShape by remember { mutableStateOf<ShapeGeometry?>(null) }
   var pendingPdf by remember { mutableStateOf<File?>(null) }
 
   val imagePicker =
@@ -182,6 +188,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
           v.settings = settings
           v.tool = vm.tool
           v.shapeKind = vm.shapeKind
+          v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
           v.accentColor = c.accent.toArgb()
           v.handleColor = c.blue.toArgb()
@@ -209,6 +216,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
             settings = settings,
             tool = vm.tool,
             shapeKind = vm.shapeKind,
+            customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId },
             onPen = vm::onPenTapped,
             onTool = vm::onToolTapped,
             onImage = {
@@ -268,11 +276,20 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
           onDelete = { holder.view?.runSafely { deleteSelection() } },
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
+          onSaveShape = { savingShape = holder.view?.selectionGeometry() },
         )
       }
     }
   }
 
+  savingShape?.let { geometry ->
+    SaveShapeDialog(geometry, onDismiss = { savingShape = null }) { name ->
+      vm.saveCustomShape(name, geometry)
+      savingShape = null
+      holder.view?.runSafely { clearSelection() }
+      vm.showHint("Saved to My shapes — hold the pen at the end of a stroke to snap to it")
+    }
+  }
   if (renaming) {
     RenameDialog(meta?.title ?: "", onDismiss = { renaming = false }) {
       vm.rename(it)
@@ -413,7 +430,7 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onColor: (Int) -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
@@ -451,8 +468,36 @@ private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () ->
         if (!sel.hasImage || sel.count > 1) ToolButton(Icons.Outlined.Palette, "Colour") { picking = true }
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
+        if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
       }
+    }
+  }
+}
+
+/** Names a selection before it joins My shapes, with a preview of the clean shape. */
+@Composable
+private fun SaveShapeDialog(geometry: ShapeGeometry, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+  val c = Tali.colors
+  var value by remember { mutableStateOf(TextFieldValue("")) }
+  DialogCard(onDismiss, width = 480) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box(Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)).background(c.blueSoft), contentAlignment = Alignment.Center) {
+        GeometryIcon(geometry, c.blue, size = 72.dp)
+      }
+      Spacer(Modifier.width(18.dp))
+      Column(Modifier.weight(1f)) {
+        Text("Save as shape", style = MaterialTheme.typography.titleLarge, color = c.ink)
+        Spacer(Modifier.height(4.dp))
+        Text("It will appear in Shapes under My shapes, and holding the pen at the end of a similar stroke will snap to it.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+      }
+    }
+    Spacer(Modifier.height(18.dp))
+    TitleField(value, { value = it }, "Name, e.g. I-beam") { onSave(value.text) }
+    Spacer(Modifier.height(24.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+      QuietButton("Cancel", onClick = onDismiss)
+      PrimaryButton("Save shape") { onSave(value.text) }
     }
   }
 }
