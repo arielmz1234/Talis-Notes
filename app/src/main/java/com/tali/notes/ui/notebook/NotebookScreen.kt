@@ -313,7 +313,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
 @Composable
 private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit) {
   val c = Tali.colors
-  FloatingBar(Modifier.height(52.dp)) {
+  FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
     ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back to notebooks", onClick = onBack)
     Text(
       title,
@@ -437,7 +437,7 @@ private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () ->
       layout(constraints.maxWidth, constraints.maxHeight) { p.place(x, y) }
     }
   ) {
-    FloatingBar(Modifier.height(52.dp)) {
+    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
       if (picking) {
         Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
           colors.take(12).forEach { col ->

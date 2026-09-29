@@ -54,7 +54,7 @@ fun MainToolbar(
   modifier: Modifier = Modifier,
 ) {
   val c = Tali.colors
-  FloatingBar(modifier.height(60.dp), crown = CloudCrown.START) {
+  FloatingBar(modifier.height(60.dp), crown = CloudCrown.EDGE) {
     // The pen tray: pens stand at the bottom edge, the active one lifted.
     Row(Modifier.height(56.dp).clipToBounds().padding(horizontal = 4.dp), verticalAlignment = Alignment.Bottom) {
       settings.pens.forEach { slot ->
@@ -89,7 +89,7 @@ fun MainToolbar(
 
 @Composable
 fun UndoRedoBar(canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, trailing: @Composable () -> Unit) {
-  FloatingBar(Modifier.height(52.dp)) {
+  FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
     ToolButton(Icons.AutoMirrored.Outlined.Undo, "Undo", enabled = canUndo, onClick = onUndo)
     ToolButton(Icons.AutoMirrored.Outlined.Redo, "Redo", enabled = canRedo, onClick = onRedo)
     Divider()
