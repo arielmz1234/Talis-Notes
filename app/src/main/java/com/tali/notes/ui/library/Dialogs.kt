@@ -40,6 +40,7 @@ import androidx.compose.ui.window.Dialog
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.PaperSwatch
+import com.tali.notes.ui.components.cloudSurface
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.SectionLabel
@@ -49,7 +50,8 @@ fun DialogCard(onDismiss: () -> Unit, width: Int = 520, content: @Composable () 
   val c = Tali.colors
   Dialog(onDismissRequest = onDismiss) {
     Column(
-      Modifier.width(width.dp).clip(RoundedCornerShape(24.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(24.dp)).padding(28.dp)
+      // The same soft cloud surface as the notebook panels, floating on a lilac shadow.
+      Modifier.width(width.dp).cloudSurface(24.dp, shadowDepth = 12.dp).padding(28.dp)
     ) {
       content()
     }

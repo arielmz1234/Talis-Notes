@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -128,7 +129,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
 @Composable
 private fun BackupCard(icon: ImageVector, title: String, body: String, actions: (@Composable () -> Unit)? = null) {
   val c = Tali.colors
-  Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(c.background).padding(16.dp)) {
+  Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(c.surface.copy(alpha = 0.7f)).border(1.dp, c.line, RoundedCornerShape(18.dp)).padding(16.dp)) {
     Icon(icon, null, tint = c.blue, modifier = Modifier.size(22.dp))
     Spacer(Modifier.width(14.dp))
     Column(Modifier.weight(1f)) {
