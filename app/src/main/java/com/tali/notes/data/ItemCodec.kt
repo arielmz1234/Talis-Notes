@@ -1,5 +1,6 @@
 package com.tali.notes.data
 
+import androidx.ink.strokes.MutableStrokeInputBatch
 import androidx.ink.strokes.Stroke
 import androidx.ink.strokes.StrokeInputBatch
 import androidx.ink.storage.decode
@@ -54,12 +55,16 @@ object ItemCodec {
         when (row.kind) {
           KIND_INK -> {
             val pen = PenType.valueOf(row.pen!!)
-            val inputs = StrokeInputBatch.decode(ByteArrayInputStream(row.payload))
-            InkItem(row.id, row.z, pen, Stroke(Brushes.brush(pen, row.color, row.size), inputs))
+            // Built on first use; see InkItem.
+            InkItem.deferred(row.id, row.z, pen, Rect(row.l, row.t, row.r, row.b), row.color) {
+              val brush = Brushes.brush(pen, row.color, row.size)
+              // A damaged stroke becomes an empty one rather than breaking every redraw.
+              runCatching { Stroke(brush, StrokeInputBatch.decode(ByteArrayInputStream(row.payload))) }.getOrElse { Stroke(brush, MutableStrokeInputBatch()) }
+            }
           }
           KIND_SHAPE -> {
             val geometry = json.decodeFromString(ShapeGeometry.serializer(), row.payload.decodeToString())
-            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry)
+            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry, Rect(row.l, row.t, row.r, row.b))
           }
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())

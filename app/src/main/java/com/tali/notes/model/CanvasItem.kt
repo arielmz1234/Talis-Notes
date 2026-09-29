@@ -22,11 +22,37 @@ sealed class CanvasItem {
   abstract fun transformed(m: Affine, newId: String = id, newZ: Long = z): CanvasItem
 }
 
-class InkItem(override val id: String, override val z: Long, override val pen: PenType, val stroke: Stroke) : CanvasItem() {
-  override val bounds: Rect = StrokeFactory.bounds(stroke)
+/**
+ * A hand-drawn stroke. Loaded strokes are built lazily: their bounds and colour come from storage,
+ * and the stroke itself (its mesh is the expensive part) is only made when something first draws
+ * or touches it. A big notebook therefore opens instantly and builds what's on screen first.
+ */
+class InkItem
+private constructor(
+  override val id: String,
+  override val z: Long,
+  override val pen: PenType,
+  private val built: Lazy<Stroke>,
+  knownBounds: Rect?,
+  private val knownColor: Int?,
+) : CanvasItem() {
+  constructor(id: String, z: Long, pen: PenType, stroke: Stroke) : this(id, z, pen, lazyOf(stroke), null, null)
+
+  val stroke: Stroke
+    get() = built.value
+
+  /** Whether the stroke has been built yet (so background warm-up can skip it). */
+  val isBuilt: Boolean
+    get() = built.isInitialized()
+
+  override val bounds: Rect = knownBounds ?: StrokeFactory.bounds(stroke)
 
   val color: Int
-    get() = Brushes.displayColor(stroke.brush)
+    get() = knownColor ?: Brushes.displayColor(stroke.brush)
+
+  companion object {
+    fun deferred(id: String, z: Long, pen: PenType, bounds: Rect, color: Int, build: () -> Stroke) = InkItem(id, z, pen, lazy(build), bounds, color)
+  }
 
   override fun transformed(m: Affine, newId: String, newZ: Long) = InkItem(newId, newZ, pen, StrokeFactory.transform(stroke, m))
 
@@ -40,10 +66,12 @@ class ShapeItem(
   val color: Int,
   val size: Float,
   val geometry: ShapeGeometry,
+  /** Bounds saved with the shape, so a loaded shape can wait to build its strokes until it's drawn. */
+  knownBounds: Rect? = null,
 ) : CanvasItem() {
-  val strokes: List<Stroke> = StrokeFactory.shapeStrokes(geometry, pen, color, size)
+  val strokes: List<Stroke> by lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
 
-  override val bounds: Rect = strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)
+  override val bounds: Rect = knownBounds ?: strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)
 
   override fun transformed(m: Affine, newId: String, newZ: Long) =
     ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m))

@@ -18,6 +18,9 @@ import com.tali.notes.export.Exporter
 import com.tali.notes.export.PdfLayout
 import com.tali.notes.geometry.Rect
 import com.tali.notes.model.CustomShape
+import com.tali.notes.model.ShapeItem
+import com.tali.notes.model.InkItem
+import com.tali.notes.model.CanvasItem
 import com.tali.notes.model.EraserMode
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenSlot
@@ -93,9 +96,38 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         canRedo = r
       }
       document = doc
+      warmUp(items, initialViewport)
       // A first-time nudge towards the app's best trick.
       kotlinx.coroutines.delay(1500)
       tip("hold", "Tip: at the end of a line or shape, hold the pen still and it snaps clean")
+    }
+  }
+
+  /**
+   * Builds the loaded strokes in the background, the ones nearest the saved view first, on every
+   * core. The screen draws immediately; anything it reaches first is simply built on the spot.
+   */
+  private fun warmUp(items: List<CanvasItem>, viewport: Viewport?) {
+    val pending = items.filter { (it is InkItem && !it.isBuilt) || it is ShapeItem }
+    if (pending.isEmpty()) return
+    val cx = (viewport?.x ?: 0f) + 600f / (viewport?.zoom ?: 1f)
+    val cy = (viewport?.y ?: 0f) + 400f / (viewport?.zoom ?: 1f)
+    val queue = pending.sortedBy { val c = it.bounds.center; (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy) }
+    val next = java.util.concurrent.atomic.AtomicInteger(0)
+    val workers = Runtime.getRuntime().availableProcessors().coerceIn(1, 6)
+    repeat(workers) {
+      viewModelScope.launch(Dispatchers.Default) {
+        while (true) {
+          val item = queue.getOrNull(next.getAndIncrement()) ?: break
+          runCatching {
+            when (item) {
+              is InkItem -> item.stroke
+              is ShapeItem -> item.strokes
+              else -> Unit
+            }
+          }
+        }
+      }
     }
   }
 
