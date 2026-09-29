@@ -93,6 +93,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         canRedo = r
       }
       document = doc
+      // A first-time nudge towards the app's best trick.
+      kotlinx.coroutines.delay(1500)
+      tip("hold", "Tip: at the end of a line or shape, hold the pen still and it snaps clean")
     }
   }
 
@@ -204,6 +207,13 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   }
 
   fun rename(title: String) = repo.rename(notebookId, title.ifBlank { "Untitled" })
+
+  /** Shows [message] the first time [id] comes up, never again after that. */
+  fun tip(id: String, message: String) {
+    if (id in settings.value.seenTips) return
+    store.update { it.copy(seenTips = it.seenTips + id) }
+    hint = message
+  }
 
   fun showHint(message: String) {
     hint = message

@@ -200,6 +200,8 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
 
                 override fun onHint(message: String) = vm.showHint(message)
 
+                override fun onTip(id: String, message: String) = vm.tip(id, message)
+
                 override fun onPageChanged(index: Int, count: Int) {
                   vm.page = index to count
                 }
@@ -467,7 +469,8 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
   val c = Tali.colors
   LaunchedEffect(message) {
     if (message != null && !message.endsWith("…")) {
-      delay(2400)
+      // Long enough to read: about a fifth of a second per word, never less than 2.4 s.
+      delay(maxOf(2400L, message.split(' ').size * 260L))
       onDone()
     }
   }

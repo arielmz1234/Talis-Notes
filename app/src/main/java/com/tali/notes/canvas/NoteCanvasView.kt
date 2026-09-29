@@ -62,6 +62,9 @@ interface CanvasHost {
   /** A brief message, such as "Converted to shape". */
   fun onHint(message: String) = Unit
 
+  /** A one-time tip, shown only the first time [id] comes up. */
+  fun onTip(id: String, message: String) = Unit
+
   /** Which imported PDF page is on screen ([index] from 0), or -1 when the notebook has none. */
   fun onPageChanged(index: Int, count: Int) = Unit
 }
@@ -768,7 +771,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (shape != null && d != null) {
           d.commit(Change(emptyList(), listOf(shape)))
           activeShapeId = shape.id
-          host.onHint("Drag the dots to adjust")
+          host.onTip("shape-dots", "Drag the dots to adjust the shape")
         }
         liveShape = null
       }
@@ -916,6 +919,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val area = Rect.around(pts) ?: return
     val picked = d.all.filter { item -> settings.lassoHits(item.pen) && item.bounds.intersects(area) && insideFraction(item, pts) >= 0.5f }
     setSelection(picked)
+    if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
   }
 

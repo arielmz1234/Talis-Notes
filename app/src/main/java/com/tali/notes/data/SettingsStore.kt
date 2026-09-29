@@ -54,6 +54,8 @@ data class AppSettings(
   val lastShape: String = "LINE",
   /** Shapes she saved from her own drawings; hold-to-shape recognises them too. */
   val customShapes: List<CustomShape> = emptyList(),
+  /** One-time tips she has already seen. */
+  val seenTips: Set<String> = emptySet(),
 ) {
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 
