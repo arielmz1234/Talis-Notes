@@ -110,6 +110,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   var shapeKind = ShapeKind.LINE
 
+  /** How far down the toolbars reach (dp), so jumps to a page land just below them. */
+  var topClearance = 124f
+
   /** When set, the shape tool draws this saved shape instead of [shapeKind]. */
   var customShape: CustomShape? = null
   var paperStyle = PaperStyle.DOTS
@@ -1157,7 +1160,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (width > 0 && height > 0) {
       val zoom = (width * 0.9f / (widest * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
       val scale = zoom * density
-      camera.set(Viewport(left + widest / 2f - width / 2f / scale, first - 124f / zoom, zoom))
+      camera.set(Viewport(left + widest / 2f - width / 2f / scale, first - topClearance / zoom, zoom))
       settleCamera()
       afterCameraMove()
     }
@@ -1317,7 +1320,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (width == 0 || height == 0) return
     val zoom = (width * 0.9f / (r.width * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
     val scale = zoom * density
-    animateCamera(Viewport(r.center.x - width / 2f / scale, r.top - 124f / zoom, zoom))
+    animateCamera(Viewport(r.center.x - width / 2f / scale, r.top - topClearance / zoom, zoom))
   }
 
   private var cameraAnimator: android.animation.ValueAnimator? = null

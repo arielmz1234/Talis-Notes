@@ -81,6 +81,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -141,7 +142,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   // One continuous sky across the top of the whole screen; the sidebar and notebooks sit below it.
   Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to c.background, 0.7f to c.background, 1f to c.sidebarEnd))) {
   SkyBand(height = 360.dp)
-  SkyClouds()
+  SkyClouds(LocalConfiguration.current.screenWidthDp)
   Row(Modifier.fillMaxSize()) {
     Sidebar(
       folders = folders,
@@ -158,8 +159,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     Box(Modifier.weight(1f).fillMaxHeight()) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 36.dp, end = 36.dp)) {
       Spacer(Modifier.height(112.dp))
-      Row(verticalAlignment = Alignment.Bottom) {
-        Column(Modifier.weight(1f)) {
+      val heading: @Composable (Modifier) -> Unit = { mod ->
+        Column(mod) {
           Text(if (inTrash) "Recently deleted" else currentFolder?.name ?: "All notebooks", style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Spacer(Modifier.height(6.dp))
           val today = remember { SimpleDateFormat("EEEE, d MMMM", Locale.UK).format(Date()) }
@@ -171,10 +172,23 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             color = c.inkMuted,
           )
         }
-        SearchField(query, onChange = { vm.query.value = it })
+      }
+      val actions: @Composable (Modifier) -> Unit = { mod ->
+        SearchField(query, onChange = { vm.query.value = it }, modifier = mod)
         Spacer(Modifier.width(12.dp))
         if (inTrash) QuietButton("Empty", color = c.danger) { emptyingTrash = true }
         else PrimaryButton("New notebook", Icons.Outlined.Add) { creating = true }
+      }
+      // Held upright there isn't room for all of it on one line: the search and button go underneath.
+      if (LocalConfiguration.current.screenWidthDp < 1000) {
+        heading(Modifier)
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) { actions(Modifier.weight(1f)) }
+      } else {
+        Row(verticalAlignment = Alignment.Bottom) {
+          heading(Modifier.weight(1f))
+          actions(Modifier.width(240.dp))
+        }
       }
       crashReport?.let { report ->
         Spacer(Modifier.height(16.dp))
@@ -521,10 +535,10 @@ private fun CoverSwatches(current: Int, onPick: (Int) -> Unit) {
 // ---- Main area ----
 
 @Composable
-private fun SearchField(value: String, onChange: (String) -> Unit) {
+private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
   val c = Tali.colors
   Row(
-    Modifier.width(240.dp).height(48.dp).clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
+    modifier.height(48.dp).clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Icon(Icons.Outlined.Search, null, tint = c.inkFaint, modifier = Modifier.size(20.dp))

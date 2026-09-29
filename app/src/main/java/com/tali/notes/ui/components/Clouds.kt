@@ -219,7 +219,11 @@ fun SkyBand(modifier: Modifier = Modifier, height: Dp = 320.dp, fadeTo: Color = 
 
 /** Clouds scattered across a sky band. [layout] picks one of a few arrangements. */
 @Composable
-fun BoxScope.SkyClouds() {
+fun BoxScope.SkyClouds(widthDp: Int = 1334) {
+  if (widthDp < 1100) {
+    CompactSkyClouds(widthDp)
+    return
+  }
   // Two small, faded clouds further away, drifting slower: a little depth behind the big ones.
   DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 196.dp, y = 104.dp), width = 96.dp, variant = 1, driftDp = 5f, periodMs = 23000, alpha = 0.55f)
   DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-196).dp, y = 118.dp), width = 84.dp, variant = 2, driftDp = 4f, periodMs = 26000, alpha = 0.5f)
@@ -230,6 +234,17 @@ fun BoxScope.SkyClouds() {
   Sparkle(Modifier.align(Alignment.TopStart).offset(x = 230.dp, y = 40.dp), size = 11.dp, color = Color.White)
   Sparkle(Modifier.align(Alignment.TopCenter).offset(x = (-60).dp, y = 26.dp), size = 13.dp, color = Color.White)
   Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-230).dp, y = 76.dp), size = 9.dp, color = Color.White.copy(alpha = 0.85f))
+}
+
+/** The same sky for a narrow screen (a tablet held upright): three big clouds spread by width, one small one far away. */
+@Composable
+private fun BoxScope.CompactSkyClouds(widthDp: Int) {
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 170.dp, y = 110.dp), width = 90.dp, variant = 1, driftDp = 5f, periodMs = 23000, alpha = 0.55f)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (-24).dp, y = 18.dp), width = 180.dp, variant = 2, driftDp = 8f, periodMs = 14000)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (widthDp * 0.36f).dp, y = 10.dp), width = 230.dp, variant = 0, driftDp = 12f, periodMs = 19000)
+  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-16).dp, y = 30.dp), width = 160.dp, variant = 2, driftDp = 8f, periodMs = 12000)
+  Sparkle(Modifier.align(Alignment.TopStart).offset(x = 214.dp, y = 42.dp), size = 11.dp, color = Color.White)
+  Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-190).dp, y = 96.dp), size = 9.dp, color = Color.White.copy(alpha = 0.85f))
 }
 
 /** A four-point sparkle. */

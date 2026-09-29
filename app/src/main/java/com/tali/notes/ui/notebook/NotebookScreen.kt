@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
@@ -132,6 +133,8 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   val c = Tali.colors
   val holder = remember { CanvasHolder() }
   val scope = rememberCoroutineScope()
+  // Held upright (or on a small tablet) the top bar splits into two lines.
+  val narrow = LocalConfiguration.current.screenWidthDp < 900
   // The paper is always light, so the status bar needs dark icons here even in dark mode.
   val view = LocalView.current
   DisposableEffect(c.isDark) {
@@ -235,6 +238,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
           v.settings = settings
           v.tool = vm.tool
           v.shapeKind = vm.shapeKind
+          v.topClearance = if (narrow) 196f else 124f
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
           v.accentColor = c.accent.toArgb()
@@ -254,10 +258,8 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
     if (vm.panel != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { vm.panel = null } })
 
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
-      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Box(Modifier.weight(1f)) {
-          TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true })
-        }
+      val titlePill: @Composable () -> Unit = { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) }
+      val tools: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           MainToolbar(
             settings = settings,
@@ -301,7 +303,8 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
             }
           }
         }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.TopEnd) {
+      }
+      val undoBar: @Composable () -> Unit = {
           UndoRedoBar(
             canUndo = vm.canUndo,
             canRedo = vm.canRedo,
@@ -321,6 +324,21 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
               onPaste = { holder.view?.runSafely { paste() } },
             )
           }
+      }
+      if (narrow) {
+        // Held upright: title and undo share the first line, the tools get a line of their own.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+          Box(Modifier.weight(1f)) { titlePill() }
+          Spacer(Modifier.width(12.dp))
+          undoBar()
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) { tools() }
+      } else {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+          Box(Modifier.weight(1f)) { titlePill() }
+          tools()
+          Box(Modifier.weight(1f), contentAlignment = Alignment.TopEnd) { undoBar() }
         }
       }
       Spacer(Modifier.weight(1f))
@@ -338,6 +356,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
       if (vm.panel == null) {
         SelectionMenu(
           sel,
+          narrow = narrow,
           colors = settings.savedColors,
           onDelete = { holder.view?.runSafely { deleteSelection() } },
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
@@ -544,7 +563,7 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
@@ -553,7 +572,7 @@ private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () ->
       val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
       val gap = with(density) { 14.dp.roundToPx() }
       // Keep clear of the toolbars along the top.
-      val topLimit = with(density) { 128.dp.roundToPx() }
+      val topLimit = with(density) { (if (narrow) 196 else 128).dp.roundToPx() }
       val bottomLimit = constraints.maxHeight - p.height - gap
       val cx = sel.screenRect.centerX().roundToInt()
       val x = (cx - p.width / 2).coerceIn(gap, constraints.maxWidth - p.width - gap)
