@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -175,6 +176,8 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
     drawRoundRect(c.paper, cornerRadius = CornerRadius(8.dp.toPx()))
     val line = Color(0xFFD2C3EE)
     val step = size.width / 7f
+    // Too small to draw a pattern (and a zero step would never finish the loops below).
+    if (step < 2f) return@Canvas
     when (style) {
       PaperStyle.BLANK -> Unit
       PaperStyle.DOTS -> {
@@ -193,6 +196,25 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
       PaperStyle.ENGINEERING -> {
         grid(step / 2.5f, Color(0xFFE4EDFC), 0.8f, both = true)
         grid(step * 2f, Color(0xFFA9C1F2), 1.2f, both = true)
+      }
+      PaperStyle.ISOMETRIC -> {
+        val iso = Color(0xFFC7DBF8)
+        val h = step * 1.2f
+        val t = 0.57735026f
+        clipRect {
+          var x = h
+          while (x < size.width) {
+            drawLine(iso, Offset(x, 0f), Offset(x, size.height), density)
+            x += h
+          }
+          val side = h / 0.8660254f
+          var k = -size.width * t
+          while (k < size.height + size.width * t) {
+            drawLine(iso, Offset(0f, k), Offset(size.width, k - size.width * t), density)
+            drawLine(iso, Offset(0f, k), Offset(size.width, k + size.width * t), density)
+            k += side
+          }
+        }
       }
     }
     drawRoundRect(c.line, cornerRadius = CornerRadius(8.dp.toPx()), style = Stroke(1.dp.toPx()))

@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -100,11 +101,12 @@ fun NewNotebookDialog(defaultPaper: PaperStyle, folderName: String? = null, onDi
     Spacer(Modifier.height(22.dp))
     SectionLabel("Paper")
     Spacer(Modifier.height(10.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    // The swatches share the row's width equally, however many paper styles there are.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       PaperStyle.entries.forEach { style ->
         val on = style == paper
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.RadioButton) { paper = style }.padding(4.dp)) {
-          PaperSwatch(style, Modifier.size(88.dp, 72.dp).then(if (on) Modifier.border(2.dp, c.accent, RoundedCornerShape(8.dp)) else Modifier))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(role = Role.RadioButton) { paper = style }.padding(4.dp)) {
+          PaperSwatch(style, Modifier.fillMaxWidth().aspectRatio(1.22f).then(if (on) Modifier.border(2.dp, c.accent, RoundedCornerShape(8.dp)) else Modifier))
           Spacer(Modifier.height(6.dp))
           Text(style.label, style = MaterialTheme.typography.labelMedium, color = if (on) c.accent else c.inkMuted)
         }

@@ -373,7 +373,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun rotateHandle(r: RectF) = Pt(r.centerX(), r.bottom + 30f * density)
 
   private fun drawRotateHandle(canvas: Canvas, r: RectF) {
-    if (!canRotateSelection() || mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION) return
+    if (!canRotateSelection() || mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.HANDLE_DRAG) return
     val h = rotateHandle(r)
     canvas.drawLine(h.x, r.bottom, h.x, h.y - 6.5f * density, selectionPaint)
     drawHandle(canvas, h.x, h.y, 6.5f)
@@ -813,8 +813,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val shape = liveShape
         if (shape != null && d != null) {
           d.commit(Change(emptyList(), listOf(shape)))
-          activeShapeId = shape.id
-          host.onTip("shape-dots", "Drag the dots to adjust the shape")
+          // No handles yet: the next line often starts right at this one's end, and should draw,
+          // not grab it. Tapping the shape (or the lasso) brings up its dots.
+          host.onTip("shape-dots", "Tap a shape with your finger to adjust its ends")
         }
         liveShape = null
       }
@@ -836,7 +837,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           val preview = shapePreview ?: buildShape(shapeStart - Pt(60f, 40f), shapeStart + Pt(60f, 40f))
           val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry)
           d.commit(Change(emptyList(), listOf(shape)))
-          activeShapeId = shape.id
         }
         shapePreview = null
       }

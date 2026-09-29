@@ -36,6 +36,9 @@ enum class PaperStyle(val label: String) {
   GRID("Grid"),
   LINES("Lines"),
   ENGINEERING("Engineering"),
+
+  /** Triangular grid for 3D sketches: vertical lines plus lines at 30° either way. */
+  ISOMETRIC("Isometric"),
 }
 
 enum class Tool {

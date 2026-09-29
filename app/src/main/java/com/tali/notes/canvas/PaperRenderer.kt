@@ -38,7 +38,50 @@ class PaperRenderer {
         grid(canvas, camera, width, height, 2 * mm, engineeringMinor, 0.8f * k, horizontalOnly = false)
         grid(canvas, camera, width, height, 10 * mm, engineeringMajor, 1.3f * k, horizontalOnly = false)
       }
+      PaperStyle.ISOMETRIC -> isometric(canvas, camera, width, height, 6 * mm, blueLine, 1f * k)
     }
+  }
+
+  /**
+   * Isometric paper: equilateral triangles of side [side], made of vertical lines and lines at
+   * +30° and -30°. Lines are clipped to the visible area and drawn in one batch.
+   */
+  private fun isometric(canvas: Canvas, camera: Camera, width: Int, height: Int, side: Float, color: Int, strokePx: Float) {
+    val h = side * 0.8660254f
+    val step = h * camera.scale
+    if (step < 6f && !print) return
+    val alpha = if (print) 1f else ((step - 6f) / 10f).coerceIn(0f, 1f)
+    paint.color = color
+    paint.alpha = (alpha * (color ushr 24)).toInt()
+    paint.strokeWidth = strokePx
+    val w = camera.visibleWorld(width, height)
+    val t = 0.57735026f // tan 30°
+    var n = 0
+    fun push(x0: Float, y0: Float, x1: Float, y1: Float) {
+      if (n + 4 > buffer.size) buffer = buffer.copyOf(buffer.size * 2)
+      buffer[n++] = (x0 - camera.x) * camera.scale
+      buffer[n++] = (y0 - camera.y) * camera.scale
+      buffer[n++] = (x1 - camera.x) * camera.scale
+      buffer[n++] = (y1 - camera.y) * camera.scale
+    }
+    var x = ceil(w.left / h) * h
+    while (x <= w.right) {
+      push(x, w.top, x, w.bottom)
+      x += h
+    }
+    // Rising lines: y = c - x·tan30 on screen (y grows downward), c a multiple of the side.
+    var c = floor((w.top + w.left * t) / side) * side
+    while (c <= w.bottom + w.right * t) {
+      push(w.left, c - w.left * t, w.right, c - w.right * t)
+      c += side
+    }
+    // Falling lines: y = c + x·tan30.
+    c = floor((w.top - w.right * t) / side) * side
+    while (c <= w.bottom - w.left * t) {
+      push(w.left, c + w.left * t, w.right, c + w.right * t)
+      c += side
+    }
+    canvas.drawLines(buffer, 0, n, paint)
   }
 
   private fun grid(canvas: Canvas, camera: Camera, width: Int, height: Int, spacing: Float, color: Int, strokePx: Float, horizontalOnly: Boolean) {
