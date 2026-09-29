@@ -51,6 +51,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.outlined.ContentPasteGo
@@ -202,6 +203,20 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
       lifecycleOwner.lifecycle.removeObserver(observer)
       holder.view?.let { if (it.width > 0) vm.persistView(it.viewport(), it.visibleWorld()) }
     }
+  }
+
+  // Also refresh the library preview and saved position a little after she stops writing, in case
+  // Android closes the app in the background before she leaves the notebook.
+  var edits by remember { mutableIntStateOf(0) }
+  DisposableEffect(doc) {
+    val listener: (com.tali.notes.canvas.Change) -> Unit = { edits++ }
+    doc?.listeners?.add(listener)
+    onDispose { doc?.listeners?.remove(listener) }
+  }
+  LaunchedEffect(edits) {
+    if (edits == 0) return@LaunchedEffect
+    delay(15_000)
+    holder.view?.let { if (it.width > 0) vm.persistView(it.viewport(), it.visibleWorld()) }
   }
 
   Box(Modifier.fillMaxSize().background(c.paper)) {
