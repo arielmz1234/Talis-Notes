@@ -7,7 +7,7 @@ Tali's notes are protected in three layers:
    - To restore, use **Restore from file**. It merges the backup in and never deletes anything:
      - A notebook that is only in the backup is added.
      - A notebook that is in both places keeps its most recently edited version.
-3. **Android's own backup.** This is free and already on. If Google backup is on in the tablet's settings (Settings > Accounts and backup > Back up data), Android saves the app's notebooks, pictures and settings to her Google account about once a day. It restores them automatically after a reinstall or on a new tablet. The limit is 25 MB, so pictures beyond that won't be included.
+3. **Android's own backup.** This is free and already on. If Google backup is on in the tablet's settings (Settings > Accounts and backup > Back up data), Android saves the app's notebooks (all the writing) and settings to her Google account about once a day. It restores them automatically after a reinstall or on a new tablet. Pictures and PDF pages are left out, so a big slide deck can't push it past Android's 25 MB limit; the backup file and Drive include them.
 
 There is also a fourth, optional layer:
 

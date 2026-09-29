@@ -135,6 +135,16 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
         }
       }
     }
+  val pdfPicker =
+    rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+      if (uri != null) {
+        scope.launch {
+          val pages = vm.importPdf(uri) ?: return@launch
+          holder.view?.runSafely { insertPages(pages) }
+          vm.showHint(if (pages.size == 1) "Added 1 page — write right on it" else "Added ${pages.size} pages — write right on them")
+        }
+      }
+    }
   val savePdf =
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
       val file = pendingPdf
@@ -222,6 +232,10 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
             onImage = {
               vm.panel = null
               imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onPdf = {
+              vm.panel = null
+              pdfPicker.launch(arrayOf("application/pdf"))
             },
           )
           AnimatedVisibility(

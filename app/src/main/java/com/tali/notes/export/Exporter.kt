@@ -6,6 +6,7 @@ import android.graphics.pdf.PdfDocument
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import com.tali.notes.canvas.Camera
 import com.tali.notes.canvas.ItemRenderer
+import com.tali.notes.data.ImageStore
 import com.tali.notes.canvas.PaperRenderer
 import com.tali.notes.geometry.Rect
 import com.tali.notes.ink.Brushes
@@ -27,10 +28,10 @@ object Exporter {
   private const val A4_H_PT = 842
   private const val MARGIN_DP = 48f
 
-  private fun renderer() = ItemRenderer(CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore))
+  private fun renderer(images: ImageStore) = ItemRenderer(CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore), images, sync = true)
 
   /** Renders the region [world] into a bitmap of the given width, keeping the aspect ratio. */
-  fun thumbnail(items: Collection<CanvasItem>, world: Rect, paper: PaperStyle, widthPx: Int): Bitmap {
+  fun thumbnail(items: Collection<CanvasItem>, world: Rect, paper: PaperStyle, widthPx: Int, images: ImageStore): Bitmap {
     val heightPx = (widthPx * world.height / world.width).toInt().coerceIn(1, widthPx * 2)
     val bmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
@@ -38,11 +39,11 @@ object Exporter {
     val camera = Camera(scale).apply { set(com.tali.notes.data.Viewport(world.left, world.top, 1f)) }
     PaperRenderer().draw(canvas, paper, camera, widthPx, heightPx)
     canvas.concat(camera.worldToScreen)
-    renderer().drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
+    renderer(images).drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
     return bmp
   }
 
-  fun pdf(items: Collection<CanvasItem>, paper: PaperStyle, layout: PdfLayout, out: File) {
+  fun pdf(items: Collection<CanvasItem>, paper: PaperStyle, layout: PdfLayout, out: File, images: ImageStore) {
     val content = items.map { it.bounds }.reduceOrNull(Rect::union)?.outset(MARGIN_DP) ?: Rect(0f, 0f, 1322f, 1871f)
     val pages: List<Rect> =
       when (layout) {
@@ -50,7 +51,7 @@ object Exporter {
         PdfLayout.A4_PAGES -> a4Pages(content).filter { page -> items.any { it.bounds.intersects(page) } }.ifEmpty { a4Pages(content).take(1) }
       }
     val doc = PdfDocument()
-    val r = renderer()
+    val r = renderer(images)
     val paperRenderer = PaperRenderer().apply { print = true }
     try {
       pages.forEachIndexed { i, world ->

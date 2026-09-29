@@ -12,6 +12,7 @@ import com.tali.notes.canvas.Document
 import com.tali.notes.canvas.SelectionInfo
 import com.tali.notes.data.AppSettings
 import com.tali.notes.data.NotebookMeta
+import com.tali.notes.data.NotesRepository
 import com.tali.notes.data.Viewport
 import com.tali.notes.export.Exporter
 import com.tali.notes.export.PdfLayout
@@ -209,9 +210,23 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   suspend fun importImage(uri: Uri): Pair<String, Bitmap>? {
     val name = repo.importImage(uri) ?: return null
-    val bmp = withContext(Dispatchers.IO) { repo.loadImage(name) } ?: return null
+    val bmp = withContext(Dispatchers.IO) { repo.images.loadNow(name) } ?: return null
     return name to bmp
   }
+
+  /** Renders a PDF's pages to pictures, showing progress in the hint. Returns null (with a message) on failure. */
+  suspend fun importPdf(uri: Uri): List<NotesRepository.ImportedPage>? =
+    try {
+      hint = "Opening PDF…"
+      repo.importPdf(uri) { done, total -> hint = "Adding pages… $done of $total" }.ifEmpty { null }.also { if (it == null) hint = "That PDF has no pages" }
+    } catch (e: NotesRepository.PdfImportException) {
+      hint = e.message
+      null
+    } catch (t: Throwable) {
+      com.tali.notes.CrashLog.recovered(getApplication(), t)
+      hint = "Couldn't read that PDF"
+      null
+    }
 
   // ---- Saving and export ----
 
@@ -229,7 +244,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       w = minOf(w, visible.width * 1.5f)
       val h = w / 1.32f
       val region = Rect(center.x - w / 2, center.y - h / 2, center.x + w / 2, center.y + h / 2)
-      val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640) }.getOrNull() ?: return@launch
+      val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images) }.getOrNull() ?: return@launch
       repo.saveThumbnail(notebookId, bmp)
     }
   }
@@ -241,7 +256,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val title = (meta.value?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
     return withContext(Dispatchers.Default) {
       val out = File(File(getApplication<Application>().cacheDir, "exports"), "$title.pdf")
-      runCatching { Exporter.pdf(items, paper, layout, out) }.map { out }.getOrNull()
+      runCatching { Exporter.pdf(items, paper, layout, out, repo.images) }.map { out }.getOrNull()
     }
   }
 }

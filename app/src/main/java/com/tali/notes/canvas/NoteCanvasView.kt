@@ -33,6 +33,8 @@ import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import com.tali.notes.geometry.ShapeRecognizer
 import com.tali.notes.model.CustomShape
+import com.tali.notes.talisApp
+import com.tali.notes.data.NotesRepository
 import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.ink.Brushes
 import com.tali.notes.ink.StrokeFactory
@@ -71,7 +73,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val density = resources.displayMetrics.density
   val camera = Camera(density)
   private val inProgress = InProgressStrokesView(context)
-  private val itemRenderer = ItemRenderer(Brushes.renderer())
+  private val images = context.talisApp.repository.images
+  private val itemRenderer = ItemRenderer(Brushes.renderer(), images)
+
+  /** A picture finished loading: redraw the tiles it covers. */
+  private val onImageLoaded: (String) -> Unit = { file ->
+    doc?.all?.forEach { if (it is ImageItem && it.file == file) tiles.invalidate(it.bounds) }
+    invalidate()
+  }
   private val tiles = TileCache(itemRenderer)
   private val paper = PaperRenderer()
   private val predictor = MotionEventPredictor.newInstance(this)
@@ -231,6 +240,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     doc?.listeners?.remove(docListener)
     doc = document
     document.listeners += docListener
+    images.addListener(onImageLoaded)
     tiles.invalidateAll()
     if (viewport != null) camera.set(viewport)
     else doOnLayout { document.contentBounds()?.let { camera.centerOn(Pt(it.center.x, it.top + height / 2f / camera.scale - 40f), width, height) } }
@@ -240,6 +250,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   fun detach() {
     doc?.listeners?.remove(docListener)
+    images.removeListener(onImageLoaded)
     doc = null
   }
 
@@ -927,10 +938,43 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val w = bitmap.width * s
     val h = bitmap.height * s
     val c = view.center
-    val item = ImageItem(d.newId(), d.nextZ(), file, Rect(c.x - w / 2, c.y - h / 2, c.x + w / 2, c.y + h / 2), bitmap)
+    images.put(file, bitmap)
+    val item = ImageItem(d.newId(), d.nextZ(), file, Rect(c.x - w / 2, c.y - h / 2, c.x + w / 2, c.y + h / 2))
     d.commit(Change(emptyList(), listOf(item)))
     // Selected right away so it can be dragged and resized into place.
     selectSingle(item)
+  }
+
+  /**
+   * Adds imported PDF pages as one tall stack below everything already in the notebook, at their
+   * real size (an A4 page exports back onto an A4 page), and scrolls to the first one.
+   */
+  fun insertPages(pages: List<NotesRepository.ImportedPage>) {
+    val d = doc ?: return
+    if (pages.isEmpty()) return
+    val content = d.contentBounds()
+    val widths = pages.map { it.widthPt / PT_PER_DP }
+    val widest = widths.max()
+    val left = content?.let { it.center.x - widest / 2f } ?: camera.visibleWorld(width, height).let { it.center.x - widest / 2f }
+    var top = content?.let { it.bottom + 160f } ?: (camera.visibleWorld(width, height).top + 40f)
+    val first = top
+    val items =
+      pages.mapIndexed { i, p ->
+        val w = widths[i]
+        val h = p.heightPt / PT_PER_DP
+        val x = left + (widest - w) / 2f
+        ImageItem(d.newId(), d.nextZ() + i, p.file, Rect(x, top, x + w, top + h)).also { top += h + PAGE_GAP }
+      }
+    d.commit(Change(emptyList(), items))
+    // Show the first page across the width of the screen.
+    if (width > 0 && height > 0) {
+      val zoom = (width * 0.9f / (widest * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
+      val scale = zoom * density
+      camera.set(Viewport(left + widest / 2f - width / 2f / scale, first - 124f / zoom, zoom))
+      settleCamera()
+      afterCameraMove()
+    }
+    invalidate()
   }
 
   // ---- Fingers: pan, pinch, tap to select, two-finger tap to undo ----
@@ -1088,6 +1132,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private val DRAW_MODES =
       setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE)
     private const val HOLD_TOLERANCE_DP = 7f
+
+    /** PDF points per world unit (dp), matching the PDF export so pages keep their real size. */
+    private const val PT_PER_DP = 72f / 160f
+    private const val PAGE_GAP = 48f
     private const val HANDLE_HIT_DP = 24f
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 260L

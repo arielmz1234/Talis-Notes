@@ -22,6 +22,16 @@ import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -54,6 +64,7 @@ fun MainToolbar(
   onPen: (PenSlot) -> Unit,
   onTool: (Tool) -> Unit,
   onImage: () -> Unit,
+  onPdf: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val c = Tali.colors
@@ -85,7 +96,22 @@ fun MainToolbar(
         }
       }
     }
-    ToolButton(Icons.Outlined.AddPhotoAlternate, "Insert image", onClick = onImage)
+    Box {
+      var inserting by remember { mutableStateOf(false) }
+      ToolButton(Icons.Outlined.AddPhotoAlternate, "Insert") { inserting = true }
+      DropdownMenu(expanded = inserting, onDismissRequest = { inserting = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+        DropdownMenuItem(
+          text = { Column { Text("Picture"); Text("From your photos or files", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+          leadingIcon = { Icon(Icons.Outlined.Image, null, tint = c.blue) },
+          onClick = { inserting = false; onImage() },
+        )
+        DropdownMenuItem(
+          text = { Column { Text("PDF pages"); Text("Lecture slides or a problem sheet to write on", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+          leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null, tint = c.blue) },
+          onClick = { inserting = false; onPdf() },
+        )
+      }
+    }
     Spacer(Modifier.width(2.dp))
   }
 }

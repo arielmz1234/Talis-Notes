@@ -1,6 +1,5 @@
 package com.tali.notes.model
 
-import android.graphics.Bitmap
 import androidx.ink.strokes.Stroke
 import com.tali.notes.geometry.Affine
 import com.tali.notes.geometry.Pt
@@ -63,7 +62,6 @@ class ImageItem(
   /** File name inside the app's image folder. */
   val file: String,
   val rect: Rect,
-  val bitmap: Bitmap?,
 ) : CanvasItem() {
   override val bounds: Rect = rect
   override val pen: PenType? = null
@@ -71,6 +69,6 @@ class ImageItem(
   override fun transformed(m: Affine, newId: String, newZ: Long): ImageItem {
     val a = m.apply(Pt(rect.left, rect.top))
     val b = m.apply(Pt(rect.right, rect.bottom))
-    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), bitmap)
+    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)))
   }
 }

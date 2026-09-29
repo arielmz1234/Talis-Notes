@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android's own backup to her Google account (Android 11 and older). A free safety net on top of
-     the app's backup file: notebooks, pictures and settings. Previews are rebuilt, so they're skipped. -->
+     the backup file: notebooks and settings. Pictures and PDF pages are left out so a big slide deck
+     can never push it past Android's 25 MB limit (the backup file and Drive include them). -->
 <full-backup-content>
     <include domain="database" path="notes.db" />
     <include domain="database" path="notes.db-wal" />
-    <include domain="file" path="images/" />
     <include domain="sharedpref" path="settings.xml" />
 </full-backup-content>

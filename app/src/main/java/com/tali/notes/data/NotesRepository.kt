@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import com.tali.notes.canvas.Change
@@ -72,6 +73,9 @@ class NotesRepository(private val context: Context) {
 
   val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
   val thumbsDir = File(context.filesDir, "thumbs").apply { mkdirs() }
+
+  /** Pictures and PDF pages, loaded as they come into view. */
+  val images = ImageStore(imagesDir)
   val databaseFile: File
     get() = context.getDatabasePath("notes.db")
 
@@ -252,7 +256,7 @@ class NotesRepository(private val context: Context) {
     }
 
   suspend fun loadItems(notebookId: String): List<CanvasItem> =
-    withContext(Dispatchers.IO) { readRows(notebookId).mapNotNull { ItemCodec.decode(it, ::loadImage) } }
+    withContext(Dispatchers.IO) { readRows(notebookId).mapNotNull(ItemCodec::decode) }
 
   fun readRows(notebookId: String): List<ItemRow> {
     val rows = mutableListOf<ItemRow>()
@@ -325,7 +329,49 @@ class NotesRepository(private val context: Context) {
         .getOrNull()
     }
 
-  fun loadImage(file: String): Bitmap? = runCatching { BitmapFactory.decodeFile(File(imagesDir, file).path) }.getOrNull()
+
+  /** One page of an imported PDF: its picture file and its size in PDF points. */
+  data class ImportedPage(val file: String, val widthPt: Float, val heightPt: Float)
+
+  class PdfImportException(message: String) : Exception(message)
+
+  /**
+   * Renders every page of a PDF (lecture slides, a problem sheet) into a picture she can write on.
+   * Pages are drawn sharp enough for zooming in on formulas, and saved as JPEGs to stay small.
+   */
+  suspend fun importPdf(uri: Uri, onProgress: (done: Int, total: Int) -> Unit): List<ImportedPage> =
+    withContext(Dispatchers.IO) {
+      val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: throw PdfImportException("Couldn't open that file.")
+      pfd.use { fd ->
+        val renderer =
+          try {
+            PdfRenderer(fd)
+          } catch (e: SecurityException) {
+            throw PdfImportException("This PDF is password-protected. Remove the password and try again.")
+          } catch (e: java.io.IOException) {
+            throw PdfImportException("That file isn't a PDF this tablet can read.")
+          }
+        renderer.use { r ->
+          val count = r.pageCount.coerceAtMost(MAX_PDF_PAGES)
+          List(count) { i ->
+            r.openPage(i).use { page ->
+              // About 190 dpi for an A4 page; long sides are capped so each page stays light in memory.
+              val scale = minOf(PDF_RENDER_WIDTH / page.width.toFloat(), PDF_RENDER_MAX_SIDE / maxOf(page.width, page.height).toFloat())
+              val w = (page.width * scale).toInt().coerceAtLeast(1)
+              val h = (page.height * scale).toInt().coerceAtLeast(1)
+              val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+              bmp.eraseColor(android.graphics.Color.WHITE)
+              page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+              val name = UUID.randomUUID().toString() + ".jpg"
+              File(imagesDir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+              bmp.recycle()
+              onProgress(i + 1, count)
+              ImportedPage(name, page.width.toFloat(), page.height.toFloat())
+            }
+          }
+        }
+      }
+    }
 
   private fun imageFilesOf(notebookId: String): List<String> =
     readRows(notebookId).filter { it.kind == ItemCodec.KIND_IMAGE }.mapNotNull { row ->
@@ -403,6 +449,9 @@ class NotesRepository(private val context: Context) {
   companion object {
     const val MAX_IMAGE_SIDE = 2048
     const val TRASH_DAYS = 30
+    private const val PDF_RENDER_WIDTH = 1600f
+    private const val PDF_RENDER_MAX_SIDE = 2400f
+    private const val MAX_PDF_PAGES = 300
   }
 }
 

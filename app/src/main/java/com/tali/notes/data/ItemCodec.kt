@@ -1,6 +1,5 @@
 package com.tali.notes.data
 
-import android.graphics.Bitmap
 import androidx.ink.strokes.Stroke
 import androidx.ink.strokes.StrokeInputBatch
 import androidx.ink.storage.decode
@@ -50,7 +49,7 @@ object ItemCodec {
   }
 
   /** Returns null for rows written by a newer version that this one can't read. */
-  fun decode(row: ItemRow, loadImage: (String) -> Bitmap?): CanvasItem? =
+  fun decode(row: ItemRow): CanvasItem? =
     runCatching {
         when (row.kind) {
           KIND_INK -> {
@@ -64,7 +63,7 @@ object ItemCodec {
           }
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())
-            ImageItem(row.id, row.z, p.file, p.rect, loadImage(p.file))
+            ImageItem(row.id, row.z, p.file, p.rect)
           }
           else -> null
         }
