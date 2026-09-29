@@ -8,7 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 /** Plain SQLite: notebooks, folders and items; no code generation, fast on older tablets. */
 class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(context, name, null, VERSION) {
   companion object {
-    const val VERSION = 2
+    const val VERSION = 3
   }
 
   override fun onConfigure(db: SQLiteDatabase) {
@@ -28,7 +28,8 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
         paper TEXT NOT NULL,
         viewport TEXT,
         thumb INTEGER NOT NULL DEFAULT 0,
-        folder_id TEXT
+        folder_id TEXT,
+        deleted INTEGER
       )
       """
     )
@@ -56,6 +57,8 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
       db.execSQL("ALTER TABLE notebooks ADD COLUMN folder_id TEXT")
       createFolders(db)
     }
+    // Recently deleted: when the notebook was moved to the trash, or NULL.
+    if (oldVersion < 3) db.execSQL("ALTER TABLE notebooks ADD COLUMN deleted INTEGER")
   }
 
   private fun createFolders(db: SQLiteDatabase) {

@@ -37,6 +37,8 @@ data class NotebookMeta(
   /** Bumped whenever the preview image is regenerated, so the library reloads it. */
   val thumbVersion: Long,
   val folderId: String?,
+  /** When she deleted it; deleted notebooks wait in Recently deleted for [TRASH_DAYS] days. */
+  val deleted: Long? = null,
 )
 
 data class Folder(val id: String, val name: String, val color: Int, val position: Int)
@@ -56,6 +58,11 @@ class NotesRepository(private val context: Context) {
   private val _notebooks = MutableStateFlow<List<NotebookMeta>>(emptyList())
   val notebooks: StateFlow<List<NotebookMeta>> = _notebooks.asStateFlow()
 
+  private val _trash = MutableStateFlow<List<NotebookMeta>>(emptyList())
+
+  /** Recently deleted notebooks, newest first. */
+  val trash: StateFlow<List<NotebookMeta>> = _trash.asStateFlow()
+
   private val _folders = MutableStateFlow<List<Folder>>(emptyList())
   val folders: StateFlow<List<Folder>> = _folders.asStateFlow()
 
@@ -69,12 +76,15 @@ class NotesRepository(private val context: Context) {
     get() = context.getDatabasePath("notes.db")
 
   init {
-    scope.launch { reload() }
+    scope.launch {
+      reload()
+      purgeTrash()
+    }
   }
 
   private fun reload() {
     val list = mutableListOf<NotebookMeta>()
-    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id FROM notebooks ORDER BY updated DESC", null).use { c ->
+    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted FROM notebooks ORDER BY updated DESC", null).use { c ->
       while (c.moveToNext()) {
         list +=
           NotebookMeta(
@@ -87,6 +97,7 @@ class NotesRepository(private val context: Context) {
             viewport = c.getString(6)?.let { runCatching { ItemCodec.json.decodeFromString(Viewport.serializer(), it) }.getOrNull() },
             thumbVersion = c.getLong(7),
             folderId = if (c.isNull(8)) null else c.getString(8),
+            deleted = if (c.isNull(9)) null else c.getLong(9),
           )
       }
     }
@@ -95,7 +106,8 @@ class NotesRepository(private val context: Context) {
       while (c.moveToNext()) folders += Folder(c.getString(0), c.getString(1), c.getInt(2), c.getInt(3))
     }
     _folders.value = folders
-    _notebooks.value = list
+    _notebooks.value = list.filter { it.deleted == null }
+    _trash.value = list.filter { it.deleted != null }.sortedByDescending { it.deleted }
   }
 
   suspend fun create(title: String, paper: PaperStyle, folderId: String? = null): NotebookMeta =
@@ -184,18 +196,36 @@ class NotesRepository(private val context: Context) {
       if (touch) values.put("updated", System.currentTimeMillis())
       db.writableDatabase.update("notebooks", values, "id=?", arrayOf(id))
       reload()
+      _revision.value++
     }
   }
 
-  fun delete(id: String) {
-    scope.launch {
-      val files = imageFilesOf(id)
-      db.writableDatabase.delete("notebooks", "id=?", arrayOf(id))
-      files.forEach { if (!isImageUsedElsewhere(it)) File(imagesDir, it).delete() }
-      File(thumbsDir, "$id.png").delete()
-      reload()
-      _revision.value++
-    }
+  /** Moves a notebook to Recently deleted. Nothing is erased until it has been there [TRASH_DAYS] days. */
+  fun delete(id: String) = update(id, touch = false) { put("deleted", System.currentTimeMillis()) }
+
+  fun restoreFromTrash(id: String) = update(id, touch = false) { putNull("deleted") }
+
+  /** Erases a notebook for good, with its pictures (unless another notebook uses them) and preview. */
+  fun deleteForever(id: String) {
+    scope.launch { erase(id) }
+  }
+
+  fun emptyTrash() {
+    scope.launch { _trash.value.forEach { erase(it.id) } }
+  }
+
+  private fun purgeTrash() {
+    val cutoff = System.currentTimeMillis() - TRASH_DAYS * 24L * 3600_000L
+    _trash.value.filter { (it.deleted ?: Long.MAX_VALUE) < cutoff }.forEach { erase(it.id) }
+  }
+
+  private fun erase(id: String) {
+    val files = imageFilesOf(id)
+    db.writableDatabase.delete("notebooks", "id=?", arrayOf(id))
+    files.forEach { if (!isImageUsedElsewhere(it)) File(imagesDir, it).delete() }
+    File(thumbsDir, "$id.png").delete()
+    reload()
+    _revision.value++
   }
 
   suspend fun duplicate(id: String): String =
@@ -336,7 +366,7 @@ class NotesRepository(private val context: Context) {
         w.beginTransaction()
         try {
           w.execSQL("INSERT OR IGNORE INTO folders (id,name,color,created,position) SELECT id,name,color,created,position FROM bk.folders")
-          w.rawQuery("SELECT b.id, m.id IS NOT NULL, b.updated > IFNULL(m.updated, 0) FROM bk.notebooks b LEFT JOIN main.notebooks m ON m.id = b.id", null).use { c ->
+          w.rawQuery("SELECT b.id, m.id IS NOT NULL, b.updated > IFNULL(m.updated, 0) FROM bk.notebooks b LEFT JOIN main.notebooks m ON m.id = b.id WHERE b.deleted IS NULL", null).use { c ->
             while (c.moveToNext()) {
               val exists = c.getInt(1) == 1
               val newer = c.getInt(2) == 1
@@ -353,7 +383,7 @@ class NotesRepository(private val context: Context) {
               w.execSQL("DELETE FROM main.notebooks WHERE id = ?", arrayOf(id))
             }
             w.execSQL(
-              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id FROM bk.notebooks WHERE id = ?",
+              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id,NULL FROM bk.notebooks WHERE id = ?",
               arrayOf(id),
             )
             w.execSQL("INSERT OR REPLACE INTO main.items SELECT * FROM bk.items WHERE notebook_id = ?", arrayOf(id))
@@ -372,6 +402,7 @@ class NotesRepository(private val context: Context) {
 
   companion object {
     const val MAX_IMAGE_SIDE = 2048
+    const val TRASH_DAYS = 30
   }
 }
 

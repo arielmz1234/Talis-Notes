@@ -21,16 +21,19 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   val query = MutableStateFlow("")
 
-  /** null shows every notebook; otherwise the id of the open folder. */
+  /** null shows every notebook; otherwise the id of the open folder, or [TRASH]. */
   val selectedFolder = MutableStateFlow<String?>(null)
 
   val folders: StateFlow<List<Folder>> = repo.folders
 
   val allNotebooks: StateFlow<List<NotebookMeta>> = repo.notebooks
 
+  val trash: StateFlow<List<NotebookMeta>> = repo.trash
+
   val notebooks: StateFlow<List<NotebookMeta>> =
-    combine(repo.notebooks, query, selectedFolder) { list, q, folder ->
-        list.filter { (folder == null || it.folderId == folder) && (q.isBlank() || it.title.contains(q.trim(), ignoreCase = true)) }
+    combine(repo.notebooks, repo.trash, query, selectedFolder) { list, trash, q, folder ->
+        val source = if (folder == TRASH) trash else list.filter { folder == null || it.folderId == folder }
+        source.filter { q.isBlank() || it.title.contains(q.trim(), ignoreCase = true) }
       }
       .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -38,7 +41,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   fun create(title: String, paper: PaperStyle, onCreated: (String) -> Unit) {
     viewModelScope.launch {
-      val meta = repo.create(title.ifBlank { "Untitled" }, paper, selectedFolder.value)
+      val meta = repo.create(title.ifBlank { "Untitled" }, paper, selectedFolder.value?.takeIf { it != TRASH })
       getApplication<Application>().talisApp.settings.update { it.copy(defaultPaper = paper) }
       onCreated(meta.id)
     }
@@ -49,6 +52,20 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   fun setCover(id: String, color: Int) = repo.setCover(id, color)
 
   fun delete(id: String) = repo.delete(id)
+
+  fun restoreFromTrash(id: String) = repo.restoreFromTrash(id)
+
+  fun deleteForever(id: String) = repo.deleteForever(id)
+
+  fun emptyTrash() {
+    selectedFolder.value = null
+    repo.emptyTrash()
+  }
+
+  companion object {
+    /** The "folder" id that shows Recently deleted. */
+    const val TRASH = "trash"
+  }
 
   fun duplicate(id: String) {
     viewModelScope.launch { repo.duplicate(id) }

@@ -56,6 +56,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import com.tali.notes.data.NotesRepository
 import com.tali.notes.backup.DriveBackup
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CloudDone
@@ -98,6 +100,7 @@ import com.tali.notes.ui.components.DriftingCloud
 import com.tali.notes.ui.components.PaperSwatch
 import com.tali.notes.ui.components.Sparkle
 import com.tali.notes.ui.components.PrimaryButton
+import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.RulerDivider
 import com.tali.notes.ui.components.SectionLabel
 import com.tali.notes.ui.components.ShapeIcon
@@ -114,6 +117,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   val c = Tali.colors
   val notebooks by vm.notebooks.collectAsState()
   val all by vm.allNotebooks.collectAsState()
+  val trash by vm.trash.collectAsState()
+  var trashAction by remember { mutableStateOf<NotebookMeta?>(null) }
+  var emptyingTrash by remember { mutableStateOf(false) }
   val folders by vm.folders.collectAsState()
   val selected by vm.selectedFolder.collectAsState()
   val query by vm.query.collectAsState()
@@ -126,6 +132,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   var deletingFolder by remember { mutableStateOf<Folder?>(null) }
   var backups by remember { mutableStateOf(false) }
   val currentFolder = folders.firstOrNull { it.id == selected }
+  val inTrash = selected == LibraryViewModel.TRASH
+  // Leave Recently deleted once it's empty.
+  LaunchedEffect(inTrash, trash.isEmpty()) { if (inTrash && trash.isEmpty()) vm.selectedFolder.value = null }
   val context = LocalContext.current
   var crashReport by remember { mutableStateOf(CrashLog.pendingReport(context)) }
 
@@ -137,6 +146,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     Sidebar(
       folders = folders,
       notebooks = all,
+      trashCount = trash.size,
       selected = selected,
       onSelect = { vm.selectedFolder.value = it },
       onNewFolder = { newFolder = true },
@@ -150,15 +160,21 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       Spacer(Modifier.height(112.dp))
       Row(verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
-          Text(currentFolder?.name ?: "All notebooks", style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(if (inTrash) "Recently deleted" else currentFolder?.name ?: "All notebooks", style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Spacer(Modifier.height(6.dp))
           val today = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()) }
           val count = if (currentFolder == null) all.size else all.count { it.folderId == currentFolder.id }
-          Text(if (count == 1) "1 notebook · $today" else "$count notebooks · $today", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
+          Text(
+            if (inTrash) "Notebooks stay here for ${NotesRepository.TRASH_DAYS} days, then they're deleted for good"
+            else if (count == 1) "1 notebook · $today" else "$count notebooks · $today",
+            style = MaterialTheme.typography.bodyLarge,
+            color = c.inkMuted,
+          )
         }
         SearchField(query, onChange = { vm.query.value = it })
         Spacer(Modifier.width(12.dp))
-        PrimaryButton("New notebook", Icons.Outlined.Add) { creating = true }
+        if (inTrash) QuietButton("Empty", color = c.danger) { emptyingTrash = true }
+        else PrimaryButton("New notebook", Icons.Outlined.Add) { creating = true }
       }
       crashReport?.let { report ->
         Spacer(Modifier.height(16.dp))
@@ -184,11 +200,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       Spacer(Modifier.height(22.dp))
 
       when {
-        all.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
+        all.isEmpty() && !inTrash -> EmptyLibrary(onCreate = { creating = true })
         notebooks.isEmpty() && query.isNotBlank() -> Text("No notebooks match “$query”.", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
         notebooks.isEmpty() -> EmptyFolder(onCreate = { creating = true })
         else -> {
-          SectionLabel("Recent")
+          SectionLabel(if (inTrash) "Tap a notebook to bring it back" else "Recent")
           Spacer(Modifier.height(14.dp))
           LazyVerticalGrid(
             columns = GridCells.Adaptive(210.dp),
@@ -201,12 +217,13 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                 nb,
                 folders = folders,
                 thumbnail = vm.thumbnailFile(nb.id),
-                onOpen = { onOpen(nb.id) },
+                onOpen = { if (inTrash) trashAction = nb else onOpen(nb.id) },
                 onRename = { renaming = nb },
                 onDuplicate = { vm.duplicate(nb.id) },
                 onCover = { vm.setCover(nb.id, it) },
                 onMove = { vm.moveToFolder(nb.id, it) },
                 onDelete = { deleting = nb },
+                inTrash = inTrash,
               )
             }
           }
@@ -232,7 +249,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   deleting?.let { nb ->
     ConfirmDialog(
       title = "Delete “${nb.title}”?",
-      body = "This removes the notebook from this tablet. Older copies stay in your backups.",
+      body = "It moves to Recently deleted, where you can bring it back for ${NotesRepository.TRASH_DAYS} days.",
       confirm = "Delete",
       destructive = true,
       onDismiss = { deleting = null },
@@ -242,6 +259,41 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     }
   }
   if (backups) BackupDialog(onDismiss = { backups = false })
+  trashAction?.let { nb ->
+    DialogCard(onDismiss = { trashAction = null }, width = 480) {
+      Text("“${nb.title}”", style = MaterialTheme.typography.titleLarge, color = c.ink)
+      Spacer(Modifier.height(8.dp))
+      val left = NotesRepository.TRASH_DAYS - ((System.currentTimeMillis() - (nb.deleted ?: 0L)) / 86_400_000L).toInt()
+      Text(
+        "Deleted ${relativeTime(nb.deleted ?: 0L).replaceFirstChar { it.lowercase() }}. It will be deleted for good in ${left.coerceAtLeast(1)} ${if (left == 1) "day" else "days"}.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = c.inkMuted,
+      )
+      Spacer(Modifier.height(24.dp))
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+        QuietButton("Delete forever", color = c.danger) {
+          vm.deleteForever(nb.id)
+          trashAction = null
+        }
+        PrimaryButton("Restore") {
+          vm.restoreFromTrash(nb.id)
+          trashAction = null
+        }
+      }
+    }
+  }
+  if (emptyingTrash) {
+    ConfirmDialog(
+      title = "Empty Recently deleted?",
+      body = if (trash.size == 1) "1 notebook will be deleted for good. This can't be undone." else "${trash.size} notebooks will be deleted for good. This can't be undone.",
+      confirm = "Delete forever",
+      destructive = true,
+      onDismiss = { emptyingTrash = false },
+    ) {
+      vm.emptyTrash()
+      emptyingTrash = false
+    }
+  }
   if (newFolder) {
     NameDialog(title = "New folder", initial = "", placeholder = "Statics", confirm = "Create", onDismiss = { newFolder = false }) {
       vm.createFolder(it)
@@ -291,6 +343,7 @@ private fun CrashBanner(onSend: () -> Unit, onDismiss: () -> Unit) {
 private fun Sidebar(
   folders: List<Folder>,
   notebooks: List<NotebookMeta>,
+  trashCount: Int,
   selected: String?,
   onSelect: (String?) -> Unit,
   onNewFolder: () -> Unit,
@@ -372,6 +425,16 @@ private fun Sidebar(
           }
         }
       }
+    }
+    if (trashCount > 0) {
+      NavRow(
+        icon = { Icon(Icons.Outlined.DeleteOutline, null, tint = if (selected == LibraryViewModel.TRASH) c.blue else c.inkMuted, modifier = Modifier.size(20.dp)) },
+        label = "Recently deleted",
+        count = trashCount,
+        selected = selected == LibraryViewModel.TRASH,
+        onClick = { onSelect(LibraryViewModel.TRASH) },
+      )
+      Spacer(Modifier.height(4.dp))
     }
     val context = LocalContext.current
     val drive by DriveBackup.status(context).collectAsState()
@@ -494,6 +557,7 @@ private fun NotebookCard(
   onCover: (Int) -> Unit,
   onMove: (String?) -> Unit,
   onDelete: () -> Unit,
+  inTrash: Boolean = false,
 ) {
   val c = Tali.colors
   var menu by remember { mutableStateOf(false) }
@@ -504,7 +568,7 @@ private fun NotebookCard(
   val image = rememberThumbnail(thumbnail, nb.thumbVersion)
   val shape = RoundedCornerShape(18.dp)
 
-  Column(Modifier.scale(scale).combinedClickable(interactionSource = interaction, indication = null, onClick = onOpen, onLongClick = { menu = true })) {
+  Column(Modifier.scale(scale).combinedClickable(interactionSource = interaction, indication = null, onClick = onOpen, onLongClick = { if (inTrash) onOpen() else menu = true })) {
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(1.32f)
@@ -564,7 +628,7 @@ private fun NotebookCard(
     }
     Spacer(Modifier.height(10.dp))
     Text(nb.title, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp))
-    Text("Edited " + relativeTime(nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.padding(start = 2.dp))
+    Text((if (inTrash) "Deleted " else "Edited ") + relativeTime(if (inTrash) nb.deleted ?: nb.updated else nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.padding(start = 2.dp))
   }
 }
 
