@@ -1046,6 +1046,24 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     d.commit(Change(sel, emptyList()))
   }
 
+  fun copySelection() {
+    if (selection.isEmpty()) return
+    Clipboard.items = selection
+    host.onHint(if (selection.size == 1) "Copied \u2014 paste it from \u22EF in any notebook" else "Copied ${selection.size} items \u2014 paste them from \u22EF in any notebook")
+  }
+
+  /** Pastes the clipboard in the middle of the screen, selected so it can be moved into place. */
+  fun paste() {
+    val d = doc ?: return
+    val items = Clipboard.items
+    val bounds = items.map { it.bounds }.reduceOrNull(Rect::union) ?: return
+    val c = camera.visibleWorld(width, height).center
+    val move = Affine.translate(c.x - bounds.center.x, c.y - bounds.center.y)
+    val copies = items.sortedBy { it.z }.map { it.transformed(move, d.newId(), d.nextZ()) }
+    d.commit(Change(emptyList(), copies))
+    setSelection(copies)
+  }
+
   fun duplicateSelection() {
     val d = doc ?: return
     val offset = Affine.translate(24f, 24f)

@@ -89,8 +89,11 @@ object DriveBackup {
     prefs(context).edit().putBoolean("enabled", next.enabled).putLong("last_success", next.lastSuccess).putString("error", next.error).apply()
   }
 
-  /** Marks that something changed since the last backup. Called for every saved edit. */
-  fun markDirty(context: Context) = prefs(context).edit().putBoolean("dirty", true).apply()
+  /** Marks that something changed since the last backup. Called for every saved edit, so it only writes when the flag flips. */
+  fun markDirty(context: Context) {
+    val p = prefs(context)
+    if (!p.getBoolean("dirty", false)) p.edit().putBoolean("dirty", true).apply()
+  }
 
   private fun isDirty(context: Context) = prefs(context).getBoolean("dirty", true)
 

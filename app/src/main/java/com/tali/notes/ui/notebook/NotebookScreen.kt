@@ -51,6 +51,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material.icons.outlined.ContentPasteGo
+import androidx.compose.material.icons.outlined.ContentPaste
+import com.tali.notes.canvas.Clipboard
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
@@ -309,6 +313,8 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
               onFit = { holder.view?.runSafely { fitContent() } },
               onExport = { exporting = true },
               onFingerDraws = vm::setFingerDraws,
+              pasteCount = Clipboard.items.size,
+              onPaste = { holder.view?.runSafely { paste() } },
             )
           }
         }
@@ -331,6 +337,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
           colors = settings.savedColors,
           onDelete = { holder.view?.runSafely { deleteSelection() } },
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
+          onCopy = { holder.view?.runSafely { copySelection() } },
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
         )
@@ -408,20 +415,38 @@ private fun MoreMenu(
   onFit: () -> Unit,
   onExport: () -> Unit,
   onFingerDraws: (Boolean?) -> Unit,
+  pasteCount: Int,
+  onPaste: () -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
   Box {
     ToolButton(Icons.Outlined.MoreHoriz, "More") { open = true }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-      Text("Paper", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-      PaperStyle.entries.forEach { style ->
+      if (pasteCount > 0) {
         DropdownMenuItem(
-          text = { Text(style.label) },
-          leadingIcon = { PaperSwatch(style, Modifier.size(28.dp, 22.dp)) },
-          trailingIcon = { if (style == paper) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-          onClick = { onPaper(style) },
+          text = { Text(if (pasteCount == 1) "Paste" else "Paste $pasteCount items") },
+          leadingIcon = { Icon(Icons.Outlined.ContentPaste, null) },
+          onClick = {
+            open = false
+            onPaste()
+          },
         )
+        HorizontalDivider(color = c.line)
+      }
+      Text("Paper", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp))
+      Row(Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        PaperStyle.entries.forEach { style ->
+          val on = style == paper
+          Column(
+            Modifier.width(62.dp).clip(RoundedCornerShape(10.dp)).background(if (on) c.accentSoft else Color.Transparent).clickable(role = Role.RadioButton, onClickLabel = style.label) { onPaper(style) }.padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+          ) {
+            PaperSwatch(style, Modifier.size(34.dp, 28.dp).then(if (on) Modifier.border(1.5.dp, c.accent, RoundedCornerShape(8.dp)) else Modifier))
+            Spacer(Modifier.height(4.dp))
+            Text(style.label, style = MaterialTheme.typography.labelSmall, color = if (on) c.accent else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+        }
       }
       HorizontalDivider(color = c.line)
       DropdownMenuItem(text = { Text("Show everything") }, leadingIcon = { Icon(Icons.Outlined.FitScreen, null) }, onClick = {
@@ -507,7 +532,7 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
@@ -545,6 +570,7 @@ private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () ->
       } else {
         if (!sel.hasImage || sel.count > 1) ToolButton(Icons.Outlined.Palette, "Colour") { picking = true }
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
+        ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
         if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
