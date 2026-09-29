@@ -206,6 +206,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var maxPointers = 0
   private var multiTapMoved = false
 
+  /** Where a multi-finger touch started, to tell a tap (undo/redo) from a pan or pinch. */
+  private var tapStartFocus = Pt.ZERO
+  private var tapStartSpan = 0f
+
   private var hoverPoint: Pt? = null
 
   // ---- Paints ----
@@ -495,8 +499,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (drawsWith(toolType)) {
           when {
             isDrawingMode() && drawIsFinger && toolType == MotionEvent.TOOL_TYPE_FINGER -> {
-              // A second finger while finger-drawing means pan/zoom instead.
+              // A second finger while finger-drawing means pan/zoom instead, or undo if it's a quick tap.
               abortDrawing()
+              maxPointers = 2
+              multiTapMoved = false
+              fingerDownTime = e.downTime
               startPinch(e)
             }
             isDrawingMode() -> Unit
@@ -1095,6 +1102,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     lastFocusX = fx
     lastFocusY = fy
     lastSpan = span
+    tapStartFocus = Pt(fx, fy)
+    tapStartSpan = span
   }
 
   private fun focusAndSpan(e: MotionEvent, skipIndex: Int): Triple<Float, Float, Float> {
@@ -1135,7 +1144,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       Mode.PINCH -> {
         val (fx, fy, span) = focusAndSpan(e, -1)
-        if (hypot(fx - lastFocusX, fy - lastFocusY) > touchSlop / 2 || kotlin.math.abs(span - lastSpan) > touchSlop / 2) multiTapMoved = true
+        // Measured from where the fingers landed, so a slow drag still counts as moving.
+        if (hypot(fx - tapStartFocus.x, fy - tapStartFocus.y) > touchSlop || kotlin.math.abs(span - tapStartSpan) > touchSlop) multiTapMoved = true
         camera.pan(fx - lastFocusX, fy - lastFocusY)
         if (lastSpan > 10f && span > 10f) camera.zoomAround(fx, fy, span / lastSpan)
         lastFocusX = fx
@@ -1295,7 +1305,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PAGE_GAP = 48f
     private const val HANDLE_HIT_DP = 24f
     private const val HIT_RADIUS_DP = 10f
-    private const val MULTI_TAP_MS = 260L
+    private const val MULTI_TAP_MS = 300L
   }
 }
 
