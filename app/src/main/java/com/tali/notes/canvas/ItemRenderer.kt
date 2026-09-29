@@ -27,12 +27,14 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   private val rectF = RectF()
 
   /**
-   * Draws highlighter ink first so it always sits under writing, then everything else in order.
+   * Draws in three layers, each in stacking order: pictures and PDF pages at the bottom, then
+   * highlighter (so it tints what's under it without covering writing), then all other ink.
    * [worldToScreen] is only a quality hint for the stroke renderer.
    */
   fun drawAll(canvas: Canvas, items: Iterable<CanvasItem>, worldToScreen: Matrix, skip: Set<String> = emptySet()) {
+    for (item in items) if (item is ImageItem && item.id !in skip) draw(canvas, item, worldToScreen)
     for (item in items) if (item.pen?.isHighlighter == true && item.id !in skip) draw(canvas, item, worldToScreen)
-    for (item in items) if (item.pen?.isHighlighter != true && item.id !in skip) draw(canvas, item, worldToScreen)
+    for (item in items) if (item !is ImageItem && item.pen?.isHighlighter != true && item.id !in skip) draw(canvas, item, worldToScreen)
   }
 
   fun draw(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
