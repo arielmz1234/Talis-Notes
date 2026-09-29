@@ -79,6 +79,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   var hint by mutableStateOf<String?>(null)
 
+  /** The imported PDF page on screen and how many there are; index -1 when there are none. */
+  var page by mutableStateOf(-1 to 0)
+
   init {
     viewModelScope.launch {
       initialViewport = meta.value?.viewport ?: repo.notebooks.value.firstOrNull { it.id == notebookId }?.viewport

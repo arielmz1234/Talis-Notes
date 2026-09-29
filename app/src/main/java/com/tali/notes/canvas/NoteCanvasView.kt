@@ -61,6 +61,9 @@ interface CanvasHost {
 
   /** A brief message, such as "Converted to shape". */
   fun onHint(message: String) = Unit
+
+  /** Which imported PDF page is on screen ([index] from 0), or -1 when the notebook has none. */
+  fun onPageChanged(index: Int, count: Int) = Unit
 }
 
 /** Selection summary in screen pixels, for placing the selection menu. */
@@ -251,6 +254,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     doc = document
     document.listeners += docListener
     images.addListener(onImageLoaded)
+    refreshPages()
     tiles.invalidateAll()
     if (viewport != null) camera.set(viewport)
     else doOnLayout { document.contentBounds()?.let { camera.centerOn(Pt(it.center.x, it.top + height / 2f / camera.scale - 40f), width, height) } }
@@ -264,13 +268,20 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     doc = null
   }
 
+  override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+    super.onSizeChanged(w, h, oldw, oldh)
+    post { updatePage() }
+  }
+
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
+    cameraAnimator?.cancel()
     removeCallbacks(holdRunnable)
     detach()
   }
 
   private fun onDocChanged(c: Change) {
+    if ((c.added + c.removed).any { it is ImageItem && it.pdfPage }) refreshPages()
     c.removed.forEach { tiles.invalidate(it.bounds) }
     c.added.forEach { tiles.invalidate(it.bounds) }
     // Keep the selection pointing at live items (undo can remove them).
@@ -1172,7 +1183,67 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun afterCameraMove() {
     if (selection.isNotEmpty()) publishSelection()
+    updatePage()
     invalidate()
+  }
+
+  // ---- Imported PDF pages: which one is showing, and jumping between them ----
+
+  private var pages: List<Rect> = emptyList()
+  private var pageIndex = -2
+
+  private fun refreshPages() {
+    pages = doc?.all?.filter { it is ImageItem && it.pdfPage }?.map { (it as ImageItem).rect }?.sortedBy { it.top }.orEmpty()
+    pageIndex = -2
+    updatePage()
+  }
+
+  /** The page under the upper-middle of the screen, where her eyes usually are. */
+  private fun updatePage() {
+    if (width == 0) return
+    val index =
+      if (pages.isEmpty()) -1
+      else {
+        val view = camera.visibleWorld(width, height)
+        val y = view.top + view.height * 0.4f
+        pages.indices.minBy { i -> val r = pages[i]; if (y < r.top) r.top - y else if (y > r.bottom) y - r.bottom else 0f }
+      }
+    if (index != pageIndex) {
+      pageIndex = index
+      host.onPageChanged(index, pages.size)
+    }
+  }
+
+  /** Glides to a page, fitting its width to the screen with the top just under the toolbar. */
+  fun goToPage(index: Int) {
+    val r = pages.getOrNull(index) ?: return
+    if (width == 0 || height == 0) return
+    val zoom = (width * 0.9f / (r.width * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
+    val scale = zoom * density
+    animateCamera(Viewport(r.center.x - width / 2f / scale, r.top - 124f / zoom, zoom))
+  }
+
+  private var cameraAnimator: android.animation.ValueAnimator? = null
+
+  private fun animateCamera(target: Viewport) {
+    cameraAnimator?.cancel()
+    val from = camera.viewport()
+    cameraAnimator =
+      android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = 320
+        interpolator = android.view.animation.DecelerateInterpolator(1.6f)
+        addUpdateListener {
+          val t = it.animatedValue as Float
+          // Interpolate zoom geometrically so the glide feels even at every scale.
+          val zoom = from.zoom * Math.pow((target.zoom / from.zoom).toDouble(), t.toDouble()).toFloat()
+          camera.set(Viewport(from.x + (target.x - from.x) * t, from.y + (target.y - from.y) * t, zoom))
+          afterCameraMove()
+        }
+        addListener(object : android.animation.AnimatorListenerAdapter() {
+          override fun onAnimationEnd(animation: android.animation.Animator) = settleCamera()
+        })
+        start()
+      }
   }
 
   private fun settleCamera() {

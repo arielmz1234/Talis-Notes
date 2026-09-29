@@ -51,6 +51,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -196,6 +199,10 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
                 }
 
                 override fun onHint(message: String) = vm.showHint(message)
+
+                override fun onPageChanged(index: Int, count: Int) {
+                  vm.page = index to count
+                }
               },
             )
             .also {
@@ -288,7 +295,11 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
       Spacer(Modifier.weight(1f))
       Box(Modifier.fillMaxWidth()) {
         HintPill(vm.hint, onDone = { vm.hint = null }, modifier = Modifier.align(Alignment.BottomCenter))
-        ZoomChip(vm.zoom, Modifier.align(Alignment.BottomEnd)) { holder.view?.runSafely { setZoom(1f) } }
+        Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+          val (page, pages) = vm.page
+          if (page >= 0) PageChip(page, pages) { target -> holder.view?.runSafely { goToPage(target) } }
+          ZoomChip(vm.zoom) { holder.view?.runSafely { setZoom(1f) } }
+        }
       }
     }
 
@@ -429,6 +440,25 @@ private fun ZoomChip(zoom: Float, modifier: Modifier = Modifier, onReset: () -> 
     modifier.cloudSurface(12.dp, shadowDepth = 3.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Reset zoom", onClick = onReset).padding(horizontal = 12.dp, vertical = 7.dp)
   ) {
     Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
+  }
+}
+
+/** "3 / 12" with arrows, for notebooks with imported slides. */
+@Composable
+private fun PageChip(page: Int, count: Int, onGo: (Int) -> Unit) {
+  val c = Tali.colors
+  Row(Modifier.cloudSurface(12.dp, shadowDepth = 3.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+    PageArrow(Icons.Outlined.KeyboardArrowUp, "Previous page", enabled = page > 0) { onGo(page - 1) }
+    Text("${page + 1} / $count", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.padding(horizontal = 2.dp))
+    PageArrow(Icons.Outlined.KeyboardArrowDown, "Next page", enabled = page < count - 1) { onGo(page + 1) }
+  }
+}
+
+@Composable
+private fun PageArrow(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+  val c = Tali.colors
+  Box(Modifier.size(32.dp).clip(CircleShape).clickable(enabled = enabled, onClickLabel = label, onClick = onClick), contentAlignment = Alignment.Center) {
+    Icon(icon, label, tint = if (enabled) c.blue else c.inkFaint.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
   }
 }
 
