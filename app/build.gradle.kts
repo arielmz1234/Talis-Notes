@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -20,13 +22,26 @@ android {
     buildConfigField("boolean", "DRIVE_BACKUP", "false")
   }
 
+  // The release key lives in keystore/ (not in git). Every update must be signed with the same key,
+  // or Android refuses to install it over the existing app, so keep a copy of that folder safe.
+  val releaseKey = rootProject.file("keystore/keystore.properties").takeIf { it.exists() }?.let { f -> Properties().apply { f.inputStream().use(::load) } }
+  signingConfigs {
+    if (releaseKey != null) {
+      create("release") {
+        storeFile = rootProject.file(releaseKey.getProperty("storeFile"))
+        storePassword = releaseKey.getProperty("storePassword")
+        keyAlias = releaseKey.getProperty("keyAlias")
+        keyPassword = releaseKey.getProperty("keyPassword")
+      }
+    }
+  }
+
   buildTypes {
     release {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      // Personal sideloaded build: sign with the debug key until a release keystore exists.
-      signingConfig = signingConfigs.getByName("debug")
+      signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
     }
   }
   compileOptions {
