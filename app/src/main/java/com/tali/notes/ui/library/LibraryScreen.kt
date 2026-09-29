@@ -162,7 +162,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         Column(Modifier.weight(1f)) {
           Text(if (inTrash) "Recently deleted" else currentFolder?.name ?: "All notebooks", style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Spacer(Modifier.height(6.dp))
-          val today = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()) }
+          val today = remember { SimpleDateFormat("EEEE, d MMMM", Locale.UK).format(Date()) }
           val count = if (currentFolder == null) all.size else all.count { it.folderId == currentFolder.id }
           Text(
             if (inTrash) "Notebooks stay here for ${NotesRepository.TRASH_DAYS} days, then they're deleted for good"
