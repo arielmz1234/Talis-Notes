@@ -320,8 +320,37 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   // ---- Drawing ----
 
+  private val guidePaint =
+    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      style = Paint.Style.STROKE
+      color = 0x669B7BE0.toInt()
+      pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 8f), 0f)
+    }
+
+  /** Faint dashed A4 page edges on the fixed page grid, so she knows where exported pages break. */
+  private fun drawPageGuides(canvas: Canvas) {
+    if (!settings.pageGuides) return
+    val w = com.tali.notes.export.Exporter.A4_WIDTH
+    val h = com.tali.notes.export.Exporter.A4_HEIGHT
+    val view = camera.visibleWorld(width, height)
+    guidePaint.strokeWidth = 1.2f * density
+    var x = kotlin.math.floor(view.left / w) * w
+    while (x <= view.right) {
+      val sx = (x - camera.x) * camera.scale
+      canvas.drawLine(sx, 0f, sx, height.toFloat(), guidePaint)
+      x += w
+    }
+    var y = kotlin.math.floor(view.top / h) * h
+    while (y <= view.bottom) {
+      val sy = (y - camera.y) * camera.scale
+      canvas.drawLine(0f, sy, width.toFloat(), sy, guidePaint)
+      y += h
+    }
+  }
+
   override fun onDraw(canvas: Canvas) {
     paper.draw(canvas, paperStyle, camera, width, height)
+    drawPageGuides(canvas)
     val d = doc ?: return
     val visible = camera.visibleWorld(width, height)
 

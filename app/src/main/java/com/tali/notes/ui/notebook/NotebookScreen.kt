@@ -51,6 +51,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.outlined.ContentPasteGo
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -79,6 +80,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
@@ -313,6 +315,8 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
               onFit = { holder.view?.runSafely { fitContent() } },
               onExport = { exporting = true },
               onFingerDraws = vm::setFingerDraws,
+              pageGuides = settings.pageGuides,
+              onPageGuides = vm::setPageGuides,
               pasteCount = Clipboard.items.size,
               onPaste = { holder.view?.runSafely { paste() } },
             )
@@ -415,6 +419,8 @@ private fun MoreMenu(
   onFit: () -> Unit,
   onExport: () -> Unit,
   onFingerDraws: (Boolean?) -> Unit,
+  pageGuides: Boolean,
+  onPageGuides: (Boolean) -> Unit,
   pasteCount: Int,
   onPaste: () -> Unit,
 ) {
@@ -444,7 +450,7 @@ private fun MoreMenu(
           ) {
             PaperSwatch(style, Modifier.size(34.dp, 28.dp).then(if (on) Modifier.border(1.5.dp, c.accent, RoundedCornerShape(8.dp)) else Modifier))
             Spacer(Modifier.height(4.dp))
-            Text(style.label, style = MaterialTheme.typography.labelSmall, color = if (on) c.accent else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(style.label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = if (on) c.accent else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
       }
@@ -453,6 +459,12 @@ private fun MoreMenu(
         open = false
         onFit()
       })
+      DropdownMenuItem(
+        text = { Text("A4 page guides") },
+        leadingIcon = { Icon(Icons.Outlined.Description, null) },
+        trailingIcon = { if (pageGuides) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+        onClick = { onPageGuides(!pageGuides) },
+      )
       DropdownMenuItem(text = { Text("Export PDF") }, leadingIcon = { Icon(Icons.Outlined.IosShare, null) }, onClick = {
         open = false
         onExport()

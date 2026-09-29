@@ -201,6 +201,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setFingerDraws(value: Boolean?) = store.update { it.copy(fingerDraws = value) }
 
+  fun setPageGuides(on: Boolean) = store.update { it.copy(pageGuides = on) }
+
   fun setPaper(style: PaperStyle) {
     repo.setPaper(notebookId, style)
     store.update { it.copy(defaultPaper = style) }
@@ -269,7 +271,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val title = (meta.value?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
     return withContext(Dispatchers.Default) {
       val out = File(File(getApplication<Application>().cacheDir, "exports"), "$title.pdf")
-      runCatching { Exporter.pdf(items, paper, layout, out, repo.images) }.map { out }.getOrNull()
+      runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides) }.map { out }.getOrNull()
     }
   }
 }

@@ -54,6 +54,8 @@ data class AppSettings(
   val lastShape: String = "LINE",
   /** Shapes she saved from her own drawings; hold-to-shape recognises them too. */
   val customShapes: List<CustomShape> = emptyList(),
+  /** Faint A4 page edges on the canvas; A4 export then follows exactly these pages. */
+  val pageGuides: Boolean = false,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
 ) {

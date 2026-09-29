@@ -15,6 +15,7 @@ import com.tali.notes.model.ImageItem
 import com.tali.notes.model.PaperStyle
 import java.io.File
 import kotlin.math.ceil
+import kotlin.math.floor
 
 enum class PdfLayout(val label: String) {
   A4_PAGES("A4 pages"),
@@ -47,12 +48,23 @@ object Exporter {
     return bmp
   }
 
-  fun pdf(items: Collection<CanvasItem>, paper: PaperStyle, layout: PdfLayout, out: File, images: ImageStore) {
+  /** A4 page size in world units (dp), matching the PDF's points. */
+  val A4_WIDTH = A4_W_PT / PT_PER_DP
+  val A4_HEIGHT = A4_H_PT / PT_PER_DP
+
+  /**
+   * [fixedPages] lays A4 pages on the canvas's fixed page grid (the one the page guides show),
+   * starting at the top-left of the canvas; otherwise the pages are centred on the writing.
+   */
+  fun pdf(items: Collection<CanvasItem>, paper: PaperStyle, layout: PdfLayout, out: File, images: ImageStore, fixedPages: Boolean = false) {
     val content = items.map { it.bounds }.reduceOrNull(Rect::union)?.outset(MARGIN_DP) ?: Rect(0f, 0f, 1322f, 1871f)
     val pages: List<Rect> =
       when (layout) {
         PdfLayout.ONE_PAGE -> splitTall(content)
-        PdfLayout.A4_PAGES -> a4Pages(content).filter { page -> items.any { it.bounds.intersects(page) } }.ifEmpty { a4Pages(content).take(1) }
+        PdfLayout.A4_PAGES -> {
+          val grid = if (fixedPages) fixedA4Pages(items) else a4Pages(content)
+          grid.filter { page -> items.any { it.bounds.intersects(page) } }.ifEmpty { grid.take(1) }
+        }
         PdfLayout.PDF_PAGES -> pdfPages(items).ifEmpty { splitTall(content) }
       }
     val doc = PdfDocument()
@@ -105,6 +117,18 @@ object Exporter {
       val bandBottom = pages.getOrNull(i + 1)?.rect?.top ?: Float.POSITIVE_INFINITY
       others.filter { it.bounds.center.y in bandTop..<bandBottom }.map { it.bounds }.fold(page.rect) { acc, r -> acc.union(r) }
     }
+  }
+
+  /** The A4 pages of the fixed grid that the writing touches, row by row. */
+  private fun fixedA4Pages(items: Collection<CanvasItem>): List<Rect> {
+    val b = items.map { it.bounds }.reduceOrNull(Rect::union) ?: return listOf(Rect(0f, 0f, A4_WIDTH, A4_HEIGHT))
+    val out = mutableListOf<Rect>()
+    for (row in floor(b.top / A4_HEIGHT).toInt()..floor(b.bottom / A4_HEIGHT).toInt()) {
+      for (col in floor(b.left / A4_WIDTH).toInt()..floor(b.right / A4_WIDTH).toInt()) {
+        out += Rect(col * A4_WIDTH, row * A4_HEIGHT, (col + 1) * A4_WIDTH, (row + 1) * A4_HEIGHT)
+      }
+    }
+    return out
   }
 
   /** Tiles the content into A4 portrait pages, row by row, top to bottom. */
