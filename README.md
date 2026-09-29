@@ -6,7 +6,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 
 **Writing**
 - Six pen types: fineliner, fountain pen, pencil, calligraphy, dashed and highlighter. She can keep up to 8 pens, each with its own saved colours.
-- Low-latency inking (androidx.ink), with pressure and tilt.
+- Low-latency inking (androidx.ink), with pressure.
 - The S Pen side button erases while held.
 - **Hold to perfect:** pause at the end of a stroke and it snaps into a clean shape: a line (with 0°, 30°, 45°, 60° and 90° snapping), arrow, circle, ellipse, triangle, rectangle, polygon or star.
 - **My shapes:** lasso any drawing and tap *Save as shape*. Holding the pen at the end of a similar one-stroke drawing then snaps to it. Matching uses a point-cloud recognizer, `geometry/ShapeMatcher.kt`.
