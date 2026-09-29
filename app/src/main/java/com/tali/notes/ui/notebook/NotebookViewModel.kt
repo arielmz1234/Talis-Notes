@@ -99,7 +99,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       warmUp(items, initialViewport)
       // A first-time nudge towards the app's best trick.
       kotlinx.coroutines.delay(1500)
-      tip("hold", "Tip: at the end of a line or shape, hold the pen still and it snaps clean")
+      // One tip per visit, in this order, each shown once.
+      if ("hold" !in settings.value.seenTips) tip("hold", "Tip: at the end of a line or shape, hold the pen still and it snaps clean")
+      else tip("spen", "Tip: hold the S Pen's side button to erase, and let go to keep writing")
     }
   }
 
