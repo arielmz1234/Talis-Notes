@@ -14,11 +14,6 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
-import androidx.compose.animation.core.InfiniteRepeatableSpec
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxScope
@@ -29,6 +24,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -184,11 +185,23 @@ fun Cloud(modifier: Modifier = Modifier, width: Dp = 160.dp, variant: Int = 0, a
   )
 }
 
-/** A cloud that drifts slowly sideways on its own GPU layer (no re-layout, no re-draw). */
+/**
+ * A cloud that drifts slowly sideways on its own GPU layer (no re-layout, no re-draw). The drift is
+ * so slow that 12 updates a second look perfectly smooth, which keeps the tablet cool and saves
+ * battery while the library sits open; it follows the frame clock, so it stops in the background.
+ */
 @Composable
 fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, driftDp: Float = 10f, periodMs: Int = 9000, alpha: Float = 1f) {
-  val transition = rememberInfiniteTransition(label = "cloud")
-  val x by transition.animateFloat(-1f, 1f, InfiniteRepeatableSpec(tween(periodMs, easing = LinearEasing), RepeatMode.Reverse), label = "drift")
+  var x by remember { mutableFloatStateOf(0f) }
+  LaunchedEffect(periodMs) {
+    val start = withFrameMillis { it }
+    while (true) {
+      val t = withFrameMillis { it } - start
+      // Eased back and forth: -1 → 1 → -1 over two periods.
+      x = -kotlin.math.cos(t.toDouble() / periodMs * Math.PI).toFloat()
+      delay(80)
+    }
+  }
   Cloud(modifier.graphicsLayer { translationX = x * driftDp * density }, width = width, variant = variant, alpha = alpha)
 }
 
