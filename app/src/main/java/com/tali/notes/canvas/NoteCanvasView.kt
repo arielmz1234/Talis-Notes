@@ -920,7 +920,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val lengthPx = Geo.pathLength(pts) * camera.scale
     if (lengthPx < 12f * density) {
       // A tap with the lasso picks up whatever is under it.
-      hitTest(end ?: pts.firstOrNull() ?: return, settings::lassoHits)?.let { selectSingle(it) }
+      hitTest(end ?: pts.firstOrNull() ?: return, filter = settings::lassoHits)?.let { selectSingle(it) }
       return
     }
     val area = Rect.around(pts) ?: return
@@ -941,17 +941,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     return samples.count { Geo.pointInPolygon(it, poly) }.toFloat() / samples.size
   }
 
-  private fun hitTest(p: Pt, filter: (PenType?) -> Boolean): CanvasItem? {
+  /**
+   * The item under [p]. Writing wins over pictures, since pictures are drawn underneath it; imported
+   * PDF pages count only when [pages] is true, so tapping a slide doesn't pick up the whole slide.
+   */
+  private fun hitTest(p: Pt, pages: Boolean = true, filter: (PenType?) -> Boolean): CanvasItem? {
     val d = doc ?: return null
     val r = HIT_RADIUS_DP / camera.zoom
     val para = parallelogram(p, p, r)
-    return d.intersecting(Rect(p.x - r, p.y - r, p.x + r, p.y + r)).asReversed().firstOrNull { item ->
-      filter(item.pen) &&
-        when (item) {
-          is ImageItem -> item.rect.contains(p)
-          else -> strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) }
-        }
-    }
+    val near = d.intersecting(Rect(p.x - r, p.y - r, p.x + r, p.y + r)).asReversed().filter { filter(it.pen) }
+    return near.firstOrNull { item -> item !is ImageItem && strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) } }
+      ?: near.firstOrNull { item -> item is ImageItem && (pages || !item.pdfPage) && item.rect.contains(p) }
   }
 
   private fun selectSingle(item: CanvasItem) {
@@ -1181,7 +1181,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun tapAt(p: Pt) {
-    val item = hitTest(p) { true }
+    val item = hitTest(p, pages = false) { true }
     if (item == null) clearSelection() else selectSingle(item)
   }
 
