@@ -50,6 +50,8 @@ import com.tali.notes.model.ShapeKind
 import com.tali.notes.model.Tool
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.abs
+import kotlin.math.PI
 
 /** What the canvas tells the screen around it. */
 interface CanvasHost {
@@ -62,7 +64,7 @@ interface CanvasHost {
 }
 
 /** Selection summary in screen pixels, for placing the selection menu. */
-data class SelectionInfo(val screenRect: RectF, val count: Int, val hasShape: Boolean, val hasImage: Boolean, val hasDrawing: Boolean = true)
+data class SelectionInfo(val screenRect: RectF, val count: Int, val hasShape: Boolean, val hasImage: Boolean, val hasDrawing: Boolean = true, val rotatable: Boolean = false)
 
 /**
  * The drawing surface. Finished content is drawn from GPU tiles; the pen stroke in progress is drawn
@@ -139,6 +141,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     LASSO,
     MOVE_SELECTION,
     SCALE_SELECTION,
+    ROTATE_SELECTION,
     HANDLE_DRAG,
     SHAPE_CREATE,
     FINGER_PENDING,
@@ -171,6 +174,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var selectionBounds: Rect? = null
   private var dragStart = Pt.ZERO
   private var dragTransform = Affine.IDENTITY
+
+  /** While rotating a selection: its centre, where the drag started, and the current angle. */
+  private var rotatePivot = Pt.ZERO
+  private var rotateAngle = 0f
+
+  private val angleText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+  private val angleBubble = Paint(Paint.ANTI_ALIAS_FLAG)
 
   // Editable shape with handles
   private var activeShapeId: String? = null
@@ -309,7 +319,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     liveShape?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     liveEdit?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     shapePreview?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
-    if ((mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION) && selection.isNotEmpty()) {
+    if (isDraggingSelection() && selection.isNotEmpty()) {
       canvas.save()
       canvas.concat(dragTransform.toMatrix())
       itemRenderer.drawAll(canvas, selection, camera.worldToScreen)
@@ -335,19 +345,68 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     canvas.drawPath(lassoPath, lassoPaint)
   }
 
+  private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
+
+  /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
+  private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem }
+
+  /** The rotate handle hangs below the middle of the selection (the menu sits above it). */
+  private fun rotateHandle(r: RectF) = Pt(r.centerX(), r.bottom + 30f * density)
+
+  private fun drawRotateHandle(canvas: Canvas, r: RectF) {
+    if (!canRotateSelection() || mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION) return
+    val h = rotateHandle(r)
+    canvas.drawLine(h.x, r.bottom, h.x, h.y - 6.5f * density, selectionPaint)
+    drawHandle(canvas, h.x, h.y, 6.5f)
+    // A little turning arrow inside the handle.
+    val a = 3.2f * density
+    canvas.drawArc(h.x - a, h.y - a, h.x + a, h.y + a, -60f, 280f, false, handleStroke)
+  }
+
   private fun drawSelection(canvas: Canvas) {
     val b = selectionBounds ?: return
-    if (activeShapeId != null && selection.size == 1) return // the shape's own handles are enough
-    val r = screenRect(b, dragTransform.takeIf { mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION } ?: Affine.IDENTITY)
     val pad = 8f * density
+    if (activeShapeId != null && selection.size == 1 && mode != Mode.ROTATE_SELECTION) {
+      // The shape's own handles are enough; just add the rotate handle.
+      drawRotateHandle(canvas, screenRect(b, Affine.IDENTITY).apply { inset(-pad, -pad) })
+      return
+    }
+    if (mode == Mode.ROTATE_SELECTION) {
+      drawRotatingSelection(canvas, b, pad)
+      return
+    }
+    val r = screenRect(b, dragTransform.takeIf { isDraggingSelection() } ?: Affine.IDENTITY)
     r.inset(-pad, -pad)
     // Snap to the pixel grid so all four dashed edges look equally crisp.
     r.set(Math.round(r.left) + 0.5f, Math.round(r.top) + 0.5f, Math.round(r.right) + 0.5f, Math.round(r.bottom) + 0.5f)
     canvas.drawRoundRect(r, 6f * density, 6f * density, selectionPaint)
     drawHandle(canvas, r.right, r.bottom, 7f)
+    drawRotateHandle(canvas, r)
+  }
+
+  /** The turning selection: its outline follows the rotation, with the angle shown above it. */
+  private fun drawRotatingSelection(canvas: Canvas, b: Rect, pad: Float) {
+    val padW = pad / camera.scale
+    val corners = listOf(Pt(b.left - padW, b.top - padW), Pt(b.right + padW, b.top - padW), Pt(b.right + padW, b.bottom + padW), Pt(b.left - padW, b.bottom + padW)).map { camera.toScreen(dragTransform.apply(it)) }
+    lassoPath.reset()
+    corners.forEachIndexed { i, s -> if (i == 0) lassoPath.moveTo(s.x, s.y) else lassoPath.lineTo(s.x, s.y) }
+    lassoPath.close()
+    canvas.drawPath(lassoPath, selectionPaint)
+    // Screen y points down, so flip the sign: counter-clockwise reads as positive, as in maths class.
+    val degrees = Math.round(-Math.toDegrees(rotateAngle.toDouble())).toInt().let { ((it + 540) % 360) - 180 }
+    val label = "$degrees\u00B0"
+    val center = camera.toScreen(rotatePivot)
+    angleText.textSize = 13f * density
+    angleText.color = 0xFFFFFFFF.toInt()
+    angleBubble.color = handleColor
+    val w = angleText.measureText(label) + 16f * density
+    val h = 24f * density
+    canvas.drawRoundRect(center.x - w / 2, center.y - h / 2, center.x + w / 2, center.y + h / 2, h / 2, h / 2, angleBubble)
+    canvas.drawText(label, center.x, center.y + 4.5f * density, angleText)
   }
 
   private fun drawShapeHandles(canvas: Canvas) {
+    if (isDraggingSelection()) return
     val shape = currentActiveShape() ?: return
     shape.geometry.handles().forEach { p ->
       val s = camera.toScreen(p)
@@ -508,10 +567,21 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     }
 
-    // 2. Existing selection: drag inside to move, corner to resize.
+    // 2. Existing selection: drag inside to move, corner to resize, the handle above to rotate.
     val sb = selectionBounds
     if (sb != null && !eraserOverride) {
       val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
+      if (canRotateSelection() && rotateHandle(r).dist(screen) < HANDLE_HIT_DP * density) {
+        dragStart = p
+        rotatePivot = sb.center
+        rotateAngle = 0f
+        dragTransform = Affine.IDENTITY
+        tiles.hidden = selection.map { it.id }.toSet()
+        mode = Mode.ROTATE_SELECTION
+        host.onSelectionChanged(null)
+        invalidate()
+        return
+      }
       val nearCorner = hypot(screen.x - r.right, screen.y - r.bottom) < HANDLE_HIT_DP * density
       if (nearCorner || r.contains(screen.x, screen.y)) {
         dragStart = p
@@ -591,6 +661,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.MOVE_SELECTION -> {
         val p = world(e, idx)
         dragTransform = Affine.translate(p.x - dragStart.x, p.y - dragStart.y)
+        invalidate()
+      }
+      Mode.ROTATE_SELECTION -> {
+        val start = (dragStart - rotatePivot).angle()
+        var angle = (world(e, idx) - rotatePivot).angle() - start
+        // Snap to 15° steps (and straight) when close, so angles like 30° and 45° are exact.
+        val step = (PI / 12).toFloat()
+        val snapped = Math.round(angle / step) * step
+        if (abs(angle - snapped) < 0.06f) angle = snapped
+        rotateAngle = angle
+        dragTransform = Affine.rotateAround(rotatePivot, angle)
         invalidate()
       }
       Mode.SCALE_SELECTION -> {
@@ -683,7 +764,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.ERASE -> finishErase()
       Mode.LASSO -> finishLasso(if (idx >= 0) world(e, idx) else null)
       Mode.MOVE_SELECTION,
-      Mode.SCALE_SELECTION -> finishSelectionDrag()
+      Mode.SCALE_SELECTION,
+      Mode.ROTATE_SELECTION -> finishSelectionDrag()
       Mode.HANDLE_DRAG -> {
         val edited = liveEdit
         val original = edited?.let { d?.get(it.id) }
@@ -869,7 +951,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       host.onSelectionChanged(null)
       return
     }
-    host.onSelectionChanged(SelectionInfo(screenRect(b, Affine.IDENTITY), selection.size, selection.any { it is ShapeItem }, selection.any { it is ImageItem }, selection.any { it !is ImageItem }))
+    host.onSelectionChanged(SelectionInfo(screenRect(b, Affine.IDENTITY), selection.size, selection.any { it is ShapeItem }, selection.any { it is ImageItem }, selection.any { it !is ImageItem }, canRotateSelection()))
   }
 
   fun clearSelection() {
@@ -963,7 +1045,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val w = widths[i]
         val h = p.heightPt / PT_PER_DP
         val x = left + (widest - w) / 2f
-        ImageItem(d.newId(), d.nextZ() + i, p.file, Rect(x, top, x + w, top + h)).also { top += h + PAGE_GAP }
+        ImageItem(d.newId(), d.nextZ() + i, p.file, Rect(x, top, x + w, top + h), pdfPage = true).also { top += h + PAGE_GAP }
       }
     d.commit(Change(emptyList(), items))
     // Show the first page across the width of the screen.
@@ -1130,7 +1212,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   companion object {
     private val DRAW_MODES =
-      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE)
+      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE)
     private const val HOLD_TOLERANCE_DP = 7f
 
     /** PDF points per world unit (dp), matching the PDF export so pages keep their real size. */

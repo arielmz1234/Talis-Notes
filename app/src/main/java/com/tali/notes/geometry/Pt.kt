@@ -118,6 +118,12 @@ data class Affine(val a: Float = 1f, val b: Float = 0f, val c: Float = 0f, val d
     fun translate(dx: Float, dy: Float) = Affine(tx = dx, ty = dy)
 
     fun scaleAround(pivot: Pt, sx: Float, sy: Float = sx) = Affine(a = sx, d = sy, tx = pivot.x - sx * pivot.x, ty = pivot.y - sy * pivot.y)
+
+    fun rotateAround(pivot: Pt, radians: Float): Affine {
+      val cos = kotlin.math.cos(radians)
+      val sin = kotlin.math.sin(radians)
+      return Affine(a = cos, b = sin, c = -sin, d = cos, tx = pivot.x - cos * pivot.x + sin * pivot.y, ty = pivot.y - sin * pivot.x - cos * pivot.y)
+    }
   }
 }
 

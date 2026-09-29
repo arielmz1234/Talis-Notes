@@ -69,7 +69,7 @@ private val CENTER_PUFFS = listOf(Triple(-20f, 6f, 11f), Triple(0f, 0f, 16f), Tr
 fun Modifier.cloudSurface(radius: Dp = 22.dp, crown: CloudCrown = CloudCrown.NONE, shadowDepth: Dp = 7.dp): Modifier {
   val c = Tali.colors
   val tones =
-    if (c.isDark) SurfaceTones(0xFF2A2440.toInt(), 0xFF231F3A.toInt(), 0xFF3A3358.toInt(), 0x66000000)
+    if (c.isDark) SurfaceTones(0xFF3A335E.toInt(), 0xFF2B2548.toInt(), 0xFF514980.toInt(), 0x38000000)
     else SurfaceTones(0xFFFFFFFF.toInt(), 0xFFE3E8FC.toInt(), 0xFFCDD4F5.toInt(), 0x3D6256C8)
   return drawWithCache {
     val d = density

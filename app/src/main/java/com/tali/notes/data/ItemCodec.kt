@@ -28,7 +28,7 @@ object ItemCodec {
     classDiscriminator = "type"
   }
 
-  @Serializable private class ImagePayload(val file: String, val rect: Rect)
+  @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false)
 
   fun encode(item: CanvasItem): ItemRow {
     val b = item.bounds
@@ -42,7 +42,7 @@ object ItemCodec {
         ItemRow(item.id, item.z, KIND_SHAPE, item.pen.name, item.color, item.size, bytes, b.left, b.top, b.right, b.bottom)
       }
       is ImageItem -> {
-        val bytes = json.encodeToString(ImagePayload.serializer(), ImagePayload(item.file, item.rect)).encodeToByteArray()
+        val bytes = json.encodeToString(ImagePayload.serializer(), ImagePayload(item.file, item.rect, item.pdfPage)).encodeToByteArray()
         ItemRow(item.id, item.z, KIND_IMAGE, null, 0, 0f, bytes, b.left, b.top, b.right, b.bottom)
       }
     }
@@ -63,7 +63,7 @@ object ItemCodec {
           }
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())
-            ImageItem(row.id, row.z, p.file, p.rect)
+            ImageItem(row.id, row.z, p.file, p.rect, p.pdfPage)
           }
           else -> null
         }

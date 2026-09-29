@@ -11,6 +11,7 @@ import com.tali.notes.canvas.PaperRenderer
 import com.tali.notes.geometry.Rect
 import com.tali.notes.ink.Brushes
 import com.tali.notes.model.CanvasItem
+import com.tali.notes.model.ImageItem
 import com.tali.notes.model.PaperStyle
 import java.io.File
 import kotlin.math.ceil
@@ -18,6 +19,9 @@ import kotlin.math.ceil
 enum class PdfLayout(val label: String) {
   A4_PAGES("A4 pages"),
   ONE_PAGE("One page, fitted to content"),
+
+  /** Each imported PDF page (a slide) becomes a page again, with her notes around it. */
+  PDF_PAGES("Same pages as the PDF"),
 }
 
 /** Software rendering for previews and PDFs; never touches the live screen. */
@@ -49,6 +53,7 @@ object Exporter {
       when (layout) {
         PdfLayout.ONE_PAGE -> splitTall(content)
         PdfLayout.A4_PAGES -> a4Pages(content).filter { page -> items.any { it.bounds.intersects(page) } }.ifEmpty { a4Pages(content).take(1) }
+        PdfLayout.PDF_PAGES -> pdfPages(items).ifEmpty { splitTall(content) }
       }
     val doc = PdfDocument()
     val r = renderer(images)
@@ -85,6 +90,21 @@ object Exporter {
       top += maxDp
     }
     return out
+  }
+
+  /**
+   * One page per imported PDF page, top to bottom. Each page also takes the notes written around
+   * it: anything whose middle lies between this page's top and the next page's top.
+   */
+  private fun pdfPages(items: Collection<CanvasItem>): List<Rect> {
+    val pages = items.filterIsInstance<ImageItem>().filter { it.pdfPage }.sortedBy { it.rect.top }
+    if (pages.isEmpty()) return emptyList()
+    val others = items.filter { !(it is ImageItem && it.pdfPage) }
+    return pages.mapIndexed { i, page ->
+      val bandTop = if (i == 0) Float.NEGATIVE_INFINITY else page.rect.top
+      val bandBottom = pages.getOrNull(i + 1)?.rect?.top ?: Float.POSITIVE_INFINITY
+      others.filter { it.bounds.center.y in bandTop..<bandBottom }.map { it.bounds }.fold(page.rect) { acc, r -> acc.union(r) }
+    }
   }
 
   /** Tiles the content into A4 portrait pages, row by row, top to bottom. */

@@ -32,8 +32,8 @@ import com.tali.notes.theme.Tali
 @Composable
 fun PenGlyph(type: PenType, color: Color, modifier: Modifier = Modifier) {
   val c = Tali.colors
-  val body = if (c.isDark) Color(0xFF3D3452) else Color(0xFFF1ECFA)
-  val outline = if (c.isDark) Color(0xFF504468) else Color(0xFFD8CCEE)
+  val body = if (c.isDark) Color(0xFFD6CFEC) else Color(0xFFF1ECFA)
+  val outline = if (c.isDark) Color(0xFFA99DCC) else Color(0xFFD8CCEE)
   val wood = Color(0xFFE9C9A0)
   Canvas(modifier.size(26.dp, 56.dp)) {
     val u = size.width / 26f

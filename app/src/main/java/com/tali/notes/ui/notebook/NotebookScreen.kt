@@ -67,6 +67,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -121,6 +123,14 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   val c = Tali.colors
   val holder = remember { CanvasHolder() }
   val scope = rememberCoroutineScope()
+  // The paper is always light, so the status bar needs dark icons here even in dark mode.
+  val view = LocalView.current
+  DisposableEffect(c.isDark) {
+    val window = (view.context as? android.app.Activity)?.window
+    val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+    bars?.isAppearanceLightStatusBars = true
+    onDispose { bars?.isAppearanceLightStatusBars = !c.isDark }
+  }
   var renaming by remember { mutableStateOf(false) }
   var exporting by remember { mutableStateOf(false) }
   var savingShape by remember { mutableStateOf<ShapeGeometry?>(null) }
@@ -312,6 +322,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   }
   if (exporting) {
     ExportDialog(
+      hasPdfPages = remember(doc) { doc?.all?.any { it is com.tali.notes.model.ImageItem && it.pdfPage } == true },
       onDismiss = { exporting = false },
       onExport = { layout, share ->
         exporting = false
@@ -458,7 +469,8 @@ private fun SelectionMenu(sel: SelectionInfo, colors: List<Int>, onDelete: () ->
       val cx = sel.screenRect.centerX().roundToInt()
       val x = (cx - p.width / 2).coerceIn(gap, constraints.maxWidth - p.width - gap)
       val above = sel.screenRect.top.roundToInt() - p.height - gap
-      val below = sel.screenRect.bottom.roundToInt() + gap
+      // Leave room for the rotate handle hanging under the selection.
+      val below = sel.screenRect.bottom.roundToInt() + gap + if (sel.rotatable) with(density) { 48.dp.roundToPx() } else 0
       val y = when {
         above >= topLimit -> above
         below <= bottomLimit -> below
@@ -517,16 +529,34 @@ private fun SaveShapeDialog(geometry: ShapeGeometry, onDismiss: () -> Unit, onSa
 }
 
 @Composable
-private fun ExportDialog(onDismiss: () -> Unit, onExport: (PdfLayout, share: Boolean) -> Unit) {
+private fun ExportDialog(hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: (PdfLayout, share: Boolean) -> Unit) {
   val c = Tali.colors
-  var layout by remember { mutableStateOf(PdfLayout.A4_PAGES) }
+  // Slides she imported come back out as the same slides, with her writing on them.
+  val options = if (hasPdfPages) listOf(PdfLayout.PDF_PAGES, PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE) else listOf(PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE)
+  var layout by remember { mutableStateOf(options.first()) }
   DialogCard(onDismiss, width = 520) {
     Text("Export PDF", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(16.dp))
-    Segmented(PdfLayout.entries, layout, { if (it == PdfLayout.A4_PAGES) "A4 pages" else "One long page" }, { layout = it }, Modifier.fillMaxWidth())
+    Segmented(
+      options,
+      layout,
+      {
+        when (it) {
+          PdfLayout.PDF_PAGES -> "PDF pages"
+          PdfLayout.A4_PAGES -> "A4 pages"
+          PdfLayout.ONE_PAGE -> "One long page"
+        }
+      },
+      { layout = it },
+      Modifier.fillMaxWidth(),
+    )
     Spacer(Modifier.height(10.dp))
     Text(
-      if (layout == PdfLayout.A4_PAGES) "Splits the canvas into printable A4 pages. Empty areas are skipped." else "Keeps the whole canvas on one page, sized to fit everything.",
+      when (layout) {
+        PdfLayout.PDF_PAGES -> "Each page you imported comes back as its own page, with your writing on and around it."
+        PdfLayout.A4_PAGES -> "Splits the canvas into printable A4 pages. Empty areas are skipped."
+        PdfLayout.ONE_PAGE -> "Keeps the whole canvas on one page, sized to fit everything."
+      },
       style = MaterialTheme.typography.bodyMedium,
       color = c.inkMuted,
     )

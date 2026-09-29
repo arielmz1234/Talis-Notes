@@ -62,6 +62,8 @@ class ImageItem(
   /** File name inside the app's image folder. */
   val file: String,
   val rect: Rect,
+  /** A page from an imported PDF (so export can give it back its own page). */
+  val pdfPage: Boolean = false,
 ) : CanvasItem() {
   override val bounds: Rect = rect
   override val pen: PenType? = null
@@ -69,6 +71,6 @@ class ImageItem(
   override fun transformed(m: Affine, newId: String, newZ: Long): ImageItem {
     val a = m.apply(Pt(rect.left, rect.top))
     val b = m.apply(Pt(rect.right, rect.bottom))
-    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)))
+    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage)
   }
 }
