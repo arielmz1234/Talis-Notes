@@ -148,6 +148,18 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
         }
       }
     }
+  // A photo straight from the camera app (the board, a textbook page); no camera permission needed.
+  var photoUri by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
+  val takePhoto =
+    rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+      val uri = photoUri
+      if (taken && uri != null) {
+        scope.launch {
+          val result = vm.importImage(uri)
+          if (result == null) vm.showHint("That photo couldn't be opened") else holder.view?.runSafely { insertImage(result.first, result.second) }
+        }
+      }
+    }
   val pdfPicker =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
       if (uri != null) {
@@ -251,6 +263,13 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
             onImage = {
               vm.panel = null
               imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onCamera = {
+              vm.panel = null
+              val file = File(File(context.cacheDir, "camera").apply { mkdirs() }, "photo.jpg")
+              val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
+              photoUri = uri
+              runCatching { takePhoto.launch(uri) }.onFailure { vm.showHint("No camera app found") }
             },
             onPdf = {
               vm.panel = null

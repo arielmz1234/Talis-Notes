@@ -116,13 +116,22 @@ object ShapeRecognizer {
     return null
   }
 
-  /** Snaps near-horizontal, vertical and 45° lines exactly, keeping the start point and length. */
+  /**
+   * Snaps near-horizontal, vertical and 45° lines exactly (within 5°), and other multiples of 15°
+   * such as 30° and 60° when very close (within 2°), keeping the start point and length.
+   */
   fun snappedLine(a: Pt, b: Pt, arrowEnd: Boolean = false): LineShape {
     val v = b - a
     val angle = v.angle()
-    val step = 45f * DEG
-    val snapped = round(angle / step) * step
-    val end = if (abs(angle - snapped) < 5f * DEG) a + Pt.polar(v.length(), snapped) else b
+    val wide = round(angle / (45f * DEG)) * (45f * DEG)
+    val fine = round(angle / (15f * DEG)) * (15f * DEG)
+    val snapped =
+      when {
+        abs(angle - wide) < 5f * DEG -> wide
+        abs(angle - fine) < 2f * DEG -> fine
+        else -> null
+      }
+    val end = if (snapped != null) a + Pt.polar(v.length(), snapped) else b
     return LineShape(a, end, arrowEnd = arrowEnd)
   }
 

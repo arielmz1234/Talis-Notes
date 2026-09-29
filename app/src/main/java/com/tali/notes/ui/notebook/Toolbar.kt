@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +65,7 @@ fun MainToolbar(
   onPen: (PenSlot) -> Unit,
   onTool: (Tool) -> Unit,
   onImage: () -> Unit,
+  onCamera: () -> Unit,
   onPdf: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -104,6 +106,11 @@ fun MainToolbar(
           text = { Column { Text("Picture"); Text("From your photos or files", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
           leadingIcon = { Icon(Icons.Outlined.Image, null, tint = c.blue) },
           onClick = { inserting = false; onImage() },
+        )
+        DropdownMenuItem(
+          text = { Column { Text("Take a photo"); Text("The board, a textbook page, a sketch", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+          leadingIcon = { Icon(Icons.Outlined.PhotoCamera, null, tint = c.blue) },
+          onClick = { inserting = false; onCamera() },
         )
         DropdownMenuItem(
           text = { Column { Text("PDF pages"); Text("Lecture slides or a problem sheet to write on", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },

@@ -348,6 +348,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawLasso(canvas)
     drawSelection(canvas)
     drawShapeHandles(canvas)
+    drawLineReadout(canvas)
     drawEraserCursor(canvas)
   }
 
@@ -421,6 +422,38 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val h = 24f * density
     canvas.drawRoundRect(center.x - w / 2, center.y - h / 2, center.x + w / 2, center.y + h / 2, h / 2, h / 2, angleBubble)
     canvas.drawText(label, center.x, center.y + 4.5f * density, angleText)
+  }
+
+  /**
+   * While a straight line is being drawn or adjusted: its angle (counter-clockwise from the
+   * horizontal, as in class) and its length at print size, next to the end that's moving.
+   */
+  private fun drawLineReadout(canvas: Canvas) {
+    val (line, movingEnd) =
+      when (mode) {
+        Mode.LIVE_SHAPE -> (liveShape?.geometry as? LineShape)?.let { it to it.b }
+        Mode.SHAPE_CREATE -> (shapePreview?.geometry as? LineShape)?.let { it to it.b }
+        Mode.HANDLE_DRAG -> (liveEdit?.geometry as? LineShape)?.let { it to if (handleIndex == 0) it.a else it.b }
+        else -> null
+      } ?: return
+    val v = line.b - line.a
+    if (v.length() < 1f) return
+    var degrees = Math.round(-Math.toDegrees(kotlin.math.atan2(v.y, v.x).toDouble())).toInt()
+    if (degrees < 0) degrees += 180
+    if (degrees == 180) degrees = 0
+    // World units are dp; exported PDFs print them at 72/160 pt each.
+    val cm = line.length * (72f / 160f) / 72f * 2.54f
+    val label = "$degrees°  ·  ${String.format(java.util.Locale.US, "%.1f", cm)} cm"
+    val s = camera.toScreen(movingEnd)
+    angleText.textSize = 12.5f * density
+    angleText.color = 0xFFFFFFFF.toInt()
+    angleBubble.color = handleColor
+    val w = angleText.measureText(label) + 18f * density
+    val h = 24f * density
+    val cx = (s.x + 22f * density + w / 2).coerceIn(w / 2 + 4f, width - w / 2 - 4f)
+    val cy = (s.y - 26f * density).coerceIn(h / 2 + 4f, height - h / 2 - 4f)
+    canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
+    canvas.drawText(label, cx, cy + 4.5f * density, angleText)
   }
 
   private fun drawShapeHandles(canvas: Canvas) {
@@ -707,7 +740,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.HANDLE_DRAG -> {
         val shape = liveEdit ?: return
         val base = doc?.get(shape.id) as? ShapeItem ?: return
-        liveEdit = base.withGeometry(base.geometry.withHandle(handleIndex, world(e, idx)))
+        var g = base.geometry.withHandle(handleIndex, world(e, idx))
+        // A line end being dragged snaps to the same tidy angles as a freshly drawn line.
+        if (g is LineShape) g = if (handleIndex == 1) g.copy(b = ShapeRecognizer.snappedLine(g.a, g.b).b) else g.copy(a = ShapeRecognizer.snappedLine(g.b, g.a).b)
+        liveEdit = base.withGeometry(g)
         invalidate()
       }
       Mode.SHAPE_CREATE -> {
