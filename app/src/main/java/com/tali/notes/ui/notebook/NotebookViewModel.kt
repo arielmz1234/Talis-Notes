@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -119,7 +120,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val workers = Runtime.getRuntime().availableProcessors().coerceIn(1, 6)
     repeat(workers) {
       viewModelScope.launch(Dispatchers.Default) {
-        while (true) {
+        // Stops as soon as she leaves the notebook (the scope is cancelled).
+        while (isActive) {
           val item = queue.getOrNull(next.getAndIncrement()) ?: break
           runCatching {
             when (item) {
