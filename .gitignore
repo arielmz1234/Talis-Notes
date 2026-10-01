@@ -16,3 +16,6 @@ local.properties
 
 # Release signing key and its passwords: never commit, but DO back these up somewhere safe.
 /keystore/
+
+# Emulator screenshots
+/tools/emulator/shots/
