@@ -143,6 +143,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.FlipToFront
 import androidx.compose.material.icons.outlined.FlipToBack
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 
 private class CanvasHolder {
   var view: NoteCanvasView? = null
@@ -363,10 +365,31 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       enter = androidx.compose.animation.EnterTransition.None,
       exit = androidx.compose.animation.ExitTransition.None,
     ) {
-    // A bar grows from its own top edge, lifting in; the bars follow one another by 40 ms.
-    fun Modifier.bar(key: String, order: Int, fromBelow: Boolean = false): Modifier =
-      animateEnterExit(enter = barEnter(order, if (fromBelow) barLift else -barLift, fromBelow), exit = barExit(if (fromBelow) barLift else -barLift, fromBelow))
+    // A bar grows from its own top edge, lifting in; the bars follow one another by 40 ms and leave
+    // together, quicker. Driven by this visibility's own transition (so it waits for them), and
+    // faded draw by draw rather than through an offscreen layer: a layer would clip the cloud bumps
+    // above the bar until it was fully shown, so the bar would arrive first and its bumps after.
+    @Composable
+    fun Modifier.bar(key: String, order: Int, fromBelow: Boolean = false): Modifier {
+      val shown by transition.animateFloat(
+        transitionSpec = {
+          if (targetState == androidx.compose.animation.EnterExitState.Visible) tween(260, delayMillis = 40 * order, easing = com.tali.notes.ui.components.EaseOutStrong)
+          else tween(170, easing = com.tali.notes.ui.components.EaseOutStrong)
+        },
+        label = "bar$order",
+      ) { if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+      val lift = (if (fromBelow) barLift else -barLift).toFloat()
+      return graphicsLayer {
+          alpha = shown
+          compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+          translationY = (1f - shown) * lift
+          val sc = 0.96f + 0.04f * shown
+          scaleX = sc
+          scaleY = sc
+          transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, if (fromBelow) 1f else 0f)
+        }
         .then(if (key.isEmpty()) Modifier else Modifier.onGloballyPositioned { recordBar(key, it) })
+    }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
       val titlePill: @Composable () -> Unit = { Box(Modifier.bar("title", 0)) { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) } }
       val tools: @Composable () -> Unit = {
@@ -1005,23 +1028,6 @@ private fun ToolbarPuffs(tick: Int, showing: Boolean, bars: Map<String, androidx
       }
     }
   }
-}
-
-/** A bar arriving: it fades in, lifts [offsetPx] into place and grows from its own top (or bottom) edge. */
-private fun barEnter(order: Int, offsetPx: Int, fromBelow: Boolean): androidx.compose.animation.EnterTransition {
-  val delay = 40 * order
-  val origin = androidx.compose.ui.graphics.TransformOrigin(0.5f, if (fromBelow) 1f else 0f)
-  return fadeIn(tween(220, delayMillis = delay, easing = com.tali.notes.ui.components.EaseOutStrong)) +
-    slideInVertically(tween(260, delayMillis = delay, easing = com.tali.notes.ui.components.EaseOutStrong)) { offsetPx } +
-    scaleIn(tween(260, delayMillis = delay, easing = com.tali.notes.ui.components.EaseOutStrong), initialScale = 0.96f, transformOrigin = origin)
-}
-
-/** A bar leaving: quicker than it came, all together, back the way it came. */
-private fun barExit(offsetPx: Int, fromBelow: Boolean): androidx.compose.animation.ExitTransition {
-  val origin = androidx.compose.ui.graphics.TransformOrigin(0.5f, if (fromBelow) 1f else 0f)
-  return fadeOut(tween(150, easing = com.tali.notes.ui.components.EaseOutStrong)) +
-    slideOutVertically(tween(180, easing = com.tali.notes.ui.components.EaseOutStrong)) { offsetPx } +
-    scaleOut(tween(180, easing = com.tali.notes.ui.components.EaseOutStrong), targetScale = 0.96f, transformOrigin = origin)
 }
 
 private val DESK_LIGHT = Color(0xFFE9E4F2)

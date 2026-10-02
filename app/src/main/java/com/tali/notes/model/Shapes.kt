@@ -348,7 +348,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       CIRCLE -> EllipseShape(p0, p0.dist(p1), p0.dist(p1))
       ELLIPSE -> EllipseShape(c, w / 2f, h / 2f)
       ARC -> ArcShape(c, side / 2f, PI.toFloat(), PI.toFloat())
-      // From the centre outwards; the canvas passes her chosen amount instead of a half.
+      // From the centre outwards, a half to start with; its end dots change the amount.
       PART_CIRCLE -> SectorShape.of(p0, p1, 0.5f)
       TRIANGLE -> PolyShape(listOf(Pt(c.x, t), Pt(r, t + h), Pt(l, t + h)), true)
       RIGHT_TRIANGLE -> PolyShape(listOf(Pt(l, t), Pt(l, t + h), Pt(r, t + h)), true)

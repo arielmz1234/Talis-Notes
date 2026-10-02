@@ -17,12 +17,15 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import com.tali.notes.theme.Tali
 import com.tali.notes.theme.TaliTheme
@@ -64,7 +67,8 @@ class CloudPuffTest {
             }
             Spacer(Modifier.width(40.dp))
             PuffBox(leaving = leaving, appearing = appearing) {
-              Box(Modifier.size(200.dp, 250.dp).clip(RoundedCornerShape(18.dp)).background(c.surface).padding(14.dp), contentAlignment = Alignment.BottomStart) {
+              // Like the library's notebook card, big shadow and all: it must fade with the card.
+              Box(Modifier.size(200.dp, 250.dp).shadow(12.dp, RoundedCornerShape(18.dp), ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6)).clip(RoundedCornerShape(18.dp)).background(c.surface).padding(14.dp), contentAlignment = Alignment.BottomStart) {
                 Box(Modifier.size(172.dp, 170.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFB9A8F0)).align(Alignment.TopCenter))
                 Text("Hydraulics", color = c.ink)
               }
@@ -117,4 +121,32 @@ class CloudPuffTest {
   @Test fun arrivesOnAPuffLight() = arrives(dark = false)
 
   @Test fun arrivesOnAPuffDark() = arrives(dark = true)
+
+  @Test
+  fun skyCloudBurstsWhenTapped() {
+    rule.setContent {
+      TaliTheme(darkTheme = false) {
+        Box(Modifier.testTag("stage").background(Color(0xFFBFD4FF)).padding(40.dp)) {
+          Cloud(Modifier.testTag("cloud"), width = 240.dp, variant = 0, burstable = true)
+        }
+      }
+    }
+    // The cloud is painted off the main thread; give it a moment, then let it fade in.
+    Thread.sleep(1500)
+    rule.waitForIdle()
+    rule.mainClock.advanceTimeBy(1000)
+    rule.mainClock.autoAdvance = false
+    val before = shot()
+    rule.onNodeWithTag("cloud").performClick()
+    record("burst", 44)
+    rule.mainClock.advanceTimeBy(1500)
+    // Gone for now: the sky shows where the cloud's middle was.
+    val gone = shot()
+    val mid = gone.getPixel(gone.width / 2, gone.height / 2)
+    assertEquals("sky shows through", Color(0xFFBFD4FF).toArgb(), mid)
+    // And a few seconds later it's back.
+    rule.mainClock.advanceTimeBy(6000)
+    val back = shot()
+    assertEquals("cloud back", before.getPixel(before.width / 2, before.height / 2), back.getPixel(back.width / 2, back.height / 2))
+  }
 }

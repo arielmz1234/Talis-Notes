@@ -69,8 +69,6 @@ data class AppSettings(
   val smartUndo: Boolean = true,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
-  /** How much of a circle the Part circle shape draws, 0.01..1 (a half to start with). */
-  val partCircle: Float = 0.5f,
 ) {
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 

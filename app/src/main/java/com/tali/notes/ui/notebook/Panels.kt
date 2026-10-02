@@ -269,26 +269,6 @@ private fun FilterChip(label: String, on: Boolean, onChange: (Boolean) -> Unit) 
   }
 }
 
-/**
- * How much of a circle Part circle draws: a quarter, a half or three quarters in one tap, or any
- * amount on the slider (snapping to whole percents). The drawn shape's end dots adjust it later.
- */
-@Composable
-private fun PartCircleControl(fraction: Float, onChange: (Float) -> Unit) {
-  val c = Tali.colors
-  Spacer(Modifier.height(14.dp))
-  Row(verticalAlignment = Alignment.CenterVertically) {
-    SectionLabel("Part circle", Modifier.weight(1f))
-    Text("${Math.round(fraction * 100)}%  ·  ${Math.round(fraction * 360)}°", style = MaterialTheme.typography.titleSmall, color = c.ink)
-  }
-  Spacer(Modifier.height(8.dp))
-  val quick = listOf(0.25f, 0.5f, 0.75f)
-  Segmented(quick, quick.firstOrNull { kotlin.math.abs(it - fraction) < 0.001f }, { "${Math.round(it * 100)}%" }, onChange, Modifier.fillMaxWidth())
-  Spacer(Modifier.height(6.dp))
-  TaliSlider(fraction, 0.01f..1f, { onChange(Math.round(it * 100) / 100f) }, Modifier.fillMaxWidth())
-  Text("Drag from the centre outwards; the curve faces the way you drag. Its end dots change the amount later.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
-}
-
 @Composable
 fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
@@ -331,7 +311,10 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
         }
       }
     }
-    if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null) PartCircleControl(settings.partCircle, vm::setPartCircle)
+    if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null) {
+      Spacer(Modifier.height(10.dp))
+      Text("Part circle: drag from the centre outwards; it starts as a half. Then drag an end dot to make it any % of a circle.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+    }
     MyShapes(settings.customShapes, vm)
   }
 }

@@ -244,6 +244,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val holdRunnable = Runnable { onHold() }
   private var liveShape: ShapeItem? = null
 
+  /** The shape as it snapped, and where the pen was then: keeping on moving resizes it from there. */
+  private var liveBase: ShapeItem? = null
+  private var liveAnchor = Pt(0f, 0f)
+  private var liveFollowing = false
+
   // Eraser
   private var erasePrev = Pt.ZERO
   private val erasedOriginals = LinkedHashMap<String, CanvasItem>()
@@ -944,9 +949,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.LIVE_SHAPE -> {
         val shape = liveShape ?: return
         val g = shape.geometry
+        val pen = world(e, idx)
         // While still holding, a snapped line follows the pen so its length and angle can be set.
         if (g is LineShape && !g.arrowEnd) {
-          liveShape = shape.withGeometry(ShapeRecognizer.snappedLine(g.a, world(e, idx)))
+          liveShape = shape.withGeometry(ShapeRecognizer.snappedLine(g.a, pen))
+          invalidate()
+        } else {
+          // Any other shape grows or shrinks with the pen, evenly around its middle (a circle's edge
+          // follows the pen tip). A small dead zone keeps hold-and-lift exactly as it snapped.
+          val base = liveBase ?: return
+          if (!liveFollowing && camera.toScreen(pen).dist(camera.toScreen(liveAnchor)) < touchSlop) return
+          liveFollowing = true
+          val bg = base.geometry
+          val c = if (bg is com.tali.notes.model.EllipseShape) bg.center else base.bounds.center
+          val from = liveAnchor.dist(c)
+          if (from < 1f) return
+          val k = (pen.dist(c) / from).coerceIn(0.15f, 8f)
+          liveShape = base.withGeometry(bg.transformed(Affine.scaleAround(c, k)))
           invalidate()
         }
       }
@@ -1034,6 +1053,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     strokeColors.remove(id)
     strokeId = null
     liveShape = ShapeItem(d.newId(), d.nextZ(), pen, slot.color, slot.size, geometry)
+    liveBase = liveShape
+    liveAnchor = strokePoints.lastOrNull() ?: Pt(0f, 0f)
+    liveFollowing = false
     mode = Mode.LIVE_SHAPE
     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     invalidate()
@@ -1042,7 +1064,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun buildShape(p0: Pt, p1: Pt): ShapeItem {
     val slot = settings.shapeSlot
     var geometry = customShape?.fitInto(p0, p1)
-      ?: if (shapeKind == ShapeKind.PART_CIRCLE) SectorShape.of(p0, p1, settings.partCircle) else shapeKind.create(p0, p1)
+      ?: shapeKind.create(p0, p1)
     if (geometry is LineShape) {
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
       geometry = geometry.copy(b = snapped.b)
@@ -1060,6 +1082,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         strokeId = null
       }
       Mode.LIVE_SHAPE -> {
+        liveBase = null
         val shape = liveShape
         if (shape != null && d != null) {
           d.commit(Change(emptyList(), listOf(shape)))
@@ -1087,6 +1110,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           val preview = shapePreview ?: buildShape(shapeStart - Pt(60f, 40f), shapeStart + Pt(60f, 40f))
           val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry)
           d.commit(Change(emptyList(), listOf(shape)))
+          // A part circle shows its dots straight away, so its amount can be set right after drawing it.
+          if (shape.geometry is SectorShape) {
+            activeShapeId = shape.id
+            host.onTip("part-circle", "Drag an end dot to choose how much of a circle: it shows the %")
+          }
         }
         shapePreview = null
       }
@@ -1102,6 +1130,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     strokeId?.let { inProgress.cancelStroke(it, null) }
     strokeId = null
     liveShape = null
+    liveBase = null
     liveEdit = null
     shapePreview = null
     lassoPoints.clear()

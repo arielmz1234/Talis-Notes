@@ -272,7 +272,6 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setSmartUndo(on: Boolean) = store.update { it.copy(smartUndo = on) }
 
-  fun setPartCircle(fraction: Float) = store.update { it.copy(partCircle = fraction.coerceIn(0.01f, 1f)) }
 
 
   fun setPaper(style: PaperStyle) {

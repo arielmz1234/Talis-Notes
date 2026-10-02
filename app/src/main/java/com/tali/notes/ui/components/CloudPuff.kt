@@ -11,6 +11,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -159,7 +160,7 @@ fun PuffBox(leaving: Boolean, appearing: Boolean, modifier: Modifier = Modifier,
   // While it leaves it sits above its neighbours, so the mist drifting over them isn't cut off.
   Box(modifier.zIndex(if (leaving) 1f else 0f)) {
     Box(
-      Modifier.graphicsLayer {
+      Modifier.layerWithRoom(LAYER_ROOM) {
         // Out: shrink a hair, fade and blur into the mist. In: the same, backwards.
         val gone = maxOf(leave, 1f - arrive.value)
         val s = 1f - 0.04f * gone
@@ -179,6 +180,17 @@ fun PuffBox(leaving: Boolean, appearing: Boolean, modifier: Modifier = Modifier,
     CloudPuff({ puff.value }, Modifier.matchParentSize(), strength = if (appearing && !leaving) 0.55f else 1f)
   }
 }
+
+/**
+ * A graphics layer with [room] to spare on every side. Fading or blurring draws through an
+ * offscreen buffer the size of the layer, which would cut off anything drawn outside the content
+ * (a card's shadow, a toolbar's cloud bumps); the room keeps it, without changing the layout.
+ */
+fun Modifier.layerWithRoom(room: Dp, block: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit): Modifier =
+  outset(room).graphicsLayer(block).padding(room)
+
+/** Enough room for the largest card shadow and cloud bumps. */
+private val LAYER_ROOM: Dp = 28.dp
 
 /** Room around the area for the mist to spill into as it spreads and rises. */
 private val OVERFLOW: Dp = 56.dp
