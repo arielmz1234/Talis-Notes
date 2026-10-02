@@ -272,6 +272,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setSmartUndo(on: Boolean) = store.update { it.copy(smartUndo = on) }
 
+  fun setPartCircle(fraction: Float) = store.update { it.copy(partCircle = fraction.coerceIn(0.01f, 1f)) }
+
   fun setScreenLock(lock: com.tali.notes.data.ScreenLock) = store.update { it.copy(screenLock = lock) }
 
   fun setPaper(style: PaperStyle) {

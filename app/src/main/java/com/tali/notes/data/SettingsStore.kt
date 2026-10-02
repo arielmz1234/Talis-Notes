@@ -69,6 +69,8 @@ data class AppSettings(
   val seenTips: Set<String> = emptySet(),
   /** Whether the screen turns with the tablet or stays upright or sideways. */
   val screenLock: ScreenLock = ScreenLock.AUTO,
+  /** How much of a circle the Part circle shape draws, 0.01..1 (a half to start with). */
+  val partCircle: Float = 0.5f,
 ) {
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 

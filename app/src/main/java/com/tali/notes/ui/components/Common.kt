@@ -155,7 +155,7 @@ fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modi
 
 /** Segmented control for two to four options; the white pill glides to the chosen one. */
 @Composable
-fun <T : Any> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
+fun <T : Any> Segmented(options: List<T>, selected: T?, label: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
   val c = Tali.colors
   val glide = rememberSlidingSelection()
   Row(

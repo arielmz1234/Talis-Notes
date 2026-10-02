@@ -49,6 +49,7 @@ import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeItem
 import com.tali.notes.model.ShapeKind
+import com.tali.notes.model.SectorShape
 import com.tali.notes.model.Tool
 import com.tali.notes.model.TextItem
 import kotlin.math.hypot
@@ -549,6 +550,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawSelection(canvas)
     drawShapeHandles(canvas)
     drawLineReadout(canvas)
+    drawSectorReadout(canvas)
     drawEraserCursor(canvas)
   }
 
@@ -652,6 +654,29 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val h = 24f * density
     val cx = (s.x + 22f * density + w / 2).coerceIn(w / 2 + 4f, width - w / 2 - 4f)
     val cy = (s.y - 26f * density).coerceIn(h / 2 + 4f, height - h / 2 - 4f)
+    canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
+    canvas.drawText(label, cx, cy + 4.5f * density, angleText)
+  }
+
+  /** While a part circle is drawn or its ends are dragged: how much of a circle it is, and its angle. */
+  private fun drawSectorReadout(canvas: Canvas) {
+    val sector =
+      when (mode) {
+        Mode.SHAPE_CREATE -> shapePreview?.geometry as? SectorShape
+        Mode.HANDLE_DRAG -> liveEdit?.geometry as? SectorShape
+        else -> null
+      } ?: return
+    val pct = Math.round(sector.fraction * 100)
+    val deg = Math.round(sector.fraction * 360)
+    val label = "$pct%  ·  $deg°"
+    val at = camera.toScreen(sector.handles()[if (mode == Mode.HANDLE_DRAG && handleIndex == 0) 0 else 1])
+    angleText.textSize = 12.5f * density
+    angleText.color = 0xFFFFFFFF.toInt()
+    angleBubble.color = handleColor
+    val w = angleText.measureText(label) + 18f * density
+    val h = 24f * density
+    val cx = (at.x + 22f * density + w / 2).coerceIn(w / 2 + 4f, width - w / 2 - 4f)
+    val cy = (at.y - 26f * density).coerceIn(h / 2 + 4f, height - h / 2 - 4f)
     canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
     canvas.drawText(label, cx, cy + 4.5f * density, angleText)
   }
@@ -1001,7 +1026,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun buildShape(p0: Pt, p1: Pt): ShapeItem {
     val slot = settings.shapeSlot
-    var geometry = customShape?.fitInto(p0, p1) ?: shapeKind.create(p0, p1)
+    var geometry = customShape?.fitInto(p0, p1)
+      ?: if (shapeKind == ShapeKind.PART_CIRCLE) SectorShape.of(p0, p1, settings.partCircle) else shapeKind.create(p0, p1)
     if (geometry is LineShape) {
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
       geometry = geometry.copy(b = snapped.b)

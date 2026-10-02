@@ -128,6 +128,71 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
   }
 }
 
+/**
+ * Part of a circle, closed like a slice of pie: [sweep] of a full turn (so 50% is a half circle with
+ * its diameter, 25% a quarter circle). Its end dots change how much of the circle it is, snapping
+ * to whole 5% steps and to quarters; the middle dot resizes and turns it.
+ */
+@Serializable
+@SerialName("sector")
+data class SectorShape(val center: Pt, val radius: Float, val start: Float, val sweep: Float) : ShapeGeometry {
+  /** How much of a full circle this is, 0..1. */
+  val fraction: Float
+    get() = (abs(sweep) / TAU).coerceIn(0f, 1f)
+
+  override fun paths(penSize: Float): List<List<Pt>> {
+    val n = (abs(sweep) * radius / 3f).toInt().coerceIn(12, 200)
+    val arc = List(n + 1) { i -> center + Pt.polar(radius, start + sweep * i / n) }
+    // A whole circle has no radii; anything less closes through the centre in one stroke.
+    return if (fraction >= 0.999f) listOf(arc) else listOf(listOf(center) + arc + listOf(center))
+  }
+
+  override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = start + atan2(m.b, m.a))
+
+  override fun handles() = listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep), center + Pt.polar(radius, start + sweep / 2))
+
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    val ang = (p - center).angle()
+    return when (index) {
+      // An end: the other end stays put and the amount of circle changes (never through zero).
+      0 -> {
+        val end = start + sweep
+        val s = snapSweep(positiveTurn(end - ang))
+        copy(start = end - s, sweep = s)
+      }
+      1 -> copy(sweep = snapSweep(positiveTurn(ang - start)))
+      // The middle: size and direction, keeping the same amount of circle.
+      else -> copy(radius = max(4f, p.dist(center)), start = ang - sweep / 2)
+    }
+  }
+
+  companion object {
+    /** [fraction] of a circle centred on [center], reaching [toward] with its curved side facing that way. */
+    fun of(center: Pt, toward: Pt, fraction: Float): SectorShape {
+      val sweep = TAU * fraction.coerceIn(0.01f, 1f)
+      val dir = if (toward.dist(center) < 0.5f) (-PI / 2).toFloat() else (toward - center).angle()
+      return SectorShape(center, max(4f, toward.dist(center)), dir - sweep / 2, sweep)
+    }
+
+    /** An angle in (0, 2π]: how far round from one end to the other, going the positive way. */
+    private fun positiveTurn(a: Float): Float {
+      var s = a % TAU
+      if (s <= 0f) s += TAU
+      return s
+    }
+
+    /** Snaps to quarters (strongly) and to whole 5% steps, so 25%, 50% and 75% are easy to hit exactly. */
+    fun snapSweep(s: Float): Float {
+      val f = s / TAU
+      val quarter = Math.round(f * 4) / 4f
+      if (abs(f - quarter) < 0.03f && quarter > 0f) return quarter * TAU
+      val five = Math.round(f * 20) / 20f
+      if (abs(f - five) < 0.012f && five > 0f) return five * TAU
+      return f.coerceIn(0.01f, 1f) * TAU
+    }
+  }
+}
+
 /** Several parts that move and scale together, used for engineering symbols. */
 @Serializable
 @SerialName("group")
@@ -181,6 +246,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
   CIRCLE("Circle", ShapeGroup.BASIC),
   ELLIPSE("Ellipse", ShapeGroup.BASIC),
   ARC("Arc", ShapeGroup.BASIC),
+  PART_CIRCLE("Part circle", ShapeGroup.BASIC),
   TRIANGLE("Triangle", ShapeGroup.BASIC),
   RIGHT_TRIANGLE("Right triangle", ShapeGroup.BASIC),
   SQUARE("Square", ShapeGroup.BASIC),
@@ -217,6 +283,8 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       CIRCLE -> EllipseShape(p0, p0.dist(p1), p0.dist(p1))
       ELLIPSE -> EllipseShape(c, w / 2f, h / 2f)
       ARC -> ArcShape(c, side / 2f, PI.toFloat(), PI.toFloat())
+      // From the centre outwards; the canvas passes her chosen amount instead of a half.
+      PART_CIRCLE -> SectorShape.of(p0, p1, 0.5f)
       TRIANGLE -> PolyShape(listOf(Pt(c.x, t), Pt(r, t + h), Pt(l, t + h)), true)
       RIGHT_TRIANGLE -> PolyShape(listOf(Pt(l, t), Pt(l, t + h), Pt(r, t + h)), true)
       SQUARE -> PolyShape(listOf(Pt(l, t), Pt(l + side, t), Pt(l + side, t + side), Pt(l, t + side)), true)
@@ -238,7 +306,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
 
   /** Whether dragging should keep the drag's aspect ratio rather than a free box. */
   val dragIsSegment: Boolean
-    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == CIRCLE
+    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == CIRCLE || this == PART_CIRCLE
 }
 
 enum class ShapeGroup(val label: String) {
