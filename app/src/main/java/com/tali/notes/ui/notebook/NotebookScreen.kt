@@ -578,7 +578,7 @@ private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit) {
   val c = Tali.colors
   // Back on a little cloud of its own; the name beside it, with a pencil to rename.
   Row(verticalAlignment = Alignment.CenterVertically) {
-    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.CENTER) {
+    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE) {
       ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back to notebooks", onClick = onBack)
     }
     Spacer(Modifier.width(10.dp))
