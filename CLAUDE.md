@@ -123,7 +123,7 @@ Backups come in three layers:
   - Landscape notebooks: pages, page overview, PDF export, Cornell/Ruled papers.
   - Bring to front / Send to back, lasso touch-pick, Part circle dots and "% · °" bubble, cloud burst in the library.
   - The R8-minified release APK has never been launched; kotlinx.serialization classes added this session (`SectorShape`, payload changes) rely on the plugin's built-in keep rules.
-- Session hand-off (2 Oct 2026): everything is merged into `master` (merge commit `3594739` plus later doc commits on the branch `claude/vigilant-fermat-8fu4pj`). A debug-key-signed release APK was handed out for a *new* user only; Tali's copy must be updated from the owner's PC with the real key.
+- Session hand-off (2 Oct 2026): everything is merged: `master` and the working branch `claude/vigilant-fermat-8fu4pj` are identical. A debug-key-signed release APK was handed out for a *new* user only; Tali's copy must be updated from the owner's PC with the real key.
 
 ## Recent work (October 2026)
 
