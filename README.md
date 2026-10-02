@@ -11,7 +11,8 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - **Hold to perfect:** pause at the end of a stroke and it snaps into a clean shape: a line (with 0°, 30°, 45°, 60° and 90° snapping), arrow, circle, ellipse, triangle, rectangle, polygon or star.
 - **My shapes:** lasso any drawing and tap *Save as shape*. Holding the pen at the end of a similar one-stroke drawing then snaps to it. Matching uses a point-cloud recognizer, `geometry/ShapeMatcher.kt`.
 - Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines.
-- Tap a shape to get its dots. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length.
+- Tap a shape to get its dots. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length. Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
+- **Part circle:** any amount of a circle as a closed slice (25%, 50%, 75% or any percent), drawn from the centre outwards. Its end dots change the amount and show "% · °".
 
 **Typing**
 - The keyboard button in the toolbar starts a text block where the next line would go on a normal page: at the left margin, below what's already written (near the top of an empty page). A small bar above it sets the size and colour, deletes it, or finishes; tapping elsewhere or Back also finishes.
@@ -19,6 +20,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 
 **Editing**
 - The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect.
+- The lasso picks up anything it touches (circling the tip of a line takes the whole line). Pictures and writing can be brought to the front or sent to the back.
 - The lasso can move, resize and rotate a selection (with live angle and 15° steps), recolour, duplicate, copy to another notebook, delete, or save as a shape.
 - Undo and redo work with the buttons, or with *Smart undo and redo* (⋯ menu): a two-finger tap undoes, a three-finger tap redoes.
 - The full-screen button beside undo hides the toolbars, leaving the page and a small frosted button to bring them back. Clouds puff up where the bars were, and as a notebook opens.
