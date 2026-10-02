@@ -31,6 +31,9 @@ enum class CloudCrown {
 
   /** A small crown in the middle, like a tiny cloud. */
   CENTER,
+
+  /** A low, narrow crown for a single button: a hint of cloud that stays within the button's width. */
+  LITTLE,
 }
 
 /** A stable pseudo-random number in [0, 1) so the bumps look hand-placed but never change. */
@@ -58,6 +61,9 @@ private fun edgeBumps(w: Float, radius: Float, soft: Boolean): List<Triple<Float
 
 /** Crown puffs as (x, y, r) in dp, x from the centre, y from the top edge. */
 private val CENTER_PUFFS = listOf(Triple(-20f, 6f, 11f), Triple(0f, 0f, 16f), Triple(20f, 7f, 10f))
+
+/** [CloudCrown.LITTLE] puffs: rise about 6 dp instead of 16 and span about 37 dp instead of 62. */
+private val LITTLE_PUFFS = listOf(Triple(-11f, 7f, 7.5f), Triple(0f, 4f, 10f), Triple(11f, 7.5f, 7f))
 
 /**
  * Draws a soft cloud-like surface behind the content: white fading to a pale blue-lilac belly,
@@ -98,6 +104,7 @@ fun Modifier.cloudSurface(radius: Dp = 22.dp, crown: CloudCrown = CloudCrown.NON
         }
       }
       CloudCrown.CENTER -> CENTER_PUFFS.forEach { (x, y, rad) -> puff(w / 2 / d + x, y, rad) }
+      CloudCrown.LITTLE -> LITTLE_PUFFS.forEach { (x, y, rad) -> puff(w / 2 / d + x, y, rad) }
     }
     val blur = 11 * d
     val margin = blur * 2 + shadowDepth.toPx()
