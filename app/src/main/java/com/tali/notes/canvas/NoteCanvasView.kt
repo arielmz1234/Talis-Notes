@@ -1292,6 +1292,35 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     setSelection(copies)
   }
 
+  /**
+   * Brings the selection in front of everything or sends it behind everything, keeping its own
+   * order. Pictures brought forward can cover writing; sent back, they sit behind it like paper.
+   */
+  fun arrangeSelection(toFront: Boolean) {
+    val d = doc ?: return
+    val sel = selection.mapNotNull { d[it.id] }.sortedBy { it.z }
+    if (sel.isEmpty()) return
+    val ids = sel.map { it.id }.toSet()
+    val all = d.all.toList()
+    val others = all.filter { it.id !in ids }
+    val alreadyThere =
+      if (toFront) sel.none { it is ImageItem && !it.front } && others.none { it.z > sel.first().z && !(it is ImageItem && !it.front) }
+      else sel.none { it is ImageItem && it.front } && others.none { it.z < sel.last().z }
+    if (alreadyThere) {
+      host.onHint(if (toFront) "Already in front" else "Already at the back")
+      return
+    }
+    val bottom = all.firstOrNull()?.z ?: 0L
+    val moved =
+      sel.mapIndexed { i, it ->
+        val z = if (toFront) d.nextZ() else bottom - sel.size + i
+        if (it is ImageItem) it.inFront(toFront, z) else it.withZ(z)
+      }
+    d.commit(Change(sel, moved))
+    setSelection(moved)
+    host.onHint(if (toFront) "Brought to the front" else "Sent to the back")
+  }
+
   fun recolorSelection(color: Int) {
     val d = doc ?: return
     val recolored =

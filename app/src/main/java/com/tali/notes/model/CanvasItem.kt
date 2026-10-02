@@ -20,6 +20,9 @@ sealed class CanvasItem {
   abstract val pen: PenType?
 
   abstract fun transformed(m: Affine, newId: String = id, newZ: Long = z): CanvasItem
+
+  /** The same item at another place in the stacking order (cheap: nothing is rebuilt). */
+  abstract fun withZ(newZ: Long): CanvasItem
 }
 
 /**
@@ -59,6 +62,8 @@ private constructor(
 
   override fun transformed(m: Affine, newId: String, newZ: Long) = InkItem(newId, newZ, pen, StrokeFactory.transform(stroke, m))
 
+  override fun withZ(newZ: Long) = InkItem(id, newZ, pen, built, bounds, knownColor)
+
   fun recolored(color: Int) = InkItem(id, z, pen, stroke.copy(stroke.brush.copyWithColorIntArgb(Brushes.inkColor(pen, color))))
 }
 
@@ -89,6 +94,8 @@ class ShapeItem(
   override fun transformed(m: Affine, newId: String, newZ: Long) =
     ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m))
 
+  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds)
+
   fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g)
 
   fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry)
@@ -105,14 +112,23 @@ class ImageItem(
   val rect: Rect,
   /** A page from an imported PDF (so export can give it back its own page). */
   val pdfPage: Boolean = false,
+  /**
+   * Brought to the front: drawn among the writing by stacking order, so it can cover ink. Off (the
+   * default, and every older picture) keeps it behind all writing, like paper.
+   */
+  val front: Boolean = false,
 ) : CanvasItem() {
   override val bounds: Rect = rect
   override val pen: PenType? = null
 
+  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front)
+
+  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on)
+
   override fun transformed(m: Affine, newId: String, newZ: Long): ImageItem {
     val a = m.apply(Pt(rect.left, rect.top))
     val b = m.apply(Pt(rect.right, rect.bottom))
-    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage)
+    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage, front)
   }
 }
 
@@ -150,6 +166,8 @@ class TextItem(
     val s = m.scaleFactor()
     return TextItem(newId, newZ, text, m.apply(origin), (width * s).coerceAtLeast(40f), (fontSize * s).coerceIn(6f, 400f), color)
   }
+
+  override fun withZ(newZ: Long) = TextItem(id, newZ, text, origin, width, fontSize, color)
 
   fun recolored(c: Int) = TextItem(id, z, text, origin, width, fontSize, c)
 

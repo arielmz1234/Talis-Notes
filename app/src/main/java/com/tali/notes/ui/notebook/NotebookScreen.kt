@@ -140,6 +140,9 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.FlipToFront
+import androidx.compose.material.icons.outlined.FlipToBack
 
 private class CanvasHolder {
   var view: NoteCanvasView? = null
@@ -462,6 +465,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onPaste = { holder.view?.runSafely { paste() } },
               smartUndo = settings.smartUndo,
               onSmartUndo = vm::setSmartUndo,
+              screenLock = settings.screenLock,
+              onScreenLock = vm::setScreenLock,
             )
           }
         }
@@ -507,6 +512,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
           onEditText = { id -> holder.view?.runSafely { editText(id) } },
+          onArrange = { front -> holder.view?.runSafely { arrangeSelection(front) } },
         )
       }
     }
@@ -641,6 +647,8 @@ private fun MoreMenu(
   onPaste: () -> Unit,
   smartUndo: Boolean,
   onSmartUndo: (Boolean) -> Unit,
+  screenLock: com.tali.notes.data.ScreenLock,
+  onScreenLock: (com.tali.notes.data.ScreenLock) -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
@@ -723,6 +731,16 @@ private fun MoreMenu(
         trailingIcon = { if (smartUndo) Icon(Icons.Outlined.Check, null, tint = c.accent) },
         onClick = { onSmartUndo(!smartUndo) },
       )
+      HorizontalDivider(color = c.line)
+      // Turn with the tablet, or stay upright or sideways (still flipping round 180°).
+      Text("Screen rotation", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp))
+      Segmented(
+        com.tali.notes.data.ScreenLock.entries,
+        screenLock,
+        { it.label },
+        onScreenLock,
+        Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp).width(300.dp),
+      )
     }
   }
 }
@@ -785,10 +803,11 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
+  var arranging by remember(sel.count) { mutableStateOf(false) }
   Box(
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
@@ -825,6 +844,22 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
         ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
+        // What's in front and what's behind: pictures can go over the writing or under it.
+        Box {
+          ToolButton(Icons.Outlined.Layers, "Arrange", selected = arranging) { arranging = true }
+          DropdownMenu(expanded = arranging, onDismissRequest = { arranging = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+            DropdownMenuItem(
+              text = { Column { Text("Bring to front"); Text(if (sel.hasImage) "Over your writing" else "Over everything else", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              leadingIcon = { Icon(Icons.Outlined.FlipToFront, null) },
+              onClick = { arranging = false; onArrange(true) },
+            )
+            DropdownMenuItem(
+              text = { Column { Text("Send to back"); Text(if (sel.hasImage) "Behind your writing" else "Behind everything else", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              leadingIcon = { Icon(Icons.Outlined.FlipToBack, null) },
+              onClick = { arranging = false; onArrange(false) },
+            )
+          }
+        }
         sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
         if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))

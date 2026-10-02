@@ -65,9 +65,10 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
       if (!built && deferUnbuilt) deferred = true
       return built || !deferUnbuilt
     }
-    for (item in items) if (item is ImageItem && item.id !in skip) draw(canvas, item, worldToScreen)
+    // Pictures behind the writing, then highlighter, then writing and front pictures by stacking order.
+    for (item in items) if (item is ImageItem && !item.front && item.id !in skip) draw(canvas, item, worldToScreen)
     for (item in items) if (item.pen?.isHighlighter == true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
-    for (item in items) if (item !is ImageItem && item.pen?.isHighlighter != true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
+    for (item in items) if ((item !is ImageItem || item.front) && item.pen?.isHighlighter != true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
     return deferred
   }
 

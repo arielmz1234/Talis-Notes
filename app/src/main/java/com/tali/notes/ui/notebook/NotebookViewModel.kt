@@ -272,6 +272,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setSmartUndo(on: Boolean) = store.update { it.copy(smartUndo = on) }
 
+  fun setScreenLock(lock: com.tali.notes.data.ScreenLock) = store.update { it.copy(screenLock = lock) }
+
   fun setPaper(style: PaperStyle) {
     repo.setPaper(notebookId, style)
     store.update { it.copy(defaultPaper = style, defaultCustomPaper = null) }

@@ -74,6 +74,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.SolidColor
+import kotlin.math.roundToInt
 
 /**
  * Paper choices: the built-in styles, then her own backgrounds, then a tile to make a new one. Her
@@ -174,7 +175,7 @@ fun CustomPaperSwatch(cp: CustomPaper, modifier: Modifier = Modifier) {
   if (image != null) {
     val bmp = rememberPaperImage(image, 240)
     Box(modifier.clip(RoundedCornerShape(8.dp)).background(Color.White)) {
-      if (bmp != null) Image(bmp, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+      if (bmp != null) Image(bmp, null, contentScale = ContentScale.Crop, alpha = cp.opacity.coerceIn(0.15f, 1f), modifier = Modifier.fillMaxSize())
     }
     return
   }
@@ -187,7 +188,7 @@ private fun PatternSwatch(cp: CustomPaper, modifier: Modifier) {
   Canvas(modifier) {
     drawRoundRect(Color(cp.paperColor), cornerRadius = CornerRadius(8.dp.toPx()))
     val step = size.width * cp.spacingMm / 60f
-    val line = Color(cp.lineColor)
+    val line = Color(cp.faded(cp.lineColor))
     if (step >= 2f) {
       when (cp.pattern) {
         PaperStyle.BLANK -> Unit
@@ -218,7 +219,7 @@ private fun PatternSwatch(cp: CustomPaper, modifier: Modifier) {
         }
       }
     }
-    if (cp.margin) drawLine(Color(0xFFF0A0B4), Offset(size.width * 0.2f, 0f), Offset(size.width * 0.2f, size.height), 1.2f * density)
+    if (cp.margin) drawLine(Color(cp.faded(0xFFF0A0B4.toInt())), Offset(size.width * 0.2f, 0f), Offset(size.width * 0.2f, size.height), 1.2f * density)
     drawRoundRect(Color(0x22000000), cornerRadius = CornerRadius(8.dp.toPx()), style = Stroke(density * 0.6f))
   }
 }
@@ -240,6 +241,24 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
         }
     }
   return state.value
+}
+
+/** How strongly the lines or picture show over the page, as a percentage slider. */
+@Composable
+private fun OpacityRow(value: Float, onChange: (Float) -> Unit) {
+  val c = Tali.colors
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    SectionLabel("Opacity", Modifier.width(76.dp))
+    Slider(
+      value = value,
+      // Whole 5% steps, never so faint that the lines disappear.
+      onValueChange = { onChange(((it * 20).roundToInt() / 20f).coerceIn(0.15f, 1f)) },
+      valueRange = 0.15f..1f,
+      colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
+      modifier = Modifier.weight(1f),
+    )
+    Text("${(value * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(52.dp).padding(start = 8.dp))
+  }
 }
 
 /** Papers shown before More. */
@@ -315,6 +334,11 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
             Spacer(Modifier.height(8.dp))
             Text("That picture couldn't be opened.", style = MaterialTheme.typography.bodySmall, color = c.danger)
           }
+          if (draft.image != null) {
+            Spacer(Modifier.height(14.dp))
+            OpacityRow(draft.opacity) { draft = draft.copy(opacity = it) }
+            Text("Fainter pictures keep your writing easy to read.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+          }
         } else {
           SectionLabel("Pattern")
           Spacer(Modifier.height(8.dp))
@@ -340,6 +364,8 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
                 LINE_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.lineColor, size = 26.dp, selection = lineRing) { draft = draft.copy(lineColor = col) } }
               }
             }
+            Spacer(Modifier.height(2.dp))
+            OpacityRow(draft.opacity) { draft = draft.copy(opacity = it) }
           }
           Spacer(Modifier.height(6.dp))
           Row(verticalAlignment = Alignment.CenterVertically) {

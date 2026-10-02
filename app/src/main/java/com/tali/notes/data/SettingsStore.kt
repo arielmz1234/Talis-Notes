@@ -67,6 +67,8 @@ data class AppSettings(
   val smartUndo: Boolean = true,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
+  /** Whether the screen turns with the tablet or stays upright or sideways. */
+  val screenLock: ScreenLock = ScreenLock.AUTO,
 ) {
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 
@@ -100,4 +102,12 @@ class SettingsStore(context: Context) {
   fun importJson(json: String) {
     runCatching { ItemCodec.json.decodeFromString(AppSettings.serializer(), json) }.getOrNull()?.let { s -> update { s } }
   }
+}
+
+/** How the app follows the tablet's rotation. The locks still allow turning the tablet round 180°. */
+@Serializable
+enum class ScreenLock(val label: String) {
+  AUTO("Auto"),
+  PORTRAIT("Portrait"),
+  LANDSCAPE("Landscape"),
 }
