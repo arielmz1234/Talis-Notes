@@ -386,7 +386,34 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     detach()
   }
 
+  /**
+   * Tiles leave out strokes that aren't built yet (so a big notebook opens fast) and wait for the
+   * background warm-up, which only runs when the notebook opens. Anything new that isn't built (a
+   * recoloured shape, an undo that brings back an old stroke) is built now: right here for a few,
+   * in the background for a big batch, so nothing ever goes missing.
+   */
+  private fun buildNew(added: List<CanvasItem>) {
+    val unbuilt = added.filter { (it is ShapeItem && !it.isBuilt) || (it is InkItem && !it.isBuilt) }
+    if (unbuilt.isEmpty()) return
+    fun build(item: CanvasItem) = runCatching {
+      when (item) {
+        is ShapeItem -> item.strokes
+        is InkItem -> item.stroke
+        else -> Unit
+      }
+    }
+    if (unbuilt.size <= 24) {
+      unbuilt.forEach(::build)
+    } else {
+      fillWorker.execute {
+        unbuilt.forEach(::build)
+        StrokeBuilds.progress()
+      }
+    }
+  }
+
   private fun onDocChanged(c: Change) {
+    buildNew(c.added)
     if (pageCount == null && (c.added + c.removed).any { it is ImageItem && it.pdfPage }) refreshPages()
     c.removed.forEach { tiles.invalidate(it.bounds) }
     c.added.forEach { tiles.invalidate(it.bounds) }
@@ -622,7 +649,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     var window = Rect(p.x - FILL_REACH, p.y - FILL_REACH, p.x + FILL_REACH, p.y + FILL_REACH)
     if (page != null) window = Rect(maxOf(window.left, page.left), maxOf(window.top, page.top), minOf(window.right, page.right), minOf(window.bottom, page.bottom))
     val walls = d.intersecting(window).filter { it !is ImageItem }
-    val dark = darkPaper
     fillWorker.execute {
       val made = runCatching { fillPicture(p, window, walls, colour) }.getOrNull()
       post {
@@ -636,7 +662,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val (file, rect) = made
         val item = ImageItem(dd.newId(), dd.nextZ(), file, rect)
         dd.commit(Change(oldFills.filter { dd[it.id] != null }, listOf(item)))
-        if (dark) host.onTip("fill-dark", "Fills keep their colour on dark paper")
       }
     }
   }
@@ -687,7 +712,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val out = IntArray(bw * bh)
     for (y in 0 until bh) for (x in 0 until bw) if (filled[(y + y0) * w + (x + x0)]) out[y * bw + x] = colour
     val bmp = android.graphics.Bitmap.createBitmap(out, bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
-    val file = images.save(bmp, FILL_PREFIX)
+    // The colour goes in the name, so dark paper can show the fill in its dark-paper colour.
+    val file = images.save(bmp, FILL_PREFIX + "%08x-".format(colour))
     return file to Rect(window.left + x0 / k, window.top + y0 / k, window.left + (x1 + 1) / k, window.top + (y1 + 1) / k)
   }
 

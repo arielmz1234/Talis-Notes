@@ -31,6 +31,12 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   /** Dark paper: ink is drawn in its light counterpart colours; pictures stay as they are. */
   var dark = false
 
+  /** The colour a fill picture was made in, from its name ("fill-AARRGGBB-…png"), or null for other pictures. */
+  private fun fillColorOf(file: String): Int? {
+    if (!file.startsWith("fill-")) return null
+    return file.removePrefix("fill-").substringBefore('-').takeIf { it.length == 8 }?.toLongOrNull(16)?.toInt()
+  }
+
   private val fillPath = android.graphics.Path()
   private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
@@ -103,7 +109,11 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
         rectF.set(item.rect.left, item.rect.top, item.rect.right, item.rect.bottom)
         val bmp = if (sync) images.loadNow(item.file) else images.peek(item.file)
         if (bmp != null) {
+          // A fill on dark paper turns colour like ink does (its colour is in its file name).
+          val darkFill = if (dark) fillColorOf(item.file)?.let { com.tali.notes.ink.Brushes.onDarkPaper(it or 0xFF000000.toInt()) } else null
+          imagePaint.colorFilter = darkFill?.let { android.graphics.PorterDuffColorFilter(it, android.graphics.PorterDuff.Mode.SRC_IN) }
           canvas.drawBitmap(reduce(item.file, bmp, item.rect), null, rectF, imagePaint)
+          imagePaint.colorFilter = null
         } else {
           if (!sync) images.request(item.file)
           canvas.drawRect(rectF, placeholderFill)

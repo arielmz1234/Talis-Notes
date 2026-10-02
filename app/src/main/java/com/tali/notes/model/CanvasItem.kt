@@ -78,6 +78,8 @@ class ShapeItem(
   knownBounds: Rect? = null,
   /** The colour it's filled with (with its own opacity), or null; only closed shapes take a fill. */
   val fill: Int? = null,
+  /** Strokes already built for this same outline and colour, shared instead of built again. */
+  sharedStrokes: Lazy<List<Stroke>>? = null,
 ) : CanvasItem() {
   /** Whether this shape encloses an area that can be filled. */
   val closed: Boolean
@@ -86,7 +88,7 @@ class ShapeItem(
   /** The outline enclosing its area, for filling and for telling whether a point is inside. */
   val outline: List<com.tali.notes.geometry.Pt>
     get() = geometry.paths(size).firstOrNull().orEmpty()
-  private val built = lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
+  private val built = sharedStrokes ?: lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
 
   val strokes: List<Stroke>
     get() = built.value
@@ -103,13 +105,13 @@ class ShapeItem(
   override fun transformed(m: Affine, newId: String, newZ: Long) =
     ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m), fill = fill)
 
-  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill)
+  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill, built)
 
   fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g, fill = fill)
 
   fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry, fill = fill)
 
-  fun filled(color: Int?) = ShapeItem(id, z, pen, this.color, size, geometry, bounds, color)
+  fun filled(color: Int?) = ShapeItem(id, z, pen, this.color, size, geometry, bounds, color, built)
 
   /** The shape's outline as plain ink, for partial erasing. */
   fun toInk(idFor: (Int) -> String): List<InkItem> = strokes.mapIndexed { i, s -> InkItem(idFor(i), z, pen, s) }
