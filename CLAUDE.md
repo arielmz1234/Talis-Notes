@@ -13,6 +13,14 @@ A handwriting notes app for Android tablets, made for **one person**: Tali, a ci
   - don't stop to ask questions;
   - make sensible calls and report them at the end.
 - **Taste over feature count.** Add features the way a good notes app (Notewise, GoodNotes, Samsung Notes) would, and only when they clearly help a student. Ideas deliberately held back for now: protractor, handwriting search. (Typed text was added on request: `TextItem`, `ui/notebook/TextEditor.kt`.)
+- Preferences he stated (October 2026); follow them:
+  - Animations: polished, fast and smooth, never choppy. He likes the mist that dissipates, and wants every "goes away" animation to match it (page delete is the reference).
+  - Shapes must update live while dragged or resized. Snapped arrows and lines locking to angles is fine.
+  - The shapes panel stays simple: one tile per shape (no % chips for Part circle). Amounts are set on the drawn shape.
+  - Fills keep exactly the chosen colour, on dark paper too.
+  - Page orientation is chosen when a notebook is made, not as a screen-rotation lock.
+  - When he mentions "Emil's design skill", he means Emil Kowalski's `emil-design-eng` skill. It isn't installed in cloud sessions; a public copy is at github.com/vercel-labs/open-agents (`.agents/skills/emil-design-eng/SKILL.md`). Key rules: ask how often an animation is seen, keep UI motion under ~300 ms, exits faster than entries, strong ease-out, nothing from scale 0, origin-aware, blur to mask crossfades.
+- He tests on his own tablet by pulling and pressing Run in Android Studio (debug build over USB). Tell him to click "Sync Now" when Gradle files changed.
 - After a chunk of work: build, test it in the emulator, review the diff yourself, then commit with a short plain-English message describing what changed for her (see `git log`).
 - Don't leave the emulator running when you finish, and stop any background tasks you started.
 
@@ -108,6 +116,14 @@ Backups come in three layers:
 - Try two-finger undo and three-finger redo on the real tablet. They are tested only in instrumented tests and the emulator.
 - The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
 - The owner reviews visual changes on his own Galaxy Tab S9 FE (debug builds over USB). He asked to review: the frosted eye "show toolbars" button, the back-cloud plus title-with-pencil layout, and how scrolling feels after the glide fix.
+- **Not yet seen on a real device** (built and unit-tested in a cloud session with no emulator); check these first if he reports problems:
+  - Toolbar hide/show: the bars and their cloud bumps should arrive together (`ModulateAlpha` fade), and the hide/show mist should be smooth.
+  - Live shape editing with the S Pen (buffered input) and with a finger on a dot (`grabsEdit`); hold-to-shape then keep moving to resize.
+  - Fill tool: area fill on real handwriting (gap bridging, the "isn't closed" hint), shape fills, undo, None.
+  - Landscape notebooks: pages, page overview, PDF export, Cornell/Ruled papers.
+  - Bring to front / Send to back, lasso touch-pick, Part circle dots and "% · °" bubble, cloud burst in the library.
+  - The R8-minified release APK has never been launched; kotlinx.serialization classes added this session (`SectorShape`, payload changes) rely on the plugin's built-in keep rules.
+- Session hand-off (2 Oct 2026): everything is merged into `master` (merge commit `3594739` plus later doc commits on the branch `claude/vigilant-fermat-8fu4pj`). A debug-key-signed release APK was handed out for a *new* user only; Tali's copy must be updated from the owner's PC with the real key.
 
 ## Recent work (October 2026)
 
@@ -133,5 +149,5 @@ Working setup notes:
 - On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.
 - The `medium_tablet` AVD may need creating. Copy another AVD's `config.ini` with 1334×800 @160dpi, landscape.
 - Python edits on Windows: write files in text mode so they keep CRLF.
-- Compose UI tests also run on the JVM with Robolectric (`app/src/test/.../ui/components/SlidingSelectionTest.kt`, which saves animation frames to `app/build/sliding-frames/`). Use `application = android.app.Application::class`, because the real app loads Ink's native library. After changing state from the test thread under a paused clock, call `Snapshot.sendApplyNotifications()`. If Robolectric can't download `android-all-instrumented`, put the jar in `~/.m2/repository` by hand.
+- Compose UI tests also run on the JVM with Robolectric: `SlidingSelectionTest` and `CloudPuffTest` save animation frames (to `app/build/sliding-frames/`, `app/build/puff-frames/`; stitch them into strips or GIFs with Pillow to review motion and show the owner), `LandscapeUpgradeTest` runs the real SQLite upgrade. Pure-geometry tests cover `Lasso`, `SectorShape`, shape resizing and `AreaFill`. Anything that renders Ink strokes (the canvas, area fill) cannot run on the JVM. Use `application = android.app.Application::class`, because the real app loads Ink's native library. After changing state from the test thread under a paused clock, call `Snapshot.sendApplyNotifications()`. If Robolectric can't download `android-all-instrumented`, put the jar in `~/.m2/repository` by hand.
 - Cloud sessions (Linux, no KVM, so no emulator): install the SDK command-line tools from dl.google.com into `~/android-sdk`, then `sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"`, write `local.properties`, and build. Maven Central sometimes answers 429; retry with a pause. Built APKs there are signed with a throwaway debug key, so they won't install over a debug build made on the owner's PC.
