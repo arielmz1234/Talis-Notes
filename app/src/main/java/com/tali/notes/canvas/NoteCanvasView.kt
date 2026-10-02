@@ -55,6 +55,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.abs
 import kotlin.math.PI
+import com.tali.notes.geometry.Lasso
 
 /** What the canvas tells the screen around it. */
 interface CanvasHost {
@@ -1168,11 +1169,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       return
     }
     val area = Rect.around(pts) ?: return
-    val picked = d.all.filter { item -> settings.lassoHits(item.pen) && item.bounds.intersects(area) && insideFraction(item, pts) >= 0.5f }
+    val picked = d.all.filter { item -> settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) }
     setSelection(picked)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
   }
+
+  /**
+   * Whether the lasso loop [poly] picks up [item]: anything it touches (see [Lasso]). Imported PDF
+   * pages still need to be mostly inside, so lassoing writing on a slide doesn't take the slide.
+   */
+  private fun lassoTouches(item: CanvasItem, poly: List<Pt>): Boolean =
+    when (item) {
+      is InkItem -> Lasso.touchesPath(StrokeFactory.points(item.stroke), poly)
+      is ShapeItem -> item.geometry.paths(item.size).any { Lasso.touchesPath(it, poly) }
+      is ImageItem -> if (item.pdfPage) insideFraction(item, poly) >= 0.5f else Lasso.touchesRect(item.rect, poly)
+      is TextItem -> Lasso.touchesRect(item.bounds, poly)
+    }
 
   private fun insideFraction(item: CanvasItem, poly: List<Pt>): Float {
     val samples: List<Pt> =
