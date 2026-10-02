@@ -26,6 +26,7 @@ import com.tali.notes.model.CanvasItem
 import com.tali.notes.model.EraserMode
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenSlot
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.model.ShapeKind
@@ -229,11 +230,21 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun updateActivePen(transform: (PenSlot) -> PenSlot) =
     store.update { s -> s.copy(pens = s.pens.map { if (it.id == s.activeSlot.id) transform(it) else it }) }
 
+  /** A colour chosen for the active pen (from the palette, the picker or the quick colours). */
+  fun pickPenColor(color: Int) = updateActivePen { it.pick(color) }
+
+  /** The active pen's line: solid, dotted or dashed. */
+  fun setPenLine(line: LineStyle) = updateActivePen { it.copy(line = line) }
+
+  fun setPaperLineWeight(weight: Float) = store.update { it.copy(paperLineWeight = weight.coerceIn(0.5f, 3f)) }
+
   fun setPenType(type: PenType) =
     updateActivePen { slot ->
       val size = if (slot.type == type) slot.size else type.defaultSize
       val color = if (type.isHighlighter && !slot.type.isHighlighter) 0xFFFFD60A.toInt() else slot.color
-      slot.copy(type = type, size = size, color = color)
+      // A highlighter and a pen keep different quick colours.
+      val quick = if (type.isHighlighter != slot.type.isHighlighter) emptyList() else slot.quick
+      slot.copy(type = type, size = size, color = color, quick = quick)
     }
 
   fun addPen() =
@@ -417,7 +428,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       val dark = m?.dark == true
       val custom = customPaperOf(m, settings.value)
       val landscape = m?.landscape == true
-      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape).joinToString("|")
+      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, settings.value.paperLineWeight).joinToString("|")
       exported[key]?.takeIf { it.exists() }?.let { return@withLock it }
       val items = doc.all.toList()
       val title = (m?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }

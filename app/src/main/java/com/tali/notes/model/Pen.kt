@@ -10,15 +10,91 @@ enum class PenType(val label: String, val defaultSize: Float, val minSize: Float
   PENCIL("Pencil", 2.6f, 1f, 12f),
   CALLIGRAPHY("Calligraphy", 7f, 2f, 24f),
   HIGHLIGHTER("Highlighter", 18f, 6f, 40f),
+
+  /**
+   * The old dashed pen, kept only so strokes written with it still load and look the same. Any pen
+   * can now draw dashed or dotted ([LineStyle]), so it isn't offered any more.
+   */
   DASHED("Dashed", 2.4f, 1f, 8f);
 
   val isHighlighter: Boolean
     get() = this == HIGHLIGHTER
+
+  /** Whether it can draw dotted and dashed lines (a highlighter always draws solid). */
+  val takesLineStyle: Boolean
+    get() = this != HIGHLIGHTER && this != DASHED
+
+  companion object {
+    /** The pens offered in the pen settings. */
+    val offered = entries.filter { it != DASHED }
+  }
 }
 
-/** One pen in the toolbar: a style, colour and size she has set up. */
+/**
+ * How a line is drawn along its length, for any pen and for shapes. [pattern] is the visible
+ * lengths of the parts in multiples of the line's thickness, alternating drawn and gap, repeated
+ * (a drawn part of 0 is a round dot).
+ */
 @Serializable
-data class PenSlot(val id: String, val type: PenType, val color: Int, val size: Float)
+enum class LineStyle(val label: String, val pattern: List<Float>) {
+  SOLID("Solid", emptyList()),
+  DOTTED("Dotted", listOf(0f, 1.7f)),
+  LONG_DASH("Long dash", listOf(6f, 2.4f)),
+  SHORT_DASH("Short dash", listOf(2.4f, 2f)),
+  DOT_DASH("Dot and dash", listOf(4f, 2f, 0f, 2f)),
+  MIXED_DASH("Mixed dash", listOf(6f, 2f, 2.2f, 2f)),
+}
+
+/**
+ * One pen in the toolbar: a style, colour and size she has set up. [quick] are the three colours
+ * shown beside the pens for switching without opening the settings; [recent] is every colour she
+ * picked for it, most recent first, which decides which quick colour a new one replaces.
+ */
+@Serializable
+data class PenSlot(
+  val id: String,
+  val type: PenType,
+  val color: Int,
+  val size: Float,
+  val line: LineStyle = LineStyle.SOLID,
+  val quick: List<Int> = emptyList(),
+  val recent: List<Int> = emptyList(),
+) {
+  /** The line it actually draws: a highlighter is always solid. */
+  val lineStyle: LineStyle
+    get() = if (type.takesLineStyle) line else LineStyle.SOLID
+
+  /** The three quick colours, starting from sensible ones for the pen until she has picked her own. */
+  val quickColors: List<Int>
+    get() {
+      if (quick.size == QUICK) return quick
+      val start = if (type.isHighlighter) HIGHLIGHTER_QUICK else INK_QUICK
+      val base = (quick + start).distinct().take(QUICK)
+      return if (color in base) base else base.dropLast(1) + color
+    }
+
+  /**
+   * Switches to [c] and keeps it among the quick colours: if it isn't one already, it takes the
+   * place of the quick colour used longest ago, in the same spot, so the others don't move.
+   */
+  fun pick(c: Int): PenSlot {
+    val shown = quickColors
+    val nextRecent = (listOf(c) + recent.filter { it != c }).take(12)
+    val nextQuick =
+      if (c in shown) shown
+      else {
+        val oldest = shown.maxBy { q -> nextRecent.indexOf(q).let { if (it < 0) Int.MAX_VALUE else it } }
+        shown.map { if (it == oldest) c else it }
+      }
+    return copy(color = c, quick = nextQuick, recent = nextRecent)
+  }
+
+  companion object {
+    const val QUICK = 3
+    private val INK_QUICK = listOf(0xFF1B1F2A, 0xFF1F5FD1, 0xFFD83A3A).map { it.toInt() }
+    private val HIGHLIGHTER_QUICK = listOf(0xFFFFD60A, 0xFFFF6FA8, 0xFF5AA9E6).map { it.toInt() }
+  }
+}
 
 @Serializable
 enum class EraserMode {

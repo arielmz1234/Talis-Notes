@@ -182,13 +182,31 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
 
   override fun handles() = listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep))
 
+  /** How far round the arc goes, in whole degrees (always positive). */
+  val degrees: Int
+    get() = Math.round(Math.toDegrees(abs(sweep).toDouble())).toInt()
+
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
     val ang = (p - center).angle()
+    val r = max(4f, p.dist(center))
+    // The arc keeps its direction, and the turn wraps: going past a full circle starts again from
+    // nothing (361° is 1°), so an end can be dragged round either way without getting stuck.
+    val dir = if (sweep < 0f) -1f else 1f
     return if (index == 0) {
       val end = start + sweep
-      copy(start = ang, sweep = end - ang, radius = max(4f, p.dist(center)))
+      val s = snapArc(positiveTurn(dir * (end - ang))) * dir
+      copy(start = end - s, sweep = s, radius = r)
     } else {
-      copy(sweep = normalizeSweep(ang - start, sweep), radius = max(4f, p.dist(center)))
+      copy(sweep = snapArc(positiveTurn(dir * (ang - start))) * dir, radius = r)
+    }
+  }
+
+  private companion object {
+    /** Gently onto whole 15° steps (30°, 45°, 90°...), so the usual angles are easy to hit. */
+    fun snapArc(s: Float): Float {
+      val step = (PI / 12).toFloat()
+      val snapped = Math.round(s / step) * step
+      return if (snapped > 0f && abs(s - snapped) < 0.03f) snapped else s.coerceAtLeast(MIN_TURN)
     }
   }
 }
@@ -239,21 +257,17 @@ data class SectorShape(val center: Pt, val radius: Float, val start: Float, val 
       return SectorShape(center, max(4f, toward.dist(center)), dir - sweep / 2, sweep)
     }
 
-    /** An angle in (0, 2π]: how far round from one end to the other, going the positive way. */
-    private fun positiveTurn(a: Float): Float {
-      var s = a % TAU
-      if (s <= 0f) s += TAU
-      return s
-    }
-
     /** Snaps to quarters (strongly) and to whole 5% steps, so 25%, 50% and 75% are easy to hit exactly. */
     fun snapSweep(s: Float): Float {
       val f = s / TAU
+      // A whole circle only when really close: a wide catch there made the circle stick shut
+      // when an end was dragged on past it.
+      if (f > 0.995f) return TAU
       val quarter = Math.round(f * 4) / 4f
-      if (abs(f - quarter) < 0.03f && quarter > 0f) return quarter * TAU
+      if (abs(f - quarter) < 0.025f && quarter > 0f && quarter < 1f) return quarter * TAU
       val five = Math.round(f * 20) / 20f
-      if (abs(f - five) < 0.012f && five > 0f) return five * TAU
-      return f.coerceIn(0.01f, 1f) * TAU
+      if (abs(f - five) < 0.01f && five > 0f && five < 1f) return five * TAU
+      return s.coerceIn(MIN_TURN, TAU)
     }
   }
 }
@@ -285,10 +299,13 @@ data class GroupShape(val parts: List<ShapeGeometry>) : ShapeGeometry {
   }
 }
 
-private fun normalizeSweep(raw: Float, previous: Float): Float {
-  var s = raw
-  while (s - previous > PI) s -= TAU
-  while (previous - s > PI) s += TAU
+/** The smallest arc or part circle an end dot can make: one degree. */
+private val MIN_TURN = (PI / 180).toFloat()
+
+/** An angle in (0, 2π]: how far round from one end to the other, going the positive way. */
+internal fun positiveTurn(a: Float): Float {
+  var s = a % TAU
+  if (s <= 0f) s += TAU
   return s
 }
 

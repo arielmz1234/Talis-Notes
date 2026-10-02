@@ -65,6 +65,21 @@ private constructor(
   override fun withZ(newZ: Long) = InkItem(id, newZ, pen, built, bounds, knownColor)
 
   fun recolored(color: Int) = InkItem(id, z, pen, stroke.copy(stroke.brush.copyWithColorIntArgb(Brushes.inkColor(pen, color))))
+
+  /** The same stroke drawn [size] thick with [line] style (the pen's points stay the same). */
+  fun restyled(size: Float = this.size, line: LineStyle = this.line): InkItem {
+    // The old dashed pen's strokes become fineliner strokes drawn in the chosen line.
+    val p = if (pen == PenType.DASHED) PenType.FINELINER else pen
+    return InkItem(id, z, p, stroke.copy(Brushes.brush(p, color, size, line)))
+  }
+
+  /** How thick the stroke is drawn. */
+  val size: Float
+    get() = stroke.brush.size
+
+  /** Solid, dotted or dashed, as the pen was set when it was written. */
+  val line: LineStyle
+    get() = if (pen == PenType.DASHED) LineStyle.SHORT_DASH else Brushes.styleOf(stroke.brush)
 }
 
 class ShapeItem(
@@ -80,6 +95,8 @@ class ShapeItem(
   val fill: Int? = null,
   /** Strokes already built for this same outline and colour, shared instead of built again. */
   sharedStrokes: Lazy<List<Stroke>>? = null,
+  /** How its lines are drawn: solid, dotted or dashed (arrow barbs and tiny details stay solid). */
+  val line: LineStyle = LineStyle.SOLID,
 ) : CanvasItem() {
   /** Whether this shape encloses an area that can be filled. */
   val closed: Boolean
@@ -88,7 +105,7 @@ class ShapeItem(
   /** The outline enclosing its area, for filling and for telling whether a point is inside. */
   val outline: List<com.tali.notes.geometry.Pt>
     get() = geometry.paths(size).firstOrNull().orEmpty()
-  private val built = sharedStrokes ?: lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
+  private val built = sharedStrokes ?: lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size, line) }
 
   val strokes: List<Stroke>
     get() = built.value
@@ -103,15 +120,18 @@ class ShapeItem(
   override val bounds: Rect = knownBounds ?: strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)
 
   override fun transformed(m: Affine, newId: String, newZ: Long) =
-    ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m), fill = fill)
+    ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m), fill = fill, line = line)
 
-  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill, built)
+  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill, built, line)
 
-  fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g, fill = fill)
+  fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g, fill = fill, line = line)
 
-  fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry, fill = fill)
+  fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry, fill = fill, line = line)
 
-  fun filled(color: Int?) = ShapeItem(id, z, pen, this.color, size, geometry, bounds, color, built)
+  fun filled(color: Int?) = ShapeItem(id, z, pen, this.color, size, geometry, bounds, color, built, line)
+
+  /** The same shape drawn with another line: thickness [size] and [line] style. */
+  fun restyled(size: Float = this.size, line: LineStyle = this.line) = ShapeItem(id, z, pen, color, size, geometry, fill = fill, line = line)
 
   /** The shape's outline as plain ink, for partial erasing. */
   fun toInk(idFor: (Int) -> String): List<InkItem> = strokes.mapIndexed { i, s -> InkItem(idFor(i), z, pen, s) }

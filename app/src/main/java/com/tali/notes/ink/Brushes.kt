@@ -14,7 +14,9 @@ import androidx.ink.brush.StockBrushes
 import androidx.ink.brush.StockTextureBitmapStore
 import androidx.ink.brush.TextureBitmapStore
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.PenType
+import kotlin.math.PI
 
 /** Maps pen styles to Ink brushes. Colours are stored opaque; the highlighter adds its own transparency. */
 object Brushes {
@@ -71,6 +73,64 @@ object Brushes {
     )
   }
 
+  /**
+   * A pen drawing a [LineStyle]: the line is laid down as separate round-ended pieces ("particles")
+   * spaced along the stroke as it's written, so the pattern shows live under the pen. A pattern
+   * of two kinds of piece (dot and dash, long and short) is two coats, the second shifted half way
+   * along each repeat. Pieces turn to follow the direction of writing.
+   */
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  private fun lineFamily(style: LineStyle): BrushFamily {
+    val p = style.pattern
+    fun piece(on: Float) = maxOf(on, 1f)
+    val period = (p.indices step 2).sumOf { (piece(p[it]) + p[it + 1]).toDouble() }.toFloat()
+    val follow =
+      BrushBehavior(
+        listOf(
+          BrushBehavior.TargetNode(
+            BrushBehavior.Target.ROTATION_OFFSET_IN_RADIANS,
+            -PI.toFloat(),
+            PI.toFloat(),
+            BrushBehavior.SourceNode(BrushBehavior.Source.DIRECTION_ABOUT_ZERO_IN_RADIANS, -PI.toFloat(), PI.toFloat(), BrushBehavior.OutOfRange.CLAMP),
+          )
+        )
+      )
+    var along = 0f
+    val coats =
+      (p.indices step 2).map { i ->
+        val w = piece(p[i])
+        val shift = along + w / 2
+        along += w + p[i + 1]
+        val behaviors = mutableListOf(StockBrushes.predictionFadeOutBehavior, follow)
+        if (i > 0) {
+          // Later pieces sit further along each repeat than the first.
+          behaviors +=
+            BrushBehavior(listOf(BrushBehavior.TargetNode(BrushBehavior.Target.POSITION_OFFSET_FORWARD_IN_MULTIPLES_OF_BRUSH_SIZE, 0f, shift - piece(p[0]) / 2, BrushBehavior.ConstantNode(1f))))
+        }
+        BrushCoat(
+          BrushTip(scaleX = w, scaleY = 1f, cornerRounding = 1f, particleGapDistanceScale = period, behaviors = behaviors),
+          BrushPaint(),
+        )
+      }
+    return BrushFamily(coats = coats, clientBrushFamilyId = LINE_ID + style.name)
+  }
+
+  private val lineFamilies = java.util.concurrent.ConcurrentHashMap<LineStyle, BrushFamily>()
+
+  /** The brush family for a pen drawing [style]; falls back to the stock dashed line if Ink won't take it. */
+  fun family(type: PenType, style: LineStyle): BrushFamily =
+    if (style == LineStyle.SOLID || !type.takesLineStyle) family(type)
+    else lineFamilies.getOrPut(style) { runCatching { lineFamily(style) }.getOrElse { StockBrushes.dashedLine() } }
+
+  /** The line style a stroke was written with. */
+  fun styleOf(brush: Brush): LineStyle {
+    val id = brush.family.clientBrushFamilyId
+    if (!id.startsWith(LINE_ID)) return LineStyle.SOLID
+    return runCatching { LineStyle.valueOf(id.removePrefix(LINE_ID)) }.getOrDefault(LineStyle.SOLID)
+  }
+
+  private const val LINE_ID = "tali:line:"
+
   fun family(type: PenType): BrushFamily =
     when (type) {
       PenType.FINELINER -> StockBrushes.marker()
@@ -91,7 +151,7 @@ object Brushes {
   fun inkColor(type: PenType, color: Int): Int =
     if (type.isHighlighter) (color and 0x00FFFFFF) or (HIGHLIGHTER_ALPHA shl 24) else color or (0xFF shl 24)
 
-  fun brush(type: PenType, color: Int, size: Float): Brush = Brush.createWithColorIntArgb(family(type), inkColor(type, color), size, EPSILON)
+  fun brush(type: PenType, color: Int, size: Float, style: LineStyle = LineStyle.SOLID): Brush = Brush.createWithColorIntArgb(family(type, style), inkColor(type, color), size, EPSILON)
 
   fun shapeBrush(type: PenType, color: Int, size: Float): Brush =
     Brush.createWithColorIntArgb(shapeFamily(type), inkColor(type, color), size, EPSILON)

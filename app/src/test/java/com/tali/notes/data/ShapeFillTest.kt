@@ -3,6 +3,7 @@ package com.tali.notes.data
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import com.tali.notes.model.EllipseShape
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeItem
 import org.junit.Assert.assertEquals
@@ -25,5 +26,12 @@ class ShapeFillTest {
   fun olderShapesHaveNoFill() {
     val back = ItemCodec.decode(ItemCodec.encode(ShapeItem("s", 3, PenType.FINELINER, 0xFF000000.toInt(), 2f, circle, box))) as ShapeItem
     assertNull(back.fill)
+  }
+
+  @Test
+  fun lineStyleSurvivesSaving() {
+    val item = ShapeItem("s", 3, PenType.FINELINER, 0xFF000000.toInt(), 2f, circle, box, line = LineStyle.DOT_DASH)
+    assertEquals(LineStyle.DOT_DASH, (ItemCodec.decode(ItemCodec.encode(item)) as ShapeItem).line)
+    assertEquals(LineStyle.SOLID, (ItemCodec.decode(ItemCodec.encode(ShapeItem("s", 3, PenType.FINELINER, 0, 2f, circle, box))) as ShapeItem).line)
   }
 }

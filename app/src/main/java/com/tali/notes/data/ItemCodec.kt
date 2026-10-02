@@ -11,6 +11,7 @@ import com.tali.notes.model.CanvasItem
 import com.tali.notes.model.ImageItem
 import com.tali.notes.model.InkItem
 import com.tali.notes.model.PenType
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.model.ShapeItem
 import com.tali.notes.model.TextItem
@@ -43,12 +44,15 @@ object ItemCodec {
     return when (item) {
       is InkItem -> {
         val bytes = ByteArrayOutputStream().also { item.stroke.inputs.encode(it) }.toByteArray()
-        ItemRow(item.id, item.z, KIND_INK, item.pen.name, item.color, item.stroke.brush.size, bytes, b.left, b.top, b.right, b.bottom)
+        // A dotted or dashed stroke is stored as "PEN/STYLE" in the pen column.
+        val pen = item.line.let { if (it == LineStyle.SOLID) item.pen.name else item.pen.name + "/" + it.name }
+        ItemRow(item.id, item.z, KIND_INK, pen, item.color, item.stroke.brush.size, bytes, b.left, b.top, b.right, b.bottom)
       }
       is ShapeItem -> {
-        // The geometry, plus "fill" when it's filled (older versions ignore the extra key).
+        // The geometry, plus "fill" when it's filled and "line" when dotted or dashed (older versions ignore extra keys).
         var obj = json.encodeToJsonElement(ShapeGeometry.serializer(), item.geometry)
         item.fill?.let { f -> obj = kotlinx.serialization.json.JsonObject(obj.jsonObject + ("fill" to kotlinx.serialization.json.JsonPrimitive(f))) }
+        if (item.line != LineStyle.SOLID) obj = kotlinx.serialization.json.JsonObject(obj.jsonObject + ("line" to kotlinx.serialization.json.JsonPrimitive(item.line.name)))
         val bytes = obj.toString().encodeToByteArray()
         ItemRow(item.id, item.z, KIND_SHAPE, item.pen.name, item.color, item.size, bytes, b.left, b.top, b.right, b.bottom)
       }
@@ -68,10 +72,11 @@ object ItemCodec {
     runCatching {
         when (row.kind) {
           KIND_INK -> {
-            val pen = PenType.valueOf(row.pen!!)
+            val pen = PenType.valueOf(row.pen!!.substringBefore('/'))
+            val line = row.pen.substringAfter('/', "").let { name -> LineStyle.entries.firstOrNull { it.name == name } ?: LineStyle.SOLID }
             // Built on first use; see InkItem.
             InkItem.deferred(row.id, row.z, pen, Rect(row.l, row.t, row.r, row.b), row.color) {
-              val brush = Brushes.brush(pen, row.color, row.size)
+              val brush = Brushes.brush(pen, row.color, row.size, line)
               // A damaged stroke becomes an empty one rather than breaking every redraw.
               runCatching { Stroke(brush, StrokeInputBatch.decode(ByteArrayInputStream(row.payload))) }.getOrElse { Stroke(brush, MutableStrokeInputBatch()) }
             }
@@ -79,8 +84,10 @@ object ItemCodec {
           KIND_SHAPE -> {
             val text = row.payload.decodeToString()
             val geometry = json.decodeFromString(ShapeGeometry.serializer(), text)
-            val fill = runCatching { json.parseToJsonElement(text).jsonObject["fill"]?.jsonPrimitive?.int }.getOrNull()
-            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry, Rect(row.l, row.t, row.r, row.b), fill)
+            val extra = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
+            val fill = runCatching { extra?.get("fill")?.jsonPrimitive?.int }.getOrNull()
+            val line = runCatching { LineStyle.valueOf(extra?.get("line")!!.jsonPrimitive.content) }.getOrDefault(LineStyle.SOLID)
+            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry, Rect(row.l, row.t, row.r, row.b), fill, line = line)
           }
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())

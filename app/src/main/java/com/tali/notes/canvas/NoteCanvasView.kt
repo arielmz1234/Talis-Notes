@@ -34,6 +34,7 @@ import com.tali.notes.geometry.Geo
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import com.tali.notes.geometry.ShapeRecognizer
+import com.tali.notes.model.ArcShape
 import com.tali.notes.model.CustomShape
 import com.tali.notes.talisApp
 import com.tali.notes.data.NotesRepository
@@ -45,6 +46,7 @@ import com.tali.notes.model.EraserMode
 import com.tali.notes.model.ImageItem
 import com.tali.notes.model.InkItem
 import com.tali.notes.model.LineShape
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeItem
@@ -87,7 +89,20 @@ interface CanvasHost {
 data class TextEdit(val id: String?, val origin: Pt, val width: Float, val fontSize: Float, val color: Int, val text: String)
 
 /** Selection summary in screen pixels, for placing the selection menu. */
-data class SelectionInfo(val screenRect: RectF, val count: Int, val hasShape: Boolean, val hasImage: Boolean, val hasDrawing: Boolean = true, val rotatable: Boolean = false, val textId: String? = null)
+data class SelectionInfo(
+  val screenRect: RectF,
+  val count: Int,
+  val hasShape: Boolean,
+  val hasImage: Boolean,
+  val hasDrawing: Boolean = true,
+  val rotatable: Boolean = false,
+  val textId: String? = null,
+  /** The colour of the first coloured item, for marking it in the style menu. */
+  val color: Int? = null,
+  /** Thickness and line style of the first stroke or shape, or null when there are none. */
+  val lineSize: Float? = null,
+  val line: LineStyle? = null,
+)
 
 /**
  * The drawing surface. Finished content is drawn from GPU tiles; the pen stroke in progress is drawn
@@ -118,6 +133,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val docListener: (Change) -> Unit = ::onDocChanged
 
   var settings = AppSettings()
+    set(value) {
+      // The paper redraws when her line weight changes.
+      if (value.paperLineWeight != field.paperLineWeight) invalidate()
+      field = value
+    }
   var tool = Tool.PEN
     set(value) {
       if (field != value) {
@@ -595,8 +615,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawLasso(canvas)
     drawSelection(canvas)
     drawShapeHandles(canvas)
-    drawLineReadout(canvas)
-    drawSectorReadout(canvas)
+    drawMeasure(canvas)
     drawEraserCursor(canvas)
   }
 
@@ -785,56 +804,79 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   /**
-   * While a straight line is being drawn or adjusted: its angle (counter-clockwise from the
-   * horizontal, as in class) and its length at print size, next to the end that's moving.
+   * Measurements for the line, arc or part circle being drawn or changed (or showing its dots): a
+   * line's angle (counter-clockwise from the horizontal, as in class) and its length at print size;
+   * how far round an arc goes; how much of a circle a part circle is. The badge stays clear of the
+   * pen, where her hand would cover it: beside the middle of a line, or at the circle's centre.
    */
-  private fun drawLineReadout(canvas: Canvas) {
-    val (line, movingEnd) =
+  private fun drawMeasure(canvas: Canvas) {
+    if (isDraggingSelection()) return
+    val g =
       when (mode) {
-        Mode.LIVE_SHAPE -> (liveShape?.geometry as? LineShape)?.let { it to it.b }
-        Mode.SHAPE_CREATE -> (shapePreview?.geometry as? LineShape)?.let { it to it.b }
-        Mode.HANDLE_DRAG -> (liveEdit?.geometry as? LineShape)?.let { it to if (handleIndex == 0) it.a else it.b }
-        else -> null
+        Mode.LIVE_SHAPE -> liveShape?.geometry
+        Mode.SHAPE_CREATE -> shapePreview?.geometry
+        else -> currentActiveShape()?.geometry
       } ?: return
-    val v = line.b - line.a
-    if (v.length() < 1f) return
-    var degrees = Math.round(-Math.toDegrees(kotlin.math.atan2(v.y, v.x).toDouble())).toInt()
-    if (degrees < 0) degrees += 180
-    if (degrees == 180) degrees = 0
-    // World units are dp; exported PDFs print them at 72/160 pt each.
-    val cm = line.length * (72f / 160f) / 72f * 2.54f
-    val label = "$degrees°  ·  ${String.format(java.util.Locale.US, "%.1f", cm)} cm"
-    val s = camera.toScreen(movingEnd)
-    angleText.textSize = 12.5f * density
-    angleText.color = 0xFFFFFFFF.toInt()
-    angleBubble.color = handleColor
-    val w = angleText.measureText(label) + 18f * density
-    val h = 24f * density
-    val cx = (s.x + 22f * density + w / 2).coerceIn(w / 2 + 4f, width - w / 2 - 4f)
-    val cy = (s.y - 26f * density).coerceIn(h / 2 + 4f, height - h / 2 - 4f)
-    canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
-    canvas.drawText(label, cx, cy + 4.5f * density, angleText)
+    when (g) {
+      is LineShape -> {
+        val v = g.b - g.a
+        if (v.length() < 1f) return
+        var degrees = Math.round(-Math.toDegrees(kotlin.math.atan2(v.y, v.x).toDouble())).toInt()
+        if (degrees < 0) degrees += 180
+        if (degrees == 180) degrees = 0
+        // World units are dp; exported PDFs print them at 72/160 pt each.
+        val cm = g.length * (72f / 160f) / 72f * 2.54f
+        val label = "$degrees°  ·  ${String.format(java.util.Locale.US, "%.1f", cm)} cm"
+        val startMoving = mode == Mode.HANDLE_DRAG && handleIndex == 0
+        val moving = if (startMoving) g.a else g.b
+        val fixed = if (startMoving) g.b else g.a
+        val a = camera.toScreen(fixed)
+        val m = camera.toScreen(moving)
+        val dir = (m - a).normalized()
+        val w = bubbleWidth(label)
+        if (a.dist(m) < w + 90f * density) {
+          // Short: just past the end that isn't moving, on the far side from the pen.
+          val reach = abs(dir.x) * w / 2 + abs(dir.y) * BUBBLE_H * density / 2 + 14f * density
+          drawBubble(canvas, label, a.x - dir.x * reach, a.y - dir.y * reach)
+        } else {
+          // Beside the middle of the line, on its upper side.
+          var n = Pt(-dir.y, dir.x)
+          if (n.y > 0f || (n.y == 0f && n.x > 0f)) n = n * -1f
+          val mid = Pt((a.x + m.x) / 2, (a.y + m.y) / 2)
+          val off = abs(n.x) * w / 2 + abs(n.y) * BUBBLE_H * density / 2 + 10f * density
+          drawBubble(canvas, label, mid.x + n.x * off, mid.y + n.y * off)
+        }
+      }
+      is ArcShape -> drawBubble(canvas, "${g.degrees}°", camera.toScreen(g.center))
+      is SectorShape -> {
+        val label = "${Math.round(g.fraction * 100)}%  ·  ${Math.round(g.fraction * 360)}°"
+        val c = camera.toScreen(g.center)
+        if (g.fraction > 0.6f) drawBubble(canvas, label, c)
+        else {
+          // The centre is a corner of the slice: sit just behind it, away from the curve.
+          val away = Pt.polar(1f, g.start + g.sweep / 2) * -1f
+          val off = abs(away.x) * bubbleWidth(label) / 2 + abs(away.y) * BUBBLE_H * density / 2 + 10f * density
+          drawBubble(canvas, label, c.x + away.x * off, c.y + away.y * off)
+        }
+      }
+      else -> Unit
+    }
   }
 
-  /** While a part circle is drawn or its ends are dragged: how much of a circle it is, and its angle. */
-  private fun drawSectorReadout(canvas: Canvas) {
-    val sector =
-      when (mode) {
-        Mode.SHAPE_CREATE -> shapePreview?.geometry as? SectorShape
-        Mode.HANDLE_DRAG -> liveEdit?.geometry as? SectorShape
-        else -> null
-      } ?: return
-    val pct = Math.round(sector.fraction * 100)
-    val deg = Math.round(sector.fraction * 360)
-    val label = "$pct%  ·  $deg°"
-    val at = camera.toScreen(sector.handles()[if (mode == Mode.HANDLE_DRAG && handleIndex == 0) 0 else 1])
+  private fun bubbleWidth(label: String): Float {
     angleText.textSize = 12.5f * density
+    return angleText.measureText(label) + 18f * density
+  }
+
+  private fun drawBubble(canvas: Canvas, label: String, at: Pt) = drawBubble(canvas, label, at.x, at.y)
+
+  private fun drawBubble(canvas: Canvas, label: String, x: Float, y: Float) {
+    val w = bubbleWidth(label)
     angleText.color = 0xFFFFFFFF.toInt()
     angleBubble.color = handleColor
-    val w = angleText.measureText(label) + 18f * density
-    val h = 24f * density
-    val cx = (at.x + 22f * density + w / 2).coerceIn(w / 2 + 4f, width - w / 2 - 4f)
-    val cy = (at.y - 26f * density).coerceIn(h / 2 + 4f, height - h / 2 - 4f)
+    val h = BUBBLE_H * density
+    val cx = x.coerceIn(w / 2 + 4f, width - w / 2 - 4f)
+    val cy = y.coerceIn(h / 2 + 4f, height - h / 2 - 4f)
     canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
     canvas.drawText(label, cx, cy + 4.5f * density, angleText)
   }
@@ -1074,7 +1116,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // anything that rebuilds a shape per sample would flood the main thread and stop it drawing.
     requestUnbufferedDispatch(e)
     val slot = settings.activeSlot
-    val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size)
+    val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle)
     predictor.record(e)
     val id = inProgress.startStroke(e, e.getPointerId(idx), brush, camera.screenToWorld)
     strokeId = id
@@ -1210,7 +1252,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     strokePens.remove(id)
     strokeColors.remove(id)
     strokeId = null
-    liveShape = ShapeItem(d.newId(), d.nextZ(), pen, slot.color, slot.size, geometry)
+    liveShape = ShapeItem(d.newId(), d.nextZ(), pen, slot.color, slot.size, geometry, line = slot.lineStyle)
     liveBase = liveShape
     liveAnchor = strokePoints.lastOrNull() ?: Pt(0f, 0f)
     liveFollowing = false
@@ -1227,7 +1269,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
       geometry = geometry.copy(b = snapped.b)
     }
-    return ShapeItem("preview", 0, slot.type, slot.color, slot.size, geometry)
+    return ShapeItem("preview", 0, slot.type, slot.color, slot.size, geometry, line = slot.lineStyle)
   }
 
   private fun endDraw(e: MotionEvent) {
@@ -1236,8 +1278,20 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     removeCallbacks(holdRunnable)
     when (mode) {
       Mode.INK -> {
-        strokeId?.let { inProgress.finishStroke(e, drawPointer, it) }
-        strokeId = null
+        val tapped = if (e.eventTime - e.downTime < PEN_TAP_MS) shapeTappedByPen() else null
+        if (tapped != null) {
+          // A quick tap on a shape's outline picks the shape up to change it, rather than leaving a dot.
+          strokeId?.let {
+            inProgress.cancelStroke(it, e)
+            strokePens.remove(it)
+            strokeColors.remove(it)
+          }
+          strokeId = null
+          selectShape(tapped)
+        } else {
+          strokeId?.let { inProgress.finishStroke(e, drawPointer, it) }
+          strokeId = null
+        }
       }
       Mode.LIVE_SHAPE -> {
         liveBase = null
@@ -1268,9 +1322,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (camera.toScreen(at).dist(camera.toScreen(shapeStart)) < touchSlop * 2) fillAt(shapeStart)
       }
       Mode.SHAPE_CREATE -> {
-        if (d != null) {
+        val tapped = if (shapePreview == null) hitTest(shapeStart, pages = false) { true } as? ShapeItem else null
+        if (tapped != null) selectShape(tapped)
+        else if (d != null) {
           val preview = shapePreview ?: buildShape(shapeStart - Pt(60f, 40f), shapeStart + Pt(60f, 40f))
-          val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry)
+          val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry, line = preview.line)
           d.commit(Change(emptyList(), listOf(shape)))
           // A part circle shows its dots straight away, so its amount can be set right after drawing it.
           if (shape.geometry is SectorShape) {
@@ -1445,6 +1501,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       ?: near.firstOrNull { item -> item is ImageItem && (pages || !item.pdfPage) && item.rect.contains(p) }
   }
 
+  /** The shape under a pen tap that barely moved, if any (writing on top of a shape still writes). */
+  private fun shapeTappedByPen(): ShapeItem? {
+    if (strokePoints.isEmpty()) return null
+    val first = camera.toScreen(strokePoints.first())
+    if (strokePoints.any { camera.toScreen(it).dist(first) > touchSlop / 2 }) return null
+    return hitTest(strokePoints.first(), pages = false) { true } as? ShapeItem
+  }
+
+  private fun selectShape(shape: ShapeItem) {
+    selectSingle(shape)
+    host.onTip("shape-tap", "Drag a dot to reshape it · the menu changes its colour, thickness and line")
+  }
+
   private fun selectSingle(item: CanvasItem) {
     setSelection(listOf(item))
     activeShapeId = (item as? ShapeItem)?.id
@@ -1473,6 +1542,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         selection.any { it !is ImageItem && it !is TextItem },
         canRotateSelection(),
         textId = (selection.singleOrNull() as? TextItem)?.id,
+        color = selection.firstNotNullOfOrNull { (it as? InkItem)?.color ?: (it as? ShapeItem)?.color ?: (it as? TextItem)?.color },
+        lineSize = selection.firstNotNullOfOrNull { (it as? InkItem)?.size ?: (it as? ShapeItem)?.size },
+        line = selection.firstNotNullOfOrNull { (it as? InkItem)?.line ?: (it as? ShapeItem)?.line },
       )
     )
   }
@@ -1579,6 +1651,25 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     d.commit(Change(selection, recolored))
     setSelection(recolored)
+  }
+
+  /**
+   * Changes how the selected writing and shapes are drawn: [size] thick and/or in [line] style
+   * (null leaves that as it is). Pictures and text keep theirs.
+   */
+  fun restyleSelection(size: Float? = null, line: LineStyle? = null) {
+    val d = doc ?: return
+    val changed =
+      selection.map {
+        when (it) {
+          is InkItem -> it.restyled(size ?: it.size, line ?: it.line)
+          is ShapeItem -> it.restyled(size ?: it.size, line ?: it.line)
+          else -> it
+        }
+      }
+    d.commit(Change(selection, changed))
+    setSelection(changed)
+    if (changed.size == 1 && changed[0] is ShapeItem) activeShapeId = changed[0].id
   }
 
   /** Puts a picture in the middle of the current view, sized to fit comfortably. */
@@ -2179,6 +2270,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** Gaps up to about this wide (world units, ~1 mm) in an outline still count as closed. */
     private const val FILL_BRIDGE = 3f
     private const val HANDLE_HIT_DP = 24f
+    private const val BUBBLE_H = 24f
+    /** A pen touch shorter than this that doesn't move is a tap. */
+    private const val PEN_TAP_MS = 250L
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L
   }

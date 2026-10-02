@@ -1,5 +1,6 @@
 package com.tali.notes.geometry
 
+import com.tali.notes.model.ArcShape
 import com.tali.notes.model.SectorShape
 import kotlin.math.PI
 import org.junit.Assert.assertEquals
@@ -52,5 +53,38 @@ class SectorShapeTest {
     assertEquals(0.75f, e.fraction, 1e-3f)
     assertEquals(fixed.x, e.handles()[0].x, 1e-3f)
     assertEquals(fixed.y, e.handles()[0].y, 1e-3f)
+  }
+
+  @Test
+  fun aWholeCircleOpensWhicheverWayAnEndIsDragged() {
+    val full = SectorShape.of(Pt(0f, 0f), Pt(100f, 0f), 1f)
+    for (index in 0..1) {
+      for (by in listOf(-0.1f, 0.1f)) {
+        val at = Pt(0f, 0f) + Pt.polar(100f, full.handles()[index].let { (it - Pt(0f, 0f)).angle() } + by * tau)
+        val e = full.withHandle(index, at) as SectorShape
+        assertTrue("dot $index by $by gave ${e.fraction}", e.fraction < 0.95f)
+      }
+    }
+  }
+
+  @Test
+  fun goingPastAFullTurnStartsAgainFromNothing() {
+    val s = SectorShape.of(Pt(0f, 0f), Pt(100f, 0f), 0.5f)
+    // 361° round from the fixed end is 1°.
+    val e = s.withHandle(1, Pt.polar(100f, s.start + tau + 0.02f * tau)) as SectorShape
+    assertEquals(0.02f, e.fraction, 1e-3f)
+  }
+
+  @Test
+  fun arcEndsWrapInsteadOfWindingIntoACircle() {
+    val arc = ArcShape(Pt(0f, 0f), 100f, PI.toFloat(), PI.toFloat())
+    // The start dragged backwards round past the other end: a small arc, never more than a turn.
+    for (k in 1..40) {
+      val a = arc.withHandle(0, Pt.polar(100f, PI.toFloat() - k * 0.05f * tau)) as ArcShape
+      assertTrue("k=$k sweep ${a.sweep}", a.sweep > 0f && a.sweep <= tau + 1e-4f)
+      assertEquals(PI.toFloat() * 2, a.start + a.sweep, 1e-3f)
+    }
+    val b = arc.withHandle(1, Pt.polar(100f, PI.toFloat() + 1.25f * tau)) as ArcShape
+    assertEquals(90, b.degrees)
   }
 }

@@ -7,9 +7,11 @@ import androidx.ink.strokes.Stroke
 import androidx.ink.strokes.StrokeInput
 import androidx.ink.strokes.StrokeInputBatch
 import com.tali.notes.geometry.Affine
+import com.tali.notes.geometry.Geo
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import com.tali.notes.model.PenType
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.ShapeGeometry
 import kotlin.math.ceil
 
@@ -26,9 +28,50 @@ object StrokeFactory {
     return Rect(box.xMin, box.yMin, box.xMax, box.yMax)
   }
 
-  fun shapeStrokes(geometry: ShapeGeometry, pen: PenType, color: Int, size: Float): List<Stroke> {
+  fun shapeStrokes(geometry: ShapeGeometry, pen: PenType, color: Int, size: Float, line: LineStyle = LineStyle.SOLID): List<Stroke> {
     val brush = Brushes.shapeBrush(pen, color, size)
-    return geometry.paths(size).filter { it.size >= 2 }.map { strokeAlong(it, brush) }
+    val paths = geometry.paths(size).filter { it.size >= 2 }
+    return (if (line == LineStyle.SOLID) paths else paths.flatMap { dashes(it, size, line) }).map { strokeAlong(it, brush) }
+  }
+
+  /**
+   * [path] cut into the pieces of [line] for a line [size] thick. Short paths (arrow barbs, small
+   * details) stay solid, since a pattern on them just looks broken. Pen ends are round and stick
+   * out half the thickness past each piece, so pieces are cut that much shorter and gaps longer,
+   * leaving the visible lengths of [LineStyle.pattern]. A dot is a piece of (almost) no length.
+   */
+  fun dashes(path: List<Pt>, size: Float, line: LineStyle): List<List<Pt>> {
+    val pattern = line.pattern.mapIndexed { i, v -> if (i % 2 == 0) maxOf((v - 1f) * size, 0.05f) else (v + 1f) * size }
+    if (pattern.isEmpty() || Geo.pathLength(path) < pattern.sum() * 2.5f) return listOf(path)
+    val out = mutableListOf<List<Pt>>()
+    var current = mutableListOf(path[0])
+    var part = 0
+    var left = pattern[0]
+    for (i in 0 until path.size - 1) {
+      var a = path[i]
+      val b = path[i + 1]
+      var seg = a.dist(b)
+      while (seg > 0f) {
+        val drawing = part % 2 == 0
+        if (seg < left) {
+          left -= seg
+          if (drawing) current.add(b)
+          seg = 0f
+        } else {
+          val cut = a + (b - a) * (left / seg)
+          if (drawing) {
+            current.add(cut)
+            out += current
+          } else current = mutableListOf(cut)
+          seg -= left
+          a = cut
+          part = (part + 1) % pattern.size
+          left = pattern[part]
+        }
+      }
+    }
+    if (part % 2 == 0 && current.size >= 2) out += current
+    return out
   }
 
   /** Builds a stroke that follows a polyline exactly, keeping every corner. */

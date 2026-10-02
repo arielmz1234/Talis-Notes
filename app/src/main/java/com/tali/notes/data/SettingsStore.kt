@@ -1,9 +1,11 @@
 package com.tali.notes.data
 
 import android.content.Context
+import com.tali.notes.canvas.PaperRenderer
 import com.tali.notes.model.CustomPaper
 import com.tali.notes.model.CustomShape
 import com.tali.notes.model.EraserMode
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenSlot
 import com.tali.notes.model.PenType
@@ -71,9 +73,16 @@ data class AppSettings(
   val pageGuides: Boolean = false,
   /** Smart undo and redo: a quick two-finger tap undoes, a three-finger tap redoes. */
   val smartUndo: Boolean = true,
+  /** How heavy the paper's lines, grid and dots are drawn: 1 is the standard weight, 0.5..3. */
+  val paperLineWeight: Float = 1f,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
 ) {
+  /** The old Dashed pen became a fineliner drawing short dashes, now that any pen can dash. */
+  fun migrated(): AppSettings =
+    if (pens.none { it.type == PenType.DASHED }) this
+    else copy(pens = pens.map { if (it.type == PenType.DASHED) it.copy(type = PenType.FINELINER, line = LineStyle.SHORT_DASH) else it })
+
   /** The fill colour with its opacity applied, or null when the fill tool takes fills away. */
   val fillArgb: Int?
     get() = fillColor?.let { c -> ((255 * fillOpacity.coerceIn(0.15f, 1f)).toInt() shl 24) or (c and 0x00FFFFFF) }
@@ -92,22 +101,23 @@ data class AppSettings(
 
 class SettingsStore(context: Context) {
   private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-  private val _settings = MutableStateFlow(load())
+  private val _settings = MutableStateFlow(load().also { PaperRenderer.lineWeight = it.paperLineWeight })
   val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
   private fun load(): AppSettings =
-    prefs.getString("json", null)?.let { runCatching { ItemCodec.json.decodeFromString(AppSettings.serializer(), it) }.getOrNull() } ?: AppSettings()
+    prefs.getString("json", null)?.let { runCatching { ItemCodec.json.decodeFromString(AppSettings.serializer(), it).migrated() }.getOrNull() } ?: AppSettings()
 
   fun update(transform: (AppSettings) -> AppSettings) {
     val next = transform(_settings.value)
     if (next == _settings.value) return
     _settings.value = next
+    PaperRenderer.lineWeight = next.paperLineWeight
     prefs.edit().putString("json", ItemCodec.json.encodeToString(AppSettings.serializer(), next)).apply()
   }
 
   fun exportJson(): String = ItemCodec.json.encodeToString(AppSettings.serializer(), _settings.value)
 
   fun importJson(json: String) {
-    runCatching { ItemCodec.json.decodeFromString(AppSettings.serializer(), json) }.getOrNull()?.let { s -> update { s } }
+    runCatching { ItemCodec.json.decodeFromString(AppSettings.serializer(), json).migrated() }.getOrNull()?.let { s -> update { s } }
   }
 }

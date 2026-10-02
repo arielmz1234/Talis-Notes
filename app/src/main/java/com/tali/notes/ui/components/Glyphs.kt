@@ -22,6 +22,7 @@ import com.tali.notes.model.CustomShape
 import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.geometry.Pt
 import com.tali.notes.model.PaperStyle
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.theme.Tali
@@ -31,7 +32,7 @@ import com.tali.notes.theme.Tali
  * by its style. The canvas is 26 x 56 dp; the tip points up.
  */
 @Composable
-fun PenGlyph(type: PenType, color: Color, modifier: Modifier = Modifier) {
+fun PenGlyph(type: PenType, color: Color, modifier: Modifier = Modifier, line: LineStyle = LineStyle.SOLID) {
   val c = Tali.colors
   val body = if (c.isDark) Color(0xFFD6CFEC) else Color(0xFFF1ECFA)
   val outline = if (c.isDark) Color(0xFFA99DCC) else Color(0xFFD8CCEE)
@@ -47,8 +48,11 @@ fun PenGlyph(type: PenType, color: Color, modifier: Modifier = Modifier) {
     drawRoundRect(outline, Offset(cx - half, bodyTop), Size(half * 2, size.height - bodyTop + 6f * u), CornerRadius(3f * u), style = Stroke(1f * u))
     // Colour band
     drawRect(color, Offset(cx - half, bodyTop + 9f * u), Size(half * 2, 4f * u))
-    if (type == PenType.DASHED) {
-      for (i in 0..2) drawRect(outline, Offset(cx - 1f * u, bodyTop + (17f + i * 6f) * u), Size(2f * u, 3f * u))
+    // A dotted or dashed pen wears its pattern down the body.
+    val pattern = if (type == PenType.DASHED) LineStyle.SHORT_DASH else line
+    if (pattern != LineStyle.SOLID) {
+      val w = 2f * u
+      drawLine(color.copy(alpha = 0.75f), Offset(cx, bodyTop + 18f * u), Offset(cx, size.height), w, StrokeCap.Round, com.tali.notes.ui.notebook.pathEffect(pattern, w))
     }
     when (type) {
       PenType.FINELINER, PenType.DASHED -> {

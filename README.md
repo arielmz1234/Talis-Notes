@@ -5,14 +5,16 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 ## What it does
 
 **Writing**
-- Six pen types: fineliner, fountain pen, pencil, calligraphy, dashed and highlighter. She can keep up to 8 pens, and her saved colours are shared by all of them.
+- Five pen types: fineliner, fountain pen, pencil, calligraphy and highlighter. She can keep up to 8 pens, and her saved colours are shared by all of them.
+- **Line styles:** any pen (not the highlighter) can draw Solid, Dotted, Long dash, Short dash, Dot and dash or Mixed dash, chosen in the pen settings. The pattern draws live under the pen, and shapes drawn with that pen use it too (arrow barbs stay solid).
+- **Quick colours:** three colour dots beside the pens switch the active pen's colour without opening its settings. They are that pen's three most recent colours; a new colour takes the place of the one used longest ago, so the dots don't jump around.
 - Low-latency inking (androidx.ink), with pressure.
 - The S Pen side button erases while held.
 - **Hold to perfect:** pause at the end of a stroke and it snaps into a clean shape: a line (with 0°, 30°, 45°, 60° and 90° snapping), arrow, circle, ellipse, triangle, rectangle, polygon or star. Keep moving without lifting to resize it (a line follows the pen tip).
 - **My shapes:** lasso any drawing and tap *Save as shape*. Holding the pen at the end of a similar one-stroke drawing then snaps to it. Matching uses a point-cloud recognizer, `geometry/ShapeMatcher.kt`.
 - Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines.
-- Tap a shape (with a finger or the pen) to get its dots; drag them with either, and the shape changes live. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length. Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
-- **Part circle:** a closed slice of a circle, drawn from the centre outwards (the curve faces the way you drag). It starts as a half; its end dots make it any percent (snapping to quarters and 5% steps) and show "% · °".
+- Tap a shape (with a finger, a quick pen tap on its outline, or any tap with the Shapes tool) to get its dots and its menu; drag them with either, and the shape changes live. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length beside the line (not under the pen). Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
+- **Part circle:** a closed slice of a circle, drawn from the centre outwards (the curve faces the way you drag). It starts as a half; its end dots make it any percent (snapping to quarters and 5% steps) and show "% · °" at the centre. Arc ends can be dragged round either way; going past a full turn starts again from nothing (361° is 1°), and the arc shows its angle.
 
 - Every one-of-many choice (segmented switches, tools, pen types, colours, papers, the library sidebar) has one highlight that glides and stretches to the new choice.
 
@@ -24,7 +26,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect.
 - **Fill:** tap inside a shape to fill it with colour, or inside an area you drew around to fill it behind your writing (small gaps in the outline are bridged). It has its own colour, opacity, and "None" to take a fill away.
 - The lasso picks up anything it touches (circling the tip of a line takes the whole line). Pictures and writing can be brought to the front or sent to the back.
-- The lasso can move, resize and rotate a selection (with live angle and 15° steps), recolour, duplicate, copy to another notebook, delete, or save as a shape.
+- The lasso can move, resize and rotate a selection (with live angle and 15° steps), duplicate, copy to another notebook, delete, or save as a shape. *Style* changes the colour, and for writing and shapes the thickness and line style, after they're drawn.
 - Undo and redo work with the buttons, or with *Smart undo and redo* (⋯ menu): a two-finger tap undoes, a three-finger tap redoes.
 - The full-screen button beside undo hides the toolbars, leaving the page and a small frosted button to bring them back. A puff of mist plays where the bars were; when a notebook opens, the bars just slide in.
 - Scrolling glides on after a flick.
@@ -34,7 +36,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - *Pages* (⋯ menu, or tap the page number) opens an overview of every page. Tapping a page lifts it up large, with *Delete page* (undo brings the writing back) and *Go to page*; the last tile adds a page.
 - *Endless canvas* in the ⋯ menu switches a notebook between A4 pages and one endless page.
 - New notebooks pick their paper, A4 pages or endless canvas, portrait or landscape pages, dark paper and cover colour up front.
-- Paper styles: blank, dots, grid, lines, engineering (2 mm / 10 mm), isometric, Cornell notes and ruled exercise-book pages, in quiet grey on white. The paper menu shows Blank, Lines and Grid, with *More* for the rest and *Your own*.
+- Paper styles: blank, dots, grid, lines, engineering (2 mm / 10 mm), isometric, Cornell notes and ruled exercise-book pages, in quiet grey on white. A *Lines* slider under the papers makes every paper's lines, grid and dots thinner or bolder (0.5× to 3×, PDF export too). The paper menu shows Blank, Lines and Grid, with *More* for the rest and *Your own*.
 - *Your own* paper: design a pattern (lines, grid or dots, spacing, line and paper colours, an exercise-book margin line, and how strongly the lines show), or use a picture such as a planner page, which fills each A4 page (with its own opacity). Her papers are saved in settings and offered in every notebook (hold one to remove it).
 - *Dark paper* (⋯ menu, per notebook) shows a black page. Ink colours flip to light versions on screen, but the real colours are kept, so switching back restores them. It's separate from the tablet's dark mode, which only changes the toolbars to soft lilac.
 - Pictures can come from the gallery or the camera.

@@ -56,6 +56,14 @@ import com.tali.notes.ui.components.CloudCrown
 import com.tali.notes.ui.components.FloatingBar
 import com.tali.notes.ui.components.GeometryIcon
 import com.tali.notes.ui.components.PenGlyph
+import com.tali.notes.ui.components.ColorDot
+import com.tali.notes.ui.components.EaseOutStrong
+import com.tali.notes.ui.components.colorRing
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import com.tali.notes.ui.components.ShapeIcon
 import com.tali.notes.ui.components.TaliIcons
 import com.tali.notes.ui.components.ToolButton
@@ -77,6 +85,7 @@ fun MainToolbar(
   onPen: (PenSlot) -> Unit,
   penSettingsOpen: Boolean,
   onPenSettings: () -> Unit,
+  onQuickColor: (Int) -> Unit,
   onTool: (Tool) -> Unit,
   onImage: () -> Unit,
   onCamera: () -> Unit,
@@ -98,7 +107,7 @@ fun MainToolbar(
           contentAlignment = Alignment.TopCenter,
         ) {
           // On dark paper the pens show the colour they really write in there.
-          PenGlyph(slot.type, Color(if (darkPaper) com.tali.notes.ink.Brushes.onDarkPaper(slot.color) else slot.color), Modifier.offset(y = lift))
+          PenGlyph(slot.type, Color(if (darkPaper) com.tali.notes.ink.Brushes.onDarkPaper(slot.color) else slot.color), Modifier.offset(y = lift), line = slot.lineStyle)
         }
       }
     }
@@ -110,6 +119,20 @@ fun MainToolbar(
       contentAlignment = Alignment.Center,
     ) {
       Icon(Icons.Outlined.KeyboardArrowDown, "Pen settings", tint = if (penSettingsOpen) c.accent else c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
+    }
+    // The pen's three quick colours: switch without opening its settings. The ring glides between
+    // them, and to their new places when another pen is picked.
+    AnimatedVisibility(
+      tool == Tool.PEN,
+      enter = fadeIn(tween(180)) + expandHorizontally(tween(220, easing = EaseOutStrong), expandFrom = Alignment.Start),
+      exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160, easing = EaseOutStrong), shrinkTowards = Alignment.Start),
+    ) {
+      val slot = settings.activeSlot
+      fun shown(col: Int) = Color(if (darkPaper) com.tali.notes.ink.Brushes.onDarkPaper(col) else col)
+      val ring = rememberSlidingSelection()
+      Row(Modifier.padding(start = 2.dp).colorRing(ring, shown(slot.color)), verticalAlignment = Alignment.CenterVertically) {
+        slot.quickColors.forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
+      }
     }
     Divider()
     // Eraser, lasso and shapes share one highlight that glides between them.

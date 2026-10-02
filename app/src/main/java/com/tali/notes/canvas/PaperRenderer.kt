@@ -39,6 +39,12 @@ class PaperRenderer {
   companion object {
     const val DARK_PAPER = 0xFF1C1A23.toInt()
 
+    /**
+     * How heavy paper lines, grids and dots are drawn, from her setting (1 is standard). It's
+     * shared by the canvas, page previews and PDF export, so they all match.
+     */
+    @Volatile var lineWeight = 1f
+
     /** Picture backgrounds on dark paper: dimmed to about a third so ink stays readable. */
     private val DIM = ColorMatrixColorFilter(ColorMatrix().apply { setScale(0.35f, 0.35f, 0.38f, 1f) })
   }
@@ -73,7 +79,7 @@ class PaperRenderer {
     }
     canvas.drawColor(paperColor)
     val mm = 160f / 25.4f
-    val k = if (print) 0.45f else 1f
+    val k = (if (print) 0.45f else 1f) * lineWeight
     when (style) {
       PaperStyle.BLANK -> Unit
       PaperStyle.DOTS -> dots(canvas, camera, width, height, 5 * mm, lineColor)
@@ -149,7 +155,7 @@ class PaperRenderer {
    */
   private fun drawCustom(canvas: Canvas, cp: CustomPaper, camera: Camera, width: Int, height: Int) {
     val mm = 160f / 25.4f
-    val k = if (print) 0.45f else 1f
+    val k = (if (print) 0.45f else 1f) * lineWeight
     val image = cp.image
     if (image != null) {
       canvas.drawColor(if (dark) DARK_PAPER else 0xFFFFFFFF.toInt())
@@ -276,7 +282,7 @@ class PaperRenderer {
     if (step < 7f && !print) return
     paint.color = color
     paint.alpha = ((if (print) 1f else ((step - 7f) / 10f).coerceIn(0f, 1f)) * (color ushr 24)).toInt()
-    paint.strokeWidth = if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)
+    paint.strokeWidth = (if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)) * lineWeight
     paint.strokeCap = Paint.Cap.ROUND
     val world = camera.visibleWorld(width, height)
     var n = 0

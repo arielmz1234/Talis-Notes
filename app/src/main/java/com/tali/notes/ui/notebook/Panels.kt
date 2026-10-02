@@ -56,6 +56,7 @@ import com.tali.notes.ink.Brushes
 import com.tali.notes.ink.StrokeFactory
 import com.tali.notes.model.EraserMode
 import com.tali.notes.model.CustomShape
+import com.tali.notes.model.LineStyle
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeGroup
 import com.tali.notes.model.ShapeKind
@@ -119,7 +120,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
   PanelColumn(392) {
     val types = rememberSlidingSelection()
     Row(Modifier.slidingHighlight(types, slot.type, SolidColor(c.accentSoft), 14.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-      PenType.entries.forEach { type ->
+      PenType.offered.forEach { type ->
         val ink by animateColorAsState(Color(if (type == slot.type) slot.color else 0xFF8E95A2.toInt()), tween(220), label = "penInk")
         Box(
           Modifier.slidingOption(types, type)
@@ -128,19 +129,25 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
             .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = type.label) { vm.setPenType(type) },
           contentAlignment = Alignment.BottomCenter,
         ) {
-          PenGlyph(type, ink, Modifier.padding(bottom = 0.dp))
+          PenGlyph(type, ink, Modifier.padding(bottom = 0.dp), line = if (type.takesLineStyle) slot.line else LineStyle.SOLID)
         }
       }
     }
     Spacer(Modifier.height(10.dp))
     Text(slot.type.label, style = MaterialTheme.typography.titleMedium, color = c.ink)
     Spacer(Modifier.height(10.dp))
-    StrokePreview(slot.type, slot.color, slot.size)
+    StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle)
     Spacer(Modifier.height(12.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
       TaliSlider(slot.size, slot.type.minSize..slot.type.maxSize, { v -> vm.updateActivePen { it.copy(size = v) } }, Modifier.weight(1f))
       Text(String.format("%.1f", slot.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+    }
+    if (slot.type.takesLineStyle) {
+      Spacer(Modifier.height(10.dp))
+      SectionLabel("Line")
+      Spacer(Modifier.height(8.dp))
+      LineStylePicker(slot.lineStyle, vm::setPenLine)
     }
     Spacer(Modifier.height(10.dp))
     SectionLabel("Colours")
@@ -149,7 +156,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     FlowRow(Modifier.colorRing(ring, Color(slot.color)), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       settings.savedColors.forEach { col ->
         Box {
-          ColorDot(Color(col), selected = col == slot.color, selection = ring, onLongClick = { removeTarget = col }) { vm.updateActivePen { it.copy(color = col) } }
+          ColorDot(Color(col), selected = col == slot.color, selection = ring, onLongClick = { removeTarget = col }) { vm.pickPenColor(col) }
           DropdownMenu(expanded = removeTarget == col, onDismissRequest = { removeTarget = null }) {
             DropdownMenuItem(text = { Text("Remove colour") }, onClick = {
               vm.removeColor(col)
@@ -173,6 +180,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
         onChange = { col -> vm.updateActivePen { it.copy(color = col) } },
         onSave = { col ->
           vm.saveColor(col)
+          vm.pickPenColor(col)
           picking = false
         },
       )
@@ -192,12 +200,12 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
 
 /** Draws a sample stroke with the real Ink brush, so size and style changes show exactly as they'll look. */
 @Composable
-fun StrokePreview(type: PenType, color: Int, size: Float) {
+fun StrokePreview(type: PenType, color: Int, size: Float, line: LineStyle = LineStyle.SOLID) {
   val c = Tali.colors
   val renderer = remember { Brushes.renderer() }
   val w = 392f
   val h = 70f
-  val stroke = remember(type, color, size) { StrokeFactory.previewStroke(Brushes.brush(type, color, size), w, h) }
+  val stroke = remember(type, color, size, line) { StrokeFactory.previewStroke(Brushes.brush(type, color, size, line), w, h) }
   Canvas(Modifier.fillMaxWidth().height(h.dp).clip(RoundedCornerShape(14.dp)).background(c.paper).border(1.dp, c.line, RoundedCornerShape(14.dp))) {
     drawIntoCanvas { canvas ->
       val nc = canvas.nativeCanvas
@@ -232,7 +240,7 @@ fun EraserPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(4.dp))
     Spacer(Modifier.height(4.dp))
     FilterChips {
-      PenType.entries.forEach { type -> FilterChip(type.label, settings.eraserHits(type)) { vm.setEraserAffects(type, it) } }
+      PenType.offered.forEach { type -> FilterChip(type.label, settings.eraserHits(type)) { vm.setEraserAffects(type, it) } }
     }
     Spacer(Modifier.height(14.dp))
     Text("Tip: hold the S Pen button to erase with any tool.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
@@ -329,7 +337,7 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(4.dp))
     Spacer(Modifier.height(4.dp))
     FilterChips {
-      PenType.entries.forEach { type -> FilterChip(type.label, settings.lassoHits(type)) { vm.setLassoAffects(type, it) } }
+      PenType.offered.forEach { type -> FilterChip(type.label, settings.lassoHits(type)) { vm.setLassoAffects(type, it) } }
       FilterChip("Images", settings.lassoSelectsImages, vm::setLassoImages)
     }
   }

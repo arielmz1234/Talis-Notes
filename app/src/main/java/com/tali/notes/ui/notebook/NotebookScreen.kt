@@ -1,5 +1,12 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.model.LineStyle
+import com.tali.notes.ui.components.rememberSlidingSelection
+import com.tali.notes.ui.components.colorRing
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import android.app.Application
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -404,6 +411,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             onPen = vm::onPenTapped,
             penSettingsOpen = vm.panel == PanelKind.PEN,
             onPenSettings = vm::togglePenSettings,
+            onQuickColor = vm::pickPenColor,
             onTool = vm::onToolTapped,
             onImage = {
               vm.panel = null
@@ -479,6 +487,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                     makingPaper = true
                   },
                   onRemove = { vm.deleteCustomPaper(it.id) },
+                  lineWeight = settings.paperLineWeight,
+                  onLineWeight = vm::setPaperLineWeight,
                 )
               },
               fingerDraws = settings.fingerDraws,
@@ -534,6 +544,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
           onCopy = { holder.view?.runSafely { copySelection() } },
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
+          onRestyle = { size, line -> holder.view?.runSafely { restyleSelection(size, line) } },
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
           onEditText = { id -> holder.view?.runSafely { editText(id) } },
           onArrange = { front -> holder.view?.runSafely { arrangeSelection(front) } },
@@ -815,7 +826,7 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
@@ -842,17 +853,16 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
     }
   ) {
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
-      if (picking) {
-        Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
-          colors.take(12).forEach { col ->
-            ColorDot(Color(col), selected = false, size = 26.dp) {
-              onColor(col)
-              picking = false
+      run {
+        // Style: colour for anything coloured, plus thickness and line for writing and shapes.
+        if (!sel.hasImage || sel.count > 1) {
+          Box {
+            ToolButton(Icons.Outlined.Palette, if (sel.lineSize != null) "Style" else "Colour", selected = picking) { picking = true }
+            DropdownMenu(expanded = picking, onDismissRequest = { picking = false }, shape = RoundedCornerShape(18.dp), containerColor = c.surface) {
+              SelectionStyle(sel, colors, onColor, onRestyle)
             }
           }
         }
-      } else {
-        if (!sel.hasImage || sel.count > 1) ToolButton(Icons.Outlined.Palette, "Colour") { picking = true }
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
         ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
@@ -877,6 +887,41 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
       }
     }
+  }
+}
+
+/** The selection's style menu: its colour, and for writing and shapes, how thick and in what line. */
+@Composable
+private fun SelectionStyle(sel: SelectionInfo, colors: List<Int>, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit) {
+  val c = Tali.colors
+  Column(Modifier.width(336.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    SectionLabel("Colour")
+    Spacer(Modifier.height(6.dp))
+    val ring = rememberSlidingSelection()
+    FlowRow(Modifier.colorRing(ring, sel.color?.let { Color(it) }), maxItemsInEachRow = 8) {
+      colors.forEach { col -> ColorDot(Color(col), selected = col == sel.color, size = 26.dp, selection = ring) { onColor(col) } }
+    }
+    val size = sel.lineSize ?: return@Column
+    Spacer(Modifier.height(12.dp))
+    SectionLabel("Thickness")
+    // Follows the finger here and changes the writing once let go (one undo step).
+    var value by remember(size) { mutableFloatStateOf(size) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Slider(
+        value = value,
+        onValueChange = { value = it },
+        onValueChangeFinished = { if (value != size) onRestyle(value, null) },
+        valueRange = 0.8f..20f,
+        colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
+        modifier = Modifier.weight(1f),
+      )
+      Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+    }
+    Spacer(Modifier.height(4.dp))
+    SectionLabel("Line")
+    Spacer(Modifier.height(8.dp))
+    LineStylePicker(sel.line ?: LineStyle.SOLID, { onRestyle(null, it) })
+    Spacer(Modifier.height(4.dp))
   }
 }
 

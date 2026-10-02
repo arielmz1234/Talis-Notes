@@ -93,6 +93,8 @@ fun PaperPicker(
   modifier: Modifier = Modifier,
   tileWidth: Dp = 62.dp,
   perRow: Int = 4,
+  lineWeight: Float? = null,
+  onLineWeight: ((Float) -> Unit)? = null,
 ) {
   val c = Tali.colors
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
@@ -100,8 +102,9 @@ fun PaperPicker(
   val glide = rememberSlidingSelection()
   // While folded, More stands in for a paper in use that isn't one of the three, so it holds the highlight.
   val foldedAway = !expanded && (customId ?: style.name) !in FOLDED
+  Column(modifier) {
   FlowRow(
-    modifier.slidingHighlight(glide, if (foldedAway) "more" else customId ?: style, SolidColor(c.accentSoft), 10.dp),
+    Modifier.slidingHighlight(glide, if (foldedAway) "more" else customId ?: style, SolidColor(c.accentSoft), 10.dp),
     horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalArrangement = Arrangement.spacedBy(4.dp),
     maxItemsInEachRow = perRow,
@@ -153,6 +156,8 @@ fun PaperPicker(
         }
       }
     }
+  }
+  if (lineWeight != null && onLineWeight != null) LineWeightRow(lineWeight, onLineWeight)
   }
   removing?.let { cp ->
     ConfirmDialog(
@@ -241,6 +246,23 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
         }
     }
   return state.value
+}
+
+/** How heavy the paper's lines, grid and dots are, from half to three times the standard weight. */
+@Composable
+private fun LineWeightRow(value: Float, onChange: (Float) -> Unit) {
+  val c = Tali.colors
+  Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    SectionLabel("Lines", Modifier.width(52.dp))
+    Slider(
+      value = value,
+      onValueChange = { onChange(((it * 4).roundToInt() / 4f).coerceIn(0.5f, 3f)) },
+      valueRange = 0.5f..3f,
+      colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
+      modifier = Modifier.weight(1f),
+    )
+    Text(if (value == 1f) "Standard" else String.format(java.util.Locale.US, "%.2f", value).trimEnd('0').trimEnd('.') + "×", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(68.dp).padding(start = 8.dp))
+  }
 }
 
 /** How strongly the lines or picture show over the page, as a percentage slider. */
