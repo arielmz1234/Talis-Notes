@@ -328,8 +328,14 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     // The toolbars slide in as the notebook opens (no cloud: she opens notebooks all day). Hiding
     // or showing them puffs a cloud where each bar is, measured from the bars themselves.
     val chrome = remember { androidx.compose.animation.core.MutableTransitionState(false) }
-    val bars = remember { androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    // Where each bar last sat. A plain map, not state: bars report while they slide, and that
+    // mustn't recompose anything. The puff copies it when it starts.
+    val bars = remember { HashMap<String, androidx.compose.ui.geometry.Rect>() }
     val barLift = with(LocalDensity.current) { 10.dp.roundToPx() }
+    // Not while they're leaving: they'd be recorded mid-slide, off their place.
+    fun recordBar(key: String, at: androidx.compose.ui.layout.LayoutCoordinates) {
+      if (chrome.targetState) bars[key] = at.boundsInRoot()
+    }
     var ready by remember { mutableStateOf(false) }
     // Wait for the notebook and the screen's slide-in, so the hello is seen.
     LaunchedEffect(doc != null) {
@@ -345,7 +351,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       if (shownFocus != null && shownFocus != vm.focus) puffs++
       shownFocus = vm.focus
     }
-    ToolbarPuffs(puffs, bars)
+    ToolbarPuffs(puffs, showing = !vm.focus, bars = bars)
     AnimatedVisibility(
       visibleState = chrome,
       // Each bar animates itself (barEnter / barExit), so they can follow one another.
@@ -355,13 +361,13 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     // A bar grows from its own top edge, lifting in; the bars follow one another by 40 ms.
     fun Modifier.bar(key: String, order: Int, fromBelow: Boolean = false): Modifier =
       animateEnterExit(enter = barEnter(order, if (fromBelow) barLift else -barLift, fromBelow), exit = barExit(if (fromBelow) barLift else -barLift, fromBelow))
-        .then(if (key.isEmpty()) Modifier else Modifier.onGloballyPositioned { bars[key] = it.boundsInRoot() })
+        .then(if (key.isEmpty()) Modifier else Modifier.onGloballyPositioned { recordBar(key, it) })
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
       val titlePill: @Composable () -> Unit = { Box(Modifier.bar("title", 0)) { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) } }
       val tools: @Composable () -> Unit = {
         Column(Modifier.bar("", 1), horizontalAlignment = Alignment.CenterHorizontally) {
           MainToolbar(
-            modifier = Modifier.onGloballyPositioned { bars["tools"] = it.boundsInRoot() },
+            modifier = Modifier.onGloballyPositioned { recordBar("tools", it) },
             settings = settings,
             darkPaper = darkPaper,
             tool = vm.tool,
@@ -944,24 +950,34 @@ private fun ShowToolbarsButton(visible: Boolean, modifier: Modifier = Modifier, 
   }
 }
 
-/** A soft cloud where each bar is (or was), whenever the toolbars are hidden or brought back. */
+/**
+ * A puff of mist where each bar is (or was), whenever the toolbars are hidden or brought back:
+ * full when they go, lighter when they come back. Progress is read while drawing, so the puff
+ * never recomposes the screen while it plays.
+ */
 @Composable
-private fun ToolbarPuffs(tick: Int, bars: Map<String, androidx.compose.ui.geometry.Rect>) {
+private fun ToolbarPuffs(tick: Int, showing: Boolean, bars: Map<String, androidx.compose.ui.geometry.Rect>) {
   val p = remember { androidx.compose.animation.core.Animatable(1f) }
+  var playing by remember { mutableStateOf(false) }
+  var spots by remember { mutableStateOf(emptyList<androidx.compose.ui.geometry.Rect>()) }
   LaunchedEffect(tick) {
     if (tick == 0) return@LaunchedEffect
+    spots = bars.values.toList()
+    playing = true
     p.snapTo(0f)
-    p.animateTo(1f, tween(com.tali.notes.ui.components.PUFF_LEAVE_MS))
+    p.animateTo(1f, tween(com.tali.notes.ui.components.PUFF_LEAVE_MS, easing = androidx.compose.animation.core.LinearEasing))
+    playing = false
   }
-  if (p.value >= 1f) return
+  if (!playing) return
   var origin by remember { mutableStateOf(Offset.Zero) }
   val density = LocalDensity.current
   Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
-    bars.values.forEach { r ->
+    spots.forEach { r ->
       with(density) {
         com.tali.notes.ui.components.CloudPuff(
-          p.value,
+          { p.value },
           Modifier.offset { IntOffset((r.left - origin.x).roundToInt(), (r.top - origin.y).roundToInt()) }.size(r.width.toDp(), r.height.toDp()),
+          strength = if (showing) 0.5f else 0.85f,
         )
       }
     }
