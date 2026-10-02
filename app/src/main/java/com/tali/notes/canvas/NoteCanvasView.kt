@@ -712,7 +712,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val out = IntArray(bw * bh)
     for (y in 0 until bh) for (x in 0 until bw) if (filled[(y + y0) * w + (x + x0)]) out[y * bw + x] = colour
     val bmp = android.graphics.Bitmap.createBitmap(out, bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
-    // The colour goes in the name, so dark paper can show the fill in its dark-paper colour.
+    // The colour goes in the name, in case a fill ever needs to be recognised by colour.
     val file = images.save(bmp, FILL_PREFIX + "%08x-".format(colour))
     return file to Rect(window.left + x0 / k, window.top + y0 / k, window.left + (x1 + 1) / k, window.top + (y1 + 1) / k)
   }
