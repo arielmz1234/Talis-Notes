@@ -76,7 +76,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # adjust per ma
 ## Release signing: important
 
 - The release key lives in `keystore/` (`talis-release.jks` plus `keystore.properties`). It is **gitignored and must never be committed**.
-- Tali's installed app is signed with this key, so updates only install over it if they are signed with the same key. Lose the key and she has to uninstall, which wipes her notes unless she restores a backup.
+- Updates only install over an app signed with the same key. (Tali's copy is currently on a cloud debug key; see the hand-off note under Open items.) Lose the key and she has to uninstall, which wipes her notes unless she restores a backup.
 - On a new computer, copy the `keystore/` folder over by hand (USB or a password manager, not git).
 - Without the key, `assembleRelease` falls back to the debug key. That APK **will not** update her installed app, so don't hand it to her as an update.
 - Release SHA-1: `B9:89:A0:5A:05:74:6D:3D:AD:20:3C:F2:A0:74:51:BB:08:13:CE:08` (used by Drive OAuth).
@@ -117,7 +117,8 @@ Backups come in three layers:
 - The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
 - The owner reviews visual changes on his own Galaxy Tab S9 FE (debug builds over USB). He asked to review: the frosted eye "show toolbars" button, the back-cloud plus title-with-pencil layout, and how scrolling feels after the glide fix.
 - Everything from the 2 Oct 2026 session (items 7-21 below, including the Ink line-style brushes) was tested by the owner on his tablet and works.
-- Session hand-off (2 Oct 2026): everything is merged: `master` and the working branch `claude/vigilant-fermat-8fu4pj` are identical. A debug-key-signed release APK was handed out for a *new* user only; Tali's copy must be updated from the owner's PC with the real key.
+- Session hand-off (2 Oct 2026): everything is merged: `master` and the working branch `claude/vigilant-fermat-8fu4pj` are identical.
+- **Tali's signing changed (2 Oct 2026):** the owner chose to have Tali uninstall (losing her notes, which he said was fine) and install a release APK built in a cloud session, signed with that session's throwaway debug key. So her installed app is **no longer** signed with the `keystore/` release key, and no future build (cloud or PC) will install over it: each one again needs an uninstall, which wipes her notes unless she backs up first and restores (restore merges). To get her back onto one stable key, the next update should be built on the owner's PC with `keystore/` (`assembleRelease`), after a backup and one last uninstall; from then on updates install over it. Remind the owner of this before handing her any APK.
 
 ## Recent work (October 2026)
 
