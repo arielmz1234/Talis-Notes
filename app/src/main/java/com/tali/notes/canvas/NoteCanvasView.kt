@@ -585,6 +585,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
 
   /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
+  /** Whether a touch at [screen] lands on the active shape's dots or on the selection (to move, resize or turn it). */
+  private fun grabsEdit(screen: Pt): Boolean {
+    val hit = HANDLE_HIT_DP * density
+    currentActiveShape()?.let { shape -> if (shape.geometry.handles().any { camera.toScreen(it).dist(screen) < hit }) return true }
+    val sb = selectionBounds ?: return false
+    val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
+    if (canRotateSelection() && rotateHandle(r).dist(screen) < hit) return true
+    return hypot(screen.x - r.right, screen.y - r.bottom) < hit || r.contains(screen.x, screen.y)
+  }
+
   private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem || it is TextItem }
 
   /** The rotate handle hangs below the middle of the selection (the menu sits above it). */
@@ -789,7 +799,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
             }
           }
         } else if (!isDrawingMode()) {
-          fingerDown(e)
+          // A finger on a shape's dot or on a selection edits it (that's how she adjusts shapes);
+          // anywhere else it scrolls and zooms as usual.
+          if (e.actionMasked == MotionEvent.ACTION_DOWN && grabsEdit(Pt(e.getX(idx), e.getY(idx)))) {
+            stopFling()
+            beginDraw(e, idx)
+          } else {
+            fingerDown(e)
+          }
         }
       }
       MotionEvent.ACTION_MOVE -> if (isDrawingMode()) drawMove(e) else fingerMove(e)
@@ -847,7 +864,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     drawPointer = e.getPointerId(idx)
     drawIsFinger = e.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER
-    requestUnbufferedDispatch(e)
     val p = world(e, idx)
     val screen = Pt(e.getX(idx), e.getY(idx))
     eraserOverride = e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
@@ -904,7 +920,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     when (effective) {
       Tool.PEN -> startInk(e, idx, p, d)
-      Tool.ERASER -> startErase(p)
+      Tool.ERASER -> {
+        requestUnbufferedDispatch(e)
+        startErase(p)
+      }
       Tool.LASSO -> startLasso(p)
       Tool.SHAPE -> {
         shapeStart = p
@@ -915,6 +934,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun startInk(e: MotionEvent, idx: Int, p: Pt, d: Document) {
+    // Every pen sample at once, for the lowest-latency ink. Only ink and the eraser ask for this:
+    // anything that rebuilds a shape per sample would flood the main thread and stop it drawing.
+    requestUnbufferedDispatch(e)
     val slot = settings.activeSlot
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size)
     predictor.record(e)
