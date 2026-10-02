@@ -70,7 +70,11 @@ import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.cloudSurface
 
-private const val PAGE_ASPECT = 1322f / 1871f
+/** Width over height of this notebook's pages (portrait or landscape A4), set by [PagesOverview]. */
+private val LocalPageAspect = androidx.compose.runtime.staticCompositionLocalOf { com.tali.notes.canvas.Pages.PORTRAIT.aspect }
+
+private val PAGE_ASPECT: Float
+  @Composable get() = LocalPageAspect.current
 
 /**
  * Every page of a paged notebook at a glance, in a popup of its own. Tapping a page lifts it up
@@ -87,7 +91,7 @@ fun PagesOverview(
   onGo: (Int) -> Unit,
   onAdd: () -> Unit,
   onDelete: (Int) -> Unit,
-) {
+) = androidx.compose.runtime.CompositionLocalProvider(LocalPageAspect provides vm.pageLayout.aspect) {
   val c = Tali.colors
   var peek by remember { mutableStateOf<Int?>(null) }
   // The last page peeked at, so it stays drawn while the peek fades away.
@@ -125,7 +129,8 @@ fun PagesOverview(
         }
         Spacer(Modifier.height(18.dp))
         LazyVerticalGrid(
-          columns = GridCells.Adaptive(132.dp),
+          // Landscape pages get wider tiles, so both kinds show a page at a readable size.
+          columns = GridCells.Adaptive(if (PAGE_ASPECT > 1f) 196.dp else 132.dp),
           state = grid,
           horizontalArrangement = Arrangement.spacedBy(20.dp),
           verticalArrangement = Arrangement.spacedBy(20.dp),

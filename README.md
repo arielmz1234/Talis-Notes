@@ -30,7 +30,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - New notebooks are A4 pages, one under the other, each with its number in the corner. To add one, pull up from the end of the last page: a small sign says "Drag for a new page", then "Release to add a page"; letting go early springs back. A fast scroll just stops at the end.
 - *Pages* (⋯ menu, or tap the page number) opens an overview of every page. Tapping a page lifts it up large, with *Delete page* (undo brings the writing back) and *Go to page*; the last tile adds a page.
 - *Endless canvas* in the ⋯ menu switches a notebook between A4 pages and one endless page.
-- New notebooks pick their paper, A4 pages or endless canvas, dark paper and cover colour up front.
+- New notebooks pick their paper, A4 pages or endless canvas, portrait or landscape pages, dark paper and cover colour up front.
 - Paper styles: blank, dots, grid, lines, engineering (2 mm / 10 mm), isometric, Cornell notes and ruled exercise-book pages, in quiet grey on white. The paper menu shows Blank, Lines and Grid, with *More* for the rest and *Your own*.
 - *Your own* paper: design a pattern (lines, grid or dots, spacing, line and paper colours, an exercise-book margin line), or use a picture such as a planner page, which fills each A4 page. Her papers are saved in settings and offered in every notebook (hold one to remove it).
 - *Dark paper* (⋯ menu, per notebook) shows a black page. Ink colours flip to light versions on screen, but the real colours are kept, so switching back restores them. It's separate from the tablet's dark mode, which only changes the toolbars to soft lilac.

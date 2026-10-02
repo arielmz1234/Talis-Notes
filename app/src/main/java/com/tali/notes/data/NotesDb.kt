@@ -8,7 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 /** Plain SQLite: notebooks, folders and items; no code generation, fast on older tablets. */
 class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(context, name, null, VERSION) {
   companion object {
-    const val VERSION = 4
+    const val VERSION = 5
   }
 
   override fun onConfigure(db: SQLiteDatabase) {
@@ -31,7 +31,8 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
         folder_id TEXT,
         deleted INTEGER,
         pages INTEGER,
-        dark INTEGER NOT NULL DEFAULT 0
+        dark INTEGER NOT NULL DEFAULT 0,
+        landscape INTEGER NOT NULL DEFAULT 0
       )
       """
     )
@@ -68,6 +69,8 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
       db.execSQL("ALTER TABLE notebooks ADD COLUMN dark INTEGER NOT NULL DEFAULT 0")
       if (oldVersion >= 2) db.execSQL("ALTER TABLE folders ADD COLUMN parent_id TEXT")
     }
+    // Landscape A4 pages, chosen when a notebook is made; every older notebook is portrait.
+    if (oldVersion < 5) db.execSQL("ALTER TABLE notebooks ADD COLUMN landscape INTEGER NOT NULL DEFAULT 0")
   }
 
   private fun createFolders(db: SQLiteDatabase) {

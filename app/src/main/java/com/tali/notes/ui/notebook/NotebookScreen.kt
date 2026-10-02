@@ -296,6 +296,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             .also {
               holder.view = it
               it.settings = settings
+              it.pageLayout = vm.pageLayout
               it.pageCount = vm.pageCount
               it.darkPaper = darkPaper
               it.attach(doc, vm.initialViewport)
@@ -309,6 +310,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
           v.customPaper = vm.customPaperOf(meta, settings)
+          v.pageLayout = vm.pageLayout
           v.pageCount = vm.pageCount
           v.darkPaper = darkPaper
           v.deskColor = (if (darkPaper) DESK_DARK_PAPER else if (systemDark) DESK_DARK else DESK_LIGHT).toArgb()
@@ -465,8 +467,6 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onPaste = { holder.view?.runSafely { paste() } },
               smartUndo = settings.smartUndo,
               onSmartUndo = vm::setSmartUndo,
-              screenLock = settings.screenLock,
-              onScreenLock = vm::setScreenLock,
             )
           }
         }
@@ -647,8 +647,6 @@ private fun MoreMenu(
   onPaste: () -> Unit,
   smartUndo: Boolean,
   onSmartUndo: (Boolean) -> Unit,
-  screenLock: com.tali.notes.data.ScreenLock,
-  onScreenLock: (com.tali.notes.data.ScreenLock) -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
@@ -730,16 +728,6 @@ private fun MoreMenu(
         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Undo, null) },
         trailingIcon = { if (smartUndo) Icon(Icons.Outlined.Check, null, tint = c.accent) },
         onClick = { onSmartUndo(!smartUndo) },
-      )
-      HorizontalDivider(color = c.line)
-      // Turn with the tablet, or stay upright or sideways (still flipping round 180°).
-      Text("Screen rotation", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp))
-      Segmented(
-        com.tali.notes.data.ScreenLock.entries,
-        screenLock,
-        { it.label },
-        onScreenLock,
-        Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp).width(300.dp),
       )
     }
   }

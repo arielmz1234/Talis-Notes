@@ -61,14 +61,14 @@ data class AppSettings(
   val defaultCustomPaper: String? = null,
   /** New notebooks start as A4 pages unless she last chose an endless canvas. */
   val defaultPaged: Boolean = true,
+  /** New paged notebooks start with the orientation she last chose. */
+  val defaultLandscape: Boolean = false,
   /** Faint A4 page edges on the canvas; A4 export then follows exactly these pages. */
   val pageGuides: Boolean = false,
   /** Smart undo and redo: a quick two-finger tap undoes, a three-finger tap redoes. */
   val smartUndo: Boolean = true,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
-  /** Whether the screen turns with the tablet or stays upright or sideways. */
-  val screenLock: ScreenLock = ScreenLock.AUTO,
   /** How much of a circle the Part circle shape draws, 0.01..1 (a half to start with). */
   val partCircle: Float = 0.5f,
 ) {
@@ -104,12 +104,4 @@ class SettingsStore(context: Context) {
   fun importJson(json: String) {
     runCatching { ItemCodec.json.decodeFromString(AppSettings.serializer(), json) }.getOrNull()?.let { s -> update { s } }
   }
-}
-
-/** How the app follows the tablet's rotation. The locks still allow turning the tablet round 180°. */
-@Serializable
-enum class ScreenLock(val label: String) {
-  AUTO("Auto"),
-  PORTRAIT("Portrait"),
-  LANDSCAPE("Landscape"),
 }

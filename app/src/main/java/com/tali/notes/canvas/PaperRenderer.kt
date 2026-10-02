@@ -92,8 +92,9 @@ class PaperRenderer {
   private fun pagesInView(camera: Camera, width: Int, height: Int): List<Rect> =
     pageRect?.let { listOf(it) }
       ?: run {
-        val w = Pages.WIDTH
-        val h = Pages.HEIGHT
+        // An endless canvas keeps the portrait A4 grid.
+        val w = Pages.PORTRAIT.width
+        val h = Pages.PORTRAIT.height
         val view = camera.visibleWorld(width, height)
         buildList {
           for (row in floor(view.top / h).toInt()..floor(view.bottom / h).toInt()) {
@@ -158,7 +159,7 @@ class PaperRenderer {
       // Her chosen strength: the page shows through a fainter picture.
       imagePaint.alpha = (255 * cp.opacity.coerceIn(0.15f, 1f)).toInt()
       // Fills the page without stretching: the middle of the picture, cropped to the page's shape.
-      val pageAspect = Pages.WIDTH / Pages.HEIGHT
+      val pageAspect = (pageRect ?: pages.firstOrNull())?.let { it.width / it.height } ?: Pages.PORTRAIT.aspect
       val bmpAspect = bmp.width.toFloat() / bmp.height
       if (bmpAspect > pageAspect) {
         val w = (bmp.height * pageAspect).toInt()

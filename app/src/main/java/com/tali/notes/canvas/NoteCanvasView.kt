@@ -151,6 +151,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
 
   /** Number of A4 pages, or null for an endless canvas. */
+  /** Portrait or landscape A4 pages, as chosen when the notebook was made. */
+  var pageLayout: Pages = Pages.PORTRAIT
+    set(value) {
+      if (field == value) return
+      field = value
+      refreshPages()
+      clampCamera()
+      invalidate()
+    }
+
   var pageCount: Int? = null
     set(value) {
       if (field == value) return
@@ -375,7 +385,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Writing (or an undo) that reaches below the last page brings the pages it needs.
     val n = pageCount
     if (n != null && c.added.isNotEmpty()) {
-      val need = Pages.needed(c.added.map { it.bounds }.reduce(Rect::union))
+      val need = pageLayout.needed(c.added.map { it.bounds }.reduce(Rect::union))
       if (need > n) setPages(need)
     }
     // Keep the selection pointing at live items (undo can remove them).
@@ -449,12 +459,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun drawPages(canvas: Canvas, n: Int) {
     canvas.drawColor(deskColor)
     val view = camera.visibleWorld(width, height)
-    val first = Pages.indexAt(view.top).coerceAtLeast(0)
-    val last = Pages.indexAt(view.bottom).coerceAtMost(n - 1)
+    val first = pageLayout.indexAt(view.top).coerceAtLeast(0)
+    val last = pageLayout.indexAt(view.bottom).coerceAtMost(n - 1)
     pageShadow.color = deskColor
     pageShadow.setShadowLayer(6f * density, 0f, 2f * density, if (darkPaper || deskIsDark()) 0x66000000 else 0x2E3A2A70)
     for (i in first..last) {
-      val r = Pages.rect(i)
+      val r = pageLayout.rect(i)
       val a = camera.toScreen(Pt(r.left, r.top))
       val b = camera.toScreen(Pt(r.right, r.bottom))
       canvas.drawRect(a.x, a.y, b.x, b.y, pageShadow)
@@ -883,7 +893,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     val effective = if (eraserOverride) Tool.ERASER else tool
     val n = pageCount
-    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE) && !Pages.contains(n, p.x, p.y)) {
+    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE) && !pageLayout.contains(n, p.x, p.y)) {
       mode = Mode.IGNORE
       return
     }
@@ -1438,10 +1448,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * so a landscape slide leaves room for notes below it. An empty last page is used first.
    */
   private fun insertPdfOnPages(d: Document, pdf: List<NotesRepository.ImportedPage>, n: Int) {
-    val start = if (d.intersecting(Pages.rect(n - 1)).isEmpty()) n - 1 else n
+    val start = if (d.intersecting(pageLayout.rect(n - 1)).isEmpty()) n - 1 else n
     val items =
       pdf.mapIndexed { i, p ->
-        val r = Pages.rect(start + i)
+        val r = pageLayout.rect(start + i)
         val w = p.widthPt / PT_PER_DP
         val h = p.heightPt / PT_PER_DP
         val s = minOf(r.width / w, r.height / h)
@@ -1475,7 +1485,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val n = pageCount
     val edit =
       if (n != null) {
-        val r = Pages.rect(currentPage().coerceIn(0, n - 1))
+        val r = pageLayout.rect(currentPage().coerceIn(0, n - 1))
         val lowest = d.intersecting(r).filter { it.bounds.center.y < r.bottom }.maxOfOrNull { it.bounds.bottom }
         val top = (lowest?.plus(6 * mm) ?: (r.top + 22 * mm)).coerceAtMost(r.bottom - 30 * mm)
         TextEdit(null, Pt(r.left + 20 * mm, top), r.width - 40 * mm, fontSize, color, "")
@@ -1718,7 +1728,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun refreshPages() {
     val n = pageCount
-    pages = if (n != null) Pages.all(n) else doc?.all?.filter { it is ImageItem && it.pdfPage }?.map { (it as ImageItem).rect }?.sortedBy { it.top }.orEmpty()
+    pages = if (n != null) pageLayout.all(n) else doc?.all?.filter { it is ImageItem && it.pdfPage }?.map { (it as ImageItem).rect }?.sortedBy { it.top }.orEmpty()
     pageIndex = -2
     updatePage()
   }
@@ -1757,8 +1767,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val viewH = height / camera.scale
     val margin = 24f / camera.zoom
     val x =
-      if (Pages.WIDTH + 2 * margin <= viewW) Pages.WIDTH / 2f - viewW / 2f
-      else camera.x.coerceIn(-margin, Pages.WIDTH + margin - viewW)
+      if (pageLayout.width + 2 * margin <= viewW) pageLayout.width / 2f - viewW / 2f
+      else camera.x.coerceIn(-margin, pageLayout.width + margin - viewW)
     val minY = -topClearance / camera.zoom
     // A little room under the last page; more while her fingers pull at it (or it springs back).
     val room = if (pulling || cameraAnimator?.isRunning == true) MAX_PULL_DP else REST_DP
@@ -1779,7 +1789,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Fingers are on the page and started at its end (so it may be pulled past the last page). */
   private var pulling = false
 
-  private fun lastPageBottom(n: Int) = (n - 1) * Pages.PITCH + Pages.HEIGHT
+  private fun lastPageBottom(n: Int) = (n - 1) * pageLayout.pitch + pageLayout.height
 
   /** How far below the last page the screen reaches, in dp on screen. */
   private fun pullDp(): Float {
@@ -1809,9 +1819,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Shows page [index] across the width of the screen, its top just under the toolbars. */
   private fun showPageWidth(index: Int) {
     if (width == 0 || height == 0) return
-    val zoom = (width * 0.94f / (Pages.WIDTH * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
+    val zoom = (width * 0.94f / (pageLayout.width * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
     val scale = zoom * density
-    camera.set(Viewport(Pages.WIDTH / 2f - width / 2f / scale, Pages.rect(index).top - topClearance / zoom, zoom))
+    camera.set(Viewport(pageLayout.width / 2f - width / 2f / scale, pageLayout.rect(index).top - topClearance / zoom, zoom))
     settleCamera()
     afterCameraMove()
   }
@@ -1823,8 +1833,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun insertPageAfter(index: Int) {
     val d = doc ?: return
     val n = pageCount ?: return
-    val below = d.all.filter { it.bounds.center.y > Pages.rect(index).bottom }
-    val shift = Affine.translate(0f, Pages.PITCH)
+    val below = d.all.filter { it.bounds.center.y > pageLayout.rect(index).bottom }
+    val shift = Affine.translate(0f, pageLayout.pitch)
     setPages(n + 1)
     if (below.isNotEmpty()) d.commit(Change(below, below.map { it.transformed(shift) }))
     goToPage(index + 1)
@@ -1837,14 +1847,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun deletePage(index: Int) {
     val d = doc ?: return
     val n = pageCount ?: return
-    val top = index * Pages.PITCH
-    val on = d.all.filter { it.bounds.center.y in top..<top + Pages.PITCH }
+    val top = index * pageLayout.pitch
+    val on = d.all.filter { it.bounds.center.y in top..<top + pageLayout.pitch }
     if (n == 1) {
       if (on.isNotEmpty()) d.commit(Change(on, emptyList()))
       return
     }
-    val below = d.all.filter { it.bounds.center.y >= top + Pages.PITCH }
-    val shift = Affine.translate(0f, -Pages.PITCH)
+    val below = d.all.filter { it.bounds.center.y >= top + pageLayout.pitch }
+    val shift = Affine.translate(0f, -pageLayout.pitch)
     setPages(n - 1)
     clearSelection()
     if (on.isNotEmpty() || below.isNotEmpty()) d.commit(Change(on + below, below.map { it.transformed(shift) }))
@@ -1858,16 +1868,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun convertToPages() {
     val d = doc ?: return
     val content = d.contentBounds()
-    if (content != null && (content.left < 0f || content.right > Pages.WIDTH || content.top < 0f)) {
+    if (content != null && (content.left < 0f || content.right > pageLayout.width || content.top < 0f)) {
       val dx =
-        if (content.width <= Pages.WIDTH - 2 * PAGE_MARGIN) (Pages.WIDTH - content.width) / 2f - content.left
+        if (content.width <= pageLayout.width - 2 * PAGE_MARGIN) (pageLayout.width - content.width) / 2f - content.left
         else PAGE_MARGIN - content.left
       val dy = if (content.top < PAGE_MARGIN) PAGE_MARGIN - content.top else 0f
       val all = d.all.toList()
       val shift = Affine.translate(dx, dy)
       d.commit(Change(all, all.map { it.transformed(shift) }))
     }
-    setPages(Pages.needed(d.contentBounds()))
+    setPages(pageLayout.needed(d.contentBounds()))
     showPageWidth(currentPage().coerceAtMost((pageCount ?: 1) - 1))
   }
 
@@ -1931,7 +1941,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Zooms out (or in, up to 150%) so everything in the notebook is on screen. */
   fun fitContent() {
     // A paged notebook shows the whole of the current page.
-    val b = (if (pageCount != null) Pages.rect(currentPage()).outset(24f) else doc?.contentBounds()?.outset(40f)) ?: return
+    val b = (if (pageCount != null) pageLayout.rect(currentPage()).outset(24f) else doc?.contentBounds()?.outset(40f)) ?: return
     if (width == 0 || height == 0) return
     val zoom = minOf(width / (b.width * density), height / (b.height * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
     val scale = zoom * density

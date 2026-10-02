@@ -45,6 +45,8 @@ data class NotebookMeta(
   val pages: Int? = null,
   /** Dark paper: a black page with the ink colours flipped to light ones. */
   val dark: Boolean = false,
+  /** Its A4 pages lie on their side (chosen when it was made). */
+  val landscape: Boolean = false,
   /** One of her own paper backgrounds ([CustomPaper.id]), used instead of [paper] when set. */
   val customPaper: String? = null,
 )
@@ -104,7 +106,7 @@ class NotesRepository(private val context: Context) {
 
   private fun reload() {
     val list = mutableListOf<NotebookMeta>()
-    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark FROM notebooks ORDER BY updated DESC", null).use { c ->
+    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape FROM notebooks ORDER BY updated DESC", null).use { c ->
       while (c.moveToNext()) {
         list +=
           NotebookMeta(
@@ -120,6 +122,7 @@ class NotesRepository(private val context: Context) {
             deleted = if (c.isNull(9)) null else c.getLong(9),
             pages = if (c.isNull(10)) null else c.getInt(10),
             dark = c.getInt(11) != 0,
+            landscape = c.getInt(12) != 0,
             customPaper = c.getString(5).takeIf { it.startsWith(CustomPaper.PREFIX) }?.removePrefix(CustomPaper.PREFIX),
           )
       }
@@ -142,6 +145,7 @@ class NotesRepository(private val context: Context) {
     customPaper: String? = null,
     dark: Boolean = false,
     cover: Int? = null,
+    landscape: Boolean = false,
   ): NotebookMeta =
     withContext(writer) {
       val now = System.currentTimeMillis()
@@ -160,6 +164,7 @@ class NotesRepository(private val context: Context) {
           put("folder_id", folderId)
           put("pages", pages)
           put("dark", if (dark) 1 else 0)
+          put("landscape", if (landscape) 1 else 0)
         },
       )
       reload()
@@ -288,7 +293,7 @@ class NotesRepository(private val context: Context) {
       w.beginTransaction()
       try {
         w.execSQL(
-          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id,pages,dark) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id,pages,dark FROM notebooks WHERE id=?",
+          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id,pages,dark,landscape) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id,pages,dark,landscape FROM notebooks WHERE id=?",
           arrayOf<Any>(newId, src.title + " (copy)", now, now, id),
         )
         readRows(id).forEach { w.insertOrThrow("items", null, it.toValues(newId).apply { put("id", UUID.randomUUID().toString()) }) }
@@ -462,6 +467,7 @@ class NotesRepository(private val context: Context) {
           val bkNotebook = columns(w, "notebooks")
           val pagesCol = if ("pages" in bkNotebook) "pages" else "NULL"
           val darkCol = if ("dark" in bkNotebook) "dark" else "0"
+          val landscapeCol = if ("landscape" in bkNotebook) "landscape" else "0"
           val parentCol = if ("parent_id" in columns(w, "folders")) "parent_id" else "NULL"
           w.execSQL("INSERT OR IGNORE INTO folders (id,name,color,created,position,parent_id) SELECT id,name,color,created,position,$parentCol FROM bk.folders")
           w.rawQuery("SELECT b.id, m.id IS NOT NULL, b.updated > IFNULL(m.updated, 0) FROM bk.notebooks b LEFT JOIN main.notebooks m ON m.id = b.id WHERE b.deleted IS NULL", null).use { c ->
@@ -481,7 +487,7 @@ class NotesRepository(private val context: Context) {
               w.execSQL("DELETE FROM main.notebooks WHERE id = ?", arrayOf(id))
             }
             w.execSQL(
-              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id,NULL,$pagesCol,$darkCol FROM bk.notebooks WHERE id = ?",
+              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id,NULL,$pagesCol,$darkCol,$landscapeCol FROM bk.notebooks WHERE id = ?",
               arrayOf(id),
             )
             w.execSQL("INSERT OR REPLACE INTO main.items SELECT * FROM bk.items WHERE notebook_id = ?", arrayOf(id))
