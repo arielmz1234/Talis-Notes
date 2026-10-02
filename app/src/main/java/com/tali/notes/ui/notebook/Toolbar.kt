@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +74,7 @@ fun MainToolbar(
   onImage: () -> Unit,
   onCamera: () -> Unit,
   onPdf: () -> Unit,
+  onKeyboard: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val c = Tali.colors
@@ -134,6 +136,8 @@ fun MainToolbar(
         )
       }
     }
+    // Typing: a text block where the next line would go.
+    ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard)
     Spacer(Modifier.width(2.dp))
   }
 }

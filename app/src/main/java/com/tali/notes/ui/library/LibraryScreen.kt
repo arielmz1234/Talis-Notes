@@ -679,8 +679,13 @@ private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, sele
 @Composable
 private fun CoverSwatches(current: Int, onPick: (Int) -> Unit) {
   val c = Tali.colors
-  Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    COVER_COLORS.forEach { col ->
+  androidx.compose.foundation.layout.FlowRow(
+    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+    maxItemsInEachRow = 9,
+  ) {
+    com.tali.notes.data.PICK_COLORS.forEach { col ->
       Box(
         Modifier.size(26.dp).clip(CircleShape).background(Color(col))
           .then(if (col == current) Modifier.border(2.dp, c.ink, CircleShape) else Modifier)

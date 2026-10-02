@@ -179,8 +179,8 @@ fun NewNotebookDialog(
       Spacer(Modifier.height(14.dp))
       SectionLabel("Cover")
       Spacer(Modifier.height(8.dp))
-      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        COVER_COLORS.forEach { col ->
+      androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), maxItemsInEachRow = 9) {
+        com.tali.notes.data.PICK_COLORS.forEach { col ->
           Box(
             Modifier.size(30.dp)
               .clip(androidx.compose.foundation.shape.CircleShape)

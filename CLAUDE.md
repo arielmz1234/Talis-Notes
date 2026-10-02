@@ -12,7 +12,7 @@ A handwriting notes app for Android tablets, made for **one person**: Tali, a ci
 - The owner (Ariel) is often away from the computer and asks for long, unattended runs. When asked to keep going, keep going:
   - don't stop to ask questions;
   - make sensible calls and report them at the end.
-- **Taste over feature count.** Add features the way a good notes app (Notewise, GoodNotes, Samsung Notes) would, and only when they clearly help a student. Ideas deliberately held back for now: protractor, text boxes, handwriting search.
+- **Taste over feature count.** Add features the way a good notes app (Notewise, GoodNotes, Samsung Notes) would, and only when they clearly help a student. Ideas deliberately held back for now: protractor, handwriting search. (Typed text was added on request: `TextItem`, `ui/notebook/TextEditor.kt`.)
 - After a chunk of work: build, test it in the emulator, review the diff yourself, then commit with a short plain-English message describing what changed for her (see `git log`).
 - Don't leave the emulator running when you finish, and stop any background tasks you started.
 

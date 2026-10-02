@@ -13,6 +13,10 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines.
 - Tap a shape to get its dots. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length.
 
+**Typing**
+- The keyboard button in the toolbar starts a text block where the next line would go on a normal page: at the left margin, below what's already written (near the top of an empty page). A small bar above it sets the size and colour, deletes it, or finishes; tapping elsewhere or Back also finishes.
+- Tap typed text to select it, then move it, resize it from the corner (the text grows with it), recolour it, or tap *Edit text* to type in it again. It exports to PDF as real, sharp text.
+
 **Editing**
 - The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect.
 - The lasso can move, resize and rotate a selection (with live angle and 15° steps), recolour, duplicate, copy to another notebook, delete, or save as a shape.

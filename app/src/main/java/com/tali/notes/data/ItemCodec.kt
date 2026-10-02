@@ -13,6 +13,7 @@ import com.tali.notes.model.InkItem
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.model.ShapeItem
+import com.tali.notes.model.TextItem
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlinx.serialization.Serializable
@@ -23,6 +24,7 @@ object ItemCodec {
   const val KIND_INK = 0
   const val KIND_SHAPE = 1
   const val KIND_IMAGE = 2
+  const val KIND_TEXT = 3
 
   val json = Json {
     ignoreUnknownKeys = true
@@ -30,6 +32,8 @@ object ItemCodec {
   }
 
   @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false)
+
+  @Serializable private class TextPayload(val text: String, val x: Float, val y: Float, val width: Float)
 
   fun encode(item: CanvasItem): ItemRow {
     val b = item.bounds
@@ -45,6 +49,10 @@ object ItemCodec {
       is ImageItem -> {
         val bytes = json.encodeToString(ImagePayload.serializer(), ImagePayload(item.file, item.rect, item.pdfPage)).encodeToByteArray()
         ItemRow(item.id, item.z, KIND_IMAGE, null, 0, 0f, bytes, b.left, b.top, b.right, b.bottom)
+      }
+      is TextItem -> {
+        val bytes = json.encodeToString(TextPayload.serializer(), TextPayload(item.text, item.origin.x, item.origin.y, item.width)).encodeToByteArray()
+        ItemRow(item.id, item.z, KIND_TEXT, null, item.color, item.fontSize, bytes, b.left, b.top, b.right, b.bottom)
       }
     }
   }
@@ -69,6 +77,10 @@ object ItemCodec {
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())
             ImageItem(row.id, row.z, p.file, p.rect, p.pdfPage)
+          }
+          KIND_TEXT -> {
+            val p = json.decodeFromString(TextPayload.serializer(), row.payload.decodeToString())
+            TextItem(row.id, row.z, p.text, com.tali.notes.geometry.Pt(p.x, p.y), p.width, row.size, row.color)
           }
           else -> null
         }

@@ -115,3 +115,48 @@ class ImageItem(
     return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage)
   }
 }
+
+/**
+ * Typed text: a block that wraps at [width] (world units), its top-left corner at [origin]. Moving
+ * and resizing it with the lasso scales the text too, so "enlarge" makes it bigger.
+ */
+class TextItem(
+  override val id: String,
+  override val z: Long,
+  val text: String,
+  val origin: Pt,
+  val width: Float,
+  val fontSize: Float,
+  val color: Int,
+) : CanvasItem() {
+  override val pen: PenType? = null
+
+  /** Laid out once; drawn as real text, so it stays sharp at any zoom and in PDFs. */
+  val layout: android.text.StaticLayout by lazy { layoutFor(color) }
+
+  override val bounds: Rect = Rect(origin.x, origin.y, origin.x + width, origin.y + maxOf(layout.height.toFloat(), fontSize * LINE))
+
+  fun layoutFor(color: Int): android.text.StaticLayout {
+    val paint =
+      android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = fontSize
+        this.color = color
+        typeface = android.graphics.Typeface.SANS_SERIF
+      }
+    return android.text.StaticLayout.Builder.obtain(text, 0, text.length, paint, width.toInt().coerceAtLeast(1)).setLineSpacing(0f, LINE / 1.17f).setIncludePad(false).build()
+  }
+
+  override fun transformed(m: Affine, newId: String, newZ: Long): TextItem {
+    val s = m.scaleFactor()
+    return TextItem(newId, newZ, text, m.apply(origin), (width * s).coerceAtLeast(40f), (fontSize * s).coerceIn(6f, 400f), color)
+  }
+
+  fun recolored(c: Int) = TextItem(id, z, text, origin, width, fontSize, c)
+
+  fun withText(t: String) = TextItem(id, z, t, origin, width, fontSize, color)
+
+  companion object {
+    /** Line height as a multiple of the font size, matched by the editor. */
+    const val LINE = 1.3f
+  }
+}

@@ -50,6 +50,7 @@ import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeItem
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.model.Tool
+import com.tali.notes.model.TextItem
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.abs
@@ -72,10 +73,19 @@ interface CanvasHost {
 
   /** A paged notebook gained or lost pages (scrolling past the end, writing low, a PDF, the Pages menu). */
   fun onPagesChanged(count: Int) = Unit
+
+  /** Typing starts in (or edits) a text block; null when nothing is being typed. */
+  fun onEditText(edit: TextEdit?) = Unit
+
+  /** The view moved or zoomed (an open text editor follows it). */
+  fun onCameraMoved() = Unit
 }
 
+/** A text block being typed: [id] is null for a new one. Positions and sizes are in world units. */
+data class TextEdit(val id: String?, val origin: Pt, val width: Float, val fontSize: Float, val color: Int, val text: String)
+
 /** Selection summary in screen pixels, for placing the selection menu. */
-data class SelectionInfo(val screenRect: RectF, val count: Int, val hasShape: Boolean, val hasImage: Boolean, val hasDrawing: Boolean = true, val rotatable: Boolean = false)
+data class SelectionInfo(val screenRect: RectF, val count: Int, val hasShape: Boolean, val hasImage: Boolean, val hasDrawing: Boolean = true, val rotatable: Boolean = false, val textId: String? = null)
 
 /**
  * The drawing surface. Finished content is drawn from GPU tiles; the pen stroke in progress is drawn
@@ -556,7 +566,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
 
   /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
-  private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem }
+  private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem || it is TextItem }
 
   /** The rotate handle hangs below the middle of the selection (the menu sits above it). */
   private fun rotateHandle(r: RectF) = Pt(r.centerX(), r.bottom + 30f * density)
@@ -1131,7 +1141,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     when (item) {
       is InkItem -> listOf(item.stroke)
       is ShapeItem -> item.strokes
-      is ImageItem -> emptyList()
+      is ImageItem, is TextItem -> emptyList()
     }
 
   private fun parallelogram(a: Pt, b: Pt, padding: Float): Parallelogram {
@@ -1170,6 +1180,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         is InkItem -> StrokeFactory.points(item.stroke).let { pts -> if (pts.size > 40) pts.filterIndexed { i, _ -> i % (pts.size / 40) == 0 } else pts }
         is ShapeItem -> item.geometry.paths(item.size).flatten()
         is ImageItem -> item.rect.let { r -> listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom), r.center) }
+        is TextItem -> item.bounds.let { r -> listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom), r.center) }
       }
     if (samples.isEmpty()) return 0f
     return samples.count { Geo.pointInPolygon(it, poly) }.toFloat() / samples.size
@@ -1184,7 +1195,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val r = HIT_RADIUS_DP / camera.zoom
     val para = parallelogram(p, p, r)
     val near = d.intersecting(Rect(p.x - r, p.y - r, p.x + r, p.y + r)).asReversed().filter { filter(it.pen) }
-    return near.firstOrNull { item -> item !is ImageItem && strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) } }
+    return near.firstOrNull { item -> item !is ImageItem && item !is TextItem && strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) } }
+      ?: near.firstOrNull { item -> item is TextItem && item.bounds.contains(p) }
       ?: near.firstOrNull { item -> item is ImageItem && (pages || !item.pdfPage) && item.rect.contains(p) }
   }
 
@@ -1207,7 +1219,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       host.onSelectionChanged(null)
       return
     }
-    host.onSelectionChanged(SelectionInfo(screenRect(b, Affine.IDENTITY), selection.size, selection.any { it is ShapeItem }, selection.any { it is ImageItem }, selection.any { it !is ImageItem }, canRotateSelection()))
+    host.onSelectionChanged(
+      SelectionInfo(
+        screenRect(b, Affine.IDENTITY),
+        selection.size,
+        selection.any { it is ShapeItem },
+        selection.any { it is ImageItem },
+        selection.any { it !is ImageItem && it !is TextItem },
+        canRotateSelection(),
+        textId = (selection.singleOrNull() as? TextItem)?.id,
+      )
+    )
   }
 
   fun clearSelection() {
@@ -1277,6 +1299,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         when (it) {
           is InkItem -> it.recolored(color)
           is ShapeItem -> it.recolored(color)
+          is TextItem -> it.recolored(color)
           is ImageItem -> it
         }
       }
@@ -1357,6 +1380,74 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     goToPage(start)
   }
 
+  // ---- Typed text ----
+
+  /** Where a world point is on screen, in pixels (for the text editor laid over the page). */
+  fun screenOf(p: Pt): Pt = camera.toScreen(p)
+
+  /** Screen pixels per world unit. */
+  val pixelsPerUnit: Float
+    get() = camera.scale
+
+  /**
+   * Starts a new text block where typing would go on a normal page: at the left margin of the
+   * page on screen, just below what's already written there (or near the top of an empty page),
+   * as wide as the page between its margins. On an endless canvas, at the top-left of the view.
+   */
+  fun startText(color: Int, fontSize: Float = TEXT_SIZE) {
+    val d = doc ?: return
+    clearSelection()
+    val mm = 160f / 25.4f
+    val view = camera.visibleWorld(width, height)
+    val n = pageCount
+    val edit =
+      if (n != null) {
+        val r = Pages.rect(currentPage().coerceIn(0, n - 1))
+        val lowest = d.intersecting(r).filter { it.bounds.center.y < r.bottom }.maxOfOrNull { it.bounds.bottom }
+        val top = (lowest?.plus(6 * mm) ?: (r.top + 22 * mm)).coerceAtMost(r.bottom - 30 * mm)
+        TextEdit(null, Pt(r.left + 20 * mm, top), r.width - 40 * mm, fontSize, color, "")
+      } else {
+        val left = view.left + 48f / camera.zoom
+        TextEdit(null, Pt(left, view.top + (topClearance + 32f) / camera.zoom), minOf(view.width * 0.7f, 1100f), fontSize, color, "")
+      }
+    showForTyping(edit.origin.y)
+    host.onEditText(edit)
+  }
+
+  /** Opens an existing text block for typing; it's hidden here while the editor shows it. */
+  fun editText(id: String) {
+    val item = doc?.get(id) as? TextItem ?: return
+    clearSelection()
+    tiles.hidden = setOf(id)
+    showForTyping(item.origin.y)
+    host.onEditText(TextEdit(id, item.origin, item.width, item.fontSize, item.color, item.text))
+    invalidate()
+  }
+
+  /** Saves what was typed: adds, changes, or (when emptied) removes the block, in one undo step. */
+  fun finishText(edit: TextEdit, text: String) {
+    val d = doc ?: return
+    tiles.hidden = emptySet()
+    val old = edit.id?.let { d[it] as? TextItem }
+    val trimmed = text.trimEnd()
+    when {
+      old == null && trimmed.isNotBlank() -> d.commit(Change(emptyList(), listOf(TextItem(d.newId(), d.nextZ(), trimmed, edit.origin, edit.width, edit.fontSize, edit.color))))
+      old != null && trimmed.isBlank() -> d.commit(Change(listOf(old), emptyList()))
+      old != null && (old.text != trimmed || old.fontSize != edit.fontSize || old.color != edit.color) ->
+        d.commit(Change(listOf(old), listOf(TextItem(old.id, old.z, trimmed, old.origin, old.width, edit.fontSize, edit.color))))
+    }
+    host.onEditText(null)
+    invalidate()
+  }
+
+  /** Scrolls so the line being typed sits comfortably below the toolbars, above the keyboard. */
+  private fun showForTyping(top: Float) {
+    if (width == 0 || height == 0) return
+    val view = camera.visibleWorld(width, height)
+    val wantTop = view.top + (topClearance + 40f) / camera.zoom
+    if (top < wantTop || top > view.top + height * 0.4f / camera.scale) animateCamera(Viewport(camera.x, top - (topClearance + 60f) / camera.zoom, camera.zoom))
+  }
+
   // ---- Fingers: pan, pinch, tap to select, two-finger tap to undo ----
 
   // A one-finger pan keeps gliding after she lets go, slowing like any scrolling list.
@@ -1372,12 +1463,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           return
         }
         val before = camera.viewport()
-        camera.pan((scroller.currX - flingX).toFloat(), (scroller.currY - flingY).toFloat())
+        val dx = scroller.currX - flingX
+        val dy = scroller.currY - flingY
+        camera.pan(dx.toFloat(), dy.toFloat())
         flingX = scroller.currX
         flingY = scroller.currY
         afterCameraMove()
-        // Stop at the edges of a paged notebook instead of pushing against them.
-        if (camera.viewport() == before) {
+        // Stop at the edges of a paged notebook instead of pushing against them. (A frame that
+        // wasn't meant to move, like the very first one, doesn't count.)
+        if ((dx != 0 || dy != 0) && camera.viewport() == before) {
           scroller.forceFinished(true)
           settleCamera()
           return
@@ -1385,6 +1479,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         postOnAnimation(this)
       }
     }
+
+  private var zoomAtDown = 1f
 
   private fun stopFling() {
     if (!scroller.isFinished) scroller.forceFinished(true)
@@ -1403,6 +1499,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
       velocity = VelocityTracker.obtain().also { it.addMovement(e) }
+      zoomAtDown = camera.zoom
       // Only a pull that starts at the end of the notebook can open space for a new page; a
       // fast scroll down just stops there.
       pulling = pageCount != null && pullDp() >= REST_DP - 4f
@@ -1502,11 +1599,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       settleCamera()
       pulling = false
       // Pulled past the last page: add one or spring back. Otherwise a one-finger flick keeps gliding.
-      if (!finishPull() && mode == Mode.PAN && maxPointers == 1) {
+      // One finger or two both glide, unless the fingers were zooming.
+      val zoomed = kotlin.math.abs(camera.zoom - zoomAtDown) > zoomAtDown * 0.04f
+      if (!finishPull() && maxPointers <= 2 && !zoomed) {
         velocity?.let { v ->
           v.addMovement(e)
           v.computeCurrentVelocity(1000, ViewConfiguration.get(context).scaledMaximumFlingVelocity.toFloat())
-          startFling(v.xVelocity, v.yVelocity)
+          val id = e.getPointerId(e.actionIndex)
+          startFling(v.getXVelocity(id), v.getYVelocity(id))
         }
       }
     }
@@ -1532,6 +1632,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun afterCameraMove() {
     clampCamera()
+    host.onCameraMoved()
     if (selection.isNotEmpty()) publishSelection()
     updatePage()
     invalidate()
@@ -1774,6 +1875,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** PDF points per world unit (dp), matching the PDF export so pages keep their real size. */
     private const val PT_PER_DP = 72f / 160f
     private const val PAGE_GAP = 48f
+
+    /** Typed text: about 11 pt when printed on A4. */
+    const val TEXT_SIZE = 26f
 
     /** How far into the next page outline she can scroll, and how far before letting go adds it (fractions of a page). */
     /** Space left under the last page at rest, how far it can be pulled, and how far adds a page (screen dp). */

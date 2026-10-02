@@ -53,6 +53,14 @@ data class NotebookMeta(
 data class Folder(val id: String, val name: String, val color: Int, val position: Int, val parentId: String? = null)
 
 /** Cover colours that sit with the lilac and sky theme: lavender, sky, orchid, blue, rose, mint, plum. */
+/**
+ * Every colour offered for covers and folders: the soft theme ones first, then bold ones that
+ * stand out on a shelf (red, orange, yellow, green, teal, navy, brown, grey, black).
+ */
+val PICK_COLORS: List<Int> by lazy {
+  COVER_COLORS + listOf(0xFFE53935, 0xFFFB8C00, 0xFFFDD835, 0xFF43A047, 0xFF00897B, 0xFF00ACC1, 0xFF1E3A8A, 0xFF795548, 0xFF757575, 0xFF212121).map { it.toInt() }
+}
+
 val COVER_COLORS =
   listOf(0xFF9B7BE0, 0xFF7FB5F0, 0xFFC78FD9, 0xFF4F7BE8, 0xFFE59BB8, 0xFF7DC4B2, 0xFF5E4B8B).map { it.toInt() }
 

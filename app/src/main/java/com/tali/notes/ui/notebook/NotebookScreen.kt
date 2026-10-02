@@ -97,8 +97,10 @@ import com.tali.notes.export.PdfQuality
 import com.tali.notes.ui.components.NewPaperDialog
 import com.tali.notes.ui.components.PaperPicker
 import androidx.compose.material.icons.outlined.AllInclusive
-import androidx.compose.material.icons.outlined.OpenInFull
-import androidx.compose.material.icons.outlined.CloseFullscreen
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import com.tali.notes.model.PaperStyle
@@ -271,6 +273,14 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                 }
 
                 override fun onPagesChanged(count: Int) = vm.setPages(count)
+
+                override fun onEditText(edit: com.tali.notes.canvas.TextEdit?) {
+                  vm.textEdit = edit
+                }
+
+                override fun onCameraMoved() {
+                  vm.cameraTick++
+                }
               },
             )
             .also {
@@ -352,6 +362,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               photoUri = uri
               runCatching { takePhoto.launch(uri) }.onFailure { vm.showHint("No camera app found") }
             },
+            onKeyboard = {
+              vm.panel = null
+              holder.view?.runSafely { startText(settings.activeSlot.color) }
+            },
             onPdf = {
               vm.panel = null
               pdfPicker.launch(arrayOf("application/pdf"))
@@ -384,7 +398,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             onUndo = { holder.view?.runSafely { undo() } },
             onRedo = { holder.view?.runSafely { redo() } },
           ) {
-            ToolButton(Icons.Outlined.OpenInFull, "Hide toolbars") {
+            ToolButton(Icons.Outlined.VisibilityOff, "Hide toolbars") {
               vm.panel = null
               vm.focus = true
             }
@@ -464,6 +478,22 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onCopy = { holder.view?.runSafely { copySelection() } },
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
+          onEditText = { id -> holder.view?.runSafely { editText(id) } },
+        )
+      }
+    }
+
+    // Typing: the editor sits over the text block, above everything else.
+    vm.textEdit?.let { edit ->
+      holder.view?.let { canvas ->
+        TextEditorOverlay(
+          edit,
+          canvas,
+          vm.cameraTick,
+          colors = settings.savedColors,
+          darkPaper = darkPaper,
+          onChange = { vm.textEdit = it },
+          onDone = { text -> canvas.runSafely { finishText(edit, text) } },
         )
       }
     }
@@ -546,16 +576,22 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 @Composable
 private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit) {
   val c = Tali.colors
-  FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
-    ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back to notebooks", onClick = onBack)
-    Text(
-      title,
-      style = MaterialTheme.typography.titleSmall,
-      color = c.ink,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.widthIn(max = 220.dp).clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Rename", onClick = onRename).padding(horizontal = 8.dp, vertical = 6.dp),
-    )
+  // Back on a little cloud of its own; the name beside it, with a pencil to rename.
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.CENTER) {
+      ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back to notebooks", onClick = onBack)
+    }
+    Spacer(Modifier.width(10.dp))
+    FloatingBar(Modifier.height(44.dp), crown = CloudCrown.NONE) {
+      Row(
+        Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Rename", onClick = onRename).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 200.dp))
+        Spacer(Modifier.width(8.dp))
+        Icon(Icons.Outlined.Edit, "Rename", tint = c.inkFaint, modifier = Modifier.size(16.dp))
+      }
+    }
   }
 }
 
@@ -721,7 +757,7 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
@@ -761,6 +797,7 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
         ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
+        sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
         if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
       }
@@ -878,7 +915,7 @@ private fun ShowToolbarsButton(visible: Boolean, modifier: Modifier = Modifier, 
         .clickable(onClickLabel = "Show toolbars", onClick = onShow),
       contentAlignment = Alignment.Center,
     ) {
-      Icon(Icons.Outlined.CloseFullscreen, "Show toolbars", tint = c.inkMuted, modifier = Modifier.size(18.dp))
+      Icon(Icons.Outlined.Visibility, "Show toolbars", tint = c.inkMuted, modifier = Modifier.size(20.dp))
     }
   }
 }

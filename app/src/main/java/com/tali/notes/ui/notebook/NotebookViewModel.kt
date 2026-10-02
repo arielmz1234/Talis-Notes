@@ -86,8 +86,14 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   var hint by mutableStateOf<String?>(null)
 
-  /** Toolbars hidden: only the page and a small cloud to bring them back. */
+  /** Toolbars hidden: only the page and a small button to bring them back. */
   var focus by mutableStateOf(false)
+
+  /** The text block being typed, if any. */
+  var textEdit by mutableStateOf<com.tali.notes.canvas.TextEdit?>(null)
+
+  /** Changes whenever the view moves, so the text editor can follow the page. */
+  var cameraTick by mutableStateOf(0)
 
   /** The page on screen and how many there are; index -1 when there are none. */
   var page by mutableStateOf(-1 to 0)

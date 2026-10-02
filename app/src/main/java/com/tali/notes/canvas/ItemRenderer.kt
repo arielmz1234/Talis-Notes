@@ -11,6 +11,7 @@ import com.tali.notes.model.CanvasItem
 import com.tali.notes.model.ImageItem
 import com.tali.notes.model.InkItem
 import com.tali.notes.model.ShapeItem
+import com.tali.notes.model.TextItem
 
 /**
  * Draws items onto a canvas already set up in world coordinates. Shared by screen, PDF and previews.
@@ -29,6 +30,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
 
   /** Dark paper: ink is drawn in its light counterpart colours; pictures stay as they are. */
   var dark = false
+
+  /** Typed text laid out in its dark-paper colour, made the first time dark paper draws it. */
+  private val darkText = java.util.WeakHashMap<TextItem, android.text.StaticLayout>()
 
   /** For lighter PDFs: pictures bigger than this many pixels per world unit are scaled down first. */
   var imagePxPerDp: Float? = null
@@ -56,7 +60,7 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
         when (item) {
           is InkItem -> item.isBuilt
           is ShapeItem -> item.isBuilt
-          is ImageItem -> true
+          is ImageItem, is TextItem -> true
         }
       if (!built && deferUnbuilt) deferred = true
       return built || !deferUnbuilt
@@ -71,6 +75,12 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
     when (item) {
       is InkItem -> strokes.draw(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
       is ShapeItem -> (if (dark) item.darkStrokes else item.strokes).forEach { strokes.draw(canvas, it, worldToScreen) }
+      is TextItem -> {
+        canvas.save()
+        canvas.translate(item.origin.x, item.origin.y)
+        (if (dark) darkText.getOrPut(item) { item.layoutFor(com.tali.notes.ink.Brushes.onDarkPaper(item.color)) } else item.layout).draw(canvas)
+        canvas.restore()
+      }
       is ImageItem -> {
         rectF.set(item.rect.left, item.rect.top, item.rect.right, item.rect.bottom)
         val bmp = if (sync) images.loadNow(item.file) else images.peek(item.file)
