@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -38,6 +39,19 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.tali.notes.model.PaperStyle
+import com.tali.notes.data.AppSettings
+import com.tali.notes.data.COVER_COLORS
+import com.tali.notes.model.CustomPaper
+import com.tali.notes.ui.components.NewPaperDialog
+import com.tali.notes.ui.components.PaperPicker
+import com.tali.notes.ui.components.Segmented
+import com.tali.notes.ui.components.ToggleRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.PaperSwatch
 import com.tali.notes.ui.components.cloudSurface
@@ -59,10 +73,10 @@ fun DialogCard(onDismiss: () -> Unit, width: Int = 520, content: @Composable () 
 }
 
 @Composable
-fun TitleField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, placeholder: String, onDone: () -> Unit) {
+fun TitleField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, placeholder: String, autoFocus: Boolean = true, onDone: () -> Unit) {
   val c = Tali.colors
   val focus = remember { FocusRequester() }
-  LaunchedEffect(Unit) { focus.requestFocus() }
+  LaunchedEffect(Unit) { if (autoFocus) focus.requestFocus() }
   val shape = RoundedCornerShape(14.dp)
   androidx.compose.foundation.layout.Box(
     Modifier.fillMaxWidth().height(52.dp).clip(shape).background(c.background).border(1.dp, c.line, shape).padding(horizontal = 16.dp),
@@ -82,42 +96,112 @@ fun TitleField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, placeh
   }
 }
 
+/** Everything chosen in the new notebook card. */
+data class NewNotebook(
+  val title: String,
+  val paper: PaperStyle,
+  val customPaper: String?,
+  val paged: Boolean,
+  val dark: Boolean,
+  val cover: Int,
+)
+
+/**
+ * A new notebook: name, paper (her own papers included, and a new one can be made right here),
+ * A4 pages or an endless canvas, dark paper, and the cover colour.
+ */
 @Composable
-fun NewNotebookDialog(defaultPaper: PaperStyle, folderName: String? = null, onDismiss: () -> Unit, onCreate: (String, PaperStyle) -> Unit) {
+fun NewNotebookDialog(
+  settings: AppSettings,
+  folderName: String? = null,
+  defaultCover: Int,
+  onDismiss: () -> Unit,
+  importImage: suspend (android.net.Uri) -> String?,
+  onAddPaper: (CustomPaper) -> Unit,
+  onRemovePaper: (CustomPaper) -> Unit,
+  onCreate: (NewNotebook) -> Unit,
+) {
   val c = Tali.colors
   var title by remember { mutableStateOf(TextFieldValue("")) }
-  var paper by remember { mutableStateOf(defaultPaper) }
-  DialogCard(onDismiss, width = 600) {
-    Row(verticalAlignment = Alignment.Top) {
-      Column(Modifier.weight(1f)) {
-        Text("New notebook", style = MaterialTheme.typography.titleLarge, color = c.ink)
-        if (folderName != null) {
-          Spacer(Modifier.height(4.dp))
-          Text("In $folderName", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+  var paper by remember { mutableStateOf(settings.defaultPaper) }
+  var custom by remember { mutableStateOf(settings.defaultCustomPaper?.takeIf { id -> settings.customPapers.any { it.id == id } }) }
+  var paged by remember { mutableStateOf(settings.defaultPaged) }
+  var dark by remember { mutableStateOf(false) }
+  var cover by remember { mutableStateOf(defaultCover) }
+  var makingPaper by remember { mutableStateOf(false) }
+  val create = { onCreate(NewNotebook(title.text, paper, custom, paged, dark, cover)) }
+  DialogCard(onDismiss, width = 640) {
+    Column(Modifier.heightIn(max = 640.dp).verticalScroll(rememberScrollState())) {
+      Row(verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+          Text("New notebook", style = MaterialTheme.typography.titleLarge, color = c.ink)
+          if (folderName != null) {
+            Spacer(Modifier.height(4.dp))
+            Text("In $folderName", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+          }
+        }
+        com.tali.notes.ui.components.DriftingCloud(width = 84.dp, variant = 2, driftDp = 5f)
+      }
+      Spacer(Modifier.height(18.dp))
+      TitleField(title, { title = it }, "Statics, week 3", autoFocus = false) { create() }
+      Spacer(Modifier.height(22.dp))
+      SectionLabel("Paper")
+      Spacer(Modifier.height(8.dp))
+      PaperPicker(
+        style = paper,
+        customId = custom,
+        customs = settings.customPapers,
+        onStyle = {
+          paper = it
+          custom = null
+        },
+        onCustom = { custom = it.id },
+        onAdd = { makingPaper = true },
+        onRemove = {
+          if (custom == it.id) custom = null
+          onRemovePaper(it)
+        },
+        tileWidth = 80.dp,
+        perRow = 7,
+      )
+      Spacer(Modifier.height(20.dp))
+      SectionLabel("Pages")
+      Spacer(Modifier.height(8.dp))
+      Segmented(listOf(true, false), paged, { if (it) "A4 pages" else "Endless canvas" }, { paged = it }, Modifier.fillMaxWidth())
+      Spacer(Modifier.height(6.dp))
+      Text(
+        if (paged) "Pages one under the other, like a real notebook. Prints and exports page by page." else "One page that goes on forever in every direction, for big drawings and mind maps.",
+        style = MaterialTheme.typography.bodySmall,
+        color = c.inkMuted,
+      )
+      Spacer(Modifier.height(12.dp))
+      ToggleRow("Dark paper", dark, { dark = it }, detail = "A black page; your pens switch to light colours")
+      Spacer(Modifier.height(14.dp))
+      SectionLabel("Cover")
+      Spacer(Modifier.height(8.dp))
+      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        COVER_COLORS.forEach { col ->
+          Box(
+            Modifier.size(30.dp)
+              .clip(androidx.compose.foundation.shape.CircleShape)
+              .background(Color(col))
+              .then(if (col == cover) Modifier.border(2.5.dp, c.ink, androidx.compose.foundation.shape.CircleShape) else Modifier)
+              .clickable(role = Role.RadioButton) { cover = col }
+          )
         }
       }
-      com.tali.notes.ui.components.DriftingCloud(width = 84.dp, variant = 2, driftDp = 5f)
     }
-    Spacer(Modifier.height(18.dp))
-    TitleField(title, { title = it }, "Statics, week 3") { onCreate(title.text, paper) }
-    Spacer(Modifier.height(22.dp))
-    SectionLabel("Paper")
-    Spacer(Modifier.height(10.dp))
-    // The swatches share the row's width equally, however many paper styles there are.
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      PaperStyle.entries.forEach { style ->
-        val on = style == paper
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(role = Role.RadioButton) { paper = style }.padding(4.dp)) {
-          PaperSwatch(style, Modifier.fillMaxWidth().aspectRatio(1.22f).then(if (on) Modifier.border(2.dp, c.accent, RoundedCornerShape(8.dp)) else Modifier))
-          Spacer(Modifier.height(6.dp))
-          Text(style.label, style = MaterialTheme.typography.labelMedium, color = if (on) c.accent else c.inkMuted)
-        }
-      }
-    }
-    Spacer(Modifier.height(26.dp))
+    Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton("Cancel", onClick = onDismiss)
-      PrimaryButton("Create") { onCreate(title.text, paper) }
+      PrimaryButton("Create") { create() }
+    }
+  }
+  if (makingPaper) {
+    NewPaperDialog(onDismiss = { makingPaper = false }, importImage = importImage) {
+      onAddPaper(it)
+      custom = it.id
+      makingPaper = false
     }
   }
 }

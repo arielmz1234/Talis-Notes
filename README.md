@@ -20,13 +20,16 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 
 **Pages and paper**
 - New notebooks are A4 pages, one under the other. Scrolling past the last page adds another, and writing never runs off the end.
-- *Pages* in the ⋯ menu adds a page after the current one, deletes the current page (undo brings the writing back), or switches the notebook to an endless canvas and back.
+- *Pages* (⋯ menu, or tap the page number) opens an overview of every page. Tapping a page lifts it up large, with *Delete page* (undo brings the writing back) and *Go to page*; the last tile adds a page.
+- *Endless canvas* in the ⋯ menu switches a notebook between A4 pages and one endless page.
+- New notebooks pick their paper, A4 pages or endless canvas, dark paper and cover colour up front.
 - Paper styles: blank, dots, grid, lines, engineering (2 mm / 10 mm) and isometric.
+- *Your own* paper: design a pattern (lines, grid or dots, spacing, line and paper colours, an exercise-book margin line), or use a picture such as a planner page, which fills each A4 page. Her papers are saved in settings and offered in every notebook (hold one to remove it).
 - *Dark paper* (⋯ menu, per notebook) shows a black page. Ink colours flip to light versions on screen, but the real colours are kept, so switching back restores them. It's separate from the tablet's dark mode, which only changes the toolbars to soft lilac.
 - Pictures can come from the gallery or the camera.
 - PDF import renders lecture slides as pages to write on, with a page chip to jump between them. In a paged notebook each slide gets an A4 page of its own.
 - On an endless canvas, optional A4 page guides show where pages will break.
-- PDF export offers three layouts: the notebook's pages (or A4 pages cut from an endless canvas), one long page, or the imported PDF's own pages.
+- PDF export offers three layouts: the notebook's pages (or A4 pages cut from an endless canvas), one long page, or the imported PDF's own pages. It also offers three qualities: *Best* (pictures at full resolution), *Balanced* (150 dpi) and *Light* (75 dpi). Writing always stays sharp lines; on a test page with a large photo the files came out at about 2.6 MB, 360 KB and 100 KB.
 
 **Library**
 - Folders, folders inside folders (a tree in the sidebar, folder tiles and a path back up in the main area), search, cover colours, and a *Recently deleted* area that keeps notebooks for 30 days.

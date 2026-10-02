@@ -124,13 +124,14 @@ object BackupArchive {
       }
     }
 
-  /** Adds the backup's saved colours and shapes to hers; everything else stays as she has it. */
+  /** Adds the backup's saved colours, shapes and paper backgrounds to hers; everything else stays as she has it. */
   private fun mergeSettings(store: SettingsStore, json: String) {
     val incoming = runCatching { ItemCodec.json.decodeFromString(com.tali.notes.data.AppSettings.serializer(), json) }.getOrNull() ?: return
     store.update { s ->
       s.copy(
         savedColors = (s.savedColors + incoming.savedColors).distinct(),
         customShapes = s.customShapes + incoming.customShapes.filter { c -> s.customShapes.none { it.id == c.id } },
+        customPapers = s.customPapers + incoming.customPapers.filter { c -> s.customPapers.none { it.id == c.id } },
       )
     }
   }

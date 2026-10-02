@@ -1,6 +1,7 @@
 package com.tali.notes.data
 
 import android.content.Context
+import com.tali.notes.model.CustomPaper
 import com.tali.notes.model.CustomShape
 import com.tali.notes.model.EraserMode
 import com.tali.notes.model.PaperStyle
@@ -54,6 +55,12 @@ data class AppSettings(
   val lastShape: String = "LINE",
   /** Shapes she saved from her own drawings; hold-to-shape recognises them too. */
   val customShapes: List<CustomShape> = emptyList(),
+  /** Paper backgrounds she made (pictures or designed patterns), offered in every notebook. */
+  val customPapers: List<CustomPaper> = emptyList(),
+  /** The paper new notebooks start with when it's one of hers, otherwise [defaultPaper]. */
+  val defaultCustomPaper: String? = null,
+  /** New notebooks start as A4 pages unless she last chose an endless canvas. */
+  val defaultPaged: Boolean = true,
   /** Faint A4 page edges on the canvas; A4 export then follows exactly these pages. */
   val pageGuides: Boolean = false,
   /** One-time tips she has already seen. */

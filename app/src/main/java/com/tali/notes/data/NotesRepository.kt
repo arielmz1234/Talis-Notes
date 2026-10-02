@@ -10,6 +10,7 @@ import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import com.tali.notes.canvas.Change
 import com.tali.notes.model.CanvasItem
+import com.tali.notes.model.CustomPaper
 import com.tali.notes.model.PaperStyle
 import java.io.File
 import java.util.UUID
@@ -44,6 +45,8 @@ data class NotebookMeta(
   val pages: Int? = null,
   /** Dark paper: a black page with the ink colours flipped to light ones. */
   val dark: Boolean = false,
+  /** One of her own paper backgrounds ([CustomPaper.id]), used instead of [paper] when set. */
+  val customPaper: String? = null,
 )
 
 /** A folder; [parentId] is the folder it sits in, or null at the top level. */
@@ -102,13 +105,14 @@ class NotesRepository(private val context: Context) {
             created = c.getLong(2),
             updated = c.getLong(3),
             cover = c.getInt(4),
-            paper = runCatching { PaperStyle.valueOf(c.getString(5)) }.getOrDefault(PaperStyle.DOTS),
+            paper = c.getString(5).let { p -> if (p.startsWith(CustomPaper.PREFIX)) PaperStyle.BLANK else runCatching { PaperStyle.valueOf(p) }.getOrDefault(PaperStyle.DOTS) },
             viewport = c.getString(6)?.let { runCatching { ItemCodec.json.decodeFromString(Viewport.serializer(), it) }.getOrNull() },
             thumbVersion = c.getLong(7),
             folderId = if (c.isNull(8)) null else c.getString(8),
             deleted = if (c.isNull(9)) null else c.getLong(9),
             pages = if (c.isNull(10)) null else c.getInt(10),
             dark = c.getInt(11) != 0,
+            customPaper = c.getString(5).takeIf { it.startsWith(CustomPaper.PREFIX) }?.removePrefix(CustomPaper.PREFIX),
           )
       }
     }
@@ -122,11 +126,19 @@ class NotesRepository(private val context: Context) {
   }
 
   /** New notebooks start as one A4 page; scrolling past the last page adds another. */
-  suspend fun create(title: String, paper: PaperStyle, folderId: String? = null, pages: Int? = 1): NotebookMeta =
+  suspend fun create(
+    title: String,
+    paper: PaperStyle,
+    folderId: String? = null,
+    pages: Int? = 1,
+    customPaper: String? = null,
+    dark: Boolean = false,
+    cover: Int? = null,
+  ): NotebookMeta =
     withContext(writer) {
       val now = System.currentTimeMillis()
       val id = UUID.randomUUID().toString()
-      val cover = COVER_COLORS[(_notebooks.value.size) % COVER_COLORS.size]
+      val cover = cover ?: COVER_COLORS[(_notebooks.value.size) % COVER_COLORS.size]
       db.writableDatabase.insertOrThrow(
         "notebooks",
         null,
@@ -136,9 +148,10 @@ class NotesRepository(private val context: Context) {
           put("created", now)
           put("updated", now)
           put("cover", cover)
-          put("paper", paper.name)
+          put("paper", customPaper?.let { CustomPaper.PREFIX + it } ?: paper.name)
           put("folder_id", folderId)
           put("pages", pages)
+          put("dark", if (dark) 1 else 0)
         },
       )
       reload()
@@ -208,6 +221,9 @@ class NotesRepository(private val context: Context) {
   fun setCover(id: String, color: Int) = update(id) { put("cover", color) }
 
   fun setPaper(id: String, paper: PaperStyle) = update(id) { put("paper", paper.name) }
+
+  /** Gives a notebook one of her own paper backgrounds. */
+  fun setCustomPaper(id: String, paperId: String) = update(id) { put("paper", CustomPaper.PREFIX + paperId) }
 
   /** A number of A4 pages, or null for an endless canvas. */
   fun setPages(id: String, pages: Int?) = update(id, touch = false) { if (pages == null) putNull("pages") else put("pages", pages) }

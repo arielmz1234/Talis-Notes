@@ -93,6 +93,10 @@ import com.tali.notes.canvas.CanvasHost
 import com.tali.notes.canvas.NoteCanvasView
 import com.tali.notes.canvas.SelectionInfo
 import com.tali.notes.export.PdfLayout
+import com.tali.notes.export.PdfQuality
+import com.tali.notes.ui.components.NewPaperDialog
+import com.tali.notes.ui.components.PaperPicker
+import androidx.compose.material.icons.outlined.AllInclusive
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.Tool
 import com.tali.notes.theme.Tali
@@ -108,6 +112,7 @@ import com.tali.notes.ui.components.PaperSwatch
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.Segmented
+import com.tali.notes.ui.components.SectionLabel
 import com.tali.notes.ui.components.Sparkle
 import com.tali.notes.ui.components.cloudSurface
 import com.tali.notes.ui.components.ToolButton
@@ -162,6 +167,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   val darkPaper = meta?.dark == true
   val paged = vm.pageCount != null
   var pagesOpen by remember { mutableStateOf(false) }
+  var makingPaper by remember { mutableStateOf(false) }
   var renaming by remember { mutableStateOf(false) }
   var exporting by remember { mutableStateOf(false) }
   var savingShape by remember { mutableStateOf<ShapeGeometry?>(null) }
@@ -278,6 +284,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           v.topClearance = if (narrow) 196f else 124f
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
+          v.customPaper = vm.customPaperOf(meta, settings)
           v.pageCount = vm.pageCount
           v.darkPaper = darkPaper
           v.deskColor = (if (darkPaper) DESK_DARK_PAPER else if (systemDark) DESK_DARK else DESK_LIGHT).toArgb()
@@ -359,9 +366,25 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               darkPaper = darkPaper,
               onDarkPaper = vm::setDark,
               onPages = { pagesOpen = true },
-              paper = meta?.paper ?: PaperStyle.DOTS,
+              onEndless = { endless ->
+                if (endless) vm.setPages(null) else holder.view?.runSafely { convertToPages() }
+                vm.showHint(if (endless) "Endless canvas: write anywhere" else "A4 pages")
+              },
+              paperPicker = { close ->
+                PaperPicker(
+                  style = meta?.paper ?: PaperStyle.DOTS,
+                  customId = vm.customPaperOf(meta, settings)?.id,
+                  customs = settings.customPapers,
+                  onStyle = vm::setPaper,
+                  onCustom = { vm.setCustomPaper(it.id) },
+                  onAdd = {
+                    close()
+                    makingPaper = true
+                  },
+                  onRemove = { vm.deleteCustomPaper(it.id) },
+                )
+              },
               fingerDraws = settings.fingerDraws,
-              onPaper = vm::setPaper,
               onFit = { holder.view?.runSafely { fitContent() } },
               onExport = { exporting = true },
               onFingerDraws = vm::setFingerDraws,
@@ -393,7 +416,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         HintPill(vm.hint, onDone = { vm.hint = null }, modifier = Modifier.align(Alignment.BottomCenter))
         Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
           val (page, pages) = vm.page
-          if (page >= 0) PageChip(page, pages) { target -> holder.view?.runSafely { goToPage(target) } }
+          if (page >= 0) PageChip(page, pages, onOverview = if (paged) ({ pagesOpen = true }) else null) { target -> holder.view?.runSafely { goToPage(target) } }
           ZoomChip(vm.zoom) { holder.view?.runSafely { setZoom(1f) } }
         }
       }
@@ -429,37 +452,42 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       renaming = false
     }
   }
-  if (pagesOpen) {
-    PagesDialog(
-      paged = paged,
-      page = vm.page.first.coerceAtLeast(0),
-      count = vm.pageCount ?: 0,
+  if (pagesOpen && doc != null && vm.pageCount != null) {
+    PagesOverview(
+      vm = vm,
+      doc = doc,
+      count = vm.pageCount ?: 1,
+      current = vm.page.first.coerceAtLeast(0),
+      version = edits,
       onDismiss = { pagesOpen = false },
-      onPaged = { on ->
-        if (on) holder.view?.runSafely { convertToPages() } else vm.setPages(null)
-      },
-      onAdd = { index ->
+      onGo = { index ->
         pagesOpen = false
-        holder.view?.runSafely { insertPageAfter(index) }
-        vm.showHint("Page ${index + 2} added")
+        holder.view?.runSafely { goToPage(index) }
       },
+      onAdd = { holder.view?.runSafely { insertPageAfter((vm.pageCount ?: 1) - 1) } },
       onDelete = { index ->
-        pagesOpen = false
         holder.view?.runSafely { deletePage(index) }
         vm.showHint("Page ${index + 1} deleted \u2014 undo brings the writing back")
       },
     )
+  }
+  if (makingPaper) {
+    NewPaperDialog(onDismiss = { makingPaper = false }, importImage = vm::importPaperImage) {
+      vm.addCustomPaper(it)
+      makingPaper = false
+      vm.showHint("“${it.name}” saved to your papers")
+    }
   }
   if (exporting) {
     ExportDialog(
       paged = paged,
       hasPdfPages = remember(doc) { doc?.all?.any { it is com.tali.notes.model.ImageItem && it.pdfPage } == true },
       onDismiss = { exporting = false },
-      onExport = { layout, share ->
+      onExport = { layout, quality, share ->
         exporting = false
         vm.showHint("Preparing PDF…")
         scope.launch {
-          val file = vm.exportPdf(layout)
+          val file = vm.exportPdf(layout, quality)
           if (file == null) {
             vm.showHint("Couldn't create the PDF")
             return@launch
@@ -505,9 +533,9 @@ private fun MoreMenu(
   darkPaper: Boolean,
   onDarkPaper: (Boolean) -> Unit,
   onPages: () -> Unit,
-  paper: PaperStyle,
+  onEndless: (Boolean) -> Unit,
   fingerDraws: Boolean?,
-  onPaper: (PaperStyle) -> Unit,
+  paperPicker: @Composable (close: () -> Unit) -> Unit,
   onFit: () -> Unit,
   onExport: () -> Unit,
   onFingerDraws: (Boolean?) -> Unit,
@@ -533,34 +561,30 @@ private fun MoreMenu(
         HorizontalDivider(color = c.line)
       }
       Text("Paper", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp))
-      Row(Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        PaperStyle.entries.forEach { style ->
-          val on = style == paper
-          Column(
-            Modifier.width(62.dp).clip(RoundedCornerShape(10.dp)).background(if (on) c.accentSoft else Color.Transparent).clickable(role = Role.RadioButton, onClickLabel = style.label) { onPaper(style) }.padding(vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-          ) {
-            PaperSwatch(style, Modifier.size(34.dp, 28.dp).then(if (on) Modifier.border(1.5.dp, c.accent, RoundedCornerShape(8.dp)) else Modifier))
-            Spacer(Modifier.height(4.dp))
-            Text(style.label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = if (on) c.accent else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-          }
-        }
-      }
+      Box(Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp)) { paperPicker { open = false } }
       DropdownMenuItem(
         text = { Text("Dark paper") },
         leadingIcon = { Icon(Icons.Outlined.DarkMode, null) },
         trailingIcon = { if (darkPaper) Icon(Icons.Outlined.Check, null, tint = c.accent) },
         onClick = { onDarkPaper(!darkPaper) },
       )
-      HorizontalDivider(color = c.line)
       DropdownMenuItem(
-        text = { Text(if (paged) "Pages" else "Pages: endless canvas") },
-        leadingIcon = { Icon(Icons.Outlined.AutoStories, null) },
-        onClick = {
-          open = false
-          onPages()
-        },
+        text = { Text("Endless canvas") },
+        leadingIcon = { Icon(Icons.Outlined.AllInclusive, null) },
+        trailingIcon = { if (!paged) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+        onClick = { onEndless(paged) },
       )
+      HorizontalDivider(color = c.line)
+      if (paged) {
+        DropdownMenuItem(
+          text = { Text("Pages") },
+          leadingIcon = { Icon(Icons.Outlined.AutoStories, null) },
+          onClick = {
+            open = false
+            onPages()
+          },
+        )
+      }
       DropdownMenuItem(text = { Text(if (paged) "Show whole page" else "Show everything") }, leadingIcon = { Icon(Icons.Outlined.FitScreen, null) }, onClick = {
         open = false
         onFit()
@@ -611,11 +635,16 @@ private fun ZoomChip(zoom: Float, modifier: Modifier = Modifier, onReset: () -> 
 
 /** "3 / 12" with arrows, for notebooks with imported slides. */
 @Composable
-private fun PageChip(page: Int, count: Int, onGo: (Int) -> Unit) {
+private fun PageChip(page: Int, count: Int, onOverview: (() -> Unit)?, onGo: (Int) -> Unit) {
   val c = Tali.colors
   Row(Modifier.cloudSurface(12.dp, shadowDepth = 3.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
     PageArrow(Icons.Outlined.KeyboardArrowUp, "Previous page", enabled = page > 0) { onGo(page - 1) }
-    Text("${page + 1} / $count", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.padding(horizontal = 2.dp))
+    Text(
+      "${page + 1} / $count",
+      style = MaterialTheme.typography.labelMedium,
+      color = c.inkMuted,
+      modifier = Modifier.clip(RoundedCornerShape(8.dp)).then(if (onOverview != null) Modifier.clickable(onClickLabel = "All pages", onClick = onOverview) else Modifier).padding(horizontal = 6.dp, vertical = 6.dp),
+    )
     PageArrow(Icons.Outlined.KeyboardArrowDown, "Next page", enabled = page < count - 1) { onGo(page + 1) }
   }
 }
@@ -727,12 +756,13 @@ private fun SaveShapeDialog(geometry: ShapeGeometry, onDismiss: () -> Unit, onSa
 }
 
 @Composable
-private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: (PdfLayout, share: Boolean) -> Unit) {
+private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: (PdfLayout, PdfQuality, share: Boolean) -> Unit) {
   val c = Tali.colors
   // Slides she imported come back out as the same slides, with her writing on them. A paged
   // notebook already has its slides on pages of their own.
   val options = if (hasPdfPages && !paged) listOf(PdfLayout.PDF_PAGES, PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE) else listOf(PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE)
   var layout by remember { mutableStateOf(options.first()) }
+  var quality by remember { mutableStateOf(PdfQuality.BEST) }
   DialogCard(onDismiss, width = 520) {
     Text("Export PDF", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(16.dp))
@@ -759,11 +789,17 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
       style = MaterialTheme.typography.bodyMedium,
       color = c.inkMuted,
     )
+    Spacer(Modifier.height(20.dp))
+    SectionLabel("Quality")
+    Spacer(Modifier.height(8.dp))
+    Segmented(PdfQuality.entries, quality, { it.label }, { quality = it }, Modifier.fillMaxWidth())
+    Spacer(Modifier.height(10.dp))
+    Text(quality.detail, style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton("Cancel", onClick = onDismiss)
-      QuietButton("Save to Files") { onExport(layout, false) }
-      PrimaryButton("Share") { onExport(layout, true) }
+      QuietButton("Save to Files") { onExport(layout, quality, false) }
+      PrimaryButton("Share") { onExport(layout, quality, true) }
     }
   }
 }
@@ -771,45 +807,3 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
 private val DESK_LIGHT = Color(0xFFE9E4F2)
 private val DESK_DARK = Color(0xFF2A2338)
 private val DESK_DARK_PAPER = Color(0xFF0E0C13)
-
-/** Page layout (A4 pages or an endless canvas), and adding or removing a page. */
-@Composable
-private fun PagesDialog(
-  paged: Boolean,
-  page: Int,
-  count: Int,
-  onDismiss: () -> Unit,
-  onPaged: (Boolean) -> Unit,
-  onAdd: (Int) -> Unit,
-  onDelete: (Int) -> Unit,
-) {
-  val c = Tali.colors
-  DialogCard(onDismiss, width = 520) {
-    Text("Pages", style = MaterialTheme.typography.titleLarge, color = c.ink)
-    Spacer(Modifier.height(16.dp))
-    Segmented(listOf(true, false), paged, { if (it) "A4 pages" else "Endless canvas" }, onPaged, Modifier.fillMaxWidth())
-    Spacer(Modifier.height(10.dp))
-    Text(
-      if (paged) "Portrait A4 pages, one under the other. Scroll past the last page to add another."
-      else "One page that never ends, in every direction. Good for big drawings and mind maps.",
-      style = MaterialTheme.typography.bodyMedium,
-      color = c.inkMuted,
-    )
-    if (paged) {
-      Spacer(Modifier.height(20.dp))
-      Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.sunken).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Column(Modifier.weight(1f)) {
-          Text("Page ${page + 1}", style = MaterialTheme.typography.titleMedium, color = c.ink)
-          Text(if (count == 1) "1 page in this notebook" else "$count pages in this notebook", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
-        }
-        QuietButton(if (count > 1) "Delete page" else "Clear page", color = c.danger) { onDelete(page) }
-        PrimaryButton("Add page after") { onAdd(page) }
-      }
-    }
-    Spacer(Modifier.height(24.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Done", onClick = onDismiss) }
-  }
-}

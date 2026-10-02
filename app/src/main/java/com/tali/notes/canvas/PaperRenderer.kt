@@ -1,7 +1,14 @@
 package com.tali.notes.canvas
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
+import android.graphics.RectF
+import com.tali.notes.geometry.Rect
+import com.tali.notes.ink.Brushes
+import com.tali.notes.model.CustomPaper
 import com.tali.notes.model.PaperStyle
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -31,6 +38,9 @@ class PaperRenderer {
 
   companion object {
     const val DARK_PAPER = 0xFF1C1A23.toInt()
+
+    /** Picture backgrounds on dark paper: dimmed to about a third so ink stays readable. */
+    private val DIM = ColorMatrixColorFilter(ColorMatrix().apply { setScale(0.35f, 0.35f, 0.38f, 1f) })
   }
   private var buffer = FloatArray(4096)
 
@@ -43,13 +53,30 @@ class PaperRenderer {
   /** World height where the pattern starts, so each A4 page's lines line up with its top edge. */
   var originY = 0f
 
+  /** One of her own backgrounds; drawn instead of the built-in style when set. */
+  var custom: CustomPaper? = null
+
+  /** The picture of a picture background, once it has loaded. */
+  var customImage: Bitmap? = null
+
+  /** The A4 page being drawn (a picture background fills it), or null on an endless canvas. */
+  var pageRect: Rect? = null
+
+  private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+  private val dst = RectF()
+  private val src = android.graphics.Rect()
+
   fun draw(canvas: Canvas, style: PaperStyle, camera: Camera, width: Int, height: Int) {
+    custom?.let {
+      drawCustom(canvas, it, camera, width, height)
+      return
+    }
     canvas.drawColor(paperColor)
     val mm = 160f / 25.4f
     val k = if (print) 0.45f else 1f
     when (style) {
       PaperStyle.BLANK -> Unit
-      PaperStyle.DOTS -> dots(canvas, camera, width, height, 5 * mm)
+      PaperStyle.DOTS -> dots(canvas, camera, width, height, 5 * mm, lineColor)
       PaperStyle.GRID -> grid(canvas, camera, width, height, 5 * mm, blueLine, 1f * k, horizontalOnly = false)
       PaperStyle.LINES -> grid(canvas, camera, width, height, 8 * mm, blueLine, 1.2f * k, horizontalOnly = true)
       PaperStyle.ENGINEERING -> {
@@ -57,6 +84,66 @@ class PaperRenderer {
         grid(canvas, camera, width, height, 10 * mm, engineeringMajor, 1.3f * k, horizontalOnly = false)
       }
       PaperStyle.ISOMETRIC -> isometric(canvas, camera, width, height, 6 * mm, blueLine, 1f * k)
+    }
+  }
+
+  /**
+   * Her own background. A picture fills each A4 page (on an endless canvas it repeats on the A4
+   * page grid); a designed pattern draws like the built-in ones at her spacing and colours. On dark
+   * paper the page goes dark and her line colour is lightened to match the ink.
+   */
+  private fun drawCustom(canvas: Canvas, cp: CustomPaper, camera: Camera, width: Int, height: Int) {
+    val mm = 160f / 25.4f
+    val k = if (print) 0.45f else 1f
+    val image = cp.image
+    if (image != null) {
+      canvas.drawColor(if (dark) DARK_PAPER else 0xFFFFFFFF.toInt())
+      val bmp = customImage ?: return
+      val pages =
+        pageRect?.let { listOf(it) }
+          ?: run {
+            val w = Pages.WIDTH
+            val h = Pages.HEIGHT
+            val view = camera.visibleWorld(width, height)
+            buildList {
+              for (row in floor(view.top / h).toInt()..floor(view.bottom / h).toInt()) {
+                for (col in floor(view.left / w).toInt()..floor(view.right / w).toInt()) add(Rect(col * w, row * h, (col + 1) * w, (row + 1) * h))
+              }
+            }
+          }
+      imagePaint.colorFilter = if (dark) DIM else null
+      // Fills the page without stretching: the middle of the picture, cropped to the page's shape.
+      val pageAspect = Pages.WIDTH / Pages.HEIGHT
+      val bmpAspect = bmp.width.toFloat() / bmp.height
+      if (bmpAspect > pageAspect) {
+        val w = (bmp.height * pageAspect).toInt()
+        src.set((bmp.width - w) / 2, 0, (bmp.width + w) / 2, bmp.height)
+      } else {
+        val h = (bmp.width / pageAspect).toInt()
+        src.set(0, (bmp.height - h) / 2, bmp.width, (bmp.height + h) / 2)
+      }
+      for (r in pages) {
+        dst.set((r.left - camera.x) * camera.scale, (r.top - camera.y) * camera.scale, (r.right - camera.x) * camera.scale, (r.bottom - camera.y) * camera.scale)
+        canvas.drawBitmap(bmp, src, dst, imagePaint)
+      }
+      return
+    }
+    canvas.drawColor(if (dark) DARK_PAPER else cp.paperColor)
+    val line = if (dark) (Brushes.onDarkPaper(cp.lineColor) and 0x00FFFFFF) or 0x70000000 else cp.lineColor
+    val spacing = cp.spacingMm.coerceIn(2f, 30f) * mm
+    when (cp.pattern) {
+      PaperStyle.BLANK -> Unit
+      PaperStyle.DOTS -> dots(canvas, camera, width, height, spacing, line)
+      PaperStyle.LINES -> grid(canvas, camera, width, height, spacing, line, 1.2f * k, horizontalOnly = true)
+      PaperStyle.ISOMETRIC -> isometric(canvas, camera, width, height, spacing, line, 1f * k)
+      else -> grid(canvas, camera, width, height, spacing, line, 1f * k, horizontalOnly = false)
+    }
+    if (cp.margin) {
+      // The red margin line of a school exercise book, 25 mm in from the page's left edge.
+      val x = ((pageRect?.left ?: 0f) + 25f * mm - camera.x) * camera.scale
+      paint.color = if (dark) 0x99E07A90.toInt() else 0xFFF0A0B4.toInt()
+      paint.strokeWidth = 1.4f * k
+      canvas.drawLine(x, 0f, x, height.toFloat(), paint)
     }
   }
 
@@ -137,11 +224,11 @@ class PaperRenderer {
     canvas.drawLines(buffer, 0, n, paint)
   }
 
-  private fun dots(canvas: Canvas, camera: Camera, width: Int, height: Int, spacing: Float) {
+  private fun dots(canvas: Canvas, camera: Camera, width: Int, height: Int, spacing: Float, color: Int) {
     val step = spacing * camera.scale
     if (step < 7f && !print) return
-    paint.color = lineColor
-    paint.alpha = if (print) 255 else (((step - 7f) / 10f).coerceIn(0f, 1f) * 255).toInt()
+    paint.color = color
+    paint.alpha = ((if (print) 1f else ((step - 7f) / 10f).coerceIn(0f, 1f)) * (color ushr 24)).toInt()
     paint.strokeWidth = if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)
     paint.strokeCap = Paint.Cap.ROUND
     val world = camera.visibleWorld(width, height)

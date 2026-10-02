@@ -293,9 +293,17 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   }
 
   if (creating) {
-    NewNotebookDialog(defaultPaper = settings.defaultPaper, folderName = currentFolder?.name, onDismiss = { creating = false }) { title, paper ->
+    NewNotebookDialog(
+      settings = settings,
+      folderName = currentFolder?.name,
+      defaultCover = remember { vm.nextCover() },
+      onDismiss = { creating = false },
+      importImage = vm::importImage,
+      onAddPaper = vm::addCustomPaper,
+      onRemovePaper = vm::removeCustomPaper,
+    ) {
       creating = false
-      vm.create(title, paper, onOpen)
+      vm.create(it, onOpen)
     }
   }
   renaming?.let { nb ->

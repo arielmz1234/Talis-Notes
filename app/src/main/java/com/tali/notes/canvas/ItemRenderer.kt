@@ -1,5 +1,6 @@
 package com.tali.notes.canvas
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -28,6 +29,17 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
 
   /** Dark paper: ink is drawn in its light counterpart colours; pictures stay as they are. */
   var dark = false
+
+  /** For lighter PDFs: pictures bigger than this many pixels per world unit are scaled down first. */
+  var imagePxPerDp: Float? = null
+  private val reduced = HashMap<String, Bitmap>()
+
+  private fun reduce(file: String, bmp: Bitmap, rect: com.tali.notes.geometry.Rect): Bitmap {
+    val limit = imagePxPerDp ?: return bmp
+    val w = (rect.width * limit).toInt().coerceAtLeast(1)
+    if (bmp.width <= w) return bmp
+    return reduced.getOrPut(file) { Bitmap.createScaledBitmap(bmp, w, (bmp.height.toLong() * w / bmp.width).toInt().coerceAtLeast(1), true) }
+  }
 
   /**
    * Draws in three layers, each in stacking order: pictures and PDF pages at the bottom, then
@@ -63,7 +75,7 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
         rectF.set(item.rect.left, item.rect.top, item.rect.right, item.rect.bottom)
         val bmp = if (sync) images.loadNow(item.file) else images.peek(item.file)
         if (bmp != null) {
-          canvas.drawBitmap(bmp, null, rectF, imagePaint)
+          canvas.drawBitmap(reduce(item.file, bmp, item.rect), null, rectF, imagePaint)
         } else {
           if (!sync) images.request(item.file)
           canvas.drawRect(rectF, placeholderFill)

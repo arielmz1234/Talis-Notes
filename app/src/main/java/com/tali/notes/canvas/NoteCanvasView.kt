@@ -127,6 +127,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       invalidate()
     }
 
+  /** One of her own backgrounds, drawn instead of [paperStyle]. */
+  var customPaper: com.tali.notes.model.CustomPaper? = null
+    set(value) {
+      if (field == value) return
+      field = value
+      paper.custom = value
+      invalidate()
+    }
+
   /** Number of A4 pages, or null for an endless canvas. */
   var pageCount: Int? = null
     set(value) {
@@ -440,10 +449,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       canvas.save()
       canvas.clipRect(a.x, a.y, b.x, b.y)
       paper.originY = r.top
+      paper.pageRect = r
       paper.draw(canvas, paperStyle, camera, width, height)
       canvas.restore()
     }
     paper.originY = 0f
+    paper.pageRect = null
     // The next page waits below the last one, drawn as an outline until she pulls it in.
     val ghost = Pages.rect(n)
     if (ghost.top < view.bottom) {
@@ -465,6 +476,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun deskIsDark() = android.graphics.Color.luminance(deskColor) < 0.3f
 
   override fun onDraw(canvas: Canvas) {
+    // A picture background loads in the background like any picture; the listener redraws.
+    paper.customImage = customPaper?.image?.let { file -> images.peek(file) ?: null.also { images.request(file) } }
     val n = pageCount
     if (n != null) {
       drawPages(canvas, n)

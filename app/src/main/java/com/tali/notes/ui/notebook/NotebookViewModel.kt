@@ -16,6 +16,8 @@ import com.tali.notes.data.NotesRepository
 import com.tali.notes.data.Viewport
 import com.tali.notes.export.Exporter
 import com.tali.notes.export.PdfLayout
+import com.tali.notes.export.PdfQuality
+import com.tali.notes.model.CustomPaper
 import com.tali.notes.geometry.Rect
 import com.tali.notes.model.CustomShape
 import com.tali.notes.model.ShapeItem
@@ -257,7 +259,41 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setPaper(style: PaperStyle) {
     repo.setPaper(notebookId, style)
-    store.update { it.copy(defaultPaper = style) }
+    store.update { it.copy(defaultPaper = style, defaultCustomPaper = null) }
+  }
+
+  /** This notebook's own background, if it uses one of hers (and it still exists). */
+  fun customPaperOf(m: NotebookMeta?, s: AppSettings): CustomPaper? = m?.customPaper?.let { id -> s.customPapers.firstOrNull { it.id == id } }
+
+  fun setCustomPaper(id: String) {
+    repo.setCustomPaper(notebookId, id)
+    store.update { it.copy(defaultCustomPaper = id) }
+  }
+
+  /** Saves a background she made and puts it on this notebook. */
+  fun addCustomPaper(paper: CustomPaper) {
+    store.update { it.copy(customPapers = it.customPapers + paper) }
+    setCustomPaper(paper.id)
+  }
+
+  /** Removes one of her backgrounds; notebooks that used it show blank paper. */
+  fun deleteCustomPaper(id: String) =
+    store.update { s -> s.copy(customPapers = s.customPapers.filterNot { it.id == id }, defaultCustomPaper = s.defaultCustomPaper?.takeIf { it != id }) }
+
+  /** Copies a picture in for a background; returns its file name. */
+  suspend fun importPaperImage(uri: Uri): String? = repo.importImage(uri)
+
+  /**
+   * A picture of page [index] for the page overview, [widthPx] wide. [items] is a snapshot of the
+   * notebook taken on the main thread.
+   */
+  suspend fun pageThumbnail(items: List<CanvasItem>, index: Int, widthPx: Int): Bitmap? {
+    val m = meta.value
+    val custom = customPaperOf(m, settings.value)
+    val page = com.tali.notes.canvas.Pages.rect(index)
+    return withContext(Dispatchers.Default) {
+      runCatching { Exporter.thumbnail(items.filter { it.bounds.intersects(page) }, page, m?.paper ?: PaperStyle.DOTS, widthPx, repo.images, m?.dark == true, originY = page.top, custom = custom, page = page) }.getOrNull()
+    }
   }
 
   fun rename(title: String) = repo.rename(notebookId, title.ifBlank { "Untitled" })
@@ -313,12 +349,13 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val paper = meta.value?.paper ?: PaperStyle.DOTS
     val dark = meta.value?.dark == true
     val pages = pageCount
+    val custom = customPaperOf(meta.value, settings.value)
     viewModelScope.launch(Dispatchers.Default) {
       if (pages != null) {
         // A paged notebook previews the top of the page she was on, like a notebook lying open.
         val page = com.tali.notes.canvas.Pages.rect(com.tali.notes.canvas.Pages.indexAt(visible.top + visible.height * 0.4f).coerceIn(0, pages - 1))
         val region = Rect(page.left, page.top, page.right, page.top + page.width / 1.32f)
-        val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top) }.getOrNull() ?: return@launch
+        val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page) }.getOrNull() ?: return@launch
         repo.saveThumbnail(notebookId, bmp)
         return@launch
       }
@@ -329,21 +366,22 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       w = minOf(w, visible.width * 1.5f)
       val h = w / 1.32f
       val region = Rect(center.x - w / 2, center.y - h / 2, center.x + w / 2, center.y + h / 2)
-      val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark) }.getOrNull() ?: return@launch
+      val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, custom = custom) }.getOrNull() ?: return@launch
       repo.saveThumbnail(notebookId, bmp)
     }
   }
 
-  suspend fun exportPdf(layout: PdfLayout): File? {
+  suspend fun exportPdf(layout: PdfLayout, quality: PdfQuality): File? {
     val doc = document ?: return null
     val items = doc.all.toList()
     val paper = meta.value?.paper ?: PaperStyle.DOTS
     val dark = meta.value?.dark == true
     val pages = pageCount
+    val custom = customPaperOf(meta.value, settings.value)
     val title = (meta.value?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
     return withContext(Dispatchers.Default) {
       val out = File(File(getApplication<Application>().cacheDir, "exports"), "$title.pdf")
-      runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark) }.map { out }.getOrNull()
+      runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality) }.map { out }.getOrNull()
     }
   }
 }

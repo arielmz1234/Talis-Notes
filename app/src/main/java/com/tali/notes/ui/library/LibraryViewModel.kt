@@ -39,13 +39,33 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   fun thumbnailFile(id: String) = repo.thumbnailFile(id)
 
-  fun create(title: String, paper: PaperStyle, onCreated: (String) -> Unit) {
+  fun create(n: NewNotebook, onCreated: (String) -> Unit) {
     viewModelScope.launch {
-      val meta = repo.create(title.ifBlank { "Untitled" }, paper, selectedFolder.value?.takeIf { it != TRASH })
-      getApplication<Application>().talisApp.settings.update { it.copy(defaultPaper = paper) }
+      val meta =
+        repo.create(
+          n.title.ifBlank { "Untitled" },
+          n.paper,
+          selectedFolder.value?.takeIf { it != TRASH },
+          pages = if (n.paged) 1 else null,
+          customPaper = n.customPaper,
+          dark = n.dark,
+          cover = n.cover,
+        )
+      // The next notebook starts the same way.
+      getApplication<Application>().talisApp.settings.update { it.copy(defaultPaper = n.paper, defaultCustomPaper = n.customPaper, defaultPaged = n.paged) }
       onCreated(meta.id)
     }
   }
+
+  /** The cover the next notebook gets unless she picks another. */
+  fun nextCover(): Int = COVER_COLORS[allNotebooks.value.size % COVER_COLORS.size]
+
+  fun addCustomPaper(paper: com.tali.notes.model.CustomPaper) = getApplication<Application>().talisApp.settings.update { it.copy(customPapers = it.customPapers + paper) }
+
+  fun removeCustomPaper(paper: com.tali.notes.model.CustomPaper) =
+    getApplication<Application>().talisApp.settings.update { s -> s.copy(customPapers = s.customPapers.filterNot { it.id == paper.id }, defaultCustomPaper = s.defaultCustomPaper?.takeIf { it != paper.id }) }
+
+  suspend fun importImage(uri: android.net.Uri): String? = repo.importImage(uri)
 
   fun rename(id: String, title: String) = repo.rename(id, title.ifBlank { "Untitled" })
 
