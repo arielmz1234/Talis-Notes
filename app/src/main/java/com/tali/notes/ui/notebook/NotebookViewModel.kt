@@ -264,9 +264,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setPageGuides(on: Boolean) = store.update { it.copy(pageGuides = on) }
 
-  fun setTwoFingerUndo(on: Boolean) = store.update { it.copy(twoFingerUndo = on) }
-
-  fun setThreeFingerRedo(on: Boolean) = store.update { it.copy(threeFingerRedo = on) }
+  fun setSmartUndo(on: Boolean) = store.update { it.copy(smartUndo = on) }
 
   fun setPaper(style: PaperStyle) {
     repo.setPaper(notebookId, style)

@@ -97,8 +97,8 @@ import com.tali.notes.export.PdfQuality
 import com.tali.notes.ui.components.NewPaperDialog
 import com.tali.notes.ui.components.PaperPicker
 import androidx.compose.material.icons.outlined.AllInclusive
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.CloseFullscreen
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import com.tali.notes.model.PaperStyle
@@ -308,11 +308,24 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     // Tapping the page closes an open panel instead of drawing.
     if (vm.panel != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { vm.panel = null } })
 
-    // Hiding the toolbars leaves only the page; they shrink away and pop back in.
+    // The toolbars pop in as the notebook opens; hiding them leaves only the page. Either way
+    // clouds puff up where the bars are.
+    val chrome = remember { androidx.compose.animation.core.MutableTransitionState(false) }
+    var ready by remember { mutableStateOf(false) }
+    // Wait for the notebook and the screen's slide-in, so the hello is seen.
+    LaunchedEffect(doc != null) {
+      if (doc == null) return@LaunchedEffect
+      delay(260)
+      ready = true
+    }
+    chrome.targetState = ready && !vm.focus
+    var puffs by remember { mutableIntStateOf(0) }
+    LaunchedEffect(vm.focus, ready) { if (ready) puffs++ }
+    ToolbarPuffs(puffs, narrow)
     AnimatedVisibility(
-      visible = !vm.focus,
-      enter = fadeIn(tween(220)) + scaleIn(tween(260), initialScale = 0.96f),
-      exit = fadeOut(tween(180)) + scaleOut(tween(200), targetScale = 0.96f),
+      visibleState = chrome,
+      enter = fadeIn(tween(200, delayMillis = 60)) + scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 380f), initialScale = 0.9f),
+      exit = fadeOut(tween(160)) + scaleOut(tween(200), targetScale = 0.9f),
     ) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
       val titlePill: @Composable () -> Unit = { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) }
@@ -371,6 +384,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             onUndo = { holder.view?.runSafely { undo() } },
             onRedo = { holder.view?.runSafely { redo() } },
           ) {
+            ToolButton(Icons.Outlined.OpenInFull, "Hide toolbars") {
+              vm.panel = null
+              vm.focus = true
+            }
             MoreMenu(
               paged = paged,
               darkPaper = darkPaper,
@@ -402,14 +419,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onPageGuides = vm::setPageGuides,
               pasteCount = Clipboard.items.size,
               onPaste = { holder.view?.runSafely { paste() } },
-              onHideToolbars = {
-                vm.panel = null
-                vm.focus = true
-              },
-              undoTap = settings.twoFingerUndo,
-              onUndoTap = vm::setTwoFingerUndo,
-              redoTap = settings.threeFingerRedo,
-              onRedoTap = vm::setThreeFingerRedo,
+              smartUndo = settings.smartUndo,
+              onSmartUndo = vm::setSmartUndo,
             )
           }
       }
@@ -440,7 +451,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
     }
     }
-    FocusCloud(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 8.dp, end = 12.dp)) { vm.focus = false }
+    ShowToolbarsButton(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 18.dp, end = 22.dp)) { vm.focus = false }
 
     vm.selection?.let { sel ->
       if (vm.panel == null) {
@@ -564,11 +575,8 @@ private fun MoreMenu(
   onPageGuides: (Boolean) -> Unit,
   pasteCount: Int,
   onPaste: () -> Unit,
-  onHideToolbars: () -> Unit,
-  undoTap: Boolean,
-  onUndoTap: (Boolean) -> Unit,
-  redoTap: Boolean,
-  onRedoTap: (Boolean) -> Unit,
+  smartUndo: Boolean,
+  onSmartUndo: (Boolean) -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
@@ -611,10 +619,6 @@ private fun MoreMenu(
           },
         )
       }
-      DropdownMenuItem(text = { Text("Hide toolbars") }, leadingIcon = { Icon(Icons.Outlined.VisibilityOff, null) }, onClick = {
-        open = false
-        onHideToolbars()
-      })
       DropdownMenuItem(text = { Text(if (paged) "Show whole page" else "Show everything") }, leadingIcon = { Icon(Icons.Outlined.FitScreen, null) }, onClick = {
         open = false
         onFit()
@@ -650,16 +654,10 @@ private fun MoreMenu(
         },
       )
       DropdownMenuItem(
-        text = { Text("Two-finger tap to undo") },
+        text = { Column { Text("Smart undo and redo"); Text("Tap with two fingers to undo, three to redo", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Undo, null) },
-        trailingIcon = { if (undoTap) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-        onClick = { onUndoTap(!undoTap) },
-      )
-      DropdownMenuItem(
-        text = { Text("Three-finger tap to redo") },
-        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Redo, null) },
-        trailingIcon = { if (redoTap) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-        onClick = { onRedoTap(!redoTap) },
+        trailingIcon = { if (smartUndo) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+        onClick = { onSmartUndo(!smartUndo) },
       )
     }
   }
@@ -860,32 +858,47 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
 }
 
 /**
- * While the toolbars are hidden, the one thing left: a small cloud in the corner that brings them
- * back. It pops in on a puff of cloud, and puffs again as the toolbars return.
+ * While the toolbars are hidden, the one thing left: a small frosted circle in the corner with the
+ * familiar "exit full screen" arrows. It springs in, and brings the toolbars back.
  */
 @Composable
-private fun FocusCloud(visible: Boolean, modifier: Modifier = Modifier, onShow: () -> Unit) {
+private fun ShowToolbarsButton(visible: Boolean, modifier: Modifier = Modifier, onShow: () -> Unit) {
   val c = Tali.colors
-  val puff = remember { androidx.compose.animation.core.Animatable(1f) }
-  // Also puffs once as the notebook opens, a small hello from the sky.
-  LaunchedEffect(visible) {
-    puff.snapTo(0f)
-    puff.animateTo(1f, tween(if (visible) 650 else 520))
-  }
-  Box(modifier.size(132.dp), contentAlignment = Alignment.Center) {
-    com.tali.notes.ui.components.CloudPuff(puff.value, Modifier.fillMaxSize())
-    AnimatedVisibility(
-      visible = visible,
-      enter = fadeIn(tween(120)) + scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 420f), initialScale = 0.2f),
-      exit = fadeOut(tween(160)) + scaleOut(tween(180), targetScale = 0.4f),
+  AnimatedVisibility(
+    visible = visible,
+    modifier = modifier,
+    enter = fadeIn(tween(160, delayMillis = 120)) + scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 400f), initialScale = 0.4f),
+    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.6f),
+  ) {
+    Box(
+      Modifier.size(40.dp)
+        .clip(CircleShape)
+        .background(c.surface.copy(alpha = 0.72f))
+        .border(1.dp, c.line, CircleShape)
+        .clickable(onClickLabel = "Show toolbars", onClick = onShow),
+      contentAlignment = Alignment.Center,
     ) {
-      Box(
-        Modifier.size(52.dp, 44.dp).cloudSurface(22.dp, CloudCrown.CENTER, shadowDepth = 5.dp).clip(RoundedCornerShape(22.dp)).clickable(onClickLabel = "Show toolbars", onClick = onShow),
-        contentAlignment = Alignment.Center,
-      ) {
-        Icon(Icons.Outlined.Visibility, "Show toolbars", tint = c.accent, modifier = Modifier.size(22.dp))
-      }
+      Icon(Icons.Outlined.CloseFullscreen, "Show toolbars", tint = c.inkMuted, modifier = Modifier.size(18.dp))
     }
+  }
+}
+
+/** Clouds billowing up where each bar is (or was), whenever the toolbars appear or go. */
+@Composable
+private fun ToolbarPuffs(tick: Int, narrow: Boolean) {
+  val p = remember { androidx.compose.animation.core.Animatable(1f) }
+  LaunchedEffect(tick) {
+    if (tick == 0) return@LaunchedEffect
+    p.snapTo(0f)
+    p.animateTo(1f, tween(720))
+  }
+  if (p.value >= 1f) return
+  Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 8.dp, vertical = 4.dp)) {
+    val puff: @Composable (Modifier, Int) -> Unit = { m, n -> com.tali.notes.ui.components.CloudPuff(p.value, m, puffs = n) }
+    puff(Modifier.align(Alignment.TopStart).size(190.dp, 76.dp), 8)
+    puff(Modifier.align(Alignment.TopEnd).size(230.dp, 76.dp), 9)
+    puff(Modifier.align(if (narrow) Alignment.TopCenter else Alignment.TopCenter).padding(top = if (narrow) 64.dp else 0.dp).size(470.dp, 88.dp), 15)
+    puff(Modifier.align(Alignment.BottomEnd).size(220.dp, 64.dp), 8)
   }
 }
 

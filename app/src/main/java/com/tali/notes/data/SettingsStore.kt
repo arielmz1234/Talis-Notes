@@ -63,9 +63,8 @@ data class AppSettings(
   val defaultPaged: Boolean = true,
   /** Faint A4 page edges on the canvas; A4 export then follows exactly these pages. */
   val pageGuides: Boolean = false,
-  /** A quick two-finger tap undoes; a three-finger tap redoes. Each can be turned off. */
-  val twoFingerUndo: Boolean = true,
-  val threeFingerRedo: Boolean = true,
+  /** Smart undo and redo: a quick two-finger tap undoes, a three-finger tap redoes. */
+  val smartUndo: Boolean = true,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
 ) {

@@ -252,14 +252,14 @@ private fun PagePeek(
   val small = rememberPage(vm, items, index, version, 480)
   val large = rememberPage(vm, items, index, version, 1100)
   BoxWithConstraints(
-    Modifier.fillMaxSize().background(c.scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
+    Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
     contentAlignment = Alignment.Center,
   ) {
     // As tall as the screen allows lying down; held upright the width decides, so it never fills it.
     val pageWidth = minOf((maxHeight - 72.dp) * 0.92f * PAGE_ASPECT, maxWidth * 0.8f)
     Column(Modifier.width(pageWidth)) {
       Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-        Text("Page ${index + 1}", style = MaterialTheme.typography.titleMedium, color = Color(0xFFDCD6EA), modifier = Modifier.weight(1f).padding(start = 2.dp))
+        Text("Page ${index + 1}", style = MaterialTheme.typography.titleMedium, color = c.inkFaint, modifier = Modifier.weight(1f).padding(start = 2.dp))
         PeekButton(Icons.Outlined.DeleteOutline, if (single) "Clear page" else "Delete page", c.danger, onDelete)
         Spacer(Modifier.width(10.dp))
         PeekButton(Icons.Outlined.ArrowOutward, "Go to page", c.accent, onGo)

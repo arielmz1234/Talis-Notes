@@ -104,6 +104,9 @@ import com.tali.notes.theme.Lilac
 import com.tali.notes.theme.Sky
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.SkyBand
+import com.tali.notes.ui.components.PuffBox
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.tali.notes.ui.components.SkyClouds
 import com.tali.notes.ui.components.DriftingCloud
 import com.tali.notes.ui.components.PaperSwatch
@@ -139,6 +142,25 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   /** A folder being made, and where. */
   var newFolder by remember { mutableStateOf<NewFolderRequest?>(null) }
   var movingFolder by remember { mutableStateOf<Folder?>(null) }
+  // Notebooks and folders on their way out (puffing away), and a folder that has just been made.
+  var vanishing by remember { mutableStateOf(emptySet<String>()) }
+  val puffScope = rememberCoroutineScope()
+  fun vanish(id: String, then: () -> Unit) {
+    vanishing = vanishing + id
+    puffScope.launch {
+      kotlinx.coroutines.delay(480)
+      then()
+      vanishing = vanishing - id
+    }
+  }
+  var knownFolders by remember { mutableStateOf<Set<String>?>(null) }
+  var freshFolders by remember { mutableStateOf(emptySet<String>()) }
+  LaunchedEffect(folders) {
+    val ids = folders.map { it.id }.toSet()
+    // One new folder is one she just made (not the list loading in).
+    knownFolders?.let { old -> (ids - old).let { new -> if (new.size == 1) freshFolders = new } }
+    knownFolders = ids
+  }
   var renamingFolder by remember { mutableStateOf<Folder?>(null) }
   var deletingFolder by remember { mutableStateOf<Folder?>(null) }
   var backups by remember { mutableStateOf(false) }
@@ -164,6 +186,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       onRenameFolder = { renamingFolder = it },
       onRecolorFolder = vm::recolorFolder,
       onMoveFolder = { movingFolder = it },
+      vanishing = vanishing,
+      fresh = freshFolders,
       onDeleteFolder = { deletingFolder = it },
       onBackup = { backups = true },
     )
@@ -253,6 +277,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             if (currentFolder != null && !inTrash && query.isBlank()) {
               item(key = "folders-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel("Folders") }
               items(subfolders, key = { "folder-" + it.id }) { f ->
+                PuffBox(leaving = f.id in vanishing, appearing = f.id in freshFolders) {
                 FolderTile(
                   f,
                   folders = folders,
@@ -264,6 +289,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                   onMove = { movingFolder = f },
                   onDelete = { deletingFolder = f },
                 )
+                }
               }
               item(key = "new-folder") { NewFolderTile { newFolder = NewFolderRequest(currentFolder.id) } }
             }
@@ -271,6 +297,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
               item(key = "notebooks-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(if (inTrash) "Tap a notebook to bring it back" else if (currentFolder != null) "Notebooks" else "Recent") }
             }
             items(notebooks, key = { it.id }) { nb ->
+              PuffBox(leaving = nb.id in vanishing, appearing = false) {
               NotebookCard(
                 nb,
                 folders = folders,
@@ -283,6 +310,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                 onDelete = { deleting = nb },
                 inTrash = inTrash,
               )
+              }
             }
           }
         }
@@ -320,8 +348,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       destructive = true,
       onDismiss = { deleting = null },
     ) {
-      vm.delete(nb.id)
       deleting = null
+      vanish(nb.id) { vm.delete(nb.id) }
     }
   }
   if (backups) BackupDialog(onDismiss = { backups = false })
@@ -363,8 +391,13 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   newFolder?.let { request ->
     val parentId = request.parentId
     val parentName = folders.firstOrNull { it.id == parentId }?.name
-    NameDialog(title = if (parentName != null) "New folder in $parentName" else "New folder", initial = "", placeholder = if (parentName != null) "Lectures" else "Statics", confirm = "Create", onDismiss = { newFolder = null }) {
-      vm.createFolder(it, parentId)
+    NewFolderDialog(
+      title = if (parentName != null) "New folder in $parentName" else "New folder",
+      placeholder = if (parentName != null) "Lectures" else "Statics",
+      initialColor = remember(request) { vm.nextFolderColor(parentId) },
+      onDismiss = { newFolder = null },
+    ) { name, color ->
+      vm.createFolder(name, parentId, color)
       newFolder = null
     }
   }
@@ -391,8 +424,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       destructive = true,
       onDismiss = { deletingFolder = null },
     ) {
-      vm.deleteFolder(f.id)
       deletingFolder = null
+      vanish(f.id) { vm.deleteFolder(f.id) }
     }
   }
 }
@@ -429,6 +462,8 @@ private fun Sidebar(
   onMoveFolder: (Folder) -> Unit,
   onDeleteFolder: (Folder) -> Unit,
   onBackup: () -> Unit,
+  vanishing: Set<String> = emptySet(),
+  fresh: Set<String> = emptySet(),
 ) {
   val c = Tali.colors
   // No panel colour of its own: the sidebar shares the page, so there's no seam to see.
@@ -484,8 +519,10 @@ private fun Sidebar(
         val hasChildren = folders.any { it.parentId == f.id }
         val expanded = f.id !in collapsed || f.id in openPath
         var menu by remember { mutableStateOf(false) }
-        Box(Modifier.padding(start = (depth * 16).dp)) {
+        PuffBox(leaving = f.id in vanishing, appearing = f.id in fresh, modifier = Modifier.padding(start = (depth * 16).dp)) {
+        Box {
           NavRow(
+            wash = folderWash(Color(f.color)),
             icon = {
               Icon(if (selected == f.id) Icons.Outlined.FolderOpen else Icons.Outlined.Folder, null, tint = Color(f.color), modifier = Modifier.size(20.dp))
             },
@@ -517,6 +554,7 @@ private fun Sidebar(
             onMove = { onMoveFolder(f) },
             onDelete = { onDeleteFolder(f) },
           )
+        }
         }
       }
     }
@@ -579,14 +617,50 @@ private fun Wordmark(modifier: Modifier = Modifier) {
   }
 }
 
+/** The soft gradient behind a selected folder, in that folder's own colour. */
 @Composable
-private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, trailing: (@Composable () -> Unit)? = null) {
+private fun folderWash(color: Color): Brush {
+  val c = Tali.colors
+  return if (c.isDark) Brush.horizontalGradient(listOf(color.copy(alpha = 0.42f), color.copy(alpha = 0.14f)))
+  else Brush.horizontalGradient(listOf(androidx.compose.ui.graphics.lerp(Color.White, color, 0.42f), androidx.compose.ui.graphics.lerp(Color.White, color, 0.14f)))
+}
+
+/** Naming a new folder and choosing its colour. */
+@Composable
+private fun NewFolderDialog(title: String, placeholder: String, initialColor: Int, onDismiss: () -> Unit, onCreate: (String, Int) -> Unit) {
+  val c = Tali.colors
+  var name by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+  var color by remember { mutableStateOf(initialColor) }
+  DialogCard(onDismiss, width = 480) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(folderWash(Color(color))), contentAlignment = Alignment.Center) {
+        Icon(Icons.Outlined.Folder, null, tint = Color(color), modifier = Modifier.size(24.dp))
+      }
+      Spacer(Modifier.width(14.dp))
+      Text(title, style = MaterialTheme.typography.titleLarge, color = c.ink)
+    }
+    Spacer(Modifier.height(18.dp))
+    TitleField(name, { name = it }, placeholder) { onCreate(name.text, color) }
+    Spacer(Modifier.height(16.dp))
+    SectionLabel("Colour")
+    Spacer(Modifier.height(6.dp))
+    Box(Modifier.offset(x = (-12).dp)) { CoverSwatches(current = color) { color = it } }
+    Spacer(Modifier.height(22.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+      QuietButton("Cancel", onClick = onDismiss)
+      PrimaryButton("Create") { onCreate(name.text, color) }
+    }
+  }
+}
+
+@Composable
+private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, trailing: (@Composable () -> Unit)? = null, wash: Brush? = null) {
   val c = Tali.colors
   Row(
     Modifier.fillMaxWidth()
       .height(44.dp)
       .clip(RoundedCornerShape(14.dp))
-      .background(if (selected) c.washBrush else SolidColor(Color.Transparent))
+      .background(if (selected) wash ?: c.washBrush else SolidColor(Color.Transparent))
       .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
       .padding(start = 12.dp, end = if (trailing != null) 4.dp else 12.dp),
     verticalAlignment = Alignment.CenterVertically,

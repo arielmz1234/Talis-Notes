@@ -429,11 +429,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private val pageShadow = Paint(Paint.ANTI_ALIAS_FLAG)
-  private val ghostPaint =
-    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      style = Paint.Style.STROKE
-      pathEffect = DashPathEffect(floatArrayOf(12f, 10f), 0f)
-    }
+  private val ghostPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
   private val ghostText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
   /** Paged notebooks: the desk, then each visible page with its paper, then the page to pull in. */
@@ -455,25 +451,52 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       paper.pageRect = r
       paper.draw(canvas, paperStyle, camera, width, height)
       canvas.restore()
+      // "2/5" in the page's bottom corner, when the page is big enough to read it.
+      if (b.y - a.y > 240f * density) {
+        ghostText.textAlign = Paint.Align.RIGHT
+        ghostText.textSize = 11f * density
+        ghostText.color = if (darkPaper) 0x88FFFFFF.toInt() else 0x66000000
+        canvas.drawText("${i + 1}/$n", b.x - 10f * density, b.y - 9f * density, ghostText)
+      }
     }
     paper.originY = 0f
     paper.pageRect = null
-    // The next page waits below the last one, drawn as an outline until she pulls it in.
-    val ghost = Pages.rect(n)
-    if (ghost.top < view.bottom) {
-      val a = camera.toScreen(Pt(ghost.left, ghost.top))
-      val b = camera.toScreen(Pt(ghost.right, ghost.bottom))
-      val ready = pullReady()
-      val tone = if (darkPaper || deskIsDark()) 0xFFB8A6E8.toInt() else 0xFF8F78CF.toInt()
-      ghostPaint.color = if (ready) tone else (tone and 0x00FFFFFF) or 0x99000000.toInt()
-      ghostPaint.strokeWidth = (if (ready) 2.4f else 1.6f) * density
-      canvas.drawRoundRect(a.x, a.y, b.x, b.y, 6f * density, 6f * density, ghostPaint)
-      ghostText.color = ghostPaint.color
-      ghostText.textSize = 15f * density
-      val label = if (ready) "Let go to add page ${n + 1}" else "Keep scrolling to add a page"
-      val ty = (a.y + 56f * density).coerceAtMost(height - 40f * density)
-      canvas.drawText(label, (a.x + b.x) / 2f, ty, ghostText)
+    drawPullIndicator(canvas, n)
+  }
+
+  /**
+   * Pulled up past the last page: a small round sign in the space below it. An arrow and "Drag for
+   * a new page" at first; a plus and "Release to add a page" once letting go would add one.
+   */
+  private fun drawPullIndicator(canvas: Canvas, n: Int) {
+    val pull = pullDp()
+    if (pull < 24f) return
+    val lastBottom = camera.toScreen(Pt(0f, lastPageBottom(n))).y
+    val ready = pull >= ADD_PULL_DP
+    val alpha = ((pull - 24f) / 40f).coerceIn(0f, 1f)
+    val tone = if (darkPaper || deskIsDark()) 0xFFC9C3D6.toInt() else 0xFF77718A.toInt()
+    val color = (tone and 0x00FFFFFF) or ((alpha * 255).toInt() shl 24)
+    val cx = width / 2f
+    val cy = (lastBottom + height) / 2f - 10f * density
+    val r = 13f * density
+    ghostPaint.pathEffect = null
+    ghostPaint.color = color
+    ghostPaint.strokeWidth = 1.6f * density
+    ghostPaint.strokeCap = Paint.Cap.ROUND
+    canvas.drawCircle(cx, cy, r, ghostPaint)
+    val s = 6f * density
+    if (ready) {
+      canvas.drawLine(cx - s, cy, cx + s, cy, ghostPaint)
+      canvas.drawLine(cx, cy - s, cx, cy + s, ghostPaint)
+    } else {
+      canvas.drawLine(cx, cy + s, cx, cy - s, ghostPaint)
+      canvas.drawLine(cx, cy - s, cx - s * 0.7f, cy - s * 0.3f, ghostPaint)
+      canvas.drawLine(cx, cy - s, cx + s * 0.7f, cy - s * 0.3f, ghostPaint)
     }
+    ghostText.textAlign = Paint.Align.CENTER
+    ghostText.textSize = 12f * density
+    ghostText.color = color
+    canvas.drawText(if (ready) "Release to add a page" else "Drag for a new page", cx, cy + r + 18f * density, ghostText)
   }
 
   private fun deskIsDark() = android.graphics.Color.luminance(deskColor) < 0.3f
@@ -760,7 +783,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           camera.pan(-h * 60f * density, v * 60f * density)
         }
         afterCameraMove()
-        addPulledPage()
         return true
       }
     }
@@ -1381,6 +1403,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
       velocity = VelocityTracker.obtain().also { it.addMovement(e) }
+      // Only a pull that starts at the end of the notebook can open space for a new page; a
+      // fast scroll down just stops there.
+      pulling = pageCount != null && pullDp() >= REST_DP - 4f
       fingerStart = Pt(e.x, e.y)
       fingerDownTime = SystemClock.uptimeMillis()
       maxPointers = 1
@@ -1470,15 +1495,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         return
       }
       mode == Mode.FINGER_PENDING && maxPointers == 1 -> tapAt(camera.toWorld(e.x, e.y))
-      maxPointers == 2 && quick && !multiTapMoved && settings.twoFingerUndo -> undo()
-      maxPointers == 3 && quick && !multiTapMoved && settings.threeFingerRedo -> redo()
+      maxPointers == 2 && quick && !multiTapMoved && settings.smartUndo -> undo()
+      maxPointers == 3 && quick && !multiTapMoved && settings.smartUndo -> redo()
     }
     if (mode == Mode.PAN || mode == Mode.PINCH) {
       settleCamera()
-      val n = pageCount
-      addPulledPage()
-      // A page that was just pulled in stays put; otherwise a one-finger flick keeps gliding.
-      if (mode == Mode.PAN && maxPointers == 1 && pageCount == n) {
+      pulling = false
+      // Pulled past the last page: add one or spring back. Otherwise a one-finger flick keeps gliding.
+      if (!finishPull() && mode == Mode.PAN && maxPointers == 1) {
         velocity?.let { v ->
           v.addMovement(e)
           v.computeCurrentVelocity(1000, ViewConfiguration.get(context).scaledMaximumFlingVelocity.toFloat())
@@ -1562,7 +1586,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       if (Pages.WIDTH + 2 * margin <= viewW) Pages.WIDTH / 2f - viewW / 2f
       else camera.x.coerceIn(-margin, Pages.WIDTH + margin - viewW)
     val minY = -topClearance / camera.zoom
-    val maxY = maxOf(minY, n * Pages.PITCH + Pages.HEIGHT * PULL_REACH - viewH)
+    // A little room under the last page; more while her fingers pull at it (or it springs back).
+    val room = if (pulling || cameraAnimator?.isRunning == true) MAX_PULL_DP else REST_DP
+    val maxY = maxOf(minY, lastPageBottom(n) + room / camera.zoom - viewH)
     val y = camera.y.coerceIn(minY, maxY)
     if (x != camera.x || y != camera.y) camera.set(Viewport(x, y, camera.zoom))
   }
@@ -1572,25 +1598,38 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * a rubber band, so a new page is only added on purpose.
    */
   private fun resisted(dy: Float): Float {
-    val n = pageCount ?: return dy
-    if (dy >= 0f) return dy
-    val lastBottom = (n - 1) * Pages.PITCH + Pages.HEIGHT
-    return if (camera.visibleWorld(width, height).bottom > lastBottom) dy * PULL_RESISTANCE else dy
+    if (pageCount == null || dy >= 0f) return dy
+    return if (pullDp() > REST_DP) dy * PULL_RESISTANCE else dy
   }
 
-  /** She has scrolled far enough into the next page outline that letting go adds it. */
-  private fun pullReady(): Boolean {
+  /** Fingers are on the page and started at its end (so it may be pulled past the last page). */
+  private var pulling = false
+
+  private fun lastPageBottom(n: Int) = (n - 1) * Pages.PITCH + Pages.HEIGHT
+
+  /** How far below the last page the screen reaches, in dp on screen. */
+  private fun pullDp(): Float {
+    val n = pageCount ?: return 0f
+    return (camera.visibleWorld(width, height).bottom - lastPageBottom(n)) * camera.zoom
+  }
+
+  /**
+   * Her fingers left the page after pulling past the last page: far enough adds a page (it takes
+   * the space she pulled open), otherwise the page springs back. Returns whether it handled that.
+   */
+  private fun finishPull(): Boolean {
     val n = pageCount ?: return false
-    return camera.visibleWorld(width, height).bottom > n * Pages.PITCH + Pages.HEIGHT * PULL_ADD
-  }
-
-  private fun addPulledPage() {
-    val n = pageCount ?: return
-    if (!pullReady()) return
-    setPages(n + 1)
-    performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-    host.onHint("Page ${n + 1} added")
-    invalidate()
+    val pull = pullDp()
+    if (pull <= REST_DP + 1f) return false
+    if (pull >= ADD_PULL_DP) {
+      setPages(n + 1)
+      performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+      invalidate()
+      return true
+    }
+    val viewH = height / camera.scale
+    animateCamera(Viewport(camera.x, lastPageBottom(n) + REST_DP / camera.zoom - viewH, camera.zoom))
+    return true
   }
 
   /** Shows page [index] across the width of the screen, its top just under the toolbars. */
@@ -1737,9 +1776,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PAGE_GAP = 48f
 
     /** How far into the next page outline she can scroll, and how far before letting go adds it (fractions of a page). */
-    private const val PULL_REACH = 0.5f
-    private const val PULL_ADD = 0.36f
-    private const val PULL_RESISTANCE = 0.4f
+    /** Space left under the last page at rest, how far it can be pulled, and how far adds a page (screen dp). */
+    private const val REST_DP = 32f
+    private const val MAX_PULL_DP = 210f
+    private const val ADD_PULL_DP = 150f
+    private const val PULL_RESISTANCE = 0.45f
 
     /** Room left around writing moved onto pages. */
     private const val PAGE_MARGIN = 60f

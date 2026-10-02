@@ -97,15 +97,18 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
    * Makes a folder inside [parentId] (or at the top level). A top-level folder opens straight away;
    * one made inside a folder appears among that folder's folders, so she can make several.
    */
-  fun createFolder(name: String, parentId: String? = null) {
+  fun createFolder(name: String, parentId: String? = null, chosen: Int? = null) {
     viewModelScope.launch {
-      val color = parentId?.let { p -> folders.value.firstOrNull { it.id == p }?.color } ?: COVER_COLORS[folders.value.size % COVER_COLORS.size]
+      val color = chosen ?: parentId?.let { p -> folders.value.firstOrNull { it.id == p }?.color } ?: COVER_COLORS[folders.value.size % COVER_COLORS.size]
       val folder = repo.createFolder(name.ifBlank { "New folder" }, color, parentId)
       if (parentId == null) selectedFolder.value = folder.id
     }
   }
 
   /** Moves a folder into [parentId]; a folder can't go inside itself or one of its own folders. */
+  /** The colour a new folder in [parentId] starts with: its parent's, or the next cover colour. */
+  fun nextFolderColor(parentId: String?): Int = parentId?.let { p -> folders.value.firstOrNull { it.id == p }?.color } ?: COVER_COLORS[folders.value.size % COVER_COLORS.size]
+
   fun moveFolder(id: String, parentId: String?) {
     if (parentId != null && (parentId == id || parentId in descendants(folders.value, id))) return
     repo.moveFolder(id, parentId)

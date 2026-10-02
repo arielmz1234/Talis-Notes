@@ -88,7 +88,7 @@ fun PaperPicker(
   onRemove: (CustomPaper) -> Unit,
   modifier: Modifier = Modifier,
   tileWidth: Dp = 62.dp,
-  perRow: Int = 6,
+  perRow: Int = 4,
 ) {
   val c = Tali.colors
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
@@ -112,20 +112,31 @@ fun PaperPicker(
     val all: List<Pair<String, @Composable () -> Unit>> =
       PaperStyle.entries.map { s -> s.name to @Composable { tile(s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
         customs.map { cp -> cp.id to @Composable { tile(cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
-    // Folded, one line: the first few, always including the one in use, then More and Your own.
+    // Folded: Blank, Lines and Grid, then More. Open: every paper, hers, and Your own last.
     val current = customId ?: style.name
-    val shown =
-      if (expanded) all
-      else all.take(FOLDED).let { first -> if (first.any { it.first == current }) first else first.dropLast(1) + all.filter { it.first == current } }
+    val shown = if (expanded) all else FOLDED.mapNotNull { name -> all.firstOrNull { it.first == name } }
     shown.forEach { it.second() }
-    tile(if (expanded) "Fewer" else "More", false, { expanded = !expanded }, null) { m ->
+    // While folded, More stands in for a paper in use that isn't one of the three.
+    val hiddenCurrent = !expanded && current !in FOLDED
+    val currentCustom = customs.firstOrNull { it.id == customId }
+    tile(if (expanded) "Fewer" else if (hiddenCurrent) (currentCustom?.name ?: style.label) else "More", hiddenCurrent, { expanded = !expanded }, null) { m ->
       Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
-        Icon(if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown, null, tint = c.inkMuted, modifier = Modifier.size(20.dp))
+        if (hiddenCurrent) {
+          if (currentCustom != null) CustomPaperSwatch(currentCustom, Modifier.fillMaxSize()) else PaperSwatch(style, Modifier.fillMaxSize())
+        }
+        Icon(
+          if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+          null,
+          tint = c.inkMuted,
+          modifier = Modifier.size(20.dp).then(if (hiddenCurrent) Modifier.clip(RoundedCornerShape(6.dp)).background(c.surface.copy(alpha = 0.85f)) else Modifier),
+        )
       }
     }
-    tile("Your own", false, onAdd, null) { m ->
-      Box(m.clip(RoundedCornerShape(8.dp)).border(1.dp, c.line, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-        Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(18.dp))
+    if (expanded) {
+      tile("Your own", false, onAdd, null) { m ->
+        Box(m.clip(RoundedCornerShape(8.dp)).border(1.dp, c.line, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+          Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(18.dp))
+        }
       }
     }
   }
@@ -219,7 +230,7 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
 }
 
 /** Papers shown before More. */
-private const val FOLDED = 4
+private val FOLDED = listOf(PaperStyle.BLANK.name, PaperStyle.LINES.name, PaperStyle.GRID.name)
 
 private val LINE_COLORS = listOf(0xFFDADADA, 0xFFB9D2F6, 0xFFD2C3EE, 0xFFBFE3CF, 0xFFF4C6D4, 0xFF8E95A2).map { it.toInt() }
 private val PAPER_COLORS = listOf(0xFFFFFFFF, 0xFFFFF8E8, 0xFFF4EEFF, 0xFFEEF5FF, 0xFFEFF8F2, 0xFFF6F1EA).map { it.toInt() }
