@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.SolidColor
 import com.tali.notes.ui.components.rememberSlidingSelection
 import com.tali.notes.ui.components.slidingHighlight
 import com.tali.notes.ui.components.slidingOption
+import androidx.compose.material.icons.outlined.FormatColorFill
 
 @Composable
 fun MainToolbar(
@@ -117,11 +118,13 @@ fun MainToolbar(
       Tool.ERASER -> "Eraser"
       Tool.LASSO -> "Lasso"
       Tool.SHAPE -> "Shapes"
+      Tool.FILL -> "Fill"
       else -> null
     }
     Row(Modifier.slidingHighlight(tools, toolKey, SolidColor(c.blueSoft), 14.dp), verticalAlignment = Alignment.CenterVertically) {
       ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true, selection = tools) { onTool(Tool.ERASER) }
       ToolButton(TaliIcons.Lasso, "Lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
+      ToolButton(Icons.Outlined.FormatColorFill, "Fill", selected = tool == Tool.FILL, blue = true, selection = tools) { onTool(Tool.FILL) }
       // While the shape tool is on, its button shows which shape it will draw.
       Box(
         Modifier.slidingOption(tools, "Shapes").size(44.dp).clip(RoundedCornerShape(14.dp))

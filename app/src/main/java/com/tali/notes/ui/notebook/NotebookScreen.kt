@@ -438,6 +438,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                   PanelKind.ERASER -> EraserPanel(settings, vm)
                   PanelKind.LASSO -> LassoPanel(settings, vm)
                   PanelKind.SHAPES -> ShapesPanel(settings, vm.shapeKind, vm)
+                  PanelKind.FILL -> FillPanel(settings, vm)
                   null -> Unit
                 }
               }

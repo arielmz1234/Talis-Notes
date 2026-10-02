@@ -20,6 +20,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 
 **Editing**
 - The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect.
+- **Fill:** tap inside a shape to fill it with colour, or inside an area you drew around to fill it behind your writing (small gaps in the outline are bridged). It has its own colour, opacity, and "None" to take a fill away.
 - The lasso picks up anything it touches (circling the tip of a line takes the whole line). Pictures and writing can be brought to the front or sent to the back.
 - The lasso can move, resize and rotate a selection (with live angle and 15° steps), recolour, duplicate, copy to another notebook, delete, or save as a shape.
 - Undo and redo work with the buttons, or with *Smart undo and redo* (⋯ menu): a two-finger tap undoes, a three-finger tap redoes.

@@ -18,6 +18,9 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.int
 
 /** Converts canvas items to storage rows and back. Ink keeps its raw pen samples, so nothing is lost. */
 object ItemCodec {
@@ -43,7 +46,10 @@ object ItemCodec {
         ItemRow(item.id, item.z, KIND_INK, item.pen.name, item.color, item.stroke.brush.size, bytes, b.left, b.top, b.right, b.bottom)
       }
       is ShapeItem -> {
-        val bytes = json.encodeToString(ShapeGeometry.serializer(), item.geometry).encodeToByteArray()
+        // The geometry, plus "fill" when it's filled (older versions ignore the extra key).
+        var obj = json.encodeToJsonElement(ShapeGeometry.serializer(), item.geometry)
+        item.fill?.let { f -> obj = kotlinx.serialization.json.JsonObject(obj.jsonObject + ("fill" to kotlinx.serialization.json.JsonPrimitive(f))) }
+        val bytes = obj.toString().encodeToByteArray()
         ItemRow(item.id, item.z, KIND_SHAPE, item.pen.name, item.color, item.size, bytes, b.left, b.top, b.right, b.bottom)
       }
       is ImageItem -> {
@@ -71,8 +77,10 @@ object ItemCodec {
             }
           }
           KIND_SHAPE -> {
-            val geometry = json.decodeFromString(ShapeGeometry.serializer(), row.payload.decodeToString())
-            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry, Rect(row.l, row.t, row.r, row.b))
+            val text = row.payload.decodeToString()
+            val geometry = json.decodeFromString(ShapeGeometry.serializer(), text)
+            val fill = runCatching { json.parseToJsonElement(text).jsonObject["fill"]?.jsonPrimitive?.int }.getOrNull()
+            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry, Rect(row.l, row.t, row.r, row.b), fill)
           }
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())

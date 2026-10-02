@@ -48,6 +48,14 @@ class ImageStore(private val dir: File) {
     }
   }
 
+  /** Saves a picture made in the app (a fill) as a PNG and returns its file name. */
+  fun save(bitmap: Bitmap, prefix: String): String {
+    val name = prefix + java.util.UUID.randomUUID().toString().take(12) + ".png"
+    File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    cache.put(name, bitmap)
+    return name
+  }
+
   /** Loads right away, for PDF export and previews. */
   fun loadNow(file: String): Bitmap? = cache.get(file) ?: decode(file)?.also { cache.put(file, it) }
 

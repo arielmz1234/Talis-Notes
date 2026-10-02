@@ -50,6 +50,7 @@ enum class PanelKind {
   ERASER,
   LASSO,
   SHAPES,
+  FILL,
 }
 
 class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewModel(app) {
@@ -169,6 +170,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         Tool.LASSO -> PanelKind.LASSO
         Tool.SHAPE -> PanelKind.SHAPES
         Tool.PEN -> PanelKind.PEN
+        Tool.FILL -> PanelKind.FILL
       }
     if (tool == t || t == Tool.SHAPE) {
       panel = if (panel == panelFor) null else panelFor
@@ -269,6 +271,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun setFingerDraws(value: Boolean?) = store.update { it.copy(fingerDraws = value) }
 
   fun setPageGuides(on: Boolean) = store.update { it.copy(pageGuides = on) }
+
+  fun setFillColor(color: Int?) = store.update { it.copy(fillColor = color) }
+
+  fun setFillOpacity(opacity: Float) = store.update { it.copy(fillOpacity = opacity.coerceIn(0.15f, 1f)) }
 
   fun setSmartUndo(on: Boolean) = store.update { it.copy(smartUndo = on) }
 

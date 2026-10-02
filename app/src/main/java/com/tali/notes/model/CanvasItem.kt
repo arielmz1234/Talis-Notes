@@ -76,7 +76,16 @@ class ShapeItem(
   val geometry: ShapeGeometry,
   /** Bounds saved with the shape, so a loaded shape can wait to build its strokes until it's drawn. */
   knownBounds: Rect? = null,
+  /** The colour it's filled with (with its own opacity), or null; only closed shapes take a fill. */
+  val fill: Int? = null,
 ) : CanvasItem() {
+  /** Whether this shape encloses an area that can be filled. */
+  val closed: Boolean
+    get() = geometry.let { it is EllipseShape || it is SectorShape || (it is PolyShape && it.closed) }
+
+  /** The outline enclosing its area, for filling and for telling whether a point is inside. */
+  val outline: List<com.tali.notes.geometry.Pt>
+    get() = geometry.paths(size).firstOrNull().orEmpty()
   private val built = lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
 
   val strokes: List<Stroke>
@@ -92,13 +101,15 @@ class ShapeItem(
   override val bounds: Rect = knownBounds ?: strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)
 
   override fun transformed(m: Affine, newId: String, newZ: Long) =
-    ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m))
+    ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m), fill = fill)
 
-  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds)
+  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill)
 
-  fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g)
+  fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g, fill = fill)
 
-  fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry)
+  fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry, fill = fill)
+
+  fun filled(color: Int?) = ShapeItem(id, z, pen, this.color, size, geometry, bounds, color)
 
   /** The shape's outline as plain ink, for partial erasing. */
   fun toInk(idFor: (Int) -> String): List<InkItem> = strokes.mapIndexed { i, s -> InkItem(idFor(i), z, pen, s) }

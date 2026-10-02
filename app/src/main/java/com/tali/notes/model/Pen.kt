@@ -52,4 +52,7 @@ enum class Tool {
   ERASER,
   LASSO,
   SHAPE,
+
+  /** Fills a closed shape, or an area her writing encloses, with colour. */
+  FILL,
 }

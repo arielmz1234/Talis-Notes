@@ -221,6 +221,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     ROTATE_SELECTION,
     HANDLE_DRAG,
     SHAPE_CREATE,
+
+    /** The fill tool came down: on lifting (without dragging) it fills what's there. */
+    FILL_TAP,
     FINGER_PENDING,
     PAN,
     PINCH,
@@ -585,6 +588,109 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
 
   /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
+  // ---- Fill ----
+
+  private var filling = false
+
+  /**
+   * Fills what's under [p] with the fill colour. A closed shape there gets a fill of its own (crisp,
+   * moves with the shape); otherwise an area her writing closes in gets a fill picture behind the
+   * writing, worked out in the background. With no fill colour, it takes a fill away instead.
+   */
+  private fun fillAt(p: Pt) {
+    val d = doc ?: return
+    val colour = settings.fillArgb
+    // 1. The topmost closed shape the tap is inside.
+    val shape = d.all.toList().asReversed().firstOrNull { it is ShapeItem && it.closed && it.bounds.contains(p) && Geo.pointInPolygon(p, it.outline) } as ShapeItem?
+    if (shape != null) {
+      if (shape.fill == colour) return
+      d.commit(Change(listOf(shape), listOf(shape.filled(colour))))
+      return
+    }
+    // 2. A fill picture already there: taken away, or replaced by the new colour below.
+    val oldFills = d.all.filter { it is ImageItem && it.file.startsWith(FILL_PREFIX) && it.rect.contains(p) && fillCovers(it, p) }
+    if (colour == null) {
+      if (oldFills.isEmpty()) host.onHint("Tap a filled shape or area to take its fill away")
+      else d.commit(Change(oldFills, emptyList()))
+      return
+    }
+    // 3. The area her writing encloses, found off the main thread.
+    if (filling) return
+    filling = true
+    val n = pageCount
+    val page = if (n != null) pageLayout.rect(pageLayout.indexAt(p.y).coerceIn(0, n - 1)) else null
+    var window = Rect(p.x - FILL_REACH, p.y - FILL_REACH, p.x + FILL_REACH, p.y + FILL_REACH)
+    if (page != null) window = Rect(maxOf(window.left, page.left), maxOf(window.top, page.top), minOf(window.right, page.right), minOf(window.bottom, page.bottom))
+    val walls = d.intersecting(window).filter { it !is ImageItem }
+    val dark = darkPaper
+    fillWorker.execute {
+      val made = runCatching { fillPicture(p, window, walls, colour) }.getOrNull()
+      post {
+        filling = false
+        val dd = doc ?: return@post
+        if (dd !== d) return@post
+        if (made == null) {
+          host.onHint(if (walls.isEmpty()) "Draw around an area first, or tap inside a shape" else "That area isn't closed. Close the gap and try again")
+          return@post
+        }
+        val (file, rect) = made
+        val item = ImageItem(dd.newId(), dd.nextZ(), file, rect)
+        dd.commit(Change(oldFills.filter { dd[it.id] != null }, listOf(item)))
+        if (dark) host.onTip("fill-dark", "Fills keep their colour on dark paper")
+      }
+    }
+  }
+
+  /** Whether the fill picture [item] actually covers [p] (not just its box). */
+  private fun fillCovers(item: CanvasItem, p: Pt): Boolean {
+    val img = item as ImageItem
+    val bmp = images.peek(img.file) ?: return true
+    val x = ((p.x - img.rect.left) / img.rect.width * bmp.width).toInt().coerceIn(0, bmp.width - 1)
+    val y = ((p.y - img.rect.top) / img.rect.height * bmp.height).toInt().coerceIn(0, bmp.height - 1)
+    return (bmp.getPixel(x, y) ushr 24) > 0
+  }
+
+  /**
+   * Draws the writing in [window] into a mask, finds the area around [p] it encloses and returns a
+   * picture of that area in [colour] (saved, with its place in the world), or null if it isn't closed.
+   */
+  private fun fillPicture(p: Pt, window: Rect, walls: List<CanvasItem>, colour: Int): Pair<String, Rect>? {
+    val k = minOf(1f, FILL_PIXELS / maxOf(window.width, window.height))
+    val w = (window.width * k).toInt().coerceAtLeast(8)
+    val h = (window.height * k).toInt().coerceAtLeast(8)
+    val mask = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+    val c = Canvas(mask)
+    c.scale(k, k)
+    c.translate(-window.left, -window.top)
+    val hint = android.graphics.Matrix().apply { setScale(k, k) }
+    ItemRenderer(androidx.ink.rendering.android.canvas.CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore), images, sync = true).drawAll(c, walls, hint)
+    val px = IntArray(w * h)
+    mask.getPixels(px, 0, w, 0, 0, w, h)
+    mask.recycle()
+    val wallGrid = BooleanArray(w * h) { (px[it] ushr 24) > 40 }
+    // Close gaps of about 1 mm in hand-drawn outlines.
+    val bridge = (FILL_BRIDGE * k).toInt().coerceAtLeast(1)
+    val filled = AreaFill.fill(wallGrid, w, h, ((p.x - window.left) * k).toInt(), ((p.y - window.top) * k).toInt(), bridge) ?: return null
+    var x0 = w
+    var y0 = h
+    var x1 = -1
+    var y1 = -1
+    for (y in 0 until h) for (x in 0 until w) if (filled[y * w + x]) {
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
+    if (x1 < x0) return null
+    val bw = x1 - x0 + 1
+    val bh = y1 - y0 + 1
+    val out = IntArray(bw * bh)
+    for (y in 0 until bh) for (x in 0 until bw) if (filled[(y + y0) * w + (x + x0)]) out[y * bw + x] = colour
+    val bmp = android.graphics.Bitmap.createBitmap(out, bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
+    val file = images.save(bmp, FILL_PREFIX)
+    return file to Rect(window.left + x0 / k, window.top + y0 / k, window.left + (x1 + 1) / k, window.top + (y1 + 1) / k)
+  }
+
   /** Whether a touch at [screen] lands on the active shape's dots or on the selection (to move, resize or turn it). */
   private fun grabsEdit(screen: Pt): Boolean {
     val hit = HANDLE_HIT_DP * density
@@ -914,7 +1020,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     val effective = if (eraserOverride) Tool.ERASER else tool
     val n = pageCount
-    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE) && !pageLayout.contains(n, p.x, p.y)) {
+    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE || effective == Tool.FILL) && !pageLayout.contains(n, p.x, p.y)) {
       mode = Mode.IGNORE
       return
     }
@@ -929,6 +1035,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         shapeStart = p
         shapePreview = null
         mode = Mode.SHAPE_CREATE
+      }
+      Tool.FILL -> {
+        shapeStart = p
+        mode = Mode.FILL_TAP
       }
     }
   }
@@ -1126,6 +1236,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         liveEdit = null
         tiles.hidden = emptySet()
         if (selection.size == 1) setSelection(listOfNotNull(d?.get(selection[0].id)))
+      }
+      Mode.FILL_TAP -> {
+        val at = if (idx >= 0) world(e, idx) else shapeStart
+        if (camera.toScreen(at).dist(camera.toScreen(shapeStart)) < touchSlop * 2) fillAt(shapeStart)
       }
       Mode.SHAPE_CREATE -> {
         if (d != null) {
@@ -1750,6 +1864,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun tapAt(p: Pt) {
+    // With the fill tool, a finger tap fills too.
+    if (tool == Tool.FILL) {
+      fillAt(p)
+      return
+    }
     val item = hitTest(p, pages = false) { true }
     if (item == null) clearSelection() else selectSingle(item)
   }
@@ -2003,7 +2122,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   companion object {
     private val DRAW_MODES =
-      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.IGNORE)
+      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE)
     private const val HOLD_TOLERANCE_DP = 7f
 
     /** PDF points per world unit (dp), matching the PDF export so pages keep their real size. */
@@ -2022,6 +2141,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** Room left around writing moved onto pages. */
     private const val PAGE_MARGIN = 60f
+    /** One background thread for working out fills, shared by every notebook. */
+    private val fillWorker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "fill").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
+
+    /** Fill pictures are saved with this prefix, so the fill tool can recognise (and replace) them. */
+    const val FILL_PREFIX = "fill-"
+    /** How far from the tap a fill looks for the edges of its area, in world units. */
+    private const val FILL_REACH = 1100f
+    /** The largest mask side, in pixels. */
+    private const val FILL_PIXELS = 1400f
+    /** Gaps up to about this wide (world units, ~1 mm) in an outline still count as closed. */
+    private const val FILL_BRIDGE = 3f
     private const val HANDLE_HIT_DP = 24f
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L

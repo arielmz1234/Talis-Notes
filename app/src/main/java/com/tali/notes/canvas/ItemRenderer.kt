@@ -31,6 +31,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   /** Dark paper: ink is drawn in its light counterpart colours; pictures stay as they are. */
   var dark = false
 
+  private val fillPath = android.graphics.Path()
+  private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
   /** Typed text laid out in its dark-paper colour, made the first time dark paper draws it. */
   private val darkText = java.util.WeakHashMap<TextItem, android.text.StaticLayout>()
 
@@ -75,7 +78,21 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   fun draw(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
     when (item) {
       is InkItem -> strokes.draw(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
-      is ShapeItem -> (if (dark) item.darkStrokes else item.strokes).forEach { strokes.draw(canvas, it, worldToScreen) }
+      is ShapeItem -> {
+        // Its fill first, under the outline; on dark paper the colour turns like ink does.
+        item.fill?.let { f ->
+          val pts = item.outline
+          if (pts.size >= 3) {
+            fillPath.rewind()
+            fillPath.moveTo(pts[0].x, pts[0].y)
+            for (i in 1 until pts.size) fillPath.lineTo(pts[i].x, pts[i].y)
+            fillPath.close()
+            fillPaint.color = if (dark) (com.tali.notes.ink.Brushes.onDarkPaper(f or 0xFF000000.toInt()) and 0x00FFFFFF) or (f and 0xFF000000.toInt()) else f
+            canvas.drawPath(fillPath, fillPaint)
+          }
+        }
+        (if (dark) item.darkStrokes else item.strokes).forEach { strokes.draw(canvas, it, worldToScreen) }
+      }
       is TextItem -> {
         canvas.save()
         canvas.translate(item.origin.x, item.origin.y)

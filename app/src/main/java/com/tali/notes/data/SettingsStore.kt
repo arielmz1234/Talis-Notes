@@ -63,6 +63,10 @@ data class AppSettings(
   val defaultPaged: Boolean = true,
   /** New paged notebooks start with the orientation she last chose. */
   val defaultLandscape: Boolean = false,
+  /** The fill tool's colour, or null to take fills away. */
+  val fillColor: Int? = 0xFF9DB8F5.toInt(),
+  /** How strongly fills cover the paper, 0.15..1. */
+  val fillOpacity: Float = 0.7f,
   /** Faint A4 page edges on the canvas; A4 export then follows exactly these pages. */
   val pageGuides: Boolean = false,
   /** Smart undo and redo: a quick two-finger tap undoes, a three-finger tap redoes. */
@@ -70,6 +74,10 @@ data class AppSettings(
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
 ) {
+  /** The fill colour with its opacity applied, or null when the fill tool takes fills away. */
+  val fillArgb: Int?
+    get() = fillColor?.let { c -> ((255 * fillOpacity.coerceIn(0.15f, 1f)).toInt() shl 24) or (c and 0x00FFFFFF) }
+
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 
   fun lassoHits(pen: PenType?) = if (pen == null) lassoSelectsImages else lassoAffects[pen] != false
