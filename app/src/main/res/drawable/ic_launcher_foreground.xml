@@ -1,22 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A fluffy cloud over a line of handwriting, with two sparkles. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-  <path android:pathData="M31,71.5a24,2.8 0 1,0 48,0a24,2.8 0 1,0 -48,0Z" android:fillColor="#383A2C9E" />
-  <path android:pathData="M25.50,55.00a11.50,11.50 0 1,0 23.00,0a11.50,11.50 0 1,0 -23.00,0ZM34.50,43.50a15.50,15.50 0 1,0 31.00,0a15.50,15.50 0 1,0 -31.00,0ZM53.50,47.00a13.00,13.00 0 1,0 26.00,0a13.00,13.00 0 1,0 -26.00,0ZM67.50,56.50a9.50,9.50 0 1,0 19.00,0a9.50,9.50 0 1,0 -19.00,0ZM37,52h40a8,8 0 0,1 8,8v0a8,8 0 0,1 -8,8h-40a8,8 0 0,1 -8,-8v0a8,8 0 0,1 8,-8Z">
-    <aapt:attr name="android:fillColor">
-      <gradient android:type="linear" android:startX="0" android:startY="30" android:endX="0" android:endY="70">
-        <item android:offset="0" android:color="#FFFFFFFF" />
-        <item android:offset="0.6" android:color="#FFFFFFFF" />
-        <item android:offset="1" android:color="#FFD3DAFA" />
-      </gradient>
-    </aapt:attr>
-  </path>
-  <path android:pathData="M32,81C37,75 41,87 46,81S55,75 59,81S67,86 72,80" android:strokeColor="#F2FFFFFF" android:strokeWidth="3.4" android:strokeLineCap="round" android:fillColor="#00000000" />
-  <path android:pathData="M80,31Q80,36 85,36Q80,36 80,41Q80,36 75,36Q80,36 80,31Z" android:fillColor="#FFFFFFFF" />
-  <path android:pathData="M26,34Q26,36.5 28.5,36.5Q26,36.5 26,39Q26,36.5 23.5,36.5Q26,36.5 26,34Z" android:fillColor="#CCFFFFFF" />
-</vector>
+<!-- The whole picture lives in the background layer (mipmap/ic_launcher_art), so the foreground is empty. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <solid android:color="@android:color/transparent" />
+</shape>

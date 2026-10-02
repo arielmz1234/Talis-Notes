@@ -106,7 +106,7 @@ Backups come in three layers:
 - Copy `keystore/` somewhere safe (it is not in git).
 - Google Drive setup, then set `DRIVE_BACKUP=true`.
 - Try two-finger undo and three-finger redo on the real tablet. They are tested only in instrumented tests and the emulator.
-- **New app icon (waiting on a file).** The owner wants the inner rounded-square icon from a picture he pasted: a white page with lilac lines and a folded corner, a soft white-lilac cloud at its lower left, and lilac clouds behind, on a violet rounded square. The pasted image was never saved to disk. Ask him for the file, crop it to the inner icon, and replace `res/drawable/ic_launcher_*` (adaptive icon in `mipmap-anydpi-v26`).
+- The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
 - The owner reviews visual changes on his own Galaxy Tab S9 FE (debug builds over USB). He asked to review: the frosted eye "show toolbars" button, the back-cloud plus title-with-pencil layout, and how scrolling feels after the glide fix.
 
 ## Recent work (October 2026)
@@ -123,3 +123,4 @@ Working setup notes:
 - On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.
 - The `medium_tablet` AVD may need creating. Copy another AVD's `config.ini` with 1334×800 @160dpi, landscape.
 - Python edits on Windows: write files in text mode so they keep CRLF.
+- Cloud sessions (Linux, no KVM, so no emulator): install the SDK command-line tools from dl.google.com into `~/android-sdk`, then `sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"`, write `local.properties`, and build. Maven Central sometimes answers 429; retry with a pause. Built APKs there are signed with a throwaway debug key, so they won't install over a debug build made on the owner's PC.
