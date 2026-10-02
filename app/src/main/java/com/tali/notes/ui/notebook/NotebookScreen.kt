@@ -133,6 +133,18 @@ import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.FlipToFront
+import androidx.compose.material.icons.outlined.FlipToBack
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 
 private class CanvasHolder {
   var view: NoteCanvasView? = null
@@ -286,6 +298,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             .also {
               holder.view = it
               it.settings = settings
+              it.pageLayout = vm.pageLayout
               it.pageCount = vm.pageCount
               it.darkPaper = darkPaper
               it.attach(doc, vm.initialViewport)
@@ -299,6 +312,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
           v.customPaper = vm.customPaperOf(meta, settings)
+          v.pageLayout = vm.pageLayout
           v.pageCount = vm.pageCount
           v.darkPaper = darkPaper
           v.deskColor = (if (darkPaper) DESK_DARK_PAPER else if (systemDark) DESK_DARK else DESK_LIGHT).toArgb()
@@ -318,9 +332,17 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     // Tapping the page closes an open panel instead of drawing.
     if (vm.panel != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { vm.panel = null } })
 
-    // The toolbars pop in as the notebook opens; hiding them leaves only the page. Either way
-    // clouds puff up where the bars are.
+    // The toolbars slide in as the notebook opens (no cloud: she opens notebooks all day). Hiding
+    // or showing them puffs a cloud where each bar is, measured from the bars themselves.
     val chrome = remember { androidx.compose.animation.core.MutableTransitionState(false) }
+    // Where each bar last sat. A plain map, not state: bars report while they slide, and that
+    // mustn't recompose anything. The puff copies it when it starts.
+    val bars = remember { HashMap<String, androidx.compose.ui.geometry.Rect>() }
+    val barLift = with(LocalDensity.current) { 10.dp.roundToPx() }
+    // Not while they're leaving: they'd be recorded mid-slide, off their place.
+    fun recordBar(key: String, at: androidx.compose.ui.layout.LayoutCoordinates) {
+      if (chrome.targetState) bars[key] = at.boundsInRoot()
+    }
     var ready by remember { mutableStateOf(false) }
     // Wait for the notebook and the screen's slide-in, so the hello is seen.
     LaunchedEffect(doc != null) {
@@ -330,18 +352,50 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     }
     chrome.targetState = ready && !vm.focus
     var puffs by remember { mutableIntStateOf(0) }
-    LaunchedEffect(vm.focus, ready) { if (ready) puffs++ }
-    ToolbarPuffs(puffs, narrow)
+    var shownFocus by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(vm.focus, ready) {
+      if (!ready) return@LaunchedEffect
+      if (shownFocus != null && shownFocus != vm.focus) puffs++
+      shownFocus = vm.focus
+    }
+    ToolbarPuffs(puffs, showing = !vm.focus, bars = bars)
     AnimatedVisibility(
       visibleState = chrome,
-      enter = fadeIn(tween(200, delayMillis = 60)) + scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 380f), initialScale = 0.9f),
-      exit = fadeOut(tween(160)) + scaleOut(tween(200), targetScale = 0.9f),
+      // Each bar animates itself (barEnter / barExit), so they can follow one another.
+      enter = androidx.compose.animation.EnterTransition.None,
+      exit = androidx.compose.animation.ExitTransition.None,
     ) {
+    // A bar grows from its own top edge, lifting in; the bars follow one another by 40 ms and leave
+    // together, quicker. Driven by this visibility's own transition (so it waits for them), and
+    // faded draw by draw rather than through an offscreen layer: a layer would clip the cloud bumps
+    // above the bar until it was fully shown, so the bar would arrive first and its bumps after.
+    @Composable
+    fun Modifier.bar(key: String, order: Int, fromBelow: Boolean = false): Modifier {
+      val shown by transition.animateFloat(
+        transitionSpec = {
+          if (targetState == androidx.compose.animation.EnterExitState.Visible) tween(260, delayMillis = 40 * order, easing = com.tali.notes.ui.components.EaseOutStrong)
+          else tween(170, easing = com.tali.notes.ui.components.EaseOutStrong)
+        },
+        label = "bar$order",
+      ) { if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+      val lift = (if (fromBelow) barLift else -barLift).toFloat()
+      return graphicsLayer {
+          alpha = shown
+          compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+          translationY = (1f - shown) * lift
+          val sc = 0.96f + 0.04f * shown
+          scaleX = sc
+          scaleY = sc
+          transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, if (fromBelow) 1f else 0f)
+        }
+        .then(if (key.isEmpty()) Modifier else Modifier.onGloballyPositioned { recordBar(key, it) })
+    }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
-      val titlePill: @Composable () -> Unit = { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) }
+      val titlePill: @Composable () -> Unit = { Box(Modifier.bar("title", 0)) { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) } }
       val tools: @Composable () -> Unit = {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.bar("", 1), horizontalAlignment = Alignment.CenterHorizontally) {
           MainToolbar(
+            modifier = Modifier.onGloballyPositioned { recordBar("tools", it) },
             settings = settings,
             darkPaper = darkPaper,
             tool = vm.tool,
@@ -384,6 +438,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                   PanelKind.ERASER -> EraserPanel(settings, vm)
                   PanelKind.LASSO -> LassoPanel(settings, vm)
                   PanelKind.SHAPES -> ShapesPanel(settings, vm.shapeKind, vm)
+                  PanelKind.FILL -> FillPanel(settings, vm)
                   null -> Unit
                 }
               }
@@ -392,6 +447,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
       val undoBar: @Composable () -> Unit = {
+        Box(Modifier.bar("undo", 2)) {
           UndoRedoBar(
             canUndo = vm.canUndo,
             canRedo = vm.canRedo,
@@ -437,6 +493,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onSmartUndo = vm::setSmartUndo,
             )
           }
+        }
       }
       if (narrow) {
         // Held upright: title and undo share the first line, the tools get a line of their own.
@@ -455,7 +512,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
       Spacer(Modifier.weight(1f))
-      Box(Modifier.fillMaxWidth()) {
+      Box(Modifier.fillMaxWidth().bar("", 3, fromBelow = true)) {
         HintPill(vm.hint, onDone = { vm.hint = null }, modifier = Modifier.align(Alignment.BottomCenter))
         Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
           val (page, pages) = vm.page
@@ -479,6 +536,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
           onEditText = { id -> holder.view?.runSafely { editText(id) } },
+          onArrange = { front -> holder.view?.runSafely { arrangeSelection(front) } },
         )
       }
     }
@@ -757,10 +815,11 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
+  var arranging by remember(sel.count) { mutableStateOf(false) }
   Box(
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
@@ -797,6 +856,22 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
         ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
+        // What's in front and what's behind: pictures can go over the writing or under it.
+        Box {
+          ToolButton(Icons.Outlined.Layers, "Arrange", selected = arranging) { arranging = true }
+          DropdownMenu(expanded = arranging, onDismissRequest = { arranging = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+            DropdownMenuItem(
+              text = { Column { Text("Bring to front"); Text(if (sel.hasImage) "Over your writing" else "Over everything else", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              leadingIcon = { Icon(Icons.Outlined.FlipToFront, null) },
+              onClick = { arranging = false; onArrange(true) },
+            )
+            DropdownMenuItem(
+              text = { Column { Text("Send to back"); Text(if (sel.hasImage) "Behind your writing" else "Behind everything else", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              leadingIcon = { Icon(Icons.Outlined.FlipToBack, null) },
+              onClick = { arranging = false; onArrange(false) },
+            )
+          }
+        }
         sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
         if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
@@ -904,8 +979,10 @@ private fun ShowToolbarsButton(visible: Boolean, modifier: Modifier = Modifier, 
   AnimatedVisibility(
     visible = visible,
     modifier = modifier,
-    enter = fadeIn(tween(160, delayMillis = 120)) + scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 400f), initialScale = 0.4f),
-    exit = fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.6f),
+    // Comes in as the bars go (from 90%, no bounce); leaves quicker than it came.
+    enter = fadeIn(tween(200, delayMillis = 80, easing = com.tali.notes.ui.components.EaseOutStrong)) +
+      scaleIn(tween(240, delayMillis = 80, easing = com.tali.notes.ui.components.EaseOutStrong), initialScale = 0.9f),
+    exit = fadeOut(tween(120, easing = com.tali.notes.ui.components.EaseOutStrong)) + scaleOut(tween(140, easing = com.tali.notes.ui.components.EaseOutStrong), targetScale = 0.95f),
   ) {
     Box(
       Modifier.size(40.dp)
@@ -920,22 +997,37 @@ private fun ShowToolbarsButton(visible: Boolean, modifier: Modifier = Modifier, 
   }
 }
 
-/** Clouds billowing up where each bar is (or was), whenever the toolbars appear or go. */
+/**
+ * A puff of mist where each bar is (or was), whenever the toolbars are hidden or brought back:
+ * full when they go, lighter when they come back. Progress is read while drawing, so the puff
+ * never recomposes the screen while it plays.
+ */
 @Composable
-private fun ToolbarPuffs(tick: Int, narrow: Boolean) {
+private fun ToolbarPuffs(tick: Int, showing: Boolean, bars: Map<String, androidx.compose.ui.geometry.Rect>) {
   val p = remember { androidx.compose.animation.core.Animatable(1f) }
+  var playing by remember { mutableStateOf(false) }
+  var spots by remember { mutableStateOf(emptyList<androidx.compose.ui.geometry.Rect>()) }
   LaunchedEffect(tick) {
     if (tick == 0) return@LaunchedEffect
+    spots = bars.values.toList()
+    playing = true
     p.snapTo(0f)
-    p.animateTo(1f, tween(720))
+    p.animateTo(1f, tween(com.tali.notes.ui.components.PUFF_LEAVE_MS, easing = androidx.compose.animation.core.LinearEasing))
+    playing = false
   }
-  if (p.value >= 1f) return
-  Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 8.dp, vertical = 4.dp)) {
-    val puff: @Composable (Modifier, Int) -> Unit = { m, n -> com.tali.notes.ui.components.CloudPuff(p.value, m, puffs = n) }
-    puff(Modifier.align(Alignment.TopStart).size(190.dp, 76.dp), 8)
-    puff(Modifier.align(Alignment.TopEnd).size(230.dp, 76.dp), 9)
-    puff(Modifier.align(if (narrow) Alignment.TopCenter else Alignment.TopCenter).padding(top = if (narrow) 64.dp else 0.dp).size(470.dp, 88.dp), 15)
-    puff(Modifier.align(Alignment.BottomEnd).size(220.dp, 64.dp), 8)
+  if (!playing) return
+  var origin by remember { mutableStateOf(Offset.Zero) }
+  val density = LocalDensity.current
+  Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+    spots.forEach { r ->
+      with(density) {
+        com.tali.notes.ui.components.CloudPuff(
+          { p.value },
+          Modifier.offset { IntOffset((r.left - origin.x).roundToInt(), (r.top - origin.y).roundToInt()) }.size(r.width.toDp(), r.height.toDp()),
+          strength = if (showing) 0.5f else 0.85f,
+        )
+      }
+    }
   }
 }
 

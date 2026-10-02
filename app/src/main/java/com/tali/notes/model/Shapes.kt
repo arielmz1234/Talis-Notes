@@ -1,6 +1,7 @@
 package com.tali.notes.model
 
 import com.tali.notes.geometry.Affine
+import com.tali.notes.geometry.Geo
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import kotlin.math.PI
@@ -68,15 +69,77 @@ data class LineShape(val a: Pt, val b: Pt, val arrowStart: Boolean = false, val 
 
 @Serializable
 @SerialName("poly")
-data class PolyShape(val points: List<Pt>, val closed: Boolean) : ShapeGeometry {
+data class PolyShape(
+  val points: List<Pt>,
+  val closed: Boolean,
+  /** How far it has been turned (with the lasso) since it was drawn, so resizing follows its own sides. */
+  val rotation: Float = 0f,
+) : ShapeGeometry {
   override fun paths(penSize: Float) = listOf(if (closed) points + points.first() else points)
 
-  override fun transformed(m: Affine) = copy(points = points.map(m::apply))
+  override fun transformed(m: Affine) = copy(points = points.map(m::apply), rotation = rotation + atan2(m.b, m.a))
 
   override fun handles() = points
 
-  override fun withHandle(index: Int, p: Pt) = copy(points = points.toMutableList().also { it[index] = p })
+  /**
+   * A corner dot resizes the shape rather than bending it: it stretches from the opposite side
+   * within the shape's own frame (so a turned rectangle stays a rectangle), evenly for squares,
+   * regular polygons and stars, and only one way for a dot in the middle of a side (a diamond's
+   * top makes it taller). It never collapses or turns inside out.
+   */
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    if (points.size < 3) return copy(points = points.toMutableList().also { it[index] = p })
+    val c = Geo.centroid(points)
+    val theta = rotation
+    val local = points.map { (it - c).rotated(-theta) }
+    val target = (p - c).rotated(-theta)
+    val v = local[index]
+    val l = local.minOf { it.x }
+    val r = local.maxOf { it.x }
+    val t = local.minOf { it.y }
+    val b = local.maxOf { it.y }
+    val w = max(r - l, 1e-3f)
+    val h = max(b - t, 1e-3f)
+    // Which sides this dot pulls: a dot near an edge of the box pulls that edge; a middle one doesn't.
+    val ax: Float? = when {
+      v.x > l + w * 0.75f -> l
+      v.x < l + w * 0.25f -> r
+      else -> null
+    }
+    val ay: Float? = when {
+      v.y > t + h * 0.75f -> t
+      v.y < t + h * 0.25f -> b
+      else -> null
+    }
+    fun factor(anchor: Float?, from: Float, to: Float): Float =
+      if (anchor == null || abs(from - anchor) < 1e-3f) 1f else ((to - anchor) / (from - anchor)).coerceIn(MIN_SCALE, MAX_SCALE)
+    var sx = factor(ax, v.x, target.x)
+    var sy = factor(ay, v.y, target.y)
+    if (isEven()) {
+      // Keep its proportions: follow the drag along the line from the anchor through the dot.
+      val anchor = Pt(ax ?: (l + r) / 2, ay ?: (t + b) / 2)
+      val d = v - anchor
+      val s = if (d.length() < 1e-3f) 1f else ((target - anchor).dot(d) / d.dot(d)).coerceIn(MIN_SCALE, MAX_SCALE)
+      sx = s
+      sy = s
+    }
+    val axv = ax ?: (l + r) / 2
+    val ayv = ay ?: (t + b) / 2
+    val out = local.map { q -> c + Pt(axv + (q.x - axv) * sx, ayv + (q.y - ayv) * sy).rotated(theta) }
+    return copy(points = out)
+  }
+
+  /** Squares, regular polygons and stars resize evenly; anything else may stretch. */
+  private fun isEven(): Boolean {
+    if (points.size >= 5) return true
+    val c = Geo.centroid(points)
+    val d = points.map { it.dist(c) }
+    return d.max() - d.min() < d.max() * 0.04f && points.size == 4
+  }
 }
+
+private const val MIN_SCALE = 0.05f
+private const val MAX_SCALE = 40f
 
 @Serializable
 @SerialName("ellipse")
@@ -98,6 +161,8 @@ data class EllipseShape(val center: Pt, val rx: Float, val ry: Float, val rotati
   override fun handles() = listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
 
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    // A circle stays a circle: any dot sets the radius.
+    if (abs(rx - ry) < max(rx, ry) * 0.01f) return copy(rx = max(2f, p.dist(center)), ry = max(2f, p.dist(center)))
     val local = (p - center).rotated(-rotation)
     return if (index % 2 == 0) copy(rx = max(2f, abs(local.x))) else copy(ry = max(2f, abs(local.y)))
   }
@@ -124,6 +189,71 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
       copy(start = ang, sweep = end - ang, radius = max(4f, p.dist(center)))
     } else {
       copy(sweep = normalizeSweep(ang - start, sweep), radius = max(4f, p.dist(center)))
+    }
+  }
+}
+
+/**
+ * Part of a circle, closed like a slice of pie: [sweep] of a full turn (so 50% is a half circle with
+ * its diameter, 25% a quarter circle). Its end dots change how much of the circle it is, snapping
+ * to whole 5% steps and to quarters; the middle dot resizes and turns it.
+ */
+@Serializable
+@SerialName("sector")
+data class SectorShape(val center: Pt, val radius: Float, val start: Float, val sweep: Float) : ShapeGeometry {
+  /** How much of a full circle this is, 0..1. */
+  val fraction: Float
+    get() = (abs(sweep) / TAU).coerceIn(0f, 1f)
+
+  override fun paths(penSize: Float): List<List<Pt>> {
+    val n = (abs(sweep) * radius / 3f).toInt().coerceIn(12, 200)
+    val arc = List(n + 1) { i -> center + Pt.polar(radius, start + sweep * i / n) }
+    // A whole circle has no radii; anything less closes through the centre in one stroke.
+    return if (fraction >= 0.999f) listOf(arc) else listOf(listOf(center) + arc + listOf(center))
+  }
+
+  override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = start + atan2(m.b, m.a))
+
+  override fun handles() = listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep), center + Pt.polar(radius, start + sweep / 2))
+
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    val ang = (p - center).angle()
+    return when (index) {
+      // An end: the other end stays put and the amount of circle changes (never through zero).
+      0 -> {
+        val end = start + sweep
+        val s = snapSweep(positiveTurn(end - ang))
+        copy(start = end - s, sweep = s)
+      }
+      1 -> copy(sweep = snapSweep(positiveTurn(ang - start)))
+      // The middle: size and direction, keeping the same amount of circle.
+      else -> copy(radius = max(4f, p.dist(center)), start = ang - sweep / 2)
+    }
+  }
+
+  companion object {
+    /** [fraction] of a circle centred on [center], reaching [toward] with its curved side facing that way. */
+    fun of(center: Pt, toward: Pt, fraction: Float): SectorShape {
+      val sweep = TAU * fraction.coerceIn(0.01f, 1f)
+      val dir = if (toward.dist(center) < 0.5f) (-PI / 2).toFloat() else (toward - center).angle()
+      return SectorShape(center, max(4f, toward.dist(center)), dir - sweep / 2, sweep)
+    }
+
+    /** An angle in (0, 2π]: how far round from one end to the other, going the positive way. */
+    private fun positiveTurn(a: Float): Float {
+      var s = a % TAU
+      if (s <= 0f) s += TAU
+      return s
+    }
+
+    /** Snaps to quarters (strongly) and to whole 5% steps, so 25%, 50% and 75% are easy to hit exactly. */
+    fun snapSweep(s: Float): Float {
+      val f = s / TAU
+      val quarter = Math.round(f * 4) / 4f
+      if (abs(f - quarter) < 0.03f && quarter > 0f) return quarter * TAU
+      val five = Math.round(f * 20) / 20f
+      if (abs(f - five) < 0.012f && five > 0f) return five * TAU
+      return f.coerceIn(0.01f, 1f) * TAU
     }
   }
 }
@@ -181,6 +311,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
   CIRCLE("Circle", ShapeGroup.BASIC),
   ELLIPSE("Ellipse", ShapeGroup.BASIC),
   ARC("Arc", ShapeGroup.BASIC),
+  PART_CIRCLE("Part circle", ShapeGroup.BASIC),
   TRIANGLE("Triangle", ShapeGroup.BASIC),
   RIGHT_TRIANGLE("Right triangle", ShapeGroup.BASIC),
   SQUARE("Square", ShapeGroup.BASIC),
@@ -217,6 +348,8 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       CIRCLE -> EllipseShape(p0, p0.dist(p1), p0.dist(p1))
       ELLIPSE -> EllipseShape(c, w / 2f, h / 2f)
       ARC -> ArcShape(c, side / 2f, PI.toFloat(), PI.toFloat())
+      // From the centre outwards, a half to start with; its end dots change the amount.
+      PART_CIRCLE -> SectorShape.of(p0, p1, 0.5f)
       TRIANGLE -> PolyShape(listOf(Pt(c.x, t), Pt(r, t + h), Pt(l, t + h)), true)
       RIGHT_TRIANGLE -> PolyShape(listOf(Pt(l, t), Pt(l, t + h), Pt(r, t + h)), true)
       SQUARE -> PolyShape(listOf(Pt(l, t), Pt(l + side, t), Pt(l + side, t + side), Pt(l, t + side)), true)
@@ -238,7 +371,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
 
   /** Whether dragging should keep the drag's aspect ratio rather than a free box. */
   val dragIsSegment: Boolean
-    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == CIRCLE
+    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == CIRCLE || this == PART_CIRCLE
 }
 
 enum class ShapeGroup(val label: String) {

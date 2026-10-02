@@ -110,12 +110,14 @@ object Exporter {
     dark: Boolean = false,
     custom: CustomPaper? = null,
     quality: PdfQuality = PdfQuality.BEST,
+    landscape: Boolean = false,
   ) {
+    val pageLayout = Pages.of(landscape)
     val content = items.map { it.bounds }.reduceOrNull(Rect::union)?.outset(MARGIN_DP) ?: Rect(0f, 0f, 1322f, 1871f)
     val pages: List<Rect> =
       when (layout) {
         PdfLayout.ONE_PAGE -> splitTall(content)
-        PdfLayout.A4_PAGES if pageCount != null -> Pages.all(pageCount)
+        PdfLayout.A4_PAGES if pageCount != null -> pageLayout.all(pageCount)
         PdfLayout.A4_PAGES -> {
           val grid = if (fixedPages) fixedA4Pages(items) else a4Pages(content)
           grid.filter { page -> items.any { it.bounds.intersects(page) } }.ifEmpty { grid.take(1) }
@@ -129,8 +131,8 @@ object Exporter {
       // A picture background shrinks like any picture (it fills an A4 page).
       val limit = quality.imagePxPerDp
       val bmp = customImage
-      if (limit != null && bmp != null && bmp.width > Pages.WIDTH * limit) {
-        val w = (Pages.WIDTH * limit).toInt()
+      if (limit != null && bmp != null && bmp.width > pageLayout.width * limit) {
+        val w = (pageLayout.width * limit).toInt()
         customImage = Bitmap.createScaledBitmap(bmp, w, (bmp.height.toLong() * w / bmp.width).toInt().coerceAtLeast(1), true)
       }
     }

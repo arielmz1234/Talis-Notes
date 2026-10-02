@@ -20,6 +20,9 @@ sealed class CanvasItem {
   abstract val pen: PenType?
 
   abstract fun transformed(m: Affine, newId: String = id, newZ: Long = z): CanvasItem
+
+  /** The same item at another place in the stacking order (cheap: nothing is rebuilt). */
+  abstract fun withZ(newZ: Long): CanvasItem
 }
 
 /**
@@ -59,6 +62,8 @@ private constructor(
 
   override fun transformed(m: Affine, newId: String, newZ: Long) = InkItem(newId, newZ, pen, StrokeFactory.transform(stroke, m))
 
+  override fun withZ(newZ: Long) = InkItem(id, newZ, pen, built, bounds, knownColor)
+
   fun recolored(color: Int) = InkItem(id, z, pen, stroke.copy(stroke.brush.copyWithColorIntArgb(Brushes.inkColor(pen, color))))
 }
 
@@ -71,8 +76,19 @@ class ShapeItem(
   val geometry: ShapeGeometry,
   /** Bounds saved with the shape, so a loaded shape can wait to build its strokes until it's drawn. */
   knownBounds: Rect? = null,
+  /** The colour it's filled with (with its own opacity), or null; only closed shapes take a fill. */
+  val fill: Int? = null,
+  /** Strokes already built for this same outline and colour, shared instead of built again. */
+  sharedStrokes: Lazy<List<Stroke>>? = null,
 ) : CanvasItem() {
-  private val built = lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
+  /** Whether this shape encloses an area that can be filled. */
+  val closed: Boolean
+    get() = geometry.let { it is EllipseShape || it is SectorShape || (it is PolyShape && it.closed) }
+
+  /** The outline enclosing its area, for filling and for telling whether a point is inside. */
+  val outline: List<com.tali.notes.geometry.Pt>
+    get() = geometry.paths(size).firstOrNull().orEmpty()
+  private val built = sharedStrokes ?: lazy { StrokeFactory.shapeStrokes(geometry, pen, color, size) }
 
   val strokes: List<Stroke>
     get() = built.value
@@ -87,11 +103,15 @@ class ShapeItem(
   override val bounds: Rect = knownBounds ?: strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)
 
   override fun transformed(m: Affine, newId: String, newZ: Long) =
-    ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m))
+    ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m), fill = fill)
 
-  fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g)
+  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill, built)
 
-  fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry)
+  fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g, fill = fill)
+
+  fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry, fill = fill)
+
+  fun filled(color: Int?) = ShapeItem(id, z, pen, this.color, size, geometry, bounds, color, built)
 
   /** The shape's outline as plain ink, for partial erasing. */
   fun toInk(idFor: (Int) -> String): List<InkItem> = strokes.mapIndexed { i, s -> InkItem(idFor(i), z, pen, s) }
@@ -105,14 +125,23 @@ class ImageItem(
   val rect: Rect,
   /** A page from an imported PDF (so export can give it back its own page). */
   val pdfPage: Boolean = false,
+  /**
+   * Brought to the front: drawn among the writing by stacking order, so it can cover ink. Off (the
+   * default, and every older picture) keeps it behind all writing, like paper.
+   */
+  val front: Boolean = false,
 ) : CanvasItem() {
   override val bounds: Rect = rect
   override val pen: PenType? = null
 
+  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front)
+
+  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on)
+
   override fun transformed(m: Affine, newId: String, newZ: Long): ImageItem {
     val a = m.apply(Pt(rect.left, rect.top))
     val b = m.apply(Pt(rect.right, rect.bottom))
-    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage)
+    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage, front)
   }
 }
 
@@ -150,6 +179,8 @@ class TextItem(
     val s = m.scaleFactor()
     return TextItem(newId, newZ, text, m.apply(origin), (width * s).coerceAtLeast(40f), (fontSize * s).coerceIn(6f, 400f), color)
   }
+
+  override fun withZ(newZ: Long) = TextItem(id, newZ, text, origin, width, fontSize, color)
 
   fun recolored(c: Int) = TextItem(id, z, text, origin, width, fontSize, c)
 

@@ -355,7 +355,7 @@ object ShapeRecognizer {
       }
       val center = c + box.center.rotated(theta)
       val corners = listOf(Pt(-hw, -hh), Pt(hw, -hh), Pt(hw, hh), Pt(-hw, hh)).map { center + it.rotated(theta) }
-      return PolyShape(corners, true)
+      return PolyShape(corners, true, rotation = theta)
     }
     // Diamond: corners sit near the midpoints of the bounding box edges.
     val box = Rect.around(q)!!

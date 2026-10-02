@@ -31,6 +31,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   /** Dark paper: ink is drawn in its light counterpart colours; pictures stay as they are. */
   var dark = false
 
+  private val fillPath = android.graphics.Path()
+  private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
   /** Typed text laid out in its dark-paper colour, made the first time dark paper draws it. */
   private val darkText = java.util.WeakHashMap<TextItem, android.text.StaticLayout>()
 
@@ -65,16 +68,31 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
       if (!built && deferUnbuilt) deferred = true
       return built || !deferUnbuilt
     }
-    for (item in items) if (item is ImageItem && item.id !in skip) draw(canvas, item, worldToScreen)
+    // Pictures behind the writing, then highlighter, then writing and front pictures by stacking order.
+    for (item in items) if (item is ImageItem && !item.front && item.id !in skip) draw(canvas, item, worldToScreen)
     for (item in items) if (item.pen?.isHighlighter == true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
-    for (item in items) if (item !is ImageItem && item.pen?.isHighlighter != true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
+    for (item in items) if ((item !is ImageItem || item.front) && item.pen?.isHighlighter != true && item.id !in skip && ready(item)) draw(canvas, item, worldToScreen)
     return deferred
   }
 
   fun draw(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
     when (item) {
       is InkItem -> strokes.draw(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
-      is ShapeItem -> (if (dark) item.darkStrokes else item.strokes).forEach { strokes.draw(canvas, it, worldToScreen) }
+      is ShapeItem -> {
+        // Its fill first, under the outline, in exactly the colour she chose (on dark paper too).
+        item.fill?.let { f ->
+          val pts = item.outline
+          if (pts.size >= 3) {
+            fillPath.rewind()
+            fillPath.moveTo(pts[0].x, pts[0].y)
+            for (i in 1 until pts.size) fillPath.lineTo(pts[i].x, pts[i].y)
+            fillPath.close()
+            fillPaint.color = f
+            canvas.drawPath(fillPath, fillPaint)
+          }
+        }
+        (if (dark) item.darkStrokes else item.strokes).forEach { strokes.draw(canvas, it, worldToScreen) }
+      }
       is TextItem -> {
         canvas.save()
         canvas.translate(item.origin.x, item.origin.y)

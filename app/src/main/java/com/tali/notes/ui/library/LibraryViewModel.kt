@@ -50,9 +50,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
           customPaper = n.customPaper,
           dark = n.dark,
           cover = n.cover,
+          landscape = n.landscape,
         )
       // The next notebook starts the same way.
-      getApplication<Application>().talisApp.settings.update { it.copy(defaultPaper = n.paper, defaultCustomPaper = n.customPaper, defaultPaged = n.paged) }
+      getApplication<Application>().talisApp.settings.update { it.copy(defaultPaper = n.paper, defaultCustomPaper = n.customPaper, defaultPaged = n.paged, defaultLandscape = if (n.paged) n.landscape else it.defaultLandscape) }
       onCreated(meta.id)
     }
   }

@@ -82,6 +82,7 @@ import com.tali.notes.ui.components.colorRing
 import com.tali.notes.ui.components.rememberSlidingSelection
 import com.tali.notes.ui.components.slidingHighlight
 import com.tali.notes.ui.components.slidingOption
+import androidx.compose.ui.geometry.Offset
 
 @Composable
 private fun PanelColumn(width: Int, content: @Composable () -> Unit) {
@@ -269,6 +270,54 @@ private fun FilterChip(label: String, on: Boolean, onChange: (Boolean) -> Unit) 
   }
 }
 
+/**
+ * The fill tool: a colour (or "None" to take fills away) and how strongly it covers the paper.
+ * Tap inside a closed shape to fill the shape; tap inside an area drawn around by hand to fill it
+ * behind the writing.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun FillPanel(settings: AppSettings, vm: NotebookViewModel) {
+  val c = Tali.colors
+  PanelColumn(360) {
+    PanelTitle("Fill")
+    Text("Tap inside a shape, or inside an area you've drawn around, to fill it with colour. Your writing stays on top.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    Spacer(Modifier.height(14.dp))
+    SectionLabel("Colour")
+    Spacer(Modifier.height(8.dp))
+    val ring = rememberSlidingSelection()
+    FlowRow(Modifier.colorRing(ring, settings.fillColor?.let { Color(it) } ?: NO_FILL), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      settings.savedColors.forEach { col -> ColorDot(Color(col), selected = col == settings.fillColor, selection = ring) { vm.setFillColor(col) } }
+      // No fill: taps take a fill away.
+      Box(
+        Modifier.slidingOption(ring, NO_FILL).size(38.dp).clip(CircleShape)
+          .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = "No fill") { vm.setFillColor(null) },
+        contentAlignment = Alignment.Center,
+      ) {
+        Canvas(Modifier.size(30.dp)) {
+          drawCircle(c.surface)
+          drawCircle(c.line, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+          drawLine(c.danger, Offset(size.width * 0.22f, size.height * 0.78f), Offset(size.width * 0.78f, size.height * 0.22f), 2.dp.toPx())
+        }
+      }
+    }
+    if (settings.fillColor != null) {
+      Spacer(Modifier.height(12.dp))
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Opacity", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(64.dp))
+        TaliSlider(settings.fillOpacity, 0.15f..1f, { vm.setFillOpacity(Math.round(it * 20) / 20f) }, Modifier.weight(1f))
+        Text("${Math.round(settings.fillOpacity * 100)}%", style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
+      }
+    } else {
+      Spacer(Modifier.height(10.dp))
+      Text("Tap a filled shape or area to take its fill away.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+    }
+  }
+}
+
+/** Stands for "no fill" in the colour ring (a colour no swatch uses). */
+private val NO_FILL = Color(0x00FF00FF)
+
 @Composable
 fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
@@ -310,6 +359,10 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
           ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
         }
       }
+    }
+    if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null) {
+      Spacer(Modifier.height(10.dp))
+      Text("Part circle: drag from the centre outwards; it starts as a half. Then drag an end dot to make it any % of a circle.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
     }
     MyShapes(settings.customShapes, vm)
   }

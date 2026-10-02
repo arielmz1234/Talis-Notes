@@ -41,6 +41,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tali.notes.theme.Tali
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import kotlin.math.roundToInt
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
 
 /**
  * A cartoon cloud recipe: puffs as (x, y, r) in units of the cloud's width. The first [crown] puffs
@@ -160,7 +171,7 @@ private val cloudCache = LruCache<String, ImageBitmap>(24)
  * fades in when ready; after that drifting and scrolling cost nothing.
  */
 @Composable
-fun Cloud(modifier: Modifier = Modifier, width: Dp = 160.dp, variant: Int = 0, alpha: Float = 1f) {
+fun Cloud(modifier: Modifier = Modifier, width: Dp = 160.dp, variant: Int = 0, alpha: Float = 1f, burstable: Boolean = false) {
   val c = Tali.colors
   val px = with(LocalDensity.current) { width.toPx() }
   val dark = c.isDark
@@ -180,10 +191,62 @@ fun Cloud(modifier: Modifier = Modifier, width: Dp = 160.dp, variant: Int = 0, a
       }
     }
   val shown by animateFloatAsState(if (image != null) 1f else 0f, tween(700), label = "cloud")
-  Spacer(
-    modifier.size(width, width * 0.5f).graphicsLayer { this.alpha = alpha * shown }.drawBehind { image?.let { drawImage(it) } }
-  )
+  if (!burstable) {
+    Spacer(
+      modifier.size(width, width * 0.5f).graphicsLayer { this.alpha = alpha * shown }.drawBehind { image?.let { drawImage(it) } }
+    )
+    return
+  }
+  // Tapped, it bursts: swells a touch and melts into the same mist things leave on, then quietly
+  // forms again a few seconds later.
+  val gone = remember { Animatable(0f) }
+  val puff = remember { Animatable(1f) }
+  var bursts by remember { mutableIntStateOf(0) }
+  LaunchedEffect(bursts) {
+    if (bursts == 0) return@LaunchedEffect
+    coroutineScope {
+      launch {
+        puff.snapTo(0f)
+        puff.animateTo(1f, tween(BURST_MIST_MS, easing = LinearEasing))
+      }
+      gone.animateTo(1f, tween(ELEMENT_LEAVE_MS, easing = EaseOutStrong))
+    }
+    delay(REFORM_AFTER_MS)
+    gone.animateTo(0f, tween(1100, easing = EaseOutStrong))
+  }
+  Box(
+    modifier.size(width, width * 0.5f).pointerInput(Unit) {
+      detectTapGestures { at ->
+        // Only the cloud itself, not the empty corners of its box; not while it's still away.
+        val dx = (at.x - size.width / 2f) / (size.width / 2f)
+        val dy = (at.y - size.height / 2f) / (size.height / 2f)
+        if (dx * dx + dy * dy <= 1f && gone.value < 0.3f) bursts++
+      }
+    }
+  ) {
+    Spacer(
+      Modifier.matchParentSize()
+        .layerWithRoom(width * 0.12f) {
+          val g = gone.value
+          this.alpha = alpha * shown * (1f - g)
+          val sc = 1f + 0.08f * g
+          scaleX = sc
+          scaleY = sc
+          renderEffect =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && g > 0.02f && g < 0.98f) {
+              val r = (8.dp.toPx() * g).roundToInt().toFloat().coerceAtLeast(1f)
+              BlurEffect(r, r, TileMode.Decal)
+            } else null
+        }
+        .drawBehind { image?.let { drawImage(it) } }
+    )
+    CloudPuff({ puff.value }, Modifier.matchParentSize())
+  }
 }
+
+/** How long a burst cloud's mist lasts, and how long before the cloud forms again. */
+private const val BURST_MIST_MS = 640
+private const val REFORM_AFTER_MS = 4000L
 
 /**
  * A cloud that drifts slowly sideways on its own GPU layer (no re-layout, no re-draw). The drift is
@@ -191,7 +254,7 @@ fun Cloud(modifier: Modifier = Modifier, width: Dp = 160.dp, variant: Int = 0, a
  * battery while the library sits open; it follows the frame clock, so it stops in the background.
  */
 @Composable
-fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, driftDp: Float = 10f, periodMs: Int = 9000, alpha: Float = 1f) {
+fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, driftDp: Float = 10f, periodMs: Int = 9000, alpha: Float = 1f, burstable: Boolean = false) {
   var x by remember { mutableFloatStateOf(0f) }
   LaunchedEffect(periodMs) {
     val start = withFrameMillis { it }
@@ -202,7 +265,7 @@ fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, dr
       delay(80)
     }
   }
-  Cloud(modifier.graphicsLayer { translationX = x * driftDp * density }, width = width, variant = variant, alpha = alpha)
+  Cloud(modifier.graphicsLayer { translationX = x * driftDp * density }, width = width, variant = variant, alpha = alpha, burstable = burstable)
 }
 
 /** The sky that sits behind the top of a screen: blue into lilac, fading into the page below. */
@@ -225,12 +288,12 @@ fun BoxScope.SkyClouds(widthDp: Int = 1334) {
     return
   }
   // Two small, faded clouds further away, drifting slower: a little depth behind the big ones.
-  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 196.dp, y = 104.dp), width = 96.dp, variant = 1, driftDp = 5f, periodMs = 23000, alpha = 0.55f)
-  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-196).dp, y = 118.dp), width = 84.dp, variant = 2, driftDp = 4f, periodMs = 26000, alpha = 0.5f)
-  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (-24).dp, y = 18.dp), width = 190.dp, variant = 2, driftDp = 8f, periodMs = 14000)
-  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 300.dp, y = 8.dp), width = 230.dp, variant = 1, driftDp = 12f, periodMs = 17000)
-  DriftingCloud(Modifier.align(Alignment.TopCenter).offset(x = 170.dp, y = 12.dp), width = 260.dp, variant = 0, driftDp = 14f, periodMs = 20000)
-  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-20).dp, y = 26.dp), width = 170.dp, variant = 2, driftDp = 8f, periodMs = 12000)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 196.dp, y = 104.dp), width = 96.dp, variant = 1, driftDp = 5f, periodMs = 23000, alpha = 0.55f, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-196).dp, y = 118.dp), width = 84.dp, variant = 2, driftDp = 4f, periodMs = 26000, alpha = 0.5f, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (-24).dp, y = 18.dp), width = 190.dp, variant = 2, driftDp = 8f, periodMs = 14000, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 300.dp, y = 8.dp), width = 230.dp, variant = 1, driftDp = 12f, periodMs = 17000, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopCenter).offset(x = 170.dp, y = 12.dp), width = 260.dp, variant = 0, driftDp = 14f, periodMs = 20000, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-20).dp, y = 26.dp), width = 170.dp, variant = 2, driftDp = 8f, periodMs = 12000, burstable = true)
   Sparkle(Modifier.align(Alignment.TopStart).offset(x = 230.dp, y = 40.dp), size = 11.dp, color = Color.White)
   Sparkle(Modifier.align(Alignment.TopCenter).offset(x = (-60).dp, y = 26.dp), size = 13.dp, color = Color.White)
   Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-230).dp, y = 76.dp), size = 9.dp, color = Color.White.copy(alpha = 0.85f))
@@ -239,10 +302,10 @@ fun BoxScope.SkyClouds(widthDp: Int = 1334) {
 /** The same sky for a narrow screen (a tablet held upright): three big clouds spread by width, one small one far away. */
 @Composable
 private fun BoxScope.CompactSkyClouds(widthDp: Int) {
-  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 170.dp, y = 110.dp), width = 90.dp, variant = 1, driftDp = 5f, periodMs = 23000, alpha = 0.55f)
-  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (-24).dp, y = 18.dp), width = 180.dp, variant = 2, driftDp = 8f, periodMs = 14000)
-  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (widthDp * 0.36f).dp, y = 10.dp), width = 230.dp, variant = 0, driftDp = 12f, periodMs = 19000)
-  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-16).dp, y = 30.dp), width = 160.dp, variant = 2, driftDp = 8f, periodMs = 12000)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = 170.dp, y = 110.dp), width = 90.dp, variant = 1, driftDp = 5f, periodMs = 23000, alpha = 0.55f, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (-24).dp, y = 18.dp), width = 180.dp, variant = 2, driftDp = 8f, periodMs = 14000, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopStart).offset(x = (widthDp * 0.36f).dp, y = 10.dp), width = 230.dp, variant = 0, driftDp = 12f, periodMs = 19000, burstable = true)
+  DriftingCloud(Modifier.align(Alignment.TopEnd).offset(x = (-16).dp, y = 30.dp), width = 160.dp, variant = 2, driftDp = 8f, periodMs = 12000, burstable = true)
   Sparkle(Modifier.align(Alignment.TopStart).offset(x = 214.dp, y = 42.dp), size = 11.dp, color = Color.White)
   Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-190).dp, y = 96.dp), size = 9.dp, color = Color.White.copy(alpha = 0.85f))
 }

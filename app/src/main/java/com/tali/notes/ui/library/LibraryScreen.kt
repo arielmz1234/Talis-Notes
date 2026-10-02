@@ -154,7 +154,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   fun vanish(id: String, then: () -> Unit) {
     vanishing = vanishing + id
     puffScope.launch {
-      kotlinx.coroutines.delay(480)
+      kotlinx.coroutines.delay(com.tali.notes.ui.components.PUFF_LEAVE_MS.toLong())
       then()
       vanishing = vanishing - id
     }
@@ -831,8 +831,8 @@ private fun EmptyLibrary(onCreate: () -> Unit) {
   val c = Tali.colors
   Column(Modifier.fillMaxWidth().padding(top = 50.dp), horizontalAlignment = Alignment.CenterHorizontally) {
     Box(Modifier.size(320.dp, 190.dp), contentAlignment = Alignment.Center) {
-    DriftingCloud(Modifier.align(Alignment.TopStart).offset(y = 6.dp), width = 96.dp, variant = 1, driftDp = 8f)
-    DriftingCloud(Modifier.align(Alignment.BottomEnd).offset(y = (-4).dp), width = 110.dp, variant = 0, driftDp = 10f, periodMs = 12000)
+    DriftingCloud(Modifier.align(Alignment.TopStart).offset(y = 6.dp), width = 96.dp, variant = 1, driftDp = 8f, burstable = true)
+    DriftingCloud(Modifier.align(Alignment.BottomEnd).offset(y = (-4).dp), width = 110.dp, variant = 0, driftDp = 10f, periodMs = 12000, burstable = true)
     Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = 18.dp), size = 12.dp, color = Sky.S400)
     Box(Modifier.size(200.dp, 150.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Lilac.L50, Sky.S100)), alpha = if (c.isDark) 0.15f else 1f).padding(14.dp)) {
       PaperSwatch(PaperStyle.ENGINEERING, Modifier.fillMaxSize())

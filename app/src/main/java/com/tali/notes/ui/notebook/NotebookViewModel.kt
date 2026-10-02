@@ -50,6 +50,7 @@ enum class PanelKind {
   ERASER,
   LASSO,
   SHAPES,
+  FILL,
 }
 
 class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewModel(app) {
@@ -169,6 +170,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         Tool.LASSO -> PanelKind.LASSO
         Tool.SHAPE -> PanelKind.SHAPES
         Tool.PEN -> PanelKind.PEN
+        Tool.FILL -> PanelKind.FILL
       }
     if (tool == t || t == Tool.SHAPE) {
       panel = if (panel == panelFor) null else panelFor
@@ -270,7 +272,13 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setPageGuides(on: Boolean) = store.update { it.copy(pageGuides = on) }
 
+  fun setFillColor(color: Int?) = store.update { it.copy(fillColor = color) }
+
+  fun setFillOpacity(opacity: Float) = store.update { it.copy(fillOpacity = opacity.coerceIn(0.15f, 1f)) }
+
   fun setSmartUndo(on: Boolean) = store.update { it.copy(smartUndo = on) }
+
+
 
   fun setPaper(style: PaperStyle) {
     repo.setPaper(notebookId, style)
@@ -305,11 +313,15 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   suspend fun pageThumbnail(items: List<CanvasItem>, index: Int, widthPx: Int): Bitmap? {
     val m = meta.value
     val custom = customPaperOf(m, settings.value)
-    val page = com.tali.notes.canvas.Pages.rect(index)
+    val page = pageLayout.rect(index)
     return withContext(Dispatchers.Default) {
       runCatching { Exporter.thumbnail(items.filter { it.bounds.intersects(page) }, page, m?.paper ?: PaperStyle.DOTS, widthPx, repo.images, m?.dark == true, originY = page.top, custom = custom, page = page) }.getOrNull()
     }
   }
+
+  /** Portrait or landscape A4 pages, as chosen when the notebook was made. */
+  val pageLayout: com.tali.notes.canvas.Pages
+    get() = com.tali.notes.canvas.Pages.of(meta.value?.landscape == true)
 
   fun rename(title: String) = repo.rename(notebookId, title.ifBlank { "Untitled" })
 
@@ -368,8 +380,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     viewModelScope.launch(Dispatchers.Default) {
       if (pages != null) {
         // A paged notebook previews the top of the page she was on, like a notebook lying open.
-        val page = com.tali.notes.canvas.Pages.rect(com.tali.notes.canvas.Pages.indexAt(visible.top + visible.height * 0.4f).coerceIn(0, pages - 1))
-        val region = Rect(page.left, page.top, page.right, page.top + page.width / 1.32f)
+        val layout = pageLayout
+        val page = layout.rect(layout.indexAt(visible.top + visible.height * 0.4f).coerceIn(0, pages - 1))
+        val region = Rect(page.left, page.top, page.right, minOf(page.bottom, page.top + page.width / 1.32f))
         val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page) }.getOrNull() ?: return@launch
         repo.saveThumbnail(notebookId, bmp)
         return@launch
@@ -403,14 +416,15 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       val paper = m?.paper ?: PaperStyle.DOTS
       val dark = m?.dark == true
       val custom = customPaperOf(m, settings.value)
-      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides).joinToString("|")
+      val landscape = m?.landscape == true
+      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape).joinToString("|")
       exported[key]?.takeIf { it.exists() }?.let { return@withLock it }
       val items = doc.all.toList()
       val title = (m?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
       withContext(Dispatchers.Default) {
         // One folder per choice, so the file she shares is still called after the notebook.
         val out = File(File(File(getApplication<Application>().cacheDir, "exports"), "${layout.name}-${quality.name}"), "$title.pdf")
-        runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality) }.map { out }.getOrNull()
+        runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality, landscape = landscape) }.map { out }.getOrNull()
       }?.also { exported[key] = it }
     }
 }

@@ -92,8 +92,9 @@ class PaperRenderer {
   private fun pagesInView(camera: Camera, width: Int, height: Int): List<Rect> =
     pageRect?.let { listOf(it) }
       ?: run {
-        val w = Pages.WIDTH
-        val h = Pages.HEIGHT
+        // An endless canvas keeps the portrait A4 grid.
+        val w = Pages.PORTRAIT.width
+        val h = Pages.PORTRAIT.height
         val view = camera.visibleWorld(width, height)
         buildList {
           for (row in floor(view.top / h).toInt()..floor(view.bottom / h).toInt()) {
@@ -155,8 +156,10 @@ class PaperRenderer {
       val bmp = customImage ?: return
       val pages = pagesInView(camera, width, height)
       imagePaint.colorFilter = if (dark) DIM else null
+      // Her chosen strength: the page shows through a fainter picture.
+      imagePaint.alpha = (255 * cp.opacity.coerceIn(0.15f, 1f)).toInt()
       // Fills the page without stretching: the middle of the picture, cropped to the page's shape.
-      val pageAspect = Pages.WIDTH / Pages.HEIGHT
+      val pageAspect = (pageRect ?: pages.firstOrNull())?.let { it.width / it.height } ?: Pages.PORTRAIT.aspect
       val bmpAspect = bmp.width.toFloat() / bmp.height
       if (bmpAspect > pageAspect) {
         val w = (bmp.height * pageAspect).toInt()
@@ -169,10 +172,11 @@ class PaperRenderer {
         dst.set((r.left - camera.x) * camera.scale, (r.top - camera.y) * camera.scale, (r.right - camera.x) * camera.scale, (r.bottom - camera.y) * camera.scale)
         canvas.drawBitmap(bmp, src, dst, imagePaint)
       }
+      imagePaint.alpha = 255
       return
     }
     canvas.drawColor(if (dark) DARK_PAPER else cp.paperColor)
-    val line = if (dark) (Brushes.onDarkPaper(cp.lineColor) and 0x00FFFFFF) or 0x70000000 else cp.lineColor
+    val line = cp.faded(if (dark) (Brushes.onDarkPaper(cp.lineColor) and 0x00FFFFFF) or 0x70000000 else cp.lineColor)
     val spacing = cp.spacingMm.coerceIn(2f, 30f) * mm
     when (cp.pattern) {
       PaperStyle.BLANK -> Unit
@@ -184,7 +188,7 @@ class PaperRenderer {
     if (cp.margin) {
       // The red margin line of a school exercise book, 25 mm in from the page's left edge.
       val x = ((pageRect?.left ?: 0f) + 25f * mm - camera.x) * camera.scale
-      paint.color = if (dark) 0x99E07A90.toInt() else 0xFFF0A0B4.toInt()
+      paint.color = cp.faded(if (dark) 0x99E07A90.toInt() else 0xFFF0A0B4.toInt())
       paint.strokeWidth = 1.4f * k
       canvas.drawLine(x, 0f, x, height.toFloat(), paint)
     }

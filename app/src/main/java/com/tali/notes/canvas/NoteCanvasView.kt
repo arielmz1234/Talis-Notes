@@ -49,12 +49,14 @@ import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.PenType
 import com.tali.notes.model.ShapeItem
 import com.tali.notes.model.ShapeKind
+import com.tali.notes.model.SectorShape
 import com.tali.notes.model.Tool
 import com.tali.notes.model.TextItem
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.abs
 import kotlin.math.PI
+import com.tali.notes.geometry.Lasso
 
 /** What the canvas tells the screen around it. */
 interface CanvasHost {
@@ -149,6 +151,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
 
   /** Number of A4 pages, or null for an endless canvas. */
+  /** Portrait or landscape A4 pages, as chosen when the notebook was made. */
+  var pageLayout: Pages = Pages.PORTRAIT
+    set(value) {
+      if (field == value) return
+      field = value
+      refreshPages()
+      clampCamera()
+      invalidate()
+    }
+
   var pageCount: Int? = null
     set(value) {
       if (field == value) return
@@ -209,6 +221,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     ROTATE_SELECTION,
     HANDLE_DRAG,
     SHAPE_CREATE,
+
+    /** The fill tool came down: on lifting (without dragging) it fills what's there. */
+    FILL_TAP,
     FINGER_PENDING,
     PAN,
     PINCH,
@@ -231,6 +246,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var holdAnchor = Pt.ZERO
   private val holdRunnable = Runnable { onHold() }
   private var liveShape: ShapeItem? = null
+
+  /** The shape as it snapped, and where the pen was then: keeping on moving resizes it from there. */
+  private var liveBase: ShapeItem? = null
+  private var liveAnchor = Pt(0f, 0f)
+  private var liveFollowing = false
 
   // Eraser
   private var erasePrev = Pt.ZERO
@@ -256,6 +276,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // Editable shape with handles
   private var activeShapeId: String? = null
   private var handleIndex = -1
+  private var handleGrab = Pt(0f, 0f)
   private var liveEdit: ShapeItem? = null
 
   // Shape tool
@@ -365,14 +386,41 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     detach()
   }
 
+  /**
+   * Tiles leave out strokes that aren't built yet (so a big notebook opens fast) and wait for the
+   * background warm-up, which only runs when the notebook opens. Anything new that isn't built (a
+   * recoloured shape, an undo that brings back an old stroke) is built now: right here for a few,
+   * in the background for a big batch, so nothing ever goes missing.
+   */
+  private fun buildNew(added: List<CanvasItem>) {
+    val unbuilt = added.filter { (it is ShapeItem && !it.isBuilt) || (it is InkItem && !it.isBuilt) }
+    if (unbuilt.isEmpty()) return
+    fun build(item: CanvasItem) = runCatching {
+      when (item) {
+        is ShapeItem -> item.strokes
+        is InkItem -> item.stroke
+        else -> Unit
+      }
+    }
+    if (unbuilt.size <= 24) {
+      unbuilt.forEach(::build)
+    } else {
+      fillWorker.execute {
+        unbuilt.forEach(::build)
+        StrokeBuilds.progress()
+      }
+    }
+  }
+
   private fun onDocChanged(c: Change) {
+    buildNew(c.added)
     if (pageCount == null && (c.added + c.removed).any { it is ImageItem && it.pdfPage }) refreshPages()
     c.removed.forEach { tiles.invalidate(it.bounds) }
     c.added.forEach { tiles.invalidate(it.bounds) }
     // Writing (or an undo) that reaches below the last page brings the pages it needs.
     val n = pageCount
     if (n != null && c.added.isNotEmpty()) {
-      val need = Pages.needed(c.added.map { it.bounds }.reduce(Rect::union))
+      val need = pageLayout.needed(c.added.map { it.bounds }.reduce(Rect::union))
       if (need > n) setPages(need)
     }
     // Keep the selection pointing at live items (undo can remove them).
@@ -446,12 +494,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun drawPages(canvas: Canvas, n: Int) {
     canvas.drawColor(deskColor)
     val view = camera.visibleWorld(width, height)
-    val first = Pages.indexAt(view.top).coerceAtLeast(0)
-    val last = Pages.indexAt(view.bottom).coerceAtMost(n - 1)
+    val first = pageLayout.indexAt(view.top).coerceAtLeast(0)
+    val last = pageLayout.indexAt(view.bottom).coerceAtMost(n - 1)
     pageShadow.color = deskColor
     pageShadow.setShadowLayer(6f * density, 0f, 2f * density, if (darkPaper || deskIsDark()) 0x66000000 else 0x2E3A2A70)
     for (i in first..last) {
-      val r = Pages.rect(i)
+      val r = pageLayout.rect(i)
       val a = camera.toScreen(Pt(r.left, r.top))
       val b = camera.toScreen(Pt(r.right, r.bottom))
       canvas.drawRect(a.x, a.y, b.x, b.y, pageShadow)
@@ -548,6 +596,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawSelection(canvas)
     drawShapeHandles(canvas)
     drawLineReadout(canvas)
+    drawSectorReadout(canvas)
     drawEraserCursor(canvas)
   }
 
@@ -566,6 +615,118 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
 
   /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
+  // ---- Fill ----
+
+  private var filling = false
+
+  /**
+   * Fills what's under [p] with the fill colour. A closed shape there gets a fill of its own (crisp,
+   * moves with the shape); otherwise an area her writing closes in gets a fill picture behind the
+   * writing, worked out in the background. With no fill colour, it takes a fill away instead.
+   */
+  private fun fillAt(p: Pt) {
+    val d = doc ?: return
+    val colour = settings.fillArgb
+    // 1. The topmost closed shape the tap is inside.
+    val shape = d.all.toList().asReversed().firstOrNull { it is ShapeItem && it.closed && it.bounds.contains(p) && Geo.pointInPolygon(p, it.outline) } as ShapeItem?
+    if (shape != null) {
+      if (shape.fill == colour) return
+      d.commit(Change(listOf(shape), listOf(shape.filled(colour))))
+      return
+    }
+    // 2. A fill picture already there: taken away, or replaced by the new colour below.
+    val oldFills = d.all.filter { it is ImageItem && it.file.startsWith(FILL_PREFIX) && it.rect.contains(p) && fillCovers(it, p) }
+    if (colour == null) {
+      if (oldFills.isEmpty()) host.onHint("Tap a filled shape or area to take its fill away")
+      else d.commit(Change(oldFills, emptyList()))
+      return
+    }
+    // 3. The area her writing encloses, found off the main thread.
+    if (filling) return
+    filling = true
+    val n = pageCount
+    val page = if (n != null) pageLayout.rect(pageLayout.indexAt(p.y).coerceIn(0, n - 1)) else null
+    var window = Rect(p.x - FILL_REACH, p.y - FILL_REACH, p.x + FILL_REACH, p.y + FILL_REACH)
+    if (page != null) window = Rect(maxOf(window.left, page.left), maxOf(window.top, page.top), minOf(window.right, page.right), minOf(window.bottom, page.bottom))
+    val walls = d.intersecting(window).filter { it !is ImageItem }
+    fillWorker.execute {
+      val made = runCatching { fillPicture(p, window, walls, colour) }.getOrNull()
+      post {
+        filling = false
+        val dd = doc ?: return@post
+        if (dd !== d) return@post
+        if (made == null) {
+          host.onHint(if (walls.isEmpty()) "Draw around an area first, or tap inside a shape" else "That area isn't closed. Close the gap and try again")
+          return@post
+        }
+        val (file, rect) = made
+        val item = ImageItem(dd.newId(), dd.nextZ(), file, rect)
+        dd.commit(Change(oldFills.filter { dd[it.id] != null }, listOf(item)))
+      }
+    }
+  }
+
+  /** Whether the fill picture [item] actually covers [p] (not just its box). */
+  private fun fillCovers(item: CanvasItem, p: Pt): Boolean {
+    val img = item as ImageItem
+    val bmp = images.peek(img.file) ?: return true
+    val x = ((p.x - img.rect.left) / img.rect.width * bmp.width).toInt().coerceIn(0, bmp.width - 1)
+    val y = ((p.y - img.rect.top) / img.rect.height * bmp.height).toInt().coerceIn(0, bmp.height - 1)
+    return (bmp.getPixel(x, y) ushr 24) > 0
+  }
+
+  /**
+   * Draws the writing in [window] into a mask, finds the area around [p] it encloses and returns a
+   * picture of that area in [colour] (saved, with its place in the world), or null if it isn't closed.
+   */
+  private fun fillPicture(p: Pt, window: Rect, walls: List<CanvasItem>, colour: Int): Pair<String, Rect>? {
+    val k = minOf(1f, FILL_PIXELS / maxOf(window.width, window.height))
+    val w = (window.width * k).toInt().coerceAtLeast(8)
+    val h = (window.height * k).toInt().coerceAtLeast(8)
+    val mask = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+    val c = Canvas(mask)
+    c.scale(k, k)
+    c.translate(-window.left, -window.top)
+    val hint = android.graphics.Matrix().apply { setScale(k, k) }
+    ItemRenderer(androidx.ink.rendering.android.canvas.CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore), images, sync = true).drawAll(c, walls, hint)
+    val px = IntArray(w * h)
+    mask.getPixels(px, 0, w, 0, 0, w, h)
+    mask.recycle()
+    val wallGrid = BooleanArray(w * h) { (px[it] ushr 24) > 40 }
+    // Close gaps of about 1 mm in hand-drawn outlines.
+    val bridge = (FILL_BRIDGE * k).toInt().coerceAtLeast(1)
+    val filled = AreaFill.fill(wallGrid, w, h, ((p.x - window.left) * k).toInt(), ((p.y - window.top) * k).toInt(), bridge) ?: return null
+    var x0 = w
+    var y0 = h
+    var x1 = -1
+    var y1 = -1
+    for (y in 0 until h) for (x in 0 until w) if (filled[y * w + x]) {
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
+    if (x1 < x0) return null
+    val bw = x1 - x0 + 1
+    val bh = y1 - y0 + 1
+    val out = IntArray(bw * bh)
+    for (y in 0 until bh) for (x in 0 until bw) if (filled[(y + y0) * w + (x + x0)]) out[y * bw + x] = colour
+    val bmp = android.graphics.Bitmap.createBitmap(out, bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
+    // The colour goes in the name, in case a fill ever needs to be recognised by colour.
+    val file = images.save(bmp, FILL_PREFIX + "%08x-".format(colour))
+    return file to Rect(window.left + x0 / k, window.top + y0 / k, window.left + (x1 + 1) / k, window.top + (y1 + 1) / k)
+  }
+
+  /** Whether a touch at [screen] lands on the active shape's dots or on the selection (to move, resize or turn it). */
+  private fun grabsEdit(screen: Pt): Boolean {
+    val hit = HANDLE_HIT_DP * density
+    currentActiveShape()?.let { shape -> if (shape.geometry.handles().any { camera.toScreen(it).dist(screen) < hit }) return true }
+    val sb = selectionBounds ?: return false
+    val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
+    if (canRotateSelection() && rotateHandle(r).dist(screen) < hit) return true
+    return hypot(screen.x - r.right, screen.y - r.bottom) < hit || r.contains(screen.x, screen.y)
+  }
+
   private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem || it is TextItem }
 
   /** The rotate handle hangs below the middle of the selection (the menu sits above it). */
@@ -651,6 +812,29 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val h = 24f * density
     val cx = (s.x + 22f * density + w / 2).coerceIn(w / 2 + 4f, width - w / 2 - 4f)
     val cy = (s.y - 26f * density).coerceIn(h / 2 + 4f, height - h / 2 - 4f)
+    canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
+    canvas.drawText(label, cx, cy + 4.5f * density, angleText)
+  }
+
+  /** While a part circle is drawn or its ends are dragged: how much of a circle it is, and its angle. */
+  private fun drawSectorReadout(canvas: Canvas) {
+    val sector =
+      when (mode) {
+        Mode.SHAPE_CREATE -> shapePreview?.geometry as? SectorShape
+        Mode.HANDLE_DRAG -> liveEdit?.geometry as? SectorShape
+        else -> null
+      } ?: return
+    val pct = Math.round(sector.fraction * 100)
+    val deg = Math.round(sector.fraction * 360)
+    val label = "$pct%  ·  $deg°"
+    val at = camera.toScreen(sector.handles()[if (mode == Mode.HANDLE_DRAG && handleIndex == 0) 0 else 1])
+    angleText.textSize = 12.5f * density
+    angleText.color = 0xFFFFFFFF.toInt()
+    angleBubble.color = handleColor
+    val w = angleText.measureText(label) + 18f * density
+    val h = 24f * density
+    val cx = (at.x + 22f * density + w / 2).coerceIn(w / 2 + 4f, width - w / 2 - 4f)
+    val cy = (at.y - 26f * density).coerceIn(h / 2 + 4f, height - h / 2 - 4f)
     canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
     canvas.drawText(label, cx, cy + 4.5f * density, angleText)
   }
@@ -747,7 +931,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
             }
           }
         } else if (!isDrawingMode()) {
-          fingerDown(e)
+          // A finger on a shape's dot or on a selection edits it (that's how she adjusts shapes);
+          // anywhere else it scrolls and zooms as usual.
+          if (e.actionMasked == MotionEvent.ACTION_DOWN && grabsEdit(Pt(e.getX(idx), e.getY(idx)))) {
+            stopFling()
+            beginDraw(e, idx)
+          } else {
+            fingerDown(e)
+          }
         }
       }
       MotionEvent.ACTION_MOVE -> if (isDrawingMode()) drawMove(e) else fingerMove(e)
@@ -805,16 +996,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     drawPointer = e.getPointerId(idx)
     drawIsFinger = e.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER
-    requestUnbufferedDispatch(e)
     val p = world(e, idx)
     val screen = Pt(e.getX(idx), e.getY(idx))
     eraserOverride = e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
 
     // 1. Handles of the shape being edited win over everything.
     currentActiveShape()?.let { shape ->
-      val hit = shape.geometry.handles().indexOfFirst { h -> camera.toScreen(h).dist(screen) < HANDLE_HIT_DP * density }
+      // The nearest dot, so on a small shape the one she aimed at wins.
+      val handles = shape.geometry.handles()
+      val hit = handles.indices.filter { camera.toScreen(handles[it]).dist(screen) < HANDLE_HIT_DP * density }.minByOrNull { camera.toScreen(handles[it]).dist(screen) } ?: -1
       if (hit >= 0) {
         handleIndex = hit
+        // Keep where on the dot she grabbed it, so the shape doesn't jump to the pen tip.
+        handleGrab = handles[hit] - p
         liveEdit = shape
         tiles.hidden = setOf(shape.id)
         mode = Mode.HANDLE_DRAG
@@ -852,23 +1046,33 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     val effective = if (eraserOverride) Tool.ERASER else tool
     val n = pageCount
-    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE) && !Pages.contains(n, p.x, p.y)) {
+    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE || effective == Tool.FILL) && !pageLayout.contains(n, p.x, p.y)) {
       mode = Mode.IGNORE
       return
     }
     when (effective) {
       Tool.PEN -> startInk(e, idx, p, d)
-      Tool.ERASER -> startErase(p)
+      Tool.ERASER -> {
+        requestUnbufferedDispatch(e)
+        startErase(p)
+      }
       Tool.LASSO -> startLasso(p)
       Tool.SHAPE -> {
         shapeStart = p
         shapePreview = null
         mode = Mode.SHAPE_CREATE
       }
+      Tool.FILL -> {
+        shapeStart = p
+        mode = Mode.FILL_TAP
+      }
     }
   }
 
   private fun startInk(e: MotionEvent, idx: Int, p: Pt, d: Document) {
+    // Every pen sample at once, for the lowest-latency ink. Only ink and the eraser ask for this:
+    // anything that rebuilds a shape per sample would flood the main thread and stop it drawing.
+    requestUnbufferedDispatch(e)
     val slot = settings.activeSlot
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size)
     predictor.record(e)
@@ -903,9 +1107,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.LIVE_SHAPE -> {
         val shape = liveShape ?: return
         val g = shape.geometry
+        val pen = world(e, idx)
         // While still holding, a snapped line follows the pen so its length and angle can be set.
         if (g is LineShape && !g.arrowEnd) {
-          liveShape = shape.withGeometry(ShapeRecognizer.snappedLine(g.a, world(e, idx)))
+          liveShape = shape.withGeometry(ShapeRecognizer.snappedLine(g.a, pen))
+          invalidate()
+        } else {
+          // Any other shape grows or shrinks with the pen, evenly around its middle (a circle's edge
+          // follows the pen tip). A small dead zone keeps hold-and-lift exactly as it snapped.
+          val base = liveBase ?: return
+          if (!liveFollowing && camera.toScreen(pen).dist(camera.toScreen(liveAnchor)) < touchSlop) return
+          liveFollowing = true
+          val bg = base.geometry
+          val c = if (bg is com.tali.notes.model.EllipseShape) bg.center else base.bounds.center
+          val from = liveAnchor.dist(c)
+          if (from < 1f) return
+          val k = (pen.dist(c) / from).coerceIn(0.15f, 8f)
+          liveShape = base.withGeometry(bg.transformed(Affine.scaleAround(c, k)))
           invalidate()
         }
       }
@@ -947,7 +1165,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.HANDLE_DRAG -> {
         val shape = liveEdit ?: return
         val base = doc?.get(shape.id) as? ShapeItem ?: return
-        var g = base.geometry.withHandle(handleIndex, world(e, idx))
+        var g = base.geometry.withHandle(handleIndex, world(e, idx) + handleGrab)
         // A line end being dragged snaps to the same tidy angles as a freshly drawn line.
         if (g is LineShape) g = if (handleIndex == 1) g.copy(b = ShapeRecognizer.snappedLine(g.a, g.b).b) else g.copy(a = ShapeRecognizer.snappedLine(g.b, g.a).b)
         liveEdit = base.withGeometry(g)
@@ -993,6 +1211,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     strokeColors.remove(id)
     strokeId = null
     liveShape = ShapeItem(d.newId(), d.nextZ(), pen, slot.color, slot.size, geometry)
+    liveBase = liveShape
+    liveAnchor = strokePoints.lastOrNull() ?: Pt(0f, 0f)
+    liveFollowing = false
     mode = Mode.LIVE_SHAPE
     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     invalidate()
@@ -1000,7 +1221,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun buildShape(p0: Pt, p1: Pt): ShapeItem {
     val slot = settings.shapeSlot
-    var geometry = customShape?.fitInto(p0, p1) ?: shapeKind.create(p0, p1)
+    var geometry = customShape?.fitInto(p0, p1)
+      ?: shapeKind.create(p0, p1)
     if (geometry is LineShape) {
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
       geometry = geometry.copy(b = snapped.b)
@@ -1018,6 +1240,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         strokeId = null
       }
       Mode.LIVE_SHAPE -> {
+        liveBase = null
         val shape = liveShape
         if (shape != null && d != null) {
           d.commit(Change(emptyList(), listOf(shape)))
@@ -1040,11 +1263,20 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         tiles.hidden = emptySet()
         if (selection.size == 1) setSelection(listOfNotNull(d?.get(selection[0].id)))
       }
+      Mode.FILL_TAP -> {
+        val at = if (idx >= 0) world(e, idx) else shapeStart
+        if (camera.toScreen(at).dist(camera.toScreen(shapeStart)) < touchSlop * 2) fillAt(shapeStart)
+      }
       Mode.SHAPE_CREATE -> {
         if (d != null) {
           val preview = shapePreview ?: buildShape(shapeStart - Pt(60f, 40f), shapeStart + Pt(60f, 40f))
           val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry)
           d.commit(Change(emptyList(), listOf(shape)))
+          // A part circle shows its dots straight away, so its amount can be set right after drawing it.
+          if (shape.geometry is SectorShape) {
+            activeShapeId = shape.id
+            host.onTip("part-circle", "Drag an end dot to choose how much of a circle: it shows the %")
+          }
         }
         shapePreview = null
       }
@@ -1060,6 +1292,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     strokeId?.let { inProgress.cancelStroke(it, null) }
     strokeId = null
     liveShape = null
+    liveBase = null
     liveEdit = null
     shapePreview = null
     lassoPoints.clear()
@@ -1168,11 +1401,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       return
     }
     val area = Rect.around(pts) ?: return
-    val picked = d.all.filter { item -> settings.lassoHits(item.pen) && item.bounds.intersects(area) && insideFraction(item, pts) >= 0.5f }
+    val picked = d.all.filter { item -> settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) }
     setSelection(picked)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
   }
+
+  /**
+   * Whether the lasso loop [poly] picks up [item]: anything it touches (see [Lasso]). Imported PDF
+   * pages still need to be mostly inside, so lassoing writing on a slide doesn't take the slide.
+   */
+  private fun lassoTouches(item: CanvasItem, poly: List<Pt>): Boolean =
+    when (item) {
+      is InkItem -> Lasso.touchesPath(StrokeFactory.points(item.stroke), poly)
+      is ShapeItem -> item.geometry.paths(item.size).any { Lasso.touchesPath(it, poly) }
+      is ImageItem -> if (item.pdfPage) insideFraction(item, poly) >= 0.5f else Lasso.touchesRect(item.rect, poly)
+      is TextItem -> Lasso.touchesRect(item.bounds, poly)
+    }
 
   private fun insideFraction(item: CanvasItem, poly: List<Pt>): Float {
     val samples: List<Pt> =
@@ -1292,6 +1537,35 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     setSelection(copies)
   }
 
+  /**
+   * Brings the selection in front of everything or sends it behind everything, keeping its own
+   * order. Pictures brought forward can cover writing; sent back, they sit behind it like paper.
+   */
+  fun arrangeSelection(toFront: Boolean) {
+    val d = doc ?: return
+    val sel = selection.mapNotNull { d[it.id] }.sortedBy { it.z }
+    if (sel.isEmpty()) return
+    val ids = sel.map { it.id }.toSet()
+    val all = d.all.toList()
+    val others = all.filter { it.id !in ids }
+    val alreadyThere =
+      if (toFront) sel.none { it is ImageItem && !it.front } && others.none { it.z > sel.first().z && !(it is ImageItem && !it.front) }
+      else sel.none { it is ImageItem && it.front } && others.none { it.z < sel.last().z }
+    if (alreadyThere) {
+      host.onHint(if (toFront) "Already in front" else "Already at the back")
+      return
+    }
+    val bottom = all.firstOrNull()?.z ?: 0L
+    val moved =
+      sel.mapIndexed { i, it ->
+        val z = if (toFront) d.nextZ() else bottom - sel.size + i
+        if (it is ImageItem) it.inFront(toFront, z) else it.withZ(z)
+      }
+    d.commit(Change(sel, moved))
+    setSelection(moved)
+    host.onHint(if (toFront) "Brought to the front" else "Sent to the back")
+  }
+
   fun recolorSelection(color: Int) {
     val d = doc ?: return
     val recolored =
@@ -1365,10 +1639,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * so a landscape slide leaves room for notes below it. An empty last page is used first.
    */
   private fun insertPdfOnPages(d: Document, pdf: List<NotesRepository.ImportedPage>, n: Int) {
-    val start = if (d.intersecting(Pages.rect(n - 1)).isEmpty()) n - 1 else n
+    val start = if (d.intersecting(pageLayout.rect(n - 1)).isEmpty()) n - 1 else n
     val items =
       pdf.mapIndexed { i, p ->
-        val r = Pages.rect(start + i)
+        val r = pageLayout.rect(start + i)
         val w = p.widthPt / PT_PER_DP
         val h = p.heightPt / PT_PER_DP
         val s = minOf(r.width / w, r.height / h)
@@ -1402,7 +1676,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val n = pageCount
     val edit =
       if (n != null) {
-        val r = Pages.rect(currentPage().coerceIn(0, n - 1))
+        val r = pageLayout.rect(currentPage().coerceIn(0, n - 1))
         val lowest = d.intersecting(r).filter { it.bounds.center.y < r.bottom }.maxOfOrNull { it.bounds.bottom }
         val top = (lowest?.plus(6 * mm) ?: (r.top + 22 * mm)).coerceAtMost(r.bottom - 30 * mm)
         TextEdit(null, Pt(r.left + 20 * mm, top), r.width - 40 * mm, fontSize, color, "")
@@ -1616,6 +1890,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun tapAt(p: Pt) {
+    // With the fill tool, a finger tap fills too.
+    if (tool == Tool.FILL) {
+      fillAt(p)
+      return
+    }
     val item = hitTest(p, pages = false) { true }
     if (item == null) clearSelection() else selectSingle(item)
   }
@@ -1645,7 +1924,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun refreshPages() {
     val n = pageCount
-    pages = if (n != null) Pages.all(n) else doc?.all?.filter { it is ImageItem && it.pdfPage }?.map { (it as ImageItem).rect }?.sortedBy { it.top }.orEmpty()
+    pages = if (n != null) pageLayout.all(n) else doc?.all?.filter { it is ImageItem && it.pdfPage }?.map { (it as ImageItem).rect }?.sortedBy { it.top }.orEmpty()
     pageIndex = -2
     updatePage()
   }
@@ -1684,8 +1963,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val viewH = height / camera.scale
     val margin = 24f / camera.zoom
     val x =
-      if (Pages.WIDTH + 2 * margin <= viewW) Pages.WIDTH / 2f - viewW / 2f
-      else camera.x.coerceIn(-margin, Pages.WIDTH + margin - viewW)
+      if (pageLayout.width + 2 * margin <= viewW) pageLayout.width / 2f - viewW / 2f
+      else camera.x.coerceIn(-margin, pageLayout.width + margin - viewW)
     val minY = -topClearance / camera.zoom
     // A little room under the last page; more while her fingers pull at it (or it springs back).
     val room = if (pulling || cameraAnimator?.isRunning == true) MAX_PULL_DP else REST_DP
@@ -1706,7 +1985,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Fingers are on the page and started at its end (so it may be pulled past the last page). */
   private var pulling = false
 
-  private fun lastPageBottom(n: Int) = (n - 1) * Pages.PITCH + Pages.HEIGHT
+  private fun lastPageBottom(n: Int) = (n - 1) * pageLayout.pitch + pageLayout.height
 
   /** How far below the last page the screen reaches, in dp on screen. */
   private fun pullDp(): Float {
@@ -1736,9 +2015,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Shows page [index] across the width of the screen, its top just under the toolbars. */
   private fun showPageWidth(index: Int) {
     if (width == 0 || height == 0) return
-    val zoom = (width * 0.94f / (Pages.WIDTH * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
+    val zoom = (width * 0.94f / (pageLayout.width * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
     val scale = zoom * density
-    camera.set(Viewport(Pages.WIDTH / 2f - width / 2f / scale, Pages.rect(index).top - topClearance / zoom, zoom))
+    camera.set(Viewport(pageLayout.width / 2f - width / 2f / scale, pageLayout.rect(index).top - topClearance / zoom, zoom))
     settleCamera()
     afterCameraMove()
   }
@@ -1750,8 +2029,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun insertPageAfter(index: Int) {
     val d = doc ?: return
     val n = pageCount ?: return
-    val below = d.all.filter { it.bounds.center.y > Pages.rect(index).bottom }
-    val shift = Affine.translate(0f, Pages.PITCH)
+    val below = d.all.filter { it.bounds.center.y > pageLayout.rect(index).bottom }
+    val shift = Affine.translate(0f, pageLayout.pitch)
     setPages(n + 1)
     if (below.isNotEmpty()) d.commit(Change(below, below.map { it.transformed(shift) }))
     goToPage(index + 1)
@@ -1764,14 +2043,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun deletePage(index: Int) {
     val d = doc ?: return
     val n = pageCount ?: return
-    val top = index * Pages.PITCH
-    val on = d.all.filter { it.bounds.center.y in top..<top + Pages.PITCH }
+    val top = index * pageLayout.pitch
+    val on = d.all.filter { it.bounds.center.y in top..<top + pageLayout.pitch }
     if (n == 1) {
       if (on.isNotEmpty()) d.commit(Change(on, emptyList()))
       return
     }
-    val below = d.all.filter { it.bounds.center.y >= top + Pages.PITCH }
-    val shift = Affine.translate(0f, -Pages.PITCH)
+    val below = d.all.filter { it.bounds.center.y >= top + pageLayout.pitch }
+    val shift = Affine.translate(0f, -pageLayout.pitch)
     setPages(n - 1)
     clearSelection()
     if (on.isNotEmpty() || below.isNotEmpty()) d.commit(Change(on + below, below.map { it.transformed(shift) }))
@@ -1785,16 +2064,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun convertToPages() {
     val d = doc ?: return
     val content = d.contentBounds()
-    if (content != null && (content.left < 0f || content.right > Pages.WIDTH || content.top < 0f)) {
+    if (content != null && (content.left < 0f || content.right > pageLayout.width || content.top < 0f)) {
       val dx =
-        if (content.width <= Pages.WIDTH - 2 * PAGE_MARGIN) (Pages.WIDTH - content.width) / 2f - content.left
+        if (content.width <= pageLayout.width - 2 * PAGE_MARGIN) (pageLayout.width - content.width) / 2f - content.left
         else PAGE_MARGIN - content.left
       val dy = if (content.top < PAGE_MARGIN) PAGE_MARGIN - content.top else 0f
       val all = d.all.toList()
       val shift = Affine.translate(dx, dy)
       d.commit(Change(all, all.map { it.transformed(shift) }))
     }
-    setPages(Pages.needed(d.contentBounds()))
+    setPages(pageLayout.needed(d.contentBounds()))
     showPageWidth(currentPage().coerceAtMost((pageCount ?: 1) - 1))
   }
 
@@ -1858,7 +2137,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Zooms out (or in, up to 150%) so everything in the notebook is on screen. */
   fun fitContent() {
     // A paged notebook shows the whole of the current page.
-    val b = (if (pageCount != null) Pages.rect(currentPage()).outset(24f) else doc?.contentBounds()?.outset(40f)) ?: return
+    val b = (if (pageCount != null) pageLayout.rect(currentPage()).outset(24f) else doc?.contentBounds()?.outset(40f)) ?: return
     if (width == 0 || height == 0) return
     val zoom = minOf(width / (b.width * density), height / (b.height * density)).coerceIn(Camera.MIN_ZOOM, 1.5f)
     val scale = zoom * density
@@ -1869,7 +2148,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   companion object {
     private val DRAW_MODES =
-      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.IGNORE)
+      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE)
     private const val HOLD_TOLERANCE_DP = 7f
 
     /** PDF points per world unit (dp), matching the PDF export so pages keep their real size. */
@@ -1888,6 +2167,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** Room left around writing moved onto pages. */
     private const val PAGE_MARGIN = 60f
+    /** One background thread for working out fills, shared by every notebook. */
+    private val fillWorker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "fill").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
+
+    /** Fill pictures are saved with this prefix, so the fill tool can recognise (and replace) them. */
+    const val FILL_PREFIX = "fill-"
+    /** How far from the tap a fill looks for the edges of its area, in world units. */
+    private const val FILL_REACH = 1100f
+    /** The largest mask side, in pixels. */
+    private const val FILL_PIXELS = 1400f
+    /** Gaps up to about this wide (world units, ~1 mm) in an outline still count as closed. */
+    private const val FILL_BRIDGE = 3f
     private const val HANDLE_HIT_DP = 24f
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L

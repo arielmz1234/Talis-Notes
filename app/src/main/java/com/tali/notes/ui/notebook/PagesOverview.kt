@@ -70,7 +70,11 @@ import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.cloudSurface
 
-private const val PAGE_ASPECT = 1322f / 1871f
+/** Width over height of this notebook's pages (portrait or landscape A4), set by [PagesOverview]. */
+private val LocalPageAspect = androidx.compose.runtime.staticCompositionLocalOf { com.tali.notes.canvas.Pages.PORTRAIT.aspect }
+
+private val PAGE_ASPECT: Float
+  @Composable get() = LocalPageAspect.current
 
 /**
  * Every page of a paged notebook at a glance, in a popup of its own. Tapping a page lifts it up
@@ -87,7 +91,7 @@ fun PagesOverview(
   onGo: (Int) -> Unit,
   onAdd: () -> Unit,
   onDelete: (Int) -> Unit,
-) {
+) = androidx.compose.runtime.CompositionLocalProvider(LocalPageAspect provides vm.pageLayout.aspect) {
   val c = Tali.colors
   var peek by remember { mutableStateOf<Int?>(null) }
   // The last page peeked at, so it stays drawn while the peek fades away.
@@ -95,7 +99,7 @@ fun PagesOverview(
   var removing by remember { mutableStateOf<Int?>(null) }
   LaunchedEffect(removing) {
     val i = removing ?: return@LaunchedEffect
-    kotlinx.coroutines.delay(440)
+    kotlinx.coroutines.delay(com.tali.notes.ui.components.PUFF_LEAVE_MS.toLong())
     onDelete(i)
     removing = null
   }
@@ -125,7 +129,8 @@ fun PagesOverview(
         }
         Spacer(Modifier.height(18.dp))
         LazyVerticalGrid(
-          columns = GridCells.Adaptive(132.dp),
+          // Landscape pages get wider tiles, so both kinds show a page at a readable size.
+          columns = GridCells.Adaptive(if (PAGE_ASPECT > 1f) 196.dp else 132.dp),
           state = grid,
           horizontalArrangement = Arrangement.spacedBy(20.dp),
           verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -172,18 +177,9 @@ private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int,
   val c = Tali.colors
   val image = rememberPage(vm, items, index, version, 480)
   val shape = RoundedCornerShape(10.dp)
-  // A deleted page shrinks a little and fades into a small puff of cloud.
-  val gone by androidx.compose.animation.core.animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) 260 else 0), label = "leave")
-  val puff by androidx.compose.animation.core.animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) 440 else 0), label = "puff")
-  Box(modifier) {
-  Column(
-    horizontalAlignment = Alignment.CenterHorizontally,
-    modifier = Modifier.graphicsLayer {
-      alpha = 1f - gone
-      scaleX = 1f - 0.12f * gone
-      scaleY = 1f - 0.12f * gone
-    },
-  ) {
+  // A deleted page dissolves into a small puff of cloud.
+  com.tali.notes.ui.components.PuffBox(leaving = leaving, appearing = false, modifier = modifier) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(PAGE_ASPECT)
@@ -203,7 +199,6 @@ private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int,
       modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) c.accent else Color.Transparent).padding(horizontal = 10.dp, vertical = 2.dp),
     )
   }
-  com.tali.notes.ui.components.CloudPuff(puff, Modifier.matchParentSize())
   }
 }
 

@@ -107,6 +107,8 @@ data class NewNotebook(
   val paged: Boolean,
   val dark: Boolean,
   val cover: Int,
+  /** A4 pages on their side. */
+  val landscape: Boolean = false,
 )
 
 /**
@@ -130,9 +132,10 @@ fun NewNotebookDialog(
   var custom by remember { mutableStateOf(settings.defaultCustomPaper?.takeIf { id -> settings.customPapers.any { it.id == id } }) }
   var paged by remember { mutableStateOf(settings.defaultPaged) }
   var dark by remember { mutableStateOf(false) }
+  var landscape by remember { mutableStateOf(settings.defaultLandscape) }
   var cover by remember { mutableStateOf(defaultCover) }
   var makingPaper by remember { mutableStateOf(false) }
-  val create = { onCreate(NewNotebook(title.text, paper, custom, paged, dark, cover)) }
+  val create = { onCreate(NewNotebook(title.text, paper, custom, paged, dark, cover, landscape = paged && landscape)) }
   DialogCard(onDismiss, width = 640) {
     Column(Modifier.heightIn(max = 640.dp).verticalScroll(rememberScrollState())) {
       Row(verticalAlignment = Alignment.Top) {
@@ -177,6 +180,21 @@ fun NewNotebookDialog(
         style = MaterialTheme.typography.bodySmall,
         color = c.inkMuted,
       )
+      // Which way up the pages are, whichever way she holds the tablet.
+      androidx.compose.animation.AnimatedVisibility(paged) {
+        Column {
+          Spacer(Modifier.height(16.dp))
+          SectionLabel("Orientation")
+          Spacer(Modifier.height(8.dp))
+          Segmented(listOf(false, true), landscape, { if (it) "Landscape" else "Portrait" }, { landscape = it }, Modifier.fillMaxWidth())
+          Spacer(Modifier.height(6.dp))
+          Text(
+            if (landscape) "Wide A4 pages on their side: good for slides, timelines and wide diagrams." else "Upright A4 pages, like a normal notebook.",
+            style = MaterialTheme.typography.bodySmall,
+            color = c.inkMuted,
+          )
+        }
+      }
       Spacer(Modifier.height(12.dp))
       ToggleRow("Dark paper", dark, { dark = it }, detail = "A black page; your pens switch to light colours")
       Spacer(Modifier.height(14.dp))
