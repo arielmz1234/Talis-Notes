@@ -97,6 +97,10 @@ import com.tali.notes.export.PdfQuality
 import com.tali.notes.ui.components.NewPaperDialog
 import com.tali.notes.ui.components.PaperPicker
 import androidx.compose.material.icons.outlined.AllInclusive
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.automirrored.outlined.Redo
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.Tool
 import com.tali.notes.theme.Tali
@@ -304,6 +308,12 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     // Tapping the page closes an open panel instead of drawing.
     if (vm.panel != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { vm.panel = null } })
 
+    // Hiding the toolbars leaves only the page; they shrink away and pop back in.
+    AnimatedVisibility(
+      visible = !vm.focus,
+      enter = fadeIn(tween(220)) + scaleIn(tween(260), initialScale = 0.96f),
+      exit = fadeOut(tween(180)) + scaleOut(tween(200), targetScale = 0.96f),
+    ) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
       val titlePill: @Composable () -> Unit = { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) }
       val tools: @Composable () -> Unit = {
@@ -392,6 +402,14 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onPageGuides = vm::setPageGuides,
               pasteCount = Clipboard.items.size,
               onPaste = { holder.view?.runSafely { paste() } },
+              onHideToolbars = {
+                vm.panel = null
+                vm.focus = true
+              },
+              undoTap = settings.twoFingerUndo,
+              onUndoTap = vm::setTwoFingerUndo,
+              redoTap = settings.threeFingerRedo,
+              onRedoTap = vm::setThreeFingerRedo,
             )
           }
       }
@@ -421,6 +439,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
     }
+    }
+    FocusCloud(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 8.dp, end = 12.dp)) { vm.focus = false }
 
     vm.selection?.let { sel ->
       if (vm.panel == null) {
@@ -483,6 +503,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       paged = paged,
       hasPdfPages = remember(doc) { doc?.all?.any { it is com.tali.notes.model.ImageItem && it.pdfPage } == true },
       onDismiss = { exporting = false },
+      prepare = vm::exportPdf,
       onExport = { layout, quality, share ->
         exporting = false
         vm.showHint("Preparing PDF…")
@@ -543,6 +564,11 @@ private fun MoreMenu(
   onPageGuides: (Boolean) -> Unit,
   pasteCount: Int,
   onPaste: () -> Unit,
+  onHideToolbars: () -> Unit,
+  undoTap: Boolean,
+  onUndoTap: (Boolean) -> Unit,
+  redoTap: Boolean,
+  onRedoTap: (Boolean) -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
@@ -585,6 +611,10 @@ private fun MoreMenu(
           },
         )
       }
+      DropdownMenuItem(text = { Text("Hide toolbars") }, leadingIcon = { Icon(Icons.Outlined.VisibilityOff, null) }, onClick = {
+        open = false
+        onHideToolbars()
+      })
       DropdownMenuItem(text = { Text(if (paged) "Show whole page" else "Show everything") }, leadingIcon = { Icon(Icons.Outlined.FitScreen, null) }, onClick = {
         open = false
         onFit()
@@ -618,6 +648,18 @@ private fun MoreMenu(
             }
           )
         },
+      )
+      DropdownMenuItem(
+        text = { Text("Two-finger tap to undo") },
+        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Undo, null) },
+        trailingIcon = { if (undoTap) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+        onClick = { onUndoTap(!undoTap) },
+      )
+      DropdownMenuItem(
+        text = { Text("Three-finger tap to redo") },
+        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Redo, null) },
+        trailingIcon = { if (redoTap) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+        onClick = { onRedoTap(!redoTap) },
       )
     }
   }
@@ -755,51 +797,94 @@ private fun SaveShapeDialog(geometry: ShapeGeometry, onDismiss: () -> Unit, onSa
   }
 }
 
+/** What the export dialog's main choice can be: a quality, or the whole canvas on one long page. */
+private enum class ExportChoice(val label: String, val quality: PdfQuality, val detail: String) {
+  BEST("Best", PdfQuality.BEST, PdfQuality.BEST.detail),
+  BALANCED("Balanced", PdfQuality.BALANCED, PdfQuality.BALANCED.detail),
+  LIGHT("Light", PdfQuality.LIGHT, PdfQuality.LIGHT.detail),
+  LONG("One long page", PdfQuality.BEST, "Everything on one long page, sized to fit, instead of A4 pages."),
+}
+
+private fun sizeLabel(bytes: Long): String =
+  when {
+    bytes >= 1_000_000 -> String.format(java.util.Locale.UK, "File size: %.1f MB", bytes / 1_000_000.0)
+    bytes >= 1_000 -> "File size: ${(bytes / 1_000.0).roundToInt()} KB"
+    else -> "File size: under 1 KB"
+  }
+
+/**
+ * Export: Best, Balanced, Light or one long page, with the real file size of the choice shown
+ * under it (the PDF is made in the background, and that same file is what gets shared or saved).
+ * Notebooks with imported slides on an endless canvas can also export the slides' own pages.
+ */
 @Composable
-private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: (PdfLayout, PdfQuality, share: Boolean) -> Unit) {
+private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> Unit, prepare: suspend (PdfLayout, PdfQuality) -> File?, onExport: (PdfLayout, PdfQuality, share: Boolean) -> Unit) {
   val c = Tali.colors
-  // Slides she imported come back out as the same slides, with her writing on them. A paged
-  // notebook already has its slides on pages of their own.
-  val options = if (hasPdfPages && !paged) listOf(PdfLayout.PDF_PAGES, PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE) else listOf(PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE)
-  var layout by remember { mutableStateOf(options.first()) }
-  var quality by remember { mutableStateOf(PdfQuality.BEST) }
-  DialogCard(onDismiss, width = 520) {
+  val pageLayouts = if (hasPdfPages && !paged) listOf(PdfLayout.PDF_PAGES, PdfLayout.A4_PAGES) else listOf(PdfLayout.A4_PAGES)
+  var pagesLayout by remember { mutableStateOf(pageLayouts.first()) }
+  var choice by remember { mutableStateOf(ExportChoice.BEST) }
+  val layout = if (choice == ExportChoice.LONG) PdfLayout.ONE_PAGE else pagesLayout
+  val sizes = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
+  val key = "$layout-${choice.quality}"
+  LaunchedEffect(key) { prepare(layout, choice.quality)?.let { sizes[key] = it.length() } }
+  DialogCard(onDismiss, width = 560) {
     Text("Export PDF", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(16.dp))
-    Segmented(
-      options,
-      layout,
-      {
-        when (it) {
-          PdfLayout.PDF_PAGES -> "PDF pages"
-          PdfLayout.A4_PAGES -> if (paged) "Notebook pages" else "A4 pages"
-          PdfLayout.ONE_PAGE -> "One long page"
-        }
-      },
-      { layout = it },
-      Modifier.fillMaxWidth(),
-    )
-    Spacer(Modifier.height(10.dp))
+    if (pageLayouts.size > 1 && choice != ExportChoice.LONG) {
+      Segmented(pageLayouts, pagesLayout, { if (it == PdfLayout.PDF_PAGES) "Slides' own pages" else "A4 pages" }, { pagesLayout = it }, Modifier.fillMaxWidth())
+      Spacer(Modifier.height(14.dp))
+    }
+    Segmented(ExportChoice.entries, choice, { it.label }, { choice = it }, Modifier.fillMaxWidth())
+    Spacer(Modifier.height(12.dp))
+    val size = sizes[key]
+    Text(size?.let(::sizeLabel) ?: "Making the PDF to measure it…", style = MaterialTheme.typography.titleSmall, color = if (size != null) c.ink else c.inkFaint)
+    Spacer(Modifier.height(2.dp))
     Text(
-      when (layout) {
-        PdfLayout.PDF_PAGES -> "Each page you imported comes back as its own page, with your writing on and around it."
-        PdfLayout.A4_PAGES -> if (paged) "Every page of the notebook becomes an A4 page, just as you see it." else "Splits the canvas into printable A4 pages. Empty areas are skipped."
-        PdfLayout.ONE_PAGE -> "Keeps the whole canvas on one page, sized to fit everything."
+      when {
+        choice == ExportChoice.LONG -> choice.detail
+        layout == PdfLayout.PDF_PAGES -> "Each slide you imported comes back as its own page, with your writing on it. " + choice.detail
+        paged -> "Every page of the notebook as an A4 page. " + choice.detail
+        else -> "The canvas cut into A4 pages; empty areas are skipped. " + choice.detail
       },
       style = MaterialTheme.typography.bodyMedium,
       color = c.inkMuted,
+      minLines = 2,
     )
-    Spacer(Modifier.height(20.dp))
-    SectionLabel("Quality")
-    Spacer(Modifier.height(8.dp))
-    Segmented(PdfQuality.entries, quality, { it.label }, { quality = it }, Modifier.fillMaxWidth())
-    Spacer(Modifier.height(10.dp))
-    Text(quality.detail, style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton("Cancel", onClick = onDismiss)
-      QuietButton("Save to Files") { onExport(layout, quality, false) }
-      PrimaryButton("Share") { onExport(layout, quality, true) }
+      QuietButton("Save to Files") { onExport(layout, choice.quality, false) }
+      PrimaryButton("Share") { onExport(layout, choice.quality, true) }
+    }
+  }
+}
+
+/**
+ * While the toolbars are hidden, the one thing left: a small cloud in the corner that brings them
+ * back. It pops in on a puff of cloud, and puffs again as the toolbars return.
+ */
+@Composable
+private fun FocusCloud(visible: Boolean, modifier: Modifier = Modifier, onShow: () -> Unit) {
+  val c = Tali.colors
+  val puff = remember { androidx.compose.animation.core.Animatable(1f) }
+  // Also puffs once as the notebook opens, a small hello from the sky.
+  LaunchedEffect(visible) {
+    puff.snapTo(0f)
+    puff.animateTo(1f, tween(if (visible) 650 else 520))
+  }
+  Box(modifier.size(132.dp), contentAlignment = Alignment.Center) {
+    com.tali.notes.ui.components.CloudPuff(puff.value, Modifier.fillMaxSize())
+    AnimatedVisibility(
+      visible = visible,
+      enter = fadeIn(tween(120)) + scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 420f), initialScale = 0.2f),
+      exit = fadeOut(tween(160)) + scaleOut(tween(180), targetScale = 0.4f),
+    ) {
+      Box(
+        Modifier.size(52.dp, 44.dp).cloudSurface(22.dp, CloudCrown.CENTER, shadowDepth = 5.dp).clip(RoundedCornerShape(22.dp)).clickable(onClickLabel = "Show toolbars", onClick = onShow),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(Icons.Outlined.Visibility, "Show toolbars", tint = c.accent, modifier = Modifier.size(22.dp))
+      }
     }
   }
 }

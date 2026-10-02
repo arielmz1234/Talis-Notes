@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -90,6 +92,7 @@ fun PaperPicker(
 ) {
   val c = Tali.colors
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
+  var expanded by remember { mutableStateOf(false) }
   FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp), maxItemsInEachRow = perRow) {
     val tile: @Composable (String, Boolean, () -> Unit, (() -> Unit)?, @Composable (Modifier) -> Unit) -> Unit = { label, on, click, longClick, swatch ->
       Column(
@@ -105,8 +108,21 @@ fun PaperPicker(
         Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = if (on) c.accent else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
       }
     }
-    PaperStyle.entries.forEach { s -> tile(s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } }
-    customs.forEach { cp -> tile(cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } }
+    // Every choice in order: the built-in papers, then hers.
+    val all: List<Pair<String, @Composable () -> Unit>> =
+      PaperStyle.entries.map { s -> s.name to @Composable { tile(s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
+        customs.map { cp -> cp.id to @Composable { tile(cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
+    // Folded, one line: the first few, always including the one in use, then More and Your own.
+    val current = customId ?: style.name
+    val shown =
+      if (expanded) all
+      else all.take(FOLDED).let { first -> if (first.any { it.first == current }) first else first.dropLast(1) + all.filter { it.first == current } }
+    shown.forEach { it.second() }
+    tile(if (expanded) "Fewer" else "More", false, { expanded = !expanded }, null) { m ->
+      Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
+        Icon(if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown, null, tint = c.inkMuted, modifier = Modifier.size(20.dp))
+      }
+    }
     tile("Your own", false, onAdd, null) { m ->
       Box(m.clip(RoundedCornerShape(8.dp)).border(1.dp, c.line, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
         Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(18.dp))
@@ -202,8 +218,11 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
   return state.value
 }
 
-private val LINE_COLORS = listOf(0xFFB9D2F6, 0xFFD2C3EE, 0xFFCDD0D8, 0xFFBFE3CF, 0xFFF4C6D4, 0xFF8E95A2).map { it.toInt() }
-private val PAPER_COLORS = listOf(0xFFFDFCFF, 0xFFFFF8E8, 0xFFF4EEFF, 0xFFEEF5FF, 0xFFEFF8F2, 0xFFF6F1EA).map { it.toInt() }
+/** Papers shown before More. */
+private const val FOLDED = 4
+
+private val LINE_COLORS = listOf(0xFFDADADA, 0xFFB9D2F6, 0xFFD2C3EE, 0xFFBFE3CF, 0xFFF4C6D4, 0xFF8E95A2).map { it.toInt() }
+private val PAPER_COLORS = listOf(0xFFFFFFFF, 0xFFFFF8E8, 0xFFF4EEFF, 0xFFEEF5FF, 0xFFEFF8F2, 0xFFF6F1EA).map { it.toInt() }
 
 /**
  * Making her own paper: design a pattern (lines, grid or dots at her spacing and colours, with an

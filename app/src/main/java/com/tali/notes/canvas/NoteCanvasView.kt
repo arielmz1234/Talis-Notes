@@ -11,7 +11,9 @@ import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.ViewConfiguration
+import android.widget.OverScroller
 import android.widget.FrameLayout
 import androidx.core.view.doOnLayout
 import androidx.ink.authoring.InProgressStrokeId
@@ -348,6 +350,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
     cameraAnimator?.cancel()
+    stopFling()
     removeCallbacks(holdRunnable)
     detach()
   }
@@ -687,6 +690,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun handleTouch(e: MotionEvent) {
+    // Any new touch catches a gliding page, like putting a finger on a moving list.
+    if (e.actionMasked == MotionEvent.ACTION_DOWN) stopFling()
     when (e.actionMasked) {
       MotionEvent.ACTION_DOWN,
       MotionEvent.ACTION_POINTER_DOWN -> {
@@ -1332,8 +1337,50 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   // ---- Fingers: pan, pinch, tap to select, two-finger tap to undo ----
 
+  // A one-finger pan keeps gliding after she lets go, slowing like any scrolling list.
+  private var velocity: VelocityTracker? = null
+  private val scroller = OverScroller(context)
+  private var flingX = 0
+  private var flingY = 0
+  private val flingStep =
+    object : Runnable {
+      override fun run() {
+        if (!scroller.computeScrollOffset()) {
+          settleCamera()
+          return
+        }
+        val before = camera.viewport()
+        camera.pan((scroller.currX - flingX).toFloat(), (scroller.currY - flingY).toFloat())
+        flingX = scroller.currX
+        flingY = scroller.currY
+        afterCameraMove()
+        // Stop at the edges of a paged notebook instead of pushing against them.
+        if (camera.viewport() == before) {
+          scroller.forceFinished(true)
+          settleCamera()
+          return
+        }
+        postOnAnimation(this)
+      }
+    }
+
+  private fun stopFling() {
+    if (!scroller.isFinished) scroller.forceFinished(true)
+    removeCallbacks(flingStep)
+  }
+
+  private fun startFling(vx: Float, vy: Float) {
+    if (hypot(vx, vy) < ViewConfiguration.get(context).scaledMinimumFlingVelocity) return
+    flingX = 0
+    flingY = 0
+    scroller.fling(0, 0, vx.toInt(), vy.toInt(), Int.MIN_VALUE, Int.MAX_VALUE, Int.MIN_VALUE, Int.MAX_VALUE)
+    postOnAnimation(flingStep)
+  }
+
   private fun fingerDown(e: MotionEvent) {
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+      velocity?.recycle()
+      velocity = VelocityTracker.obtain().also { it.addMovement(e) }
       fingerStart = Pt(e.x, e.y)
       fingerDownTime = SystemClock.uptimeMillis()
       maxPointers = 1
@@ -1377,6 +1424,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun fingerMove(e: MotionEvent) {
+    velocity?.addMovement(e)
     when (mode) {
       Mode.FINGER_PENDING -> {
         if (hypot(e.x - fingerStart.x, e.y - fingerStart.y) > touchSlop) {
@@ -1386,7 +1434,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
       }
       Mode.PAN -> {
-        camera.pan(e.x - lastFocusX, e.y - lastFocusY)
+        camera.pan(e.x - lastFocusX, resisted(e.y - lastFocusY))
         lastFocusX = e.x
         lastFocusY = e.y
         afterCameraMove()
@@ -1395,7 +1443,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val (fx, fy, span) = focusAndSpan(e, -1)
         // Measured from where the fingers landed, so a slow drag still counts as moving.
         if (hypot(fx - tapStartFocus.x, fy - tapStartFocus.y) > touchSlop || kotlin.math.abs(span - tapStartSpan) > touchSlop) multiTapMoved = true
-        camera.pan(fx - lastFocusX, fy - lastFocusY)
+        camera.pan(fx - lastFocusX, resisted(fy - lastFocusY))
         if (lastSpan > 10f && span > 10f) camera.zoomAround(fx, fy, span / lastSpan)
         lastFocusX = fx
         lastFocusY = fy
@@ -1422,13 +1470,24 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         return
       }
       mode == Mode.FINGER_PENDING && maxPointers == 1 -> tapAt(camera.toWorld(e.x, e.y))
-      maxPointers == 2 && quick && !multiTapMoved -> undo()
-      maxPointers == 3 && quick && !multiTapMoved -> redo()
+      maxPointers == 2 && quick && !multiTapMoved && settings.twoFingerUndo -> undo()
+      maxPointers == 3 && quick && !multiTapMoved && settings.threeFingerRedo -> redo()
     }
     if (mode == Mode.PAN || mode == Mode.PINCH) {
       settleCamera()
+      val n = pageCount
       addPulledPage()
+      // A page that was just pulled in stays put; otherwise a one-finger flick keeps gliding.
+      if (mode == Mode.PAN && maxPointers == 1 && pageCount == n) {
+        velocity?.let { v ->
+          v.addMovement(e)
+          v.computeCurrentVelocity(1000, ViewConfiguration.get(context).scaledMaximumFlingVelocity.toFloat())
+          startFling(v.xVelocity, v.yVelocity)
+        }
+      }
     }
+    velocity?.recycle()
+    velocity = null
     mode = Mode.NONE
   }
 
@@ -1506,6 +1565,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val maxY = maxOf(minY, n * Pages.PITCH + Pages.HEIGHT * PULL_REACH - viewH)
     val y = camera.y.coerceIn(minY, maxY)
     if (x != camera.x || y != camera.y) camera.set(Viewport(x, y, camera.zoom))
+  }
+
+  /**
+   * Past the last page the page follows the finger at less than half speed, like pulling against
+   * a rubber band, so a new page is only added on purpose.
+   */
+  private fun resisted(dy: Float): Float {
+    val n = pageCount ?: return dy
+    if (dy >= 0f) return dy
+    val lastBottom = (n - 1) * Pages.PITCH + Pages.HEIGHT
+    return if (camera.visibleWorld(width, height).bottom > lastBottom) dy * PULL_RESISTANCE else dy
   }
 
   /** She has scrolled far enough into the next page outline that letting go adds it. */
@@ -1600,6 +1670,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var cameraAnimator: android.animation.ValueAnimator? = null
 
   private fun animateCamera(target: Viewport) {
+    stopFling()
     cameraAnimator?.cancel()
     val from = camera.viewport()
     cameraAnimator =
@@ -1666,8 +1737,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PAGE_GAP = 48f
 
     /** How far into the next page outline she can scroll, and how far before letting go adds it (fractions of a page). */
-    private const val PULL_REACH = 0.42f
-    private const val PULL_ADD = 0.24f
+    private const val PULL_REACH = 0.5f
+    private const val PULL_ADD = 0.36f
+    private const val PULL_RESISTANCE = 0.4f
 
     /** Room left around writing moved onto pages. */
     private const val PAGE_MARGIN = 60f

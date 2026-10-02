@@ -16,20 +16,22 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 **Editing**
 - The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect.
 - The lasso can move, resize and rotate a selection (with live angle and 15° steps), recolour, duplicate, copy to another notebook, delete, or save as a shape.
-- Undo and redo work with the buttons, a two-finger tap (undo) or a three-finger tap (redo).
+- Undo and redo work with the buttons, a two-finger tap (undo) or a three-finger tap (redo); either tap can be turned off in the ⋯ menu.
+- *Hide toolbars* (⋯ menu) leaves just the page and a small cloud in the corner that brings them back, with a puff of cloud.
+- Scrolling glides on after a flick. Pulling past the last page meets some resistance, so pages are added on purpose.
 
 **Pages and paper**
 - New notebooks are A4 pages, one under the other. Scrolling past the last page adds another, and writing never runs off the end.
 - *Pages* (⋯ menu, or tap the page number) opens an overview of every page. Tapping a page lifts it up large, with *Delete page* (undo brings the writing back) and *Go to page*; the last tile adds a page.
 - *Endless canvas* in the ⋯ menu switches a notebook between A4 pages and one endless page.
 - New notebooks pick their paper, A4 pages or endless canvas, dark paper and cover colour up front.
-- Paper styles: blank, dots, grid, lines, engineering (2 mm / 10 mm) and isometric.
+- Paper styles: blank, dots, grid, lines, engineering (2 mm / 10 mm), isometric, Cornell notes and ruled exercise-book pages, in quiet grey on white. The paper choices fit on one line, with *More* for the rest.
 - *Your own* paper: design a pattern (lines, grid or dots, spacing, line and paper colours, an exercise-book margin line), or use a picture such as a planner page, which fills each A4 page. Her papers are saved in settings and offered in every notebook (hold one to remove it).
 - *Dark paper* (⋯ menu, per notebook) shows a black page. Ink colours flip to light versions on screen, but the real colours are kept, so switching back restores them. It's separate from the tablet's dark mode, which only changes the toolbars to soft lilac.
 - Pictures can come from the gallery or the camera.
 - PDF import renders lecture slides as pages to write on, with a page chip to jump between them. In a paged notebook each slide gets an A4 page of its own.
 - On an endless canvas, optional A4 page guides show where pages will break.
-- PDF export offers three layouts: the notebook's pages (or A4 pages cut from an endless canvas), one long page, or the imported PDF's own pages. It also offers three qualities: *Best* (pictures at full resolution), *Balanced* (150 dpi) and *Light* (75 dpi). Writing always stays sharp lines; on a test page with a large photo the files came out at about 2.6 MB, 360 KB and 100 KB.
+- PDF export offers three layouts: the notebook's pages (or A4 pages cut from an endless canvas), one long page, or the imported PDF's own pages. The dialog offers *Best* (pictures at full resolution), *Balanced* (150 dpi), *Light* (75 dpi) or *One long page*, and shows the real file size of the choice: the PDF is made in the background and that same file is shared or saved. Writing always stays sharp lines.
 
 **Library**
 - Folders, folders inside folders (a tree in the sidebar, folder tiles and a path back up in the main area), search, cover colours, and a *Recently deleted* area that keeps notebooks for 30 days.

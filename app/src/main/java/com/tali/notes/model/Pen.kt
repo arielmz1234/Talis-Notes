@@ -39,6 +39,12 @@ enum class PaperStyle(val label: String) {
 
   /** Triangular grid for 3D sketches: vertical lines plus lines at 30° either way. */
   ISOMETRIC("Isometric"),
+
+  /** Cornell notes: a title strip, a cue column on the left, ruled notes, and a summary box at the bottom. */
+  CORNELL("Cornell"),
+
+  /** An exercise-book page: a header line, a red margin, then ruled lines. */
+  RULED("Ruled"),
 }
 
 enum class Tool {

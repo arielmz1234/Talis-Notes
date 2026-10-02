@@ -15,23 +15,23 @@ import kotlin.math.floor
 
 /** Paper patterns drawn in screen space each frame. Spacing is real-world: 1 mm = 160/25.4 dp. */
 class PaperRenderer {
-  var paperColor = 0xFFFDFCFF.toInt()
-  var lineColor = 0xFFD9CCF2.toInt()
+  var paperColor = 0xFFFFFFFF.toInt()
+  var lineColor = 0xFFC4C4C4.toInt()
 
-  /** Ruled lines and grids use light blue, like a school notebook; dots stay lilac. */
-  var blueLine = 0xFFC7DBF8.toInt()
-  var engineeringMinor = 0xFFE4EDFC.toInt()
-  var engineeringMajor = 0xFFA9C1F2.toInt()
+  /** Lines and grids in a quiet light grey on white, like most notes apps; dots a shade darker. */
+  var blueLine = 0xFFDADADA.toInt()
+  var engineeringMinor = 0xFFEDEDED.toInt()
+  var engineeringMajor = 0xFFCFCFCF.toInt()
 
   /** Dark paper: near-black with a hint of plum, and dimmed lines that still read. */
   var dark = false
     set(value) {
       field = value
-      paperColor = if (value) DARK_PAPER else 0xFFFDFCFF.toInt()
-      lineColor = if (value) 0xFF5A4E78.toInt() else 0xFFD9CCF2.toInt()
-      blueLine = if (value) 0xFF34466A.toInt() else 0xFFC7DBF8.toInt()
-      engineeringMinor = if (value) 0xFF242C40.toInt() else 0xFFE4EDFC.toInt()
-      engineeringMajor = if (value) 0xFF3E5482.toInt() else 0xFFA9C1F2.toInt()
+      paperColor = if (value) DARK_PAPER else 0xFFFFFFFF.toInt()
+      lineColor = if (value) 0xFF5E5C66.toInt() else 0xFFC4C4C4.toInt()
+      blueLine = if (value) 0xFF403E48.toInt() else 0xFFDADADA.toInt()
+      engineeringMinor = if (value) 0xFF2A2931.toInt() else 0xFFEDEDED.toInt()
+      engineeringMajor = if (value) 0xFF4A4852.toInt() else 0xFFCFCFCF.toInt()
     }
 
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -84,6 +84,60 @@ class PaperRenderer {
         grid(canvas, camera, width, height, 10 * mm, engineeringMajor, 1.3f * k, horizontalOnly = false)
       }
       PaperStyle.ISOMETRIC -> isometric(canvas, camera, width, height, 6 * mm, blueLine, 1f * k)
+      PaperStyle.CORNELL, PaperStyle.RULED -> pagesInView(camera, width, height).forEach { laidOutPage(canvas, style, it, camera, k) }
+    }
+  }
+
+  /** The A4 pages being drawn: the current one in a paged notebook, else the A4 grid in view. */
+  private fun pagesInView(camera: Camera, width: Int, height: Int): List<Rect> =
+    pageRect?.let { listOf(it) }
+      ?: run {
+        val w = Pages.WIDTH
+        val h = Pages.HEIGHT
+        val view = camera.visibleWorld(width, height)
+        buildList {
+          for (row in floor(view.top / h).toInt()..floor(view.bottom / h).toInt()) {
+            for (col in floor(view.left / w).toInt()..floor(view.right / w).toInt()) add(Rect(col * w, row * h, (col + 1) * w, (row + 1) * h))
+          }
+        }
+      }
+
+  /**
+   * Papers laid out on the page itself. Ruled: a header line, a red margin and 8 mm lines.
+   * Cornell: a title strip, a cue column for questions and key words, ruled notes beside it, and a
+   * summary box across the bottom.
+   */
+  private fun laidOutPage(canvas: Canvas, style: PaperStyle, r: Rect, camera: Camera, k: Float) {
+    val mm = 160f / 25.4f
+    fun sx(x: Float) = (x - camera.x) * camera.scale
+    fun sy(y: Float) = (y - camera.y) * camera.scale
+    val spacing = 8 * mm
+    val step = spacing * camera.scale
+    val fade = if (print) 1f else ((step - 5f) / 10f).coerceIn(0f, 1f)
+    val header = r.top + 28 * mm
+    val linesEnd = if (style == PaperStyle.CORNELL) r.bottom - 50 * mm else r.bottom - 12 * mm
+    // Ruled lines.
+    if (fade > 0f) {
+      paint.color = blueLine
+      paint.alpha = (fade * (blueLine ushr 24)).toInt()
+      paint.strokeWidth = 1.2f * k
+      var y = header + spacing
+      while (y <= linesEnd - spacing * 0.5f) {
+        canvas.drawLine(sx(r.left), sy(y), sx(r.right), sy(y), paint)
+        y += spacing
+      }
+    }
+    // The structure lines are always shown, even zoomed far out.
+    paint.color = engineeringMajor
+    paint.alpha = engineeringMajor ushr 24
+    paint.strokeWidth = 1.6f * k
+    canvas.drawLine(sx(r.left), sy(header), sx(r.right), sy(header), paint)
+    if (style == PaperStyle.CORNELL) {
+      canvas.drawLine(sx(r.left + 60 * mm), sy(header), sx(r.left + 60 * mm), sy(linesEnd), paint)
+      canvas.drawLine(sx(r.left), sy(linesEnd), sx(r.right), sy(linesEnd), paint)
+    } else {
+      paint.color = if (dark) 0x99E07A90.toInt() else 0xFFF0A0B4.toInt()
+      canvas.drawLine(sx(r.left + 25 * mm), sy(r.top), sx(r.left + 25 * mm), sy(r.bottom), paint)
     }
   }
 
@@ -99,18 +153,7 @@ class PaperRenderer {
     if (image != null) {
       canvas.drawColor(if (dark) DARK_PAPER else 0xFFFFFFFF.toInt())
       val bmp = customImage ?: return
-      val pages =
-        pageRect?.let { listOf(it) }
-          ?: run {
-            val w = Pages.WIDTH
-            val h = Pages.HEIGHT
-            val view = camera.visibleWorld(width, height)
-            buildList {
-              for (row in floor(view.top / h).toInt()..floor(view.bottom / h).toInt()) {
-                for (col in floor(view.left / w).toInt()..floor(view.right / w).toInt()) add(Rect(col * w, row * h, (col + 1) * w, (row + 1) * h))
-              }
-            }
-          }
+      val pages = pagesInView(camera, width, height)
       imagePaint.colorFilter = if (dark) DIM else null
       // Fills the page without stretching: the middle of the picture, cropped to the page's shape.
       val pageAspect = Pages.WIDTH / Pages.HEIGHT

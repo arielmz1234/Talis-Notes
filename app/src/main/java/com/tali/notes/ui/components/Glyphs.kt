@@ -173,8 +173,8 @@ fun GeometryIcon(geometry: ShapeGeometry, color: Color, modifier: Modifier = Mod
 fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
   val c = Tali.colors
   Canvas(modifier) {
-    drawRoundRect(c.paper, cornerRadius = CornerRadius(8.dp.toPx()))
-    val line = Color(0xFFD2C3EE)
+    drawRoundRect(Color.White, cornerRadius = CornerRadius(8.dp.toPx()))
+    val line = Color(0xFFC4C4C4)
     val step = size.width / 7f
     // Too small to draw a pattern (and a zero step would never finish the loops below).
     if (step < 2f) return@Canvas
@@ -191,14 +191,14 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
           y += step
         }
       }
-      PaperStyle.GRID -> grid(step, Color(0xFFC7DBF8), 1f, both = true)
-      PaperStyle.LINES -> grid(step * 1.4f, Color(0xFFB9D2F6), 1.2f, both = false)
+      PaperStyle.GRID -> grid(step, Color(0xFFDADADA), 1f, both = true)
+      PaperStyle.LINES -> grid(step * 1.4f, Color(0xFFD2D2D2), 1.2f, both = false)
       PaperStyle.ENGINEERING -> {
-        grid(step / 2.5f, Color(0xFFE4EDFC), 0.8f, both = true)
-        grid(step * 2f, Color(0xFFA9C1F2), 1.2f, both = true)
+        grid(step / 2.5f, Color(0xFFEDEDED), 0.8f, both = true)
+        grid(step * 2f, Color(0xFFCFCFCF), 1.2f, both = true)
       }
       PaperStyle.ISOMETRIC -> {
-        val iso = Color(0xFFC7DBF8)
+        val iso = Color(0xFFDADADA)
         val h = step * 1.2f
         val t = 0.57735026f
         clipRect {
@@ -214,6 +214,24 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
             drawLine(iso, Offset(0f, k), Offset(size.width, k + size.width * t), density)
             k += side
           }
+        }
+      }
+      PaperStyle.CORNELL, PaperStyle.RULED -> {
+        val ruled = Color(0xFFDADADA)
+        val strong = Color(0xFFBDBDBD)
+        val header = size.height * 0.2f
+        val end = if (style == PaperStyle.CORNELL) size.height * 0.74f else size.height
+        var y = header + step
+        while (y < end - step * 0.4f) {
+          drawLine(ruled, Offset(0f, y), Offset(size.width, y), density)
+          y += step
+        }
+        drawLine(strong, Offset(0f, header), Offset(size.width, header), 1.3f * density)
+        if (style == PaperStyle.CORNELL) {
+          drawLine(strong, Offset(size.width * 0.3f, header), Offset(size.width * 0.3f, end), 1.3f * density)
+          drawLine(strong, Offset(0f, end), Offset(size.width, end), 1.3f * density)
+        } else {
+          drawLine(Color(0xFFF0A0B4), Offset(size.width * 0.18f, 0f), Offset(size.width * 0.18f, size.height), 1.2f * density)
         }
       }
     }

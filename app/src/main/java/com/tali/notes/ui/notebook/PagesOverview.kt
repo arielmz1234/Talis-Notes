@@ -31,6 +31,12 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowOutward
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -85,6 +92,13 @@ fun PagesOverview(
   var peek by remember { mutableStateOf<Int?>(null) }
   // The last page peeked at, so it stays drawn while the peek fades away.
   var lastPeek by remember { mutableStateOf(0) }
+  var removing by remember { mutableStateOf<Int?>(null) }
+  LaunchedEffect(removing) {
+    val i = removing ?: return@LaunchedEffect
+    kotlinx.coroutines.delay(440)
+    onDelete(i)
+    removing = null
+  }
   // A snapshot of the notebook for the background renderer; refreshed after every edit.
   val items = remember(version, count) { doc.all.toList() }
   val grid = rememberLazyGridState()
@@ -119,12 +133,12 @@ fun PagesOverview(
           modifier = Modifier.weight(1f),
         ) {
           items(count, key = { it }) { i ->
-            PageTile(vm, items, i, version, selected = i == current) {
+            PageTile(vm, items, i, version, selected = i == current, leaving = i == removing, modifier = Modifier.animateItem()) {
               lastPeek = i
               peek = i
             }
           }
-          item(key = "add") { AddPageTile(onAdd) }
+          item(key = "add") { Box(Modifier.animateItem()) { AddPageTile(onAdd) } }
         }
       }
       AnimatedVisibility(
@@ -133,8 +147,9 @@ fun PagesOverview(
         exit = fadeOut(tween(130)) + scaleOut(tween(130), targetScale = 0.92f),
       ) {
         PagePeek(vm, items, lastPeek, version, single = count == 1, onClose = { peek = null }, onGo = { onGo(lastPeek) }) {
-          onDelete(lastPeek)
+          // The peek closes, then the page's tile lifts away before it's removed.
           peek = null
+          removing = lastPeek
         }
       }
     }
@@ -143,16 +158,32 @@ fun PagesOverview(
 
 @Composable
 private fun rememberPage(vm: NotebookViewModel, items: List<CanvasItem>, index: Int, version: Int, widthPx: Int): ImageBitmap? {
-  val state = produceState<ImageBitmap?>(null, index, version, items, widthPx) { value = vm.pageThumbnail(items, index, widthPx)?.asImageBitmap() }
+  val state =
+    produceState<ImageBitmap?>(null, index, version, items, widthPx) {
+      // Don't keep showing the old page while the new picture is made (after a delete, say).
+      value = null
+      value = vm.pageThumbnail(items, index, widthPx)?.asImageBitmap()
+    }
   return state.value
 }
 
 @Composable
-private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int, version: Int, selected: Boolean, onClick: () -> Unit) {
+private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int, version: Int, selected: Boolean, leaving: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
   val c = Tali.colors
   val image = rememberPage(vm, items, index, version, 480)
   val shape = RoundedCornerShape(10.dp)
-  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+  // A deleted page shrinks a little and fades into a small puff of cloud.
+  val gone by androidx.compose.animation.core.animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) 260 else 0), label = "leave")
+  val puff by androidx.compose.animation.core.animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) 440 else 0), label = "puff")
+  Box(modifier) {
+  Column(
+    horizontalAlignment = Alignment.CenterHorizontally,
+    modifier = Modifier.graphicsLayer {
+      alpha = 1f - gone
+      scaleX = 1f - 0.12f * gone
+      scaleY = 1f - 0.12f * gone
+    },
+  ) {
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(PAGE_ASPECT)
@@ -171,6 +202,8 @@ private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int,
       color = if (selected) c.onAccent else c.inkMuted,
       modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) c.accent else Color.Transparent).padding(horizontal = 10.dp, vertical = 2.dp),
     )
+  }
+  com.tali.notes.ui.components.CloudPuff(puff, Modifier.matchParentSize())
   }
 }
 
@@ -200,7 +233,10 @@ private fun AddPageTile(onAdd: () -> Unit) {
   }
 }
 
-/** One page lifted up large over a dimmed overview, with what can be done to it underneath. */
+/**
+ * One page lifted up large over the dimmed overview. Its number sits above it in a soft grey, with
+ * two round buttons at the end of that line: delete, and go to the page.
+ */
 @Composable
 private fun PagePeek(
   vm: NotebookViewModel,
@@ -214,14 +250,22 @@ private fun PagePeek(
 ) {
   val c = Tali.colors
   val small = rememberPage(vm, items, index, version, 480)
-  val large = rememberPage(vm, items, index, version, 1000)
-  Box(
+  val large = rememberPage(vm, items, index, version, 1100)
+  BoxWithConstraints(
     Modifier.fillMaxSize().background(c.scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
     contentAlignment = Alignment.Center,
   ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxHeight(0.92f)) {
+    // As tall as the screen allows lying down; held upright the width decides, so it never fills it.
+    val pageWidth = minOf((maxHeight - 72.dp) * 0.92f * PAGE_ASPECT, maxWidth * 0.8f)
+    Column(Modifier.width(pageWidth)) {
+      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        Text("Page ${index + 1}", style = MaterialTheme.typography.titleMedium, color = Color(0xFFDCD6EA), modifier = Modifier.weight(1f).padding(start = 2.dp))
+        PeekButton(Icons.Outlined.DeleteOutline, if (single) "Clear page" else "Delete page", c.danger, onDelete)
+        Spacer(Modifier.width(10.dp))
+        PeekButton(Icons.Outlined.ArrowOutward, "Go to page", c.accent, onGo)
+      }
       Box(
-        Modifier.weight(1f)
+        Modifier.fillMaxWidth()
           .aspectRatio(PAGE_ASPECT)
           .shadow(24.dp, RoundedCornerShape(14.dp))
           .clip(RoundedCornerShape(14.dp))
@@ -231,16 +275,16 @@ private fun PagePeek(
         // The small picture stands in until the sharp one is ready.
         (large ?: small)?.let { Image(it, "Page ${index + 1}", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
       }
-      Spacer(Modifier.height(16.dp))
-      Row(
-        Modifier.cloudSurface(20.dp, shadowDepth = 6.dp).padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Text("Page ${index + 1}", style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.padding(horizontal = 10.dp))
-        QuietButton(if (single) "Clear page" else "Delete page", color = c.danger, onClick = onDelete)
-        PrimaryButton("Go to page", onClick = onGo)
-      }
     }
+  }
+}
+
+@Composable
+private fun PeekButton(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
+  Box(
+    Modifier.size(44.dp).shadow(6.dp, CircleShape).clip(CircleShape).background(Color.White).clickable(onClickLabel = label, role = Role.Button, onClick = onClick),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(icon, label, tint = tint, modifier = Modifier.size(22.dp))
   }
 }

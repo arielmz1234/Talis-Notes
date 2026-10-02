@@ -15,8 +15,8 @@ data class CustomPaper(
   val image: String? = null,
   val pattern: PaperStyle = PaperStyle.LINES,
   val spacingMm: Float = 8f,
-  val lineColor: Int = 0xFFB9D2F6.toInt(),
-  val paperColor: Int = 0xFFFDFCFF.toInt(),
+  val lineColor: Int = 0xFFDADADA.toInt(),
+  val paperColor: Int = 0xFFFFFFFF.toInt(),
   /** A school-notebook margin line down the left of each page. */
   val margin: Boolean = false,
 ) {

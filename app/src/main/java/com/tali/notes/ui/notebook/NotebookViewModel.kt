@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val CUSTOM_PREFIX = "custom:"
@@ -85,6 +86,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   var hint by mutableStateOf<String?>(null)
 
+  /** Toolbars hidden: only the page and a small cloud to bring them back. */
+  var focus by mutableStateOf(false)
+
   /** The page on screen and how many there are; index -1 when there are none. */
   var page by mutableStateOf(-1 to 0)
 
@@ -102,7 +106,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       pageCount = m?.pages
       val items = repo.loadItems(notebookId)
       val doc = Document(items)
-      doc.listeners += { change -> repo.applyChange(notebookId, change) }
+      doc.listeners += { change ->
+        repo.applyChange(notebookId, change)
+        revision++
+      }
       doc.onHistoryChanged = { u, r ->
         canUndo = u
         canRedo = r
@@ -257,6 +264,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setPageGuides(on: Boolean) = store.update { it.copy(pageGuides = on) }
 
+  fun setTwoFingerUndo(on: Boolean) = store.update { it.copy(twoFingerUndo = on) }
+
+  fun setThreeFingerRedo(on: Boolean) = store.update { it.copy(threeFingerRedo = on) }
+
   fun setPaper(style: PaperStyle) {
     repo.setPaper(notebookId, style)
     store.update { it.copy(defaultPaper = style, defaultCustomPaper = null) }
@@ -371,17 +382,31 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     }
   }
 
-  suspend fun exportPdf(layout: PdfLayout, quality: PdfQuality): File? {
-    val doc = document ?: return null
-    val items = doc.all.toList()
-    val paper = meta.value?.paper ?: PaperStyle.DOTS
-    val dark = meta.value?.dark == true
-    val pages = pageCount
-    val custom = customPaperOf(meta.value, settings.value)
-    val title = (meta.value?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
-    return withContext(Dispatchers.Default) {
-      val out = File(File(getApplication<Application>().cacheDir, "exports"), "$title.pdf")
-      runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality) }.map { out }.getOrNull()
+  /** Bumped on every edit, so a PDF made for the export dialog's size is only reused while it's current. */
+  private var revision = 0
+  private val exported = HashMap<String, File>()
+  private val exporting = kotlinx.coroutines.sync.Mutex()
+
+  /**
+   * The PDF for [layout] at [quality]. Each one is made once and kept until the notebook changes,
+   * so the size the export dialog shows is the file that is then shared or saved.
+   */
+  suspend fun exportPdf(layout: PdfLayout, quality: PdfQuality): File? =
+    exporting.withLock {
+      val doc = document ?: return@withLock null
+      val m = meta.value
+      val pages = pageCount
+      val paper = m?.paper ?: PaperStyle.DOTS
+      val dark = m?.dark == true
+      val custom = customPaperOf(m, settings.value)
+      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides).joinToString("|")
+      exported[key]?.takeIf { it.exists() }?.let { return@withLock it }
+      val items = doc.all.toList()
+      val title = (m?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
+      withContext(Dispatchers.Default) {
+        // One folder per choice, so the file she shares is still called after the notebook.
+        val out = File(File(File(getApplication<Application>().cacheDir, "exports"), "${layout.name}-${quality.name}"), "$title.pdf")
+        runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality) }.map { out }.getOrNull()
+      }?.also { exported[key] = it }
     }
-  }
 }
