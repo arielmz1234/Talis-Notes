@@ -106,3 +106,20 @@ Backups come in three layers:
 - Copy `keystore/` somewhere safe (it is not in git).
 - Google Drive setup, then set `DRIVE_BACKUP=true`.
 - Try two-finger undo and three-finger redo on the real tablet. They are tested only in instrumented tests and the emulator.
+- **New app icon (waiting on a file).** The owner wants the inner rounded-square icon from a picture he pasted: a white page with lilac lines and a folded corner, a soft white-lilac cloud at its lower left, and lilac clouds behind, on a violet rounded square. The pasted image was never saved to disk. Ask him for the file, crop it to the inner icon, and replace `res/drawable/ic_launcher_*` (adaptive icon in `mipmap-anydpi-v26`).
+- The owner reviews visual changes on his own Galaxy Tab S9 FE (debug builds over USB). He asked to review: the frosted eye "show toolbars" button, the back-cloud plus title-with-pencil layout, and how scrolling feels after the glide fix.
+
+## Recent work (October 2026)
+
+In order, see `git log`:
+1. A4 pages by default (`canvas/Pages.kt`), page overview popup (`ui/notebook/PagesOverview.kt`), Samsung-style "Drag for a new page / Release to add a page" at the end of the last page.
+2. Dark paper, her own paper backgrounds (`model/CustomPaper.kt`, `ui/components/Papers.kt`), Cornell and Ruled papers, grey-on-white paper colours.
+3. Folders inside folders, with a colour per folder.
+4. PDF export qualities (Best, Balanced, Light, One long page) with the real file size shown.
+5. Cloud-puff animations (`ui/components/CloudPuff.kt`), hide-toolbars mode, gliding scroll.
+6. Typed text (`TextItem`, `ui/notebook/TextEditor.kt`).
+
+Working setup notes:
+- On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.
+- The `medium_tablet` AVD may need creating. Copy another AVD's `config.ini` with 1334×800 @160dpi, landscape.
+- Python edits on Windows: write files in text mode so they keep CRLF.
