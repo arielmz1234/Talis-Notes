@@ -16,7 +16,22 @@ class PaperRenderer {
   var engineeringMinor = 0xFFE4EDFC.toInt()
   var engineeringMajor = 0xFFA9C1F2.toInt()
 
+  /** Dark paper: near-black with a hint of plum, and dimmed lines that still read. */
+  var dark = false
+    set(value) {
+      field = value
+      paperColor = if (value) DARK_PAPER else 0xFFFDFCFF.toInt()
+      lineColor = if (value) 0xFF5A4E78.toInt() else 0xFFD9CCF2.toInt()
+      blueLine = if (value) 0xFF34466A.toInt() else 0xFFC7DBF8.toInt()
+      engineeringMinor = if (value) 0xFF242C40.toInt() else 0xFFE4EDFC.toInt()
+      engineeringMajor = if (value) 0xFF3E5482.toInt() else 0xFFA9C1F2.toInt()
+    }
+
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+  companion object {
+    const val DARK_PAPER = 0xFF1C1A23.toInt()
+  }
   private var buffer = FloatArray(4096)
 
   /**
@@ -24,6 +39,9 @@ class PaperRenderer {
    * the page looks like real printed paper instead of a zoomed-out screen.
    */
   var print = false
+
+  /** World height where the pattern starts, so each A4 page's lines line up with its top edge. */
+  var originY = 0f
 
   fun draw(canvas: Canvas, style: PaperStyle, camera: Camera, width: Int, height: Int) {
     canvas.drawColor(paperColor)
@@ -70,13 +88,13 @@ class PaperRenderer {
       x += h
     }
     // Rising lines: y = c - x·tan30 on screen (y grows downward), c a multiple of the side.
-    var c = floor((w.top + w.left * t) / side) * side
+    var c = floor((w.top + w.left * t - originY) / side) * side + originY
     while (c <= w.bottom + w.right * t) {
       push(w.left, c - w.left * t, w.right, c - w.right * t)
       c += side
     }
     // Falling lines: y = c + x·tan30.
-    c = floor((w.top - w.right * t) / side) * side
+    c = floor((w.top - w.right * t - originY) / side) * side + originY
     while (c <= w.bottom - w.left * t) {
       push(w.left, c + w.left * t, w.right, c + w.right * t)
       c += side
@@ -101,7 +119,7 @@ class PaperRenderer {
       buffer[n++] = x1
       buffer[n++] = y1
     }
-    val firstY = ceil(world.top / spacing) * spacing
+    val firstY = ceil((world.top - originY) / spacing) * spacing + originY
     var wy = firstY
     while (wy <= world.bottom) {
       val sy = (wy - camera.y) * camera.scale
@@ -129,7 +147,7 @@ class PaperRenderer {
     val world = camera.visibleWorld(width, height)
     var n = 0
     val x0 = floor(world.left / spacing) * spacing
-    val y0 = floor(world.top / spacing) * spacing
+    val y0 = floor((world.top - originY) / spacing) * spacing + originY
     var wy = y0
     while (wy <= world.bottom) {
       var wx = x0

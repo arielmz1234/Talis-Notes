@@ -39,6 +39,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -59,10 +62,13 @@ import com.tali.notes.ui.components.ToolButton
 @Composable
 fun MainToolbar(
   settings: AppSettings,
+  darkPaper: Boolean,
   tool: Tool,
   shapeKind: ShapeKind,
   customShape: CustomShape?,
   onPen: (PenSlot) -> Unit,
+  penSettingsOpen: Boolean,
+  onPenSettings: () -> Unit,
   onTool: (Tool) -> Unit,
   onImage: () -> Unit,
   onCamera: () -> Unit,
@@ -82,9 +88,18 @@ fun MainToolbar(
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = slot.type.label) { onPen(slot) },
           contentAlignment = Alignment.TopCenter,
         ) {
-          PenGlyph(slot.type, Color(slot.color), Modifier.offset(y = lift))
+          // On dark paper the pens show the colour they really write in there.
+          PenGlyph(slot.type, Color(if (darkPaper) com.tali.notes.ink.Brushes.onDarkPaper(slot.color) else slot.color), Modifier.offset(y = lift))
         }
       }
+    }
+    // The pen's settings (style, size, colour) open from the little arrow.
+    val turn by animateFloatAsState(if (penSettingsOpen) 180f else 0f, label = "turn")
+    Box(
+      Modifier.size(28.dp, 44.dp).clip(RoundedCornerShape(10.dp)).background(if (penSettingsOpen) c.accentSoft else Color.Transparent).clickable(onClickLabel = "Pen settings", role = Role.Button, onClick = onPenSettings),
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(Icons.Outlined.KeyboardArrowDown, "Pen settings", tint = if (penSettingsOpen) c.accent else c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
     }
     Divider()
     ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true) { onTool(Tool.ERASER) }

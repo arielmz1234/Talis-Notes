@@ -52,6 +52,11 @@ data class TaliColors(
   /** Bottom of the sidebar gradient (lilac at the top fading to light blue). */
   val sidebarEnd: Color,
   val isDark: Boolean,
+  /** Cloud surfaces (toolbars, cards, dialogs): top, belly, hairline edge and the shadow below. */
+  val cloudTop: Color,
+  val cloudBelly: Color,
+  val cloudEdge: Color,
+  val cloudShadow: Color,
 ) {
   /** The signature violet-to-blue used on primary buttons. */
   val accentBrush: Brush
@@ -106,6 +111,10 @@ private val Light =
     sky = Sky.S100,
     sidebarEnd = Color(0xFFE6EFFF),
     isDark = false,
+    cloudTop = Color(0xFFFFFFFF),
+    cloudBelly = Color(0xFFE3E8FC),
+    cloudEdge = Color(0xFFCDD4F5),
+    cloudShadow = Color(0x3D6256C8),
   )
 
 private val Dark =
@@ -132,7 +141,42 @@ private val Dark =
     sky = Color(0xFF2E4470),
     sidebarEnd = Color(0xFF161C2B),
     isDark = true,
+    cloudTop = Color(0xFF3A335E),
+    cloudBelly = Color(0xFF2B2548),
+    cloudEdge = Color(0xFF514980),
+    cloudShadow = Color(0x38000000),
   )
+
+/**
+ * The notebook's toolbars in dark mode while the page is white: soft lilac clouds rather than
+ * deep plum, so the bars sit gently on the paper instead of looking like holes in it.
+ */
+private val Mist =
+  Light.copy(
+    surface = Color(0xFFF5EFFF),
+    sunken = Color(0xFFE6DBFB),
+    line = Color(0xFFD5C7F2),
+    ink = Color(0xFF261D3B),
+    inkMuted = Color(0xFF5D5279),
+    inkFaint = Color(0xFF8C82AA),
+    accentSoft = Color(0xFFE0D1FD),
+    blueSoft = Color(0xFFE1EAFF),
+    cloudTop = Color(0xFFF1E9FF),
+    cloudBelly = Color(0xFFDCCEF9),
+    cloudEdge = Color(0xFFC6B5EE),
+    cloudShadow = Color(0x4D2A1F55),
+  )
+
+/**
+ * Colours for the bars over a notebook: dark ones on dark paper; on white paper the usual light
+ * ones, or in dark mode the softer [Mist] lilac.
+ */
+fun notebookColors(systemDark: Boolean, darkPaper: Boolean): TaliColors =
+  when {
+    darkPaper -> Dark
+    systemDark -> Mist
+    else -> Light
+  }
 
 val LocalTaliColors = staticCompositionLocalOf { Light }
 
@@ -172,10 +216,13 @@ object Tali {
 }
 
 @Composable
-fun TaliTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-  val c = if (darkTheme) Dark else Light
+fun TaliTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) = TaliColorsScope(if (darkTheme) Dark else Light, content)
+
+/** Runs [content] with the palette [c], Material's colours included (menus, text fields). */
+@Composable
+fun TaliColorsScope(c: TaliColors, content: @Composable () -> Unit) {
   val scheme =
-    if (darkTheme) {
+    if (c.isDark) {
       darkColorScheme(
         primary = c.accent,
         onPrimary = c.onAccent,

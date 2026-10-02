@@ -117,8 +117,8 @@ object ShapeRecognizer {
   }
 
   /**
-   * Snaps near-horizontal, vertical and 45° lines exactly (within 5°), and other multiples of 15°
-   * such as 30° and 60° when very close (within 2°), keeping the start point and length.
+   * Snaps near-horizontal, vertical and 45° lines exactly (within 8°), and other multiples of 15°
+   * such as 30° and 60° when close (within 4°), keeping the start point and length.
    */
   fun snappedLine(a: Pt, b: Pt, arrowEnd: Boolean = false): LineShape {
     val v = b - a
@@ -127,8 +127,8 @@ object ShapeRecognizer {
     val fine = round(angle / (15f * DEG)) * (15f * DEG)
     val snapped =
       when {
-        abs(angle - wide) < 5f * DEG -> wide
-        abs(angle - fine) < 2f * DEG -> fine
+        abs(angle - wide) < 8f * DEG -> wide
+        abs(angle - fine) < 4f * DEG -> fine
         else -> null
       }
     val end = if (snapped != null) a + Pt.polar(v.length(), snapped) else b
@@ -210,13 +210,13 @@ object ShapeRecognizer {
 
   private fun beautifyEllipse(e: EllipseShape): EllipseShape {
     val ratio = min(e.rx, e.ry) / max(e.rx, e.ry)
-    if (ratio > 0.85f) {
+    if (ratio > 0.8f) {
       val r = (e.rx + e.ry) / 2f
       return EllipseShape(e.center, r, r, 0f)
     }
     val quarter = 90f * DEG
     val snapped = round(e.rotation / quarter) * quarter
-    return if (abs(e.rotation - snapped) < 10f * DEG) e.copy(rotation = snapped) else e
+    return if (abs(e.rotation - snapped) < 15f * DEG) e.copy(rotation = snapped) else e
   }
 
   /** Corner detection on a closed stroke: simplify from the point farthest from the centre, then merge flat corners. */
@@ -264,17 +264,13 @@ object ShapeRecognizer {
   private fun beautifyTriangle(t: List<Pt>): ShapeGeometry {
     val sides = listOf(t[0].dist(t[1]), t[1].dist(t[2]), t[2].dist(t[0]))
     val mean = sides.average().toFloat()
-    if (sides.all { abs(it - mean) / mean < 0.1f }) {
-      val c = Geo.centroid(t)
-      val r = t.sumOf { it.dist(c).toDouble() }.toFloat() / 3f
-      return regularPolygon(c, r, 3, (t[0] - c).angle())
-    }
+    if (sides.all { abs(it - mean) / mean < 0.15f }) return regularFrom(t, Geo.centroid(t))
     // Snap a near-right angle to exactly 90° by moving the corner onto the hypotenuse's Thales circle.
     for (i in 0 until 3) {
       val a = t[(i + 2) % 3]
       val b = t[i]
       val cc = t[(i + 1) % 3]
-      if (abs(Geo.interiorAngle(a, b, cc) - 90f * DEG) < 10f * DEG) {
+      if (abs(Geo.interiorAngle(a, b, cc) - 90f * DEG) < 15f * DEG) {
         val mid = (a + cc) / 2f
         val r = a.dist(cc) / 2f
         val fixed = mid + (b - mid).normalized() * r
@@ -283,7 +279,47 @@ object ShapeRecognizer {
         return PolyShape(axisSnapRightTriangle(out, i), true)
       }
     }
-    return PolyShape(t, true)
+    return PolyShape(levelBase(isoscelesFrom(t) ?: t), true)
+  }
+
+  /**
+   * Two sides within 15% of each other become exactly equal: the apex moves onto the base's
+   * perpendicular bisector, keeping its height, so the triangle reads as symmetric.
+   */
+  private fun isoscelesFrom(t: List<Pt>): List<Pt>? {
+    for (apex in 0 until 3) {
+      val a = t[(apex + 1) % 3]
+      val b = t[(apex + 2) % 3]
+      val s1 = t[apex].dist(a)
+      val s2 = t[apex].dist(b)
+      if (abs(s1 - s2) / max(s1, s2) >= 0.15f) continue
+      val mid = (a + b) / 2f
+      val base = (b - a).normalized()
+      val normal = Pt(-base.y, base.x)
+      val height = (t[apex] - mid).dot(normal)
+      val out = t.toMutableList()
+      out[apex] = mid + normal * height
+      return out
+    }
+    return null
+  }
+
+  /** Rotates a triangle about its centre so the edge closest to horizontal or vertical lies exactly on the axis (within 15°). */
+  private fun levelBase(t: List<Pt>): List<Pt> {
+    val quarter = 90f * DEG
+    var best = 0f
+    var bestAbs = Float.MAX_VALUE
+    for (i in 0 until 3) {
+      val angle = (t[(i + 1) % 3] - t[i]).angle()
+      val delta = round(angle / quarter) * quarter - angle
+      if (abs(delta) < bestAbs) {
+        bestAbs = abs(delta)
+        best = delta
+      }
+    }
+    if (bestAbs >= 15f * DEG) return t
+    val c = Geo.centroid(t)
+    return t.map { it.rotatedAround(c, best) }
   }
 
   /** If the legs of a right triangle are near-axis-aligned, rotate it so they are exactly aligned. */
@@ -294,25 +330,25 @@ object ShapeRecognizer {
     val quarter = 90f * DEG
     val snapped = round(angle / quarter) * quarter
     val delta = snapped - angle
-    return if (abs(delta) < 8f * DEG) t.map { it.rotatedAround(b, delta) } else t
+    return if (abs(delta) < 15f * DEG) t.map { it.rotatedAround(b, delta) } else t
   }
 
   private fun beautifyQuad(q: List<Pt>): ShapeGeometry {
     val angles = q.indices.map { i -> Geo.interiorAngle(q[(i + 3) % 4], q[i], q[(i + 1) % 4]) }
     val c = Geo.centroid(q)
-    if (angles.all { abs(it - 90f * DEG) < 14f * DEG }) {
+    if (angles.all { abs(it - 90f * DEG) < 20f * DEG }) {
       // Rectangle: orient along the longest edge, snap to the axes when close.
       val edges = q.indices.map { i -> q[(i + 1) % 4] - q[i] }
       val longest = edges.maxBy { it.length() }
       var theta = longest.angle()
       val quarter = 90f * DEG
       val snapped = round(theta / quarter) * quarter
-      if (abs(theta - snapped) < 8f * DEG) theta = snapped
+      if (abs(theta - snapped) < 15f * DEG) theta = snapped
       val local = q.map { (it - c).rotated(-theta) }
       val box = Rect.around(local)!!
       var hw = box.width / 2f
       var hh = box.height / 2f
-      if (min(hw, hh) / max(hw, hh) > 0.9f) {
+      if (min(hw, hh) / max(hw, hh) > 0.88f) {
         val s = (hw + hh) / 2f
         hw = s
         hh = s
@@ -348,7 +384,7 @@ object ShapeRecognizer {
     val upright = (-PI / 2).toFloat()
     val k = round((rot - upright) / step)
     val candidate = upright + k * step
-    if (abs(rot - candidate) < 10f * DEG) rot = candidate
+    if (abs(rot - candidate) < 15f * DEG) rot = candidate
     return regularPolygon(c, r, poly.size, rot)
   }
 

@@ -19,14 +19,17 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - Undo and redo work with the buttons, a two-finger tap (undo) or a three-finger tap (redo).
 
 **Pages and paper**
+- New notebooks are A4 pages, one under the other. Scrolling past the last page adds another, and writing never runs off the end.
+- *Pages* in the ⋯ menu adds a page after the current one, deletes the current page (undo brings the writing back), or switches the notebook to an endless canvas and back.
 - Paper styles: blank, dots, grid, lines, engineering (2 mm / 10 mm) and isometric.
+- *Dark paper* (⋯ menu, per notebook) shows a black page. Ink colours flip to light versions on screen, but the real colours are kept, so switching back restores them. It's separate from the tablet's dark mode, which only changes the toolbars to soft lilac.
 - Pictures can come from the gallery or the camera.
-- PDF import renders lecture slides as pages to write on, with a page chip to jump between them.
-- Optional A4 page guides show where pages will break.
-- PDF export offers three layouts: A4 pages, one long page, or the imported PDF's own pages.
+- PDF import renders lecture slides as pages to write on, with a page chip to jump between them. In a paged notebook each slide gets an A4 page of its own.
+- On an endless canvas, optional A4 page guides show where pages will break.
+- PDF export offers three layouts: the notebook's pages (or A4 pages cut from an endless canvas), one long page, or the imported PDF's own pages.
 
 **Library**
-- Folders, search, cover colours, and a *Recently deleted* area that keeps notebooks for 30 days.
+- Folders, folders inside folders (a tree in the sidebar, folder tiles and a path back up in the main area), search, cover colours, and a *Recently deleted* area that keeps notebooks for 30 days.
 - Backups: a backup file with merge-restore, Android's own backup, and optional automatic Google Drive backup. See [BACKUP_SETUP.md](BACKUP_SETUP.md).
 
 ## Building

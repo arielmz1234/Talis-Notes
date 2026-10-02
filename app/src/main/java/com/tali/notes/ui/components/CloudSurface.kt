@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tali.notes.theme.Tali
@@ -31,8 +32,6 @@ enum class CloudCrown {
   /** A small crown in the middle, like a tiny cloud. */
   CENTER,
 }
-
-private class SurfaceTones(val top: Int, val belly: Int, val border: Int, val shadow: Int)
 
 /** A stable pseudo-random number in [0, 1) so the bumps look hand-placed but never change. */
 private fun hash(i: Int, salt: Int): Float {
@@ -68,9 +67,10 @@ private val CENTER_PUFFS = listOf(Triple(-20f, 6f, 11f), Triple(0f, 0f, 16f), Tr
 @Composable
 fun Modifier.cloudSurface(radius: Dp = 22.dp, crown: CloudCrown = CloudCrown.NONE, shadowDepth: Dp = 7.dp): Modifier {
   val c = Tali.colors
-  val tones =
-    if (c.isDark) SurfaceTones(0xFF3A335E.toInt(), 0xFF2B2548.toInt(), 0xFF514980.toInt(), 0x38000000)
-    else SurfaceTones(0xFFFFFFFF.toInt(), 0xFFE3E8FC.toInt(), 0xFFCDD4F5.toInt(), 0x3D6256C8)
+  val toneTop = c.cloudTop.toArgb()
+  val toneBelly = c.cloudBelly.toArgb()
+  val edge = c.cloudEdge.toArgb()
+  val shadow = c.cloudShadow.toArgb()
   return drawWithCache {
     val d = density
     val w = size.width
@@ -109,17 +109,17 @@ fun Modifier.cloudSurface(radius: Dp = 22.dp, crown: CloudCrown = CloudCrown.NON
     canvas.save()
     canvas.translate(0f, shadowDepth.toPx())
     canvas.drawPath(outline, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = tones.shadow
+      color = shadow
       maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
     })
     canvas.restore()
     canvas.drawPath(outline, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      shader = LinearGradient(0f, crownTop, 0f, h, intArrayOf(tones.top, tones.top, tones.belly), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+      shader = LinearGradient(0f, crownTop, 0f, h, intArrayOf(toneTop, toneTop, toneBelly), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
     })
     canvas.drawPath(outline, Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.STROKE
       strokeWidth = d
-      color = tones.border
+      color = edge
     })
     val image = bmp.asImageBitmap()
     onDrawBehind { drawImage(image, Offset(left, top)) }

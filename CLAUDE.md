@@ -35,9 +35,13 @@ A handwriting notes app for Android tablets, made for **one person**: Tali, a ci
 - Package `com.tali.notes`.
 - Ink: `androidx.ink` (low-latency strokes).
 - Canvas: one custom `View` (`canvas/NoteCanvasView.kt`) with RenderNode tiles (`canvas/TileCache.kt`, 768-unit tiles).
+  - The renderer drops the display list of a tile that leaves the screen, so tiles re-record when `hasDisplayList()` is false. Without that, writing vanishes after scrolling away and back.
+  - Paged notebooks (`notebooks.pages` not NULL) put A4 pages in one column from the origin (`canvas/Pages.kt`). Older notebooks keep NULL, which means an endless canvas.
+  - Dark paper (`notebooks.dark`) is display-only. Strokes are stored in their real colour and drawn through `Brushes.onDarkPaper`.
   - World units are dp.
   - A4 is 1322 × 1871 world units.
-- Storage: plain SQLite (`data/NotesDb.kt`, schema VERSION 3).
+- Storage: plain SQLite (`data/NotesDb.kt`, schema VERSION 4: pages, dark paper, `folders.parent_id`).
+  - Merge-restore accepts backups from older schemas (missing columns get defaults).
   - All writes go through a single writer thread in `NotesRepository`.
   - Deleting a notebook is a soft delete into *Recently deleted* (kept 30 days).
 - Strokes decode lazily (`InkItem.deferred`) and warm up in the background, nearest to the viewport first. A 5000-stroke notebook opens in about 50ms; keep it that way.

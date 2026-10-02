@@ -98,4 +98,21 @@ object Brushes {
 
   /** Opaque colour of a brush, as shown in the palette. */
   fun displayColor(brush: Brush): Int = brush.colorIntArgb or (0xFF shl 24)
+
+  /**
+   * How a colour shows on dark paper: dark inks flip to their light counterpart with the same hue
+   * (black becomes near-white, navy becomes light blue), and every colour is lifted enough to read
+   * on black. Alpha is kept, so the highlighter stays see-through.
+   */
+  fun onDarkPaper(argb: Int): Int {
+    val hsl = FloatArray(3)
+    androidx.core.graphics.ColorUtils.colorToHSL(argb, hsl)
+    val l = hsl[2]
+    hsl[2] = maxOf(if (l < 0.5f) 1f - l else l, 0.62f).coerceAtMost(0.9f)
+    return (androidx.core.graphics.ColorUtils.HSLToColor(hsl) and 0x00FFFFFF) or (argb and 0xFF000000.toInt())
+  }
+
+  /** The same stroke in its dark-paper colour; only the colour changes, so the shape is reused. */
+  fun forDarkPaper(stroke: androidx.ink.strokes.Stroke): androidx.ink.strokes.Stroke =
+    stroke.copy(stroke.brush.copyWithColorIntArgb(onDarkPaper(stroke.brush.colorIntArgb)))
 }

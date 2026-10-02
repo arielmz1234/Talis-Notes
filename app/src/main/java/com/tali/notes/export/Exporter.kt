@@ -6,6 +6,7 @@ import android.graphics.pdf.PdfDocument
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import com.tali.notes.canvas.Camera
 import com.tali.notes.canvas.ItemRenderer
+import com.tali.notes.canvas.Pages
 import com.tali.notes.data.ImageStore
 import com.tali.notes.canvas.PaperRenderer
 import com.tali.notes.geometry.Rect
@@ -33,18 +34,22 @@ object Exporter {
   private const val A4_H_PT = 842
   private const val MARGIN_DP = 48f
 
-  private fun renderer(images: ImageStore) = ItemRenderer(CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore), images, sync = true)
+  private fun renderer(images: ImageStore, dark: Boolean) =
+    ItemRenderer(CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore), images, sync = true).also { it.dark = dark }
 
   /** Renders the region [world] into a bitmap of the given width, keeping the aspect ratio. */
-  fun thumbnail(items: Collection<CanvasItem>, world: Rect, paper: PaperStyle, widthPx: Int, images: ImageStore): Bitmap {
+  fun thumbnail(items: Collection<CanvasItem>, world: Rect, paper: PaperStyle, widthPx: Int, images: ImageStore, dark: Boolean = false, originY: Float = 0f): Bitmap {
     val heightPx = (widthPx * world.height / world.width).toInt().coerceIn(1, widthPx * 2)
     val bmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
     val scale = widthPx / world.width
     val camera = Camera(scale).apply { set(com.tali.notes.data.Viewport(world.left, world.top, 1f)) }
-    PaperRenderer().draw(canvas, paper, camera, widthPx, heightPx)
+    PaperRenderer().apply {
+      this.dark = dark
+      this.originY = originY
+    }.draw(canvas, paper, camera, widthPx, heightPx)
     canvas.concat(camera.worldToScreen)
-    renderer(images).drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
+    renderer(images, dark).drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
     return bmp
   }
 
@@ -54,13 +59,16 @@ object Exporter {
 
   /**
    * [fixedPages] lays A4 pages on the canvas's fixed page grid (the one the page guides show),
-   * starting at the top-left of the canvas; otherwise the pages are centred on the writing.
+   * starting at the top-left of the canvas; otherwise the pages are centred on the writing. A paged
+   * notebook ([pageCount] set) exports exactly its own pages, empty ones included. [dark] exports
+   * dark paper as it looks on screen.
    */
-  fun pdf(items: Collection<CanvasItem>, paper: PaperStyle, layout: PdfLayout, out: File, images: ImageStore, fixedPages: Boolean = false) {
+  fun pdf(items: Collection<CanvasItem>, paper: PaperStyle, layout: PdfLayout, out: File, images: ImageStore, fixedPages: Boolean = false, pageCount: Int? = null, dark: Boolean = false) {
     val content = items.map { it.bounds }.reduceOrNull(Rect::union)?.outset(MARGIN_DP) ?: Rect(0f, 0f, 1322f, 1871f)
     val pages: List<Rect> =
       when (layout) {
         PdfLayout.ONE_PAGE -> splitTall(content)
+        PdfLayout.A4_PAGES if pageCount != null -> Pages.all(pageCount)
         PdfLayout.A4_PAGES -> {
           val grid = if (fixedPages) fixedA4Pages(items) else a4Pages(content)
           grid.filter { page -> items.any { it.bounds.intersects(page) } }.ifEmpty { grid.take(1) }
@@ -68,8 +76,11 @@ object Exporter {
         PdfLayout.PDF_PAGES -> pdfPages(items).ifEmpty { splitTall(content) }
       }
     val doc = PdfDocument()
-    val r = renderer(images)
-    val paperRenderer = PaperRenderer().apply { print = true }
+    val r = renderer(images, dark)
+    val paperRenderer = PaperRenderer().apply {
+      print = true
+      this.dark = dark
+    }
     try {
       pages.forEachIndexed { i, world ->
         val wPt = ceil(world.width * PT_PER_DP).toInt()
@@ -77,6 +88,7 @@ object Exporter {
         val page = doc.startPage(PdfDocument.PageInfo.Builder(wPt, hPt, i + 1).create())
         val canvas = page.canvas
         val camera = Camera(PT_PER_DP).apply { set(com.tali.notes.data.Viewport(world.left, world.top, 1f)) }
+        paperRenderer.originY = if (pageCount != null) world.top else 0f
         paperRenderer.draw(canvas, paper, camera, wPt, hPt)
         canvas.save()
         canvas.concat(camera.worldToScreen)

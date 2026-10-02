@@ -73,12 +73,22 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   fun moveToFolder(id: String, folderId: String?) = repo.moveToFolder(id, folderId)
 
-  fun createFolder(name: String) {
+  /**
+   * Makes a folder inside [parentId] (or at the top level). A top-level folder opens straight away;
+   * one made inside a folder appears among that folder's folders, so she can make several.
+   */
+  fun createFolder(name: String, parentId: String? = null) {
     viewModelScope.launch {
-      val color = COVER_COLORS[folders.value.size % COVER_COLORS.size]
-      val folder = repo.createFolder(name.ifBlank { "New folder" }, color)
-      selectedFolder.value = folder.id
+      val color = parentId?.let { p -> folders.value.firstOrNull { it.id == p }?.color } ?: COVER_COLORS[folders.value.size % COVER_COLORS.size]
+      val folder = repo.createFolder(name.ifBlank { "New folder" }, color, parentId)
+      if (parentId == null) selectedFolder.value = folder.id
     }
+  }
+
+  /** Moves a folder into [parentId]; a folder can't go inside itself or one of its own folders. */
+  fun moveFolder(id: String, parentId: String?) {
+    if (parentId != null && (parentId == id || parentId in descendants(folders.value, id))) return
+    repo.moveFolder(id, parentId)
   }
 
   fun renameFolder(id: String, name: String) = repo.renameFolder(id, name.ifBlank { "Folder" })
@@ -86,7 +96,45 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   fun recolorFolder(id: String, color: Int) = repo.recolorFolder(id, color)
 
   fun deleteFolder(id: String) {
-    if (selectedFolder.value == id) selectedFolder.value = null
+    if (selectedFolder.value == id) selectedFolder.value = folders.value.firstOrNull { it.id == id }?.parentId
     repo.deleteFolder(id)
   }
+}
+
+/** Folders in tree order (each followed by its own folders), with how deep each one sits. */
+fun folderTree(folders: List<Folder>): List<Pair<Folder, Int>> {
+  val children = folders.groupBy { f -> f.parentId?.takeIf { p -> folders.any { it.id == p } } }
+  val out = ArrayList<Pair<Folder, Int>>(folders.size)
+  val seen = HashSet<String>()
+  fun walk(parent: String?, depth: Int) {
+    children[parent].orEmpty().forEach { f ->
+      if (seen.add(f.id)) {
+        out += f to depth
+        walk(f.id, depth + 1)
+      }
+    }
+  }
+  walk(null, 0)
+  return out
+}
+
+/** Ids of every folder inside [id], at any depth. */
+fun descendants(folders: List<Folder>, id: String): Set<String> {
+  val out = LinkedHashSet<String>()
+  var frontier = listOf(id)
+  while (frontier.isNotEmpty()) {
+    frontier = folders.filter { it.parentId in frontier && out.add(it.id) }.map { it.id }
+  }
+  return out
+}
+
+/** The folders from the top level down to [id], [id] included. */
+fun folderPath(folders: List<Folder>, id: String?): List<Folder> {
+  val out = ArrayList<Folder>()
+  var cur = folders.firstOrNull { it.id == id }
+  while (cur != null && out.none { it.id == cur!!.id }) {
+    out.add(0, cur)
+    cur = folders.firstOrNull { it.id == cur!!.parentId }
+  }
+  return out
 }

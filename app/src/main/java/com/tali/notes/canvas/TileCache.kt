@@ -52,9 +52,10 @@ class TileCache(private val renderer: ItemRenderer) {
     frame++
     forEachKey(visible) { key ->
       val tile = tiles.getOrPut(key) { Tile(RenderNode("tile")) }
-      // Re-record after big zoom changes so textures and tessellation stay crisp.
+      // Re-record after big zoom changes so textures and tessellation stay crisp, and when the
+      // renderer dropped the recording (it does that to tiles that went off screen for a while).
       val ratio = if (tile.recordedScale == 0f) 0f else scale / tile.recordedScale
-      if (tile.dirty || ratio > 2.5f || (ratio in 0.01f..0.3f)) record(tile, key, scale, doc)
+      if (tile.dirty || !tile.node.hasDisplayList() || ratio > 2.5f || (ratio in 0.01f..0.3f)) record(tile, key, scale, doc)
       tile.lastUsed = frame
       canvas.drawRenderNode(tile.node)
     }

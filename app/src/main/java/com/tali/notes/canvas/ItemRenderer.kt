@@ -26,6 +26,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   }
   private val rectF = RectF()
 
+  /** Dark paper: ink is drawn in its light counterpart colours; pictures stay as they are. */
+  var dark = false
+
   /**
    * Draws in three layers, each in stacking order: pictures and PDF pages at the bottom, then
    * highlighter (so it tints what's under it without covering writing), then all other ink.
@@ -54,8 +57,8 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
 
   fun draw(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
     when (item) {
-      is InkItem -> strokes.draw(canvas, item.stroke, worldToScreen)
-      is ShapeItem -> item.strokes.forEach { strokes.draw(canvas, it, worldToScreen) }
+      is InkItem -> strokes.draw(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
+      is ShapeItem -> (if (dark) item.darkStrokes else item.strokes).forEach { strokes.draw(canvas, it, worldToScreen) }
       is ImageItem -> {
         rectF.set(item.rect.left, item.rect.top, item.rect.right, item.rect.bottom)
         val bmp = if (sync) images.loadNow(item.file) else images.peek(item.file)

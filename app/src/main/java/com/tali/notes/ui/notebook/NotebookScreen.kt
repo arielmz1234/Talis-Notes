@@ -96,6 +96,10 @@ import com.tali.notes.export.PdfLayout
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.Tool
 import com.tali.notes.theme.Tali
+import com.tali.notes.theme.TaliColorsScope
+import com.tali.notes.theme.notebookColors
+import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.DarkMode
 import com.tali.notes.ui.components.CloudCrown
 import com.tali.notes.ui.components.ColorDot
 import com.tali.notes.ui.components.FloatingBar
@@ -125,9 +129,28 @@ private class CanvasHolder {
 
 @Composable
 fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
-  val context = LocalContext.current
-  val app = context.applicationContext as Application
+  val app = LocalContext.current.applicationContext as Application
   val vm: NotebookViewModel = viewModel(key = notebookId) { NotebookViewModel(app, notebookId) }
+  val meta by vm.meta.collectAsState()
+  val systemDark = Tali.colors.isDark
+  val darkPaper = meta?.dark == true
+  // The status bar sits over the paper, or over the desk around the pages: light icons when that's dark.
+  val darkTop = darkPaper || (systemDark && vm.pageCount != null)
+  val view = LocalView.current
+  DisposableEffect(darkTop) {
+    val window = (view.context as? android.app.Activity)?.window
+    val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+    bars?.isAppearanceLightStatusBars = !darkTop
+    onDispose { bars?.isAppearanceLightStatusBars = !systemDark }
+  }
+  TaliColorsScope(notebookColors(systemDark, darkPaper)) {
+    NotebookContent(vm, systemDark, onBack)
+  }
+}
+
+@Composable
+private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: () -> Unit) {
+  val context = LocalContext.current
   val settings by vm.settings.collectAsState()
   val meta by vm.meta.collectAsState()
   val doc = vm.document
@@ -136,14 +159,9 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   val scope = rememberCoroutineScope()
   // Held upright (or on a small tablet) the top bar splits into two lines.
   val narrow = LocalConfiguration.current.screenWidthDp < 900
-  // The paper is always light, so the status bar needs dark icons here even in dark mode.
-  val view = LocalView.current
-  DisposableEffect(c.isDark) {
-    val window = (view.context as? android.app.Activity)?.window
-    val bars = window?.let { WindowCompat.getInsetsController(it, view) }
-    bars?.isAppearanceLightStatusBars = true
-    onDispose { bars?.isAppearanceLightStatusBars = !c.isDark }
-  }
+  val darkPaper = meta?.dark == true
+  val paged = vm.pageCount != null
+  var pagesOpen by remember { mutableStateOf(false) }
   var renaming by remember { mutableStateOf(false) }
   var exporting by remember { mutableStateOf(false) }
   var savingShape by remember { mutableStateOf<ShapeGeometry?>(null) }
@@ -219,7 +237,7 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
     holder.view?.let { if (it.width > 0) vm.persistView(it.viewport(), it.visibleWorld()) }
   }
 
-  Box(Modifier.fillMaxSize().background(c.paper)) {
+  Box(Modifier.fillMaxSize().background(if (darkPaper) Color(com.tali.notes.canvas.PaperRenderer.DARK_PAPER) else c.paper)) {
     if (doc != null) {
       AndroidView(
         factory = { ctx ->
@@ -241,11 +259,15 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
                 override fun onPageChanged(index: Int, count: Int) {
                   vm.page = index to count
                 }
+
+                override fun onPagesChanged(count: Int) = vm.setPages(count)
               },
             )
             .also {
               holder.view = it
               it.settings = settings
+              it.pageCount = vm.pageCount
+              it.darkPaper = darkPaper
               it.attach(doc, vm.initialViewport)
             }
         },
@@ -256,6 +278,9 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
           v.topClearance = if (narrow) 196f else 124f
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
+          v.pageCount = vm.pageCount
+          v.darkPaper = darkPaper
+          v.deskColor = (if (darkPaper) DESK_DARK_PAPER else if (systemDark) DESK_DARK else DESK_LIGHT).toArgb()
           v.accentColor = c.accent.toArgb()
           v.handleColor = c.blue.toArgb()
         },
@@ -278,10 +303,13 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           MainToolbar(
             settings = settings,
+            darkPaper = darkPaper,
             tool = vm.tool,
             shapeKind = vm.shapeKind,
             customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId },
             onPen = vm::onPenTapped,
+            penSettingsOpen = vm.panel == PanelKind.PEN,
+            onPenSettings = vm::togglePenSettings,
             onTool = vm::onToolTapped,
             onImage = {
               vm.panel = null
@@ -327,6 +355,10 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
             onRedo = { holder.view?.runSafely { redo() } },
           ) {
             MoreMenu(
+              paged = paged,
+              darkPaper = darkPaper,
+              onDarkPaper = vm::setDark,
+              onPages = { pagesOpen = true },
               paper = meta?.paper ?: PaperStyle.DOTS,
               fingerDraws = settings.fingerDraws,
               onPaper = vm::setPaper,
@@ -397,8 +429,30 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
       renaming = false
     }
   }
+  if (pagesOpen) {
+    PagesDialog(
+      paged = paged,
+      page = vm.page.first.coerceAtLeast(0),
+      count = vm.pageCount ?: 0,
+      onDismiss = { pagesOpen = false },
+      onPaged = { on ->
+        if (on) holder.view?.runSafely { convertToPages() } else vm.setPages(null)
+      },
+      onAdd = { index ->
+        pagesOpen = false
+        holder.view?.runSafely { insertPageAfter(index) }
+        vm.showHint("Page ${index + 2} added")
+      },
+      onDelete = { index ->
+        pagesOpen = false
+        holder.view?.runSafely { deletePage(index) }
+        vm.showHint("Page ${index + 1} deleted \u2014 undo brings the writing back")
+      },
+    )
+  }
   if (exporting) {
     ExportDialog(
+      paged = paged,
       hasPdfPages = remember(doc) { doc?.all?.any { it is com.tali.notes.model.ImageItem && it.pdfPage } == true },
       onDismiss = { exporting = false },
       onExport = { layout, share ->
@@ -447,6 +501,10 @@ private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit) {
 
 @Composable
 private fun MoreMenu(
+  paged: Boolean,
+  darkPaper: Boolean,
+  onDarkPaper: (Boolean) -> Unit,
+  onPages: () -> Unit,
   paper: PaperStyle,
   fingerDraws: Boolean?,
   onPaper: (PaperStyle) -> Unit,
@@ -488,17 +546,33 @@ private fun MoreMenu(
           }
         }
       }
+      DropdownMenuItem(
+        text = { Text("Dark paper") },
+        leadingIcon = { Icon(Icons.Outlined.DarkMode, null) },
+        trailingIcon = { if (darkPaper) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+        onClick = { onDarkPaper(!darkPaper) },
+      )
       HorizontalDivider(color = c.line)
-      DropdownMenuItem(text = { Text("Show everything") }, leadingIcon = { Icon(Icons.Outlined.FitScreen, null) }, onClick = {
+      DropdownMenuItem(
+        text = { Text(if (paged) "Pages" else "Pages: endless canvas") },
+        leadingIcon = { Icon(Icons.Outlined.AutoStories, null) },
+        onClick = {
+          open = false
+          onPages()
+        },
+      )
+      DropdownMenuItem(text = { Text(if (paged) "Show whole page" else "Show everything") }, leadingIcon = { Icon(Icons.Outlined.FitScreen, null) }, onClick = {
         open = false
         onFit()
       })
-      DropdownMenuItem(
-        text = { Text("A4 page guides") },
-        leadingIcon = { Icon(Icons.Outlined.Description, null) },
-        trailingIcon = { if (pageGuides) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-        onClick = { onPageGuides(!pageGuides) },
-      )
+      if (!paged) {
+        DropdownMenuItem(
+          text = { Text("A4 page guides") },
+          leadingIcon = { Icon(Icons.Outlined.Description, null) },
+          trailingIcon = { if (pageGuides) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+          onClick = { onPageGuides(!pageGuides) },
+        )
+      }
       DropdownMenuItem(text = { Text("Export PDF") }, leadingIcon = { Icon(Icons.Outlined.IosShare, null) }, onClick = {
         open = false
         onExport()
@@ -653,10 +727,11 @@ private fun SaveShapeDialog(geometry: ShapeGeometry, onDismiss: () -> Unit, onSa
 }
 
 @Composable
-private fun ExportDialog(hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: (PdfLayout, share: Boolean) -> Unit) {
+private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: (PdfLayout, share: Boolean) -> Unit) {
   val c = Tali.colors
-  // Slides she imported come back out as the same slides, with her writing on them.
-  val options = if (hasPdfPages) listOf(PdfLayout.PDF_PAGES, PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE) else listOf(PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE)
+  // Slides she imported come back out as the same slides, with her writing on them. A paged
+  // notebook already has its slides on pages of their own.
+  val options = if (hasPdfPages && !paged) listOf(PdfLayout.PDF_PAGES, PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE) else listOf(PdfLayout.A4_PAGES, PdfLayout.ONE_PAGE)
   var layout by remember { mutableStateOf(options.first()) }
   DialogCard(onDismiss, width = 520) {
     Text("Export PDF", style = MaterialTheme.typography.titleLarge, color = c.ink)
@@ -667,7 +742,7 @@ private fun ExportDialog(hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: 
       {
         when (it) {
           PdfLayout.PDF_PAGES -> "PDF pages"
-          PdfLayout.A4_PAGES -> "A4 pages"
+          PdfLayout.A4_PAGES -> if (paged) "Notebook pages" else "A4 pages"
           PdfLayout.ONE_PAGE -> "One long page"
         }
       },
@@ -678,7 +753,7 @@ private fun ExportDialog(hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: 
     Text(
       when (layout) {
         PdfLayout.PDF_PAGES -> "Each page you imported comes back as its own page, with your writing on and around it."
-        PdfLayout.A4_PAGES -> "Splits the canvas into printable A4 pages. Empty areas are skipped."
+        PdfLayout.A4_PAGES -> if (paged) "Every page of the notebook becomes an A4 page, just as you see it." else "Splits the canvas into printable A4 pages. Empty areas are skipped."
         PdfLayout.ONE_PAGE -> "Keeps the whole canvas on one page, sized to fit everything."
       },
       style = MaterialTheme.typography.bodyMedium,
@@ -690,5 +765,51 @@ private fun ExportDialog(hasPdfPages: Boolean, onDismiss: () -> Unit, onExport: 
       QuietButton("Save to Files") { onExport(layout, false) }
       PrimaryButton("Share") { onExport(layout, true) }
     }
+  }
+}
+
+private val DESK_LIGHT = Color(0xFFE9E4F2)
+private val DESK_DARK = Color(0xFF2A2338)
+private val DESK_DARK_PAPER = Color(0xFF0E0C13)
+
+/** Page layout (A4 pages or an endless canvas), and adding or removing a page. */
+@Composable
+private fun PagesDialog(
+  paged: Boolean,
+  page: Int,
+  count: Int,
+  onDismiss: () -> Unit,
+  onPaged: (Boolean) -> Unit,
+  onAdd: (Int) -> Unit,
+  onDelete: (Int) -> Unit,
+) {
+  val c = Tali.colors
+  DialogCard(onDismiss, width = 520) {
+    Text("Pages", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(16.dp))
+    Segmented(listOf(true, false), paged, { if (it) "A4 pages" else "Endless canvas" }, onPaged, Modifier.fillMaxWidth())
+    Spacer(Modifier.height(10.dp))
+    Text(
+      if (paged) "Portrait A4 pages, one under the other. Scroll past the last page to add another."
+      else "One page that never ends, in every direction. Good for big drawings and mind maps.",
+      style = MaterialTheme.typography.bodyMedium,
+      color = c.inkMuted,
+    )
+    if (paged) {
+      Spacer(Modifier.height(20.dp))
+      Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.sunken).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Column(Modifier.weight(1f)) {
+          Text("Page ${page + 1}", style = MaterialTheme.typography.titleMedium, color = c.ink)
+          Text(if (count == 1) "1 page in this notebook" else "$count pages in this notebook", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+        }
+        QuietButton(if (count > 1) "Delete page" else "Clear page", color = c.danger) { onDelete(page) }
+        PrimaryButton("Add page after") { onAdd(page) }
+      }
+    }
+    Spacer(Modifier.height(24.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Done", onClick = onDismiss) }
   }
 }

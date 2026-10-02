@@ -32,6 +32,14 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -128,7 +136,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   var creating by remember { mutableStateOf(false) }
   var renaming by remember { mutableStateOf<NotebookMeta?>(null) }
   var deleting by remember { mutableStateOf<NotebookMeta?>(null) }
-  var newFolder by remember { mutableStateOf(false) }
+  /** A folder being made, and where. */
+  var newFolder by remember { mutableStateOf<NewFolderRequest?>(null) }
+  var movingFolder by remember { mutableStateOf<Folder?>(null) }
   var renamingFolder by remember { mutableStateOf<Folder?>(null) }
   var deletingFolder by remember { mutableStateOf<Folder?>(null) }
   var backups by remember { mutableStateOf(false) }
@@ -150,9 +160,10 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       trashCount = trash.size,
       selected = selected,
       onSelect = { vm.selectedFolder.value = it },
-      onNewFolder = { newFolder = true },
+      onNewFolder = { newFolder = NewFolderRequest(it) },
       onRenameFolder = { renamingFolder = it },
       onRecolorFolder = vm::recolorFolder,
+      onMoveFolder = { movingFolder = it },
       onDeleteFolder = { deletingFolder = it },
       onBackup = { backups = true },
     )
@@ -161,13 +172,25 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       Spacer(Modifier.height(112.dp))
       val heading: @Composable (Modifier) -> Unit = { mod ->
         Column(mod) {
+          // Inside a folder within a folder: the way back up, one tap per level.
+          val path = folderPath(folders, currentFolder?.id).dropLast(1)
+          if (path.isNotEmpty()) {
+            Breadcrumb(path, onSelect = { vm.selectedFolder.value = it })
+            Spacer(Modifier.height(4.dp))
+          }
           Text(if (inTrash) "Recently deleted" else currentFolder?.name ?: "All notebooks", style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Spacer(Modifier.height(6.dp))
           val today = remember { SimpleDateFormat("EEEE, d MMMM", Locale.UK).format(Date()) }
           val count = if (currentFolder == null) all.size else all.count { it.folderId == currentFolder.id }
+          val inside = if (currentFolder == null) 0 else folders.count { it.parentId == currentFolder.id }
+          val counts = (if (count == 1) "1 notebook" else "$count notebooks") + when (inside) {
+            0 -> ""
+            1 -> " · 1 folder"
+            else -> " · $inside folders"
+          }
           Text(
             if (inTrash) "Notebooks stay here for ${NotesRepository.TRASH_DAYS} days, then they're deleted for good"
-            else if (count == 1) "1 notebook · $today" else "$count notebooks · $today",
+            else "$counts · $today",
             style = MaterialTheme.typography.bodyLarge,
             color = c.inkMuted,
           )
@@ -213,19 +236,40 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       RulerDivider()
       Spacer(Modifier.height(22.dp))
 
+      // Folders inside the open folder show as tiles above its notebooks.
+      val subfolders = if (currentFolder == null || query.isNotBlank()) emptyList() else folders.filter { it.parentId == currentFolder.id }
       when {
-        all.isEmpty() && !inTrash -> EmptyLibrary(onCreate = { creating = true })
+        all.isEmpty() && !inTrash && folders.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
         notebooks.isEmpty() && query.isNotBlank() -> Text("No notebooks match “$query”.", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
-        notebooks.isEmpty() -> EmptyFolder(onCreate = { creating = true })
+        notebooks.isEmpty() && subfolders.isEmpty() && currentFolder != null -> EmptyFolder(onCreate = { creating = true }, onNewFolder = { newFolder = NewFolderRequest(currentFolder.id) })
+        notebooks.isEmpty() && subfolders.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
         else -> {
-          SectionLabel(if (inTrash) "Tap a notebook to bring it back" else "Recent")
-          Spacer(Modifier.height(14.dp))
           LazyVerticalGrid(
             columns = GridCells.Adaptive(210.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalArrangement = Arrangement.spacedBy(28.dp),
             contentPadding = PaddingValues(bottom = 40.dp),
           ) {
+            if (currentFolder != null && !inTrash && query.isBlank()) {
+              item(key = "folders-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel("Folders") }
+              items(subfolders, key = { "folder-" + it.id }) { f ->
+                FolderTile(
+                  f,
+                  folders = folders,
+                  notebooks = all,
+                  onOpen = { vm.selectedFolder.value = f.id },
+                  onNewFolder = { newFolder = NewFolderRequest(f.id) },
+                  onRename = { renamingFolder = f },
+                  onRecolor = { vm.recolorFolder(f.id, it) },
+                  onMove = { movingFolder = f },
+                  onDelete = { deletingFolder = f },
+                )
+              }
+              item(key = "new-folder") { NewFolderTile { newFolder = NewFolderRequest(currentFolder.id) } }
+            }
+            if (notebooks.isNotEmpty()) {
+              item(key = "notebooks-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(if (inTrash) "Tap a notebook to bring it back" else if (currentFolder != null) "Notebooks" else "Recent") }
+            }
             items(notebooks, key = { it.id }) { nb ->
               NotebookCard(
                 nb,
@@ -308,10 +352,18 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       emptyingTrash = false
     }
   }
-  if (newFolder) {
-    NameDialog(title = "New folder", initial = "", placeholder = "Statics", confirm = "Create", onDismiss = { newFolder = false }) {
-      vm.createFolder(it)
-      newFolder = false
+  newFolder?.let { request ->
+    val parentId = request.parentId
+    val parentName = folders.firstOrNull { it.id == parentId }?.name
+    NameDialog(title = if (parentName != null) "New folder in $parentName" else "New folder", initial = "", placeholder = if (parentName != null) "Lectures" else "Statics", confirm = "Create", onDismiss = { newFolder = null }) {
+      vm.createFolder(it, parentId)
+      newFolder = null
+    }
+  }
+  movingFolder?.let { f ->
+    MoveFolderDialog(f, folders, onDismiss = { movingFolder = null }) { parent ->
+      vm.moveFolder(f.id, parent)
+      movingFolder = null
     }
   }
   renamingFolder?.let { f ->
@@ -323,7 +375,10 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   deletingFolder?.let { f ->
     ConfirmDialog(
       title = "Delete the “${f.name}” folder?",
-      body = "The notebooks inside aren't deleted. They move back to All notebooks.",
+      body = folders.firstOrNull { it.id == f.parentId }.let { parent ->
+        if (parent != null) "Nothing inside is deleted. Its notebooks and folders move up into “${parent.name}”."
+        else "Nothing inside is deleted. Its notebooks move back to All notebooks, and its folders to the top level."
+      },
       confirm = "Delete folder",
       destructive = true,
       onDismiss = { deletingFolder = null },
@@ -360,9 +415,10 @@ private fun Sidebar(
   trashCount: Int,
   selected: String?,
   onSelect: (String?) -> Unit,
-  onNewFolder: () -> Unit,
+  onNewFolder: (parentId: String?) -> Unit,
   onRenameFolder: (Folder) -> Unit,
   onRecolorFolder: (String, Int) -> Unit,
+  onMoveFolder: (Folder) -> Unit,
   onDeleteFolder: (Folder) -> Unit,
   onBackup: () -> Unit,
 ) {
@@ -388,7 +444,7 @@ private fun Sidebar(
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
       SectionLabel("Folders", Modifier.weight(1f))
       Box(
-        Modifier.size(30.dp).clip(CircleShape).clickable(onClickLabel = "New folder", onClick = onNewFolder),
+        Modifier.size(30.dp).clip(CircleShape).clickable(onClickLabel = "New folder") { onNewFolder(null) },
         contentAlignment = Alignment.Center,
       ) {
         Icon(Icons.Outlined.Add, "New folder", tint = c.inkMuted, modifier = Modifier.size(18.dp))
@@ -407,36 +463,52 @@ private fun Sidebar(
           "New folder",
           style = MaterialTheme.typography.labelLarge,
           color = c.accent,
-          modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onNewFolder).padding(horizontal = 10.dp, vertical = 6.dp),
+          modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onNewFolder(null) }.padding(horizontal = 10.dp, vertical = 6.dp),
         )
       }
-      folders.forEach { f ->
+      // A tree: folders inside folders sit indented under them, and fold away with the arrow.
+      val tree = remember(folders) { folderTree(folders) }
+      var collapsed by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(setOf<String>()) }
+      val openPath = remember(folders, selected) { folderPath(folders, selected).map { it.id }.toSet() }
+      tree.forEach { (f, depth) ->
+        val hidden = folderPath(folders, f.parentId).any { it.id in collapsed && it.id !in openPath }
+        if (hidden) return@forEach
+        val hasChildren = folders.any { it.parentId == f.id }
+        val expanded = f.id !in collapsed || f.id in openPath
         var menu by remember { mutableStateOf(false) }
-        Box {
+        Box(Modifier.padding(start = (depth * 16).dp)) {
           NavRow(
             icon = {
               Icon(if (selected == f.id) Icons.Outlined.FolderOpen else Icons.Outlined.Folder, null, tint = Color(f.color), modifier = Modifier.size(20.dp))
             },
             label = f.name,
-            count = notebooks.count { it.folderId == f.id },
+            count = notebooks.count { it.folderId == f.id || it.folderId in descendants(folders, f.id) },
             selected = selected == f.id,
             onClick = { onSelect(f.id) },
             onLongClick = { menu = true },
+            trailing = if (!hasChildren) null else {
+              {
+                Box(
+                  Modifier.size(28.dp).clip(CircleShape).clickable(onClickLabel = if (expanded) "Fold" else "Unfold") {
+                    collapsed = if (f.id in collapsed) collapsed - f.id else collapsed + f.id
+                  },
+                  contentAlignment = Alignment.Center,
+                ) {
+                  Icon(if (expanded) Icons.Outlined.KeyboardArrowDown else Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = c.inkFaint, modifier = Modifier.size(18.dp))
+                }
+              }
+            },
           )
-          DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-            DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = {
-              menu = false
-              onRenameFolder(f)
-            })
-            CoverSwatches(current = f.color) {
-              onRecolorFolder(f.id, it)
-              menu = false
-            }
-            DropdownMenuItem(text = { Text("Delete folder", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = {
-              menu = false
-              onDeleteFolder(f)
-            })
-          }
+          FolderMenu(
+            f,
+            expanded = menu,
+            onDismiss = { menu = false },
+            onNewFolder = { onNewFolder(f.id) },
+            onRename = { onRenameFolder(f) },
+            onRecolor = { onRecolorFolder(f.id, it) },
+            onMove = { onMoveFolder(f) },
+            onDelete = { onDeleteFolder(f) },
+          )
         }
       }
     }
@@ -500,7 +572,7 @@ private fun Wordmark(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, trailing: (@Composable () -> Unit)? = null) {
   val c = Tali.colors
   Row(
     Modifier.fillMaxWidth()
@@ -508,13 +580,17 @@ private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, sele
       .clip(RoundedCornerShape(14.dp))
       .background(if (selected) c.washBrush else SolidColor(Color.Transparent))
       .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
-      .padding(horizontal = 12.dp),
+      .padding(start = 12.dp, end = if (trailing != null) 4.dp else 12.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     icon()
     Spacer(Modifier.width(12.dp))
     Text(label, style = MaterialTheme.typography.titleSmall, color = if (selected) c.ink else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = c.inkFaint)
+    if (trailing != null) {
+      Spacer(Modifier.width(2.dp))
+      trailing()
+    }
   }
 }
 
@@ -627,11 +703,12 @@ private fun NotebookCard(
             leadingIcon = { Icon(Icons.Outlined.AutoStories, null, tint = c.inkMuted) },
             onClick = { onMove(null); menu = false; moving = false },
           )
-          folders.forEach { f ->
+          folderTree(folders).forEach { (f, depth) ->
             DropdownMenuItem(
               text = { Text(f.name + if (f.id == nb.folderId) "  (here)" else "") },
               leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = Color(f.color)) },
               onClick = { onMove(f.id); menu = false; moving = false },
+              modifier = Modifier.padding(start = (depth * 18).dp),
             )
           }
           if (folders.isEmpty()) {
@@ -666,14 +743,14 @@ private fun EmptyLibrary(onCreate: () -> Unit) {
     Spacer(Modifier.height(20.dp))
     Text("Start your first notebook", style = MaterialTheme.typography.headlineMedium, color = c.ink)
     Spacer(Modifier.height(8.dp))
-    Text("One endless page per notebook. Everything saves as you write.", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
+    Text("A4 pages that keep coming as you write. Everything saves as you go.", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
     PrimaryButton("New notebook", Icons.Outlined.Add, onClick = onCreate)
   }
 }
 
 @Composable
-private fun EmptyFolder(onCreate: () -> Unit) {
+private fun EmptyFolder(onCreate: () -> Unit, onNewFolder: () -> Unit) {
   val c = Tali.colors
   Column(Modifier.fillMaxWidth().padding(top = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
     Box(contentAlignment = Alignment.Center) {
@@ -685,6 +762,194 @@ private fun EmptyFolder(onCreate: () -> Unit) {
     Spacer(Modifier.height(8.dp))
     Text("Create a notebook here, or move one in from its menu (press and hold a notebook).", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
-    PrimaryButton("New notebook", Icons.Outlined.Add, onClick = onCreate)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+      QuietButton("Folder inside", onClick = onNewFolder)
+      PrimaryButton("New notebook", Icons.Outlined.Add, onClick = onCreate)
+    }
+  }
+}
+
+// ---- Folders inside folders ----
+
+/** A folder she is naming: made inside [parentId], or at the top level when it's null. */
+private class NewFolderRequest(val parentId: String?)
+
+/** "All notebooks › Civil ›" above a folder's name; each part goes back up to that level. */
+@Composable
+private fun Breadcrumb(path: List<Folder>, onSelect: (String?) -> Unit) {
+  val c = Tali.colors
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    val crumb: @Composable (String, String?) -> Unit = { label, id ->
+      Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        color = c.accent,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSelect(id) }.padding(horizontal = 4.dp, vertical = 2.dp),
+      )
+      Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = c.inkFaint, modifier = Modifier.size(16.dp))
+    }
+    crumb("All notebooks", null)
+    path.forEach { crumb(it.name, it.id) }
+  }
+}
+
+@Composable
+private fun FolderMenu(
+  f: Folder,
+  expanded: Boolean,
+  onDismiss: () -> Unit,
+  onNewFolder: () -> Unit,
+  onRename: () -> Unit,
+  onRecolor: (Int) -> Unit,
+  onMove: () -> Unit,
+  onDelete: () -> Unit,
+) {
+  val c = Tali.colors
+  DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+    DropdownMenuItem(text = { Text("New folder inside") }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) }, onClick = {
+      onDismiss()
+      onNewFolder()
+    })
+    DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = {
+      onDismiss()
+      onRename()
+    })
+    DropdownMenuItem(text = { Text("Move to…") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) }, onClick = {
+      onDismiss()
+      onMove()
+    })
+    CoverSwatches(current = f.color) {
+      onRecolor(it)
+      onDismiss()
+    }
+    HorizontalDivider(color = c.line)
+    DropdownMenuItem(text = { Text("Delete folder", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = {
+      onDismiss()
+      onDelete()
+    })
+  }
+}
+
+/** A folder inside the open folder: its colour, name and what it holds. Hold for its menu. */
+@Composable
+private fun FolderTile(
+  f: Folder,
+  folders: List<Folder>,
+  notebooks: List<NotebookMeta>,
+  onOpen: () -> Unit,
+  onNewFolder: () -> Unit,
+  onRename: () -> Unit,
+  onRecolor: (Int) -> Unit,
+  onMove: () -> Unit,
+  onDelete: () -> Unit,
+) {
+  val c = Tali.colors
+  var menu by remember { mutableStateOf(false) }
+  val interaction = remember { MutableInteractionSource() }
+  val pressed by interaction.collectIsPressedAsState()
+  val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
+  val shape = RoundedCornerShape(18.dp)
+  val tint = Color(f.color)
+  val count = notebooks.count { it.folderId == f.id }
+  val inner = folders.count { it.parentId == f.id }
+  Box {
+    Row(
+      Modifier.scale(scale)
+        .fillMaxWidth()
+        .height(76.dp)
+        .shadow(8.dp, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x2A7A4ED6))
+        .clip(shape)
+        .background(c.surface)
+        .background(Brush.horizontalGradient(listOf(tint.copy(alpha = 0.22f), tint.copy(alpha = 0.06f))))
+        .border(1.dp, c.line, shape)
+        .combinedClickable(interactionSource = interaction, indication = null, onClick = onOpen, onLongClick = { menu = true })
+        .padding(horizontal = 16.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(Icons.Outlined.Folder, null, tint = tint, modifier = Modifier.size(30.dp))
+      Spacer(Modifier.width(12.dp))
+      Column(Modifier.weight(1f)) {
+        Text(f.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+          listOfNotNull(
+              if (count == 1) "1 notebook" else "$count notebooks",
+              when (inner) {
+                0 -> null
+                1 -> "1 folder"
+                else -> "$inner folders"
+              },
+            )
+            .joinToString(" · "),
+          style = MaterialTheme.typography.bodySmall,
+          color = c.inkFaint,
+        )
+      }
+    }
+    FolderMenu(f, menu, { menu = false }, onNewFolder, onRename, onRecolor, onMove, onDelete)
+  }
+}
+
+@Composable
+private fun NewFolderTile(onClick: () -> Unit) {
+  val c = Tali.colors
+  val shape = RoundedCornerShape(18.dp)
+  Row(
+    Modifier.fillMaxWidth()
+      .height(76.dp)
+      .clip(shape)
+      .drawBehind {
+        drawRoundRect(
+          c.inkFaint.copy(alpha = 0.6f),
+          cornerRadius = CornerRadius(18.dp.toPx()),
+          style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))),
+        )
+      }
+      .clickable(onClickLabel = "New folder", onClick = onClick)
+      .padding(horizontal = 16.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(Icons.Outlined.CreateNewFolder, null, tint = c.inkMuted, modifier = Modifier.size(26.dp))
+    Spacer(Modifier.width(12.dp))
+    Text("New folder", style = MaterialTheme.typography.titleSmall, color = c.inkMuted)
+  }
+}
+
+/** Where a folder goes: the top level or any folder that isn't inside it. */
+@Composable
+private fun MoveFolderDialog(f: Folder, folders: List<Folder>, onDismiss: () -> Unit, onMove: (String?) -> Unit) {
+  val c = Tali.colors
+  val blocked = remember(f, folders) { descendants(folders, f.id) + f.id }
+  DialogCard(onDismiss, width = 460) {
+    Text("Move “${f.name}”", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(12.dp))
+    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+      MoveTarget("Top level", Icons.Outlined.AutoStories, c.inkMuted, depth = 0, current = f.parentId == null) { onMove(null) }
+      folderTree(folders).filter { it.first.id !in blocked }.forEach { (target, depth) ->
+        MoveTarget(target.name, Icons.Outlined.Folder, Color(target.color), depth = depth + 1, current = target.id == f.parentId) { onMove(target.id) }
+      }
+    }
+    Spacer(Modifier.height(16.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Cancel", onClick = onDismiss) }
+  }
+}
+
+@Composable
+private fun MoveTarget(label: String, icon: ImageVector, tint: Color, depth: Int, current: Boolean, onClick: () -> Unit) {
+  val c = Tali.colors
+  Row(
+    Modifier.fillMaxWidth()
+      .padding(start = (depth * 18).dp)
+      .height(44.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .clickable(enabled = !current, onClick = onClick)
+      .padding(horizontal = 12.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+    Spacer(Modifier.width(12.dp))
+    Text(label, style = MaterialTheme.typography.titleSmall, color = if (current) c.inkFaint else c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    if (current) Text("Here now", style = MaterialTheme.typography.labelMedium, color = c.inkFaint)
   }
 }

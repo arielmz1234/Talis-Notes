@@ -117,6 +117,27 @@ class ShapeRecognizerTest {
   }
 
   @Test
+  fun tiltedRectangleSnapsToAxes() {
+    // Drawn about 10° off and a little skewed; she wants a clean upright rectangle.
+    val shape = ShapeRecognizer.recognize(wobbly(Pt(0f, 0f), Pt(295f, 52f), Pt(268f, 210f), Pt(-24f, 152f), Pt(0f, 0f)))
+    val p = (shape as PolyShape).points
+    assertEquals(4, p.size)
+    p.indices.forEach { i ->
+      val e = p[(i + 1) % 4] - p[i]
+      assertTrue("edge $e not on an axis", abs(e.x) < 0.5f || abs(e.y) < 0.5f)
+    }
+  }
+
+  @Test
+  fun lopsidedTriangleBecomesLevelIsosceles() {
+    // Apex a little off centre and the base 6° off level.
+    val t = (ShapeRecognizer.recognize(wobbly(Pt(110f, 0f), Pt(210f, 190f), Pt(10f, 170f), Pt(110f, 0f))) as PolyShape).points
+    val sides = t.indices.map { t[it].dist(t[(it + 1) % 3]) }.sorted()
+    assertTrue("no two equal sides: $sides", abs(sides[0] - sides[1]) < 0.5f || abs(sides[1] - sides[2]) < 0.5f)
+    assertTrue("no level edge: $t", t.indices.any { abs(t[it].y - t[(it + 1) % 3].y) < 0.5f })
+  }
+
+  @Test
   fun hexagonIsNotMistakenForCircle() {
     val corners = List(7) { i -> Pt(100f * cos(2 * PI * i / 6).toFloat(), 100f * sin(2 * PI * i / 6).toFloat()) }
     val shape = ShapeRecognizer.recognize(wobbly(*corners.toTypedArray(), jitter = 2f))

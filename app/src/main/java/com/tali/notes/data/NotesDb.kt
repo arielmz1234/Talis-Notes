@@ -8,7 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 /** Plain SQLite: notebooks, folders and items; no code generation, fast on older tablets. */
 class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(context, name, null, VERSION) {
   companion object {
-    const val VERSION = 3
+    const val VERSION = 4
   }
 
   override fun onConfigure(db: SQLiteDatabase) {
@@ -29,7 +29,9 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
         viewport TEXT,
         thumb INTEGER NOT NULL DEFAULT 0,
         folder_id TEXT,
-        deleted INTEGER
+        deleted INTEGER,
+        pages INTEGER,
+        dark INTEGER NOT NULL DEFAULT 0
       )
       """
     )
@@ -59,10 +61,17 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
     }
     // Recently deleted: when the notebook was moved to the trash, or NULL.
     if (oldVersion < 3) db.execSQL("ALTER TABLE notebooks ADD COLUMN deleted INTEGER")
+    if (oldVersion < 4) {
+      // A4 page count (NULL keeps the endless canvas every older notebook was made with), dark
+      // paper, and folders inside folders.
+      db.execSQL("ALTER TABLE notebooks ADD COLUMN pages INTEGER")
+      db.execSQL("ALTER TABLE notebooks ADD COLUMN dark INTEGER NOT NULL DEFAULT 0")
+      if (oldVersion >= 2) db.execSQL("ALTER TABLE folders ADD COLUMN parent_id TEXT")
+    }
   }
 
   private fun createFolders(db: SQLiteDatabase) {
-    db.execSQL("CREATE TABLE folders (id TEXT PRIMARY KEY, name TEXT NOT NULL, color INTEGER NOT NULL, created INTEGER NOT NULL, position INTEGER NOT NULL)")
+    db.execSQL("CREATE TABLE folders (id TEXT PRIMARY KEY, name TEXT NOT NULL, color INTEGER NOT NULL, created INTEGER NOT NULL, position INTEGER NOT NULL, parent_id TEXT)")
   }
 }
 

@@ -83,12 +83,21 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   var hint by mutableStateOf<String?>(null)
 
-  /** The imported PDF page on screen and how many there are; index -1 when there are none. */
+  /** The page on screen and how many there are; index -1 when there are none. */
   var page by mutableStateOf(-1 to 0)
+
+  /**
+   * A4 page count, or null for an endless canvas. Kept here as well as in the database so the
+   * canvas never flickers back to the old count while the write is on its way.
+   */
+  var pageCount by mutableStateOf(meta.value?.pages)
+    private set
 
   init {
     viewModelScope.launch {
-      initialViewport = meta.value?.viewport ?: repo.notebooks.value.firstOrNull { it.id == notebookId }?.viewport
+      val m = meta.value ?: repo.notebooks.value.firstOrNull { it.id == notebookId }
+      initialViewport = m?.viewport
+      pageCount = m?.pages
       val items = repo.loadItems(notebookId)
       val doc = Document(items)
       doc.listeners += { change -> repo.applyChange(notebookId, change) }
@@ -163,6 +172,12 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       tool = Tool.PEN
       panel = null
     }
+  }
+
+  /** The arrow beside the pens: opens or closes the active pen's settings, switching to the pen if needed. */
+  fun togglePenSettings() {
+    tool = Tool.PEN
+    panel = if (panel == PanelKind.PEN) null else PanelKind.PEN
   }
 
   fun pickShape(kind: ShapeKind) {
@@ -247,6 +262,14 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun rename(title: String) = repo.rename(notebookId, title.ifBlank { "Untitled" })
 
+  /** A number of A4 pages, or null to make it an endless canvas. */
+  fun setPages(count: Int?) {
+    pageCount = count
+    repo.setPages(notebookId, count)
+  }
+
+  fun setDark(on: Boolean) = repo.setDark(notebookId, on)
+
   /** Shows [message] the first time [id] comes up, never again after that. */
   fun tip(id: String, message: String) {
     if (id in settings.value.seenTips) return
@@ -288,7 +311,17 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val doc = document ?: return
     val items = doc.all.toList()
     val paper = meta.value?.paper ?: PaperStyle.DOTS
+    val dark = meta.value?.dark == true
+    val pages = pageCount
     viewModelScope.launch(Dispatchers.Default) {
+      if (pages != null) {
+        // A paged notebook previews the top of the page she was on, like a notebook lying open.
+        val page = com.tali.notes.canvas.Pages.rect(com.tali.notes.canvas.Pages.indexAt(visible.top + visible.height * 0.4f).coerceIn(0, pages - 1))
+        val region = Rect(page.left, page.top, page.right, page.top + page.width / 1.32f)
+        val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top) }.getOrNull() ?: return@launch
+        repo.saveThumbnail(notebookId, bmp)
+        return@launch
+      }
       // Preview the writing she last saw, framed to the card's proportions.
       val seen = items.map { it.bounds }.filter { it.intersects(visible) }.reduceOrNull(Rect::union)?.outset(48f) ?: visible
       val center = seen.center
@@ -296,7 +329,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       w = minOf(w, visible.width * 1.5f)
       val h = w / 1.32f
       val region = Rect(center.x - w / 2, center.y - h / 2, center.x + w / 2, center.y + h / 2)
-      val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images) }.getOrNull() ?: return@launch
+      val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark) }.getOrNull() ?: return@launch
       repo.saveThumbnail(notebookId, bmp)
     }
   }
@@ -305,10 +338,12 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val doc = document ?: return null
     val items = doc.all.toList()
     val paper = meta.value?.paper ?: PaperStyle.DOTS
+    val dark = meta.value?.dark == true
+    val pages = pageCount
     val title = (meta.value?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
     return withContext(Dispatchers.Default) {
       val out = File(File(getApplication<Application>().cacheDir, "exports"), "$title.pdf")
-      runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides) }.map { out }.getOrNull()
+      runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark) }.map { out }.getOrNull()
     }
   }
 }

@@ -50,6 +50,9 @@ private constructor(
   val color: Int
     get() = knownColor ?: Brushes.displayColor(stroke.brush)
 
+  /** The stroke in its dark-paper colour, made the first time dark paper draws it. */
+  val darkStroke: Stroke by lazy { Brushes.forDarkPaper(stroke) }
+
   companion object {
     fun deferred(id: String, z: Long, pen: PenType, bounds: Rect, color: Int, build: () -> Stroke) = InkItem(id, z, pen, lazy(build), bounds, color)
   }
@@ -73,6 +76,9 @@ class ShapeItem(
 
   val strokes: List<Stroke>
     get() = built.value
+
+  /** The strokes in their dark-paper colour. */
+  val darkStrokes: List<Stroke> by lazy { strokes.map(Brushes::forDarkPaper) }
 
   /** Whether the strokes exist yet (loaded shapes build them on first use). */
   val isBuilt: Boolean
