@@ -20,7 +20,7 @@ A handwriting notes app for Android tablets, made for **one person**: Tali, a ci
   - Fills keep exactly the chosen colour, on dark paper too.
   - Page orientation is chosen when a notebook is made, not as a screen-rotation lock.
   - When he mentions "Emil's design skill", he means Emil Kowalski's `emil-design-eng` skill. It isn't installed in cloud sessions; a public copy is at github.com/vercel-labs/open-agents (`.agents/skills/emil-design-eng/SKILL.md`). Key rules: ask how often an animation is seen, keep UI motion under ~300 ms, exits faster than entries, strong ease-out, nothing from scale 0, origin-aware, blur to mask crossfades.
-- He tests on his own tablet by pulling and pressing Run in Android Studio (debug build over USB). Tell him to click "Sync Now" when Gradle files changed.
+- In a local session, build and install the debug APK on his connected tablet yourself (`./gradlew installDebug`, or `adb install -r`) and launch it, so he can try changes straight away. Only cloud sessions (no USB, no emulator) have to ask him to pull and run it himself. That applies to his own tablet only; never Tali's.
 - After a chunk of work: build, test it in the emulator, review the diff yourself, then commit with a short plain-English message describing what changed for her (see `git log`).
 - Don't leave the emulator running when you finish, and stop any background tasks you started.
 
@@ -116,13 +116,7 @@ Backups come in three layers:
 - Try two-finger undo and three-finger redo on the real tablet. They are tested only in instrumented tests and the emulator.
 - The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
 - The owner reviews visual changes on his own Galaxy Tab S9 FE (debug builds over USB). He asked to review: the frosted eye "show toolbars" button, the back-cloud plus title-with-pencil layout, and how scrolling feels after the glide fix.
-- **Not yet seen on a real device** (built and unit-tested in a cloud session with no emulator); check these first if he reports problems:
-  - Toolbar hide/show: the bars and their cloud bumps should arrive together (`ModulateAlpha` fade), and the hide/show mist should be smooth.
-  - Live shape editing with the S Pen (buffered input) and with a finger on a dot (`grabsEdit`); hold-to-shape then keep moving to resize.
-  - Fill tool: area fill on real handwriting (gap bridging, the "isn't closed" hint), shape fills, undo, None.
-  - Landscape notebooks: pages, page overview, PDF export, Cornell/Ruled papers.
-  - Bring to front / Send to back, lasso touch-pick, Part circle dots and "% · °" bubble, cloud burst in the library.
-  - The R8-minified release APK has never been launched; kotlinx.serialization classes added this session (`SectorShape`, payload changes) rely on the plugin's built-in keep rules.
+- Everything from the 2 Oct 2026 session (items 7-16 below) was tested by the owner on his tablet and works.
 - Session hand-off (2 Oct 2026): everything is merged: `master` and the working branch `claude/vigilant-fermat-8fu4pj` are identical. A debug-key-signed release APK was handed out for a *new* user only; Tali's copy must be updated from the owner's PC with the real key.
 
 ## Recent work (October 2026)
