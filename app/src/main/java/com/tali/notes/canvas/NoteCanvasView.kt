@@ -258,6 +258,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // Editable shape with handles
   private var activeShapeId: String? = null
   private var handleIndex = -1
+  private var handleGrab = Pt(0f, 0f)
   private var liveEdit: ShapeItem? = null
 
   // Shape tool
@@ -838,9 +839,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     // 1. Handles of the shape being edited win over everything.
     currentActiveShape()?.let { shape ->
-      val hit = shape.geometry.handles().indexOfFirst { h -> camera.toScreen(h).dist(screen) < HANDLE_HIT_DP * density }
+      // The nearest dot, so on a small shape the one she aimed at wins.
+      val handles = shape.geometry.handles()
+      val hit = handles.indices.filter { camera.toScreen(handles[it]).dist(screen) < HANDLE_HIT_DP * density }.minByOrNull { camera.toScreen(handles[it]).dist(screen) } ?: -1
       if (hit >= 0) {
         handleIndex = hit
+        // Keep where on the dot she grabbed it, so the shape doesn't jump to the pen tip.
+        handleGrab = handles[hit] - p
         liveEdit = shape
         tiles.hidden = setOf(shape.id)
         mode = Mode.HANDLE_DRAG
@@ -973,7 +978,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.HANDLE_DRAG -> {
         val shape = liveEdit ?: return
         val base = doc?.get(shape.id) as? ShapeItem ?: return
-        var g = base.geometry.withHandle(handleIndex, world(e, idx))
+        var g = base.geometry.withHandle(handleIndex, world(e, idx) + handleGrab)
         // A line end being dragged snaps to the same tidy angles as a freshly drawn line.
         if (g is LineShape) g = if (handleIndex == 1) g.copy(b = ShapeRecognizer.snappedLine(g.a, g.b).b) else g.copy(a = ShapeRecognizer.snappedLine(g.b, g.a).b)
         liveEdit = base.withGeometry(g)

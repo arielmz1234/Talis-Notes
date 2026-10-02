@@ -1,6 +1,7 @@
 package com.tali.notes.model
 
 import com.tali.notes.geometry.Affine
+import com.tali.notes.geometry.Geo
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import kotlin.math.PI
@@ -68,15 +69,77 @@ data class LineShape(val a: Pt, val b: Pt, val arrowStart: Boolean = false, val 
 
 @Serializable
 @SerialName("poly")
-data class PolyShape(val points: List<Pt>, val closed: Boolean) : ShapeGeometry {
+data class PolyShape(
+  val points: List<Pt>,
+  val closed: Boolean,
+  /** How far it has been turned (with the lasso) since it was drawn, so resizing follows its own sides. */
+  val rotation: Float = 0f,
+) : ShapeGeometry {
   override fun paths(penSize: Float) = listOf(if (closed) points + points.first() else points)
 
-  override fun transformed(m: Affine) = copy(points = points.map(m::apply))
+  override fun transformed(m: Affine) = copy(points = points.map(m::apply), rotation = rotation + atan2(m.b, m.a))
 
   override fun handles() = points
 
-  override fun withHandle(index: Int, p: Pt) = copy(points = points.toMutableList().also { it[index] = p })
+  /**
+   * A corner dot resizes the shape rather than bending it: it stretches from the opposite side
+   * within the shape's own frame (so a turned rectangle stays a rectangle), evenly for squares,
+   * regular polygons and stars, and only one way for a dot in the middle of a side (a diamond's
+   * top makes it taller). It never collapses or turns inside out.
+   */
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    if (points.size < 3) return copy(points = points.toMutableList().also { it[index] = p })
+    val c = Geo.centroid(points)
+    val theta = rotation
+    val local = points.map { (it - c).rotated(-theta) }
+    val target = (p - c).rotated(-theta)
+    val v = local[index]
+    val l = local.minOf { it.x }
+    val r = local.maxOf { it.x }
+    val t = local.minOf { it.y }
+    val b = local.maxOf { it.y }
+    val w = max(r - l, 1e-3f)
+    val h = max(b - t, 1e-3f)
+    // Which sides this dot pulls: a dot near an edge of the box pulls that edge; a middle one doesn't.
+    val ax: Float? = when {
+      v.x > l + w * 0.75f -> l
+      v.x < l + w * 0.25f -> r
+      else -> null
+    }
+    val ay: Float? = when {
+      v.y > t + h * 0.75f -> t
+      v.y < t + h * 0.25f -> b
+      else -> null
+    }
+    fun factor(anchor: Float?, from: Float, to: Float): Float =
+      if (anchor == null || abs(from - anchor) < 1e-3f) 1f else ((to - anchor) / (from - anchor)).coerceIn(MIN_SCALE, MAX_SCALE)
+    var sx = factor(ax, v.x, target.x)
+    var sy = factor(ay, v.y, target.y)
+    if (isEven()) {
+      // Keep its proportions: follow the drag along the line from the anchor through the dot.
+      val anchor = Pt(ax ?: (l + r) / 2, ay ?: (t + b) / 2)
+      val d = v - anchor
+      val s = if (d.length() < 1e-3f) 1f else ((target - anchor).dot(d) / d.dot(d)).coerceIn(MIN_SCALE, MAX_SCALE)
+      sx = s
+      sy = s
+    }
+    val axv = ax ?: (l + r) / 2
+    val ayv = ay ?: (t + b) / 2
+    val out = local.map { q -> c + Pt(axv + (q.x - axv) * sx, ayv + (q.y - ayv) * sy).rotated(theta) }
+    return copy(points = out)
+  }
+
+  /** Squares, regular polygons and stars resize evenly; anything else may stretch. */
+  private fun isEven(): Boolean {
+    if (points.size >= 5) return true
+    val c = Geo.centroid(points)
+    val d = points.map { it.dist(c) }
+    return d.max() - d.min() < d.max() * 0.04f && points.size == 4
+  }
 }
+
+private const val MIN_SCALE = 0.05f
+private const val MAX_SCALE = 40f
 
 @Serializable
 @SerialName("ellipse")
@@ -98,6 +161,8 @@ data class EllipseShape(val center: Pt, val rx: Float, val ry: Float, val rotati
   override fun handles() = listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
 
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    // A circle stays a circle: any dot sets the radius.
+    if (abs(rx - ry) < max(rx, ry) * 0.01f) return copy(rx = max(2f, p.dist(center)), ry = max(2f, p.dist(center)))
     val local = (p - center).rotated(-rotation)
     return if (index % 2 == 0) copy(rx = max(2f, abs(local.x))) else copy(ry = max(2f, abs(local.y)))
   }
