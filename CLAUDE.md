@@ -119,6 +119,7 @@ In order, see `git log`:
 5. Cloud-puff animations (`ui/components/CloudPuff.kt`), hide-toolbars mode, gliding scroll.
 6. Typed text (`TextItem`, `ui/notebook/TextEditor.kt`).
 7. Gliding selection (`ui/components/SlidingSelection.kt`). One highlight springs from option to option and stretches as it travels. It is used in every one-of-many choice: segmented controls, the eraser/lasso/shapes tools, pen types, colour rings, paper tiles, the library sidebar and cover swatches. Options with a gliding highlight have no ripple. Shape tiles (cards of their own) and on/off chips fade their colours instead.
+8. Cloud puff, reworked using Emil Kowalski's design-engineering rules (`ui/components/CloudPuff.kt`). An element turns into a soft cloud the size of itself, which drifts up and evaporates (blurring on Android 12+). It is built from feathered lobes on one offscreen layer, so it never shows separate circles. Dark mode uses one tone. Exits: element 200ms, cloud 420ms (`PUFF_LEAVE_MS`, which callers wait for). Arrivals start at 96% scale with no bounce. Toolbars: no puff when a notebook opens. The bars slide in from their own top edge with a 40ms stagger, and a puff plays only on hide/show, placed at the measured bar bounds. `CloudPuffTest` saves frames to `app/build/puff-frames/`.
 
 Working setup notes:
 - On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.

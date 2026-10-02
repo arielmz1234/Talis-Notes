@@ -154,7 +154,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   fun vanish(id: String, then: () -> Unit) {
     vanishing = vanishing + id
     puffScope.launch {
-      kotlinx.coroutines.delay(480)
+      kotlinx.coroutines.delay(com.tali.notes.ui.components.PUFF_LEAVE_MS.toLong())
       then()
       vanishing = vanishing - id
     }

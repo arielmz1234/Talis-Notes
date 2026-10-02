@@ -95,7 +95,7 @@ fun PagesOverview(
   var removing by remember { mutableStateOf<Int?>(null) }
   LaunchedEffect(removing) {
     val i = removing ?: return@LaunchedEffect
-    kotlinx.coroutines.delay(440)
+    kotlinx.coroutines.delay(com.tali.notes.ui.components.PUFF_LEAVE_MS.toLong())
     onDelete(i)
     removing = null
   }
@@ -172,18 +172,9 @@ private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int,
   val c = Tali.colors
   val image = rememberPage(vm, items, index, version, 480)
   val shape = RoundedCornerShape(10.dp)
-  // A deleted page shrinks a little and fades into a small puff of cloud.
-  val gone by androidx.compose.animation.core.animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) 260 else 0), label = "leave")
-  val puff by androidx.compose.animation.core.animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) 440 else 0), label = "puff")
-  Box(modifier) {
-  Column(
-    horizontalAlignment = Alignment.CenterHorizontally,
-    modifier = Modifier.graphicsLayer {
-      alpha = 1f - gone
-      scaleX = 1f - 0.12f * gone
-      scaleY = 1f - 0.12f * gone
-    },
-  ) {
+  // A deleted page dissolves into a small puff of cloud.
+  com.tali.notes.ui.components.PuffBox(leaving = leaving, appearing = false, modifier = modifier) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(PAGE_ASPECT)
@@ -203,7 +194,6 @@ private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int,
       modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) c.accent else Color.Transparent).padding(horizontal = 10.dp, vertical = 2.dp),
     )
   }
-  com.tali.notes.ui.components.CloudPuff(puff, Modifier.matchParentSize())
   }
 }
 
