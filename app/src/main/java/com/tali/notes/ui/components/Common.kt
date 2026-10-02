@@ -54,6 +54,9 @@ import com.tali.notes.theme.Tali
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.SolidColor
 
 fun relativeTime(millis: Long): String {
   val now = System.currentTimeMillis()
@@ -94,25 +97,35 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
   }
 }
 
-/** Round icon button with a pressed scale and optional selected tint. */
+/**
+ * Round icon button with a pressed scale and optional selected tint. Inside a group of choices, pass
+ * the group's [selection] and the highlight glides to it rather than appearing under it.
+ */
 @Composable
-fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enabled: Boolean = true, size: Dp = 44.dp, blue: Boolean = false, onClick: () -> Unit) {
+fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enabled: Boolean = true, size: Dp = 44.dp, blue: Boolean = false, selection: SlidingSelection? = null, onClick: () -> Unit) {
   val c = Tali.colors
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
-  Box(
-    Modifier.size(size)
-      .scale(if (pressed) 0.9f else 1f)
-      .clip(RoundedCornerShape(14.dp))
-      .background(if (selected) (if (blue) c.blueSoft else c.accentSoft) else Color.Transparent)
-      .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
-    contentAlignment = Alignment.Center,
-  ) {
-    Icon(icon, contentDescription = label, tint = when {
+  val wash by animateColorAsState(if (selected && selection == null) (if (blue) c.blueSoft else c.accentSoft) else Color.Transparent, tween(200), label = "wash")
+  val tint by animateColorAsState(
+    when {
       !enabled -> c.inkFaint.copy(alpha = 0.5f)
       selected -> if (blue) c.blue else c.accent
       else -> c.ink
-    }, modifier = Modifier.size(22.dp))
+    },
+    tween(200),
+    label = "tint",
+  )
+  Box(
+    Modifier.then(if (selection != null) Modifier.slidingOption(selection, label) else Modifier)
+      .size(size)
+      .scale(if (pressed) 0.9f else 1f)
+      .clip(RoundedCornerShape(14.dp))
+      .background(wash)
+      .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
   }
 }
 
@@ -140,22 +153,27 @@ fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modi
   }
 }
 
-/** Segmented control for two to four options. */
+/** Segmented control for two to four options; the white pill glides to the chosen one. */
 @Composable
-fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
+fun <T : Any> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
   val c = Tali.colors
-  Row(modifier.clip(RoundedCornerShape(12.dp)).background(c.sunken).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+  val glide = rememberSlidingSelection()
+  Row(
+    modifier.clip(RoundedCornerShape(12.dp)).background(c.sunken).slidingHighlight(glide, selected, SolidColor(c.surface), 10.dp, lift = true).padding(3.dp),
+    horizontalArrangement = Arrangement.spacedBy(3.dp),
+  ) {
     options.forEach { o ->
-      val on = o == selected
+      val ink by animateColorAsState(if (o == selected) c.ink else c.inkMuted, tween(220), label = "segment")
       Box(
         Modifier.weight(1f)
+          .slidingOption(glide, o)
           .clip(RoundedCornerShape(10.dp))
-          .background(if (on) c.surface else Color.Transparent)
-          .clickable(role = Role.RadioButton) { onSelect(o) }
+          // No ripple: the gliding pill is the feedback, and a grey flash under it looks muddy.
+          .clickable(interactionSource = null, indication = null, role = Role.RadioButton) { onSelect(o) }
           .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center,
       ) {
-        Text(label(o), style = MaterialTheme.typography.labelLarge, color = if (on) c.ink else c.inkMuted)
+        Text(label(o), style = MaterialTheme.typography.labelLarge, color = ink)
       }
     }
   }
@@ -191,20 +209,33 @@ fun QuietButton(text: String, modifier: Modifier = Modifier, color: Color = Tali
   }
 }
 
+/**
+ * A colour to pick. In a row of colours, pass the row's [selection] (hosted with [colorRing]) and the
+ * ring glides between them; on its own it draws its own ring.
+ */
 @Composable
-fun ColorDot(color: Color, selected: Boolean, size: Dp = 30.dp, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+fun ColorDot(color: Color, selected: Boolean, size: Dp = 30.dp, selection: SlidingSelection? = null, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
   val c = Tali.colors
   Box(
-    Modifier.size(size + 8.dp)
+    Modifier.then(if (selection != null) Modifier.slidingOption(selection, color) else Modifier)
+      .size(size + 8.dp)
       .clip(CircleShape)
-      .then(if (selected) Modifier.border(2.dp, c.accent, CircleShape) else Modifier)
-      .combinedClickableCompat(onClick, onLongClick)
+      .then(if (selected && selection == null) Modifier.border(2.dp, c.accent, CircleShape) else Modifier)
+      .then(
+        if (selection != null) Modifier.combinedClickable(interactionSource = null, indication = null, role = Role.RadioButton, onClick = onClick, onLongClick = onLongClick)
+        else Modifier.combinedClickableCompat(onClick, onLongClick)
+      )
       .padding(4.dp)
       .clip(CircleShape)
       .background(color)
       .border(1.dp, Color(0x22000000), CircleShape)
   )
 }
+
+/** Hosts the gliding ring for a row of [ColorDot]s; [selected] is the chosen colour. */
+@Composable
+fun Modifier.colorRing(selection: SlidingSelection, selected: Color?, color: Color = Tali.colors.accent, width: Dp = 2.dp): Modifier =
+  slidingHighlight(selection, selected, SolidColor(color), corner = 100.dp, ring = width)
 
 /**
  * The divider under the library title: an architect's scale ruler, with minor ticks and numbered

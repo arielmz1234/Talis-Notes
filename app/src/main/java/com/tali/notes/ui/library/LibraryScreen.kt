@@ -121,6 +121,12 @@ import com.tali.notes.ui.components.rememberThumbnail
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import com.tali.notes.ui.components.SlidingSelection
+import com.tali.notes.ui.components.rememberSlidingSelection
+import com.tali.notes.ui.components.slidingHighlight
+import com.tali.notes.ui.components.slidingOption
 
 @Composable
 fun LibraryScreen(onOpen: (String) -> Unit) {
@@ -467,9 +473,12 @@ private fun Sidebar(
 ) {
   val c = Tali.colors
   // No panel colour of its own: the sidebar shares the page, so there's no seam to see.
+  // One highlight glides between All notebooks, the folders and Recently deleted, taking on each folder's colour.
+  val nav = rememberSlidingSelection()
   Box(Modifier.width(268.dp).fillMaxHeight()) {
   Column(
     Modifier.fillMaxSize()
+      .slidingHighlight(nav, selected ?: ALL_NOTEBOOKS, c.washBrush, 14.dp)
       .windowInsetsPadding(WindowInsets.safeDrawing)
       .padding(horizontal = 18.dp)
   ) {
@@ -481,6 +490,8 @@ private fun Sidebar(
       label = "All notebooks",
       count = notebooks.size,
       selected = selected == null,
+      nav = nav,
+      key = ALL_NOTEBOOKS,
       onClick = { onSelect(null) },
     )
     Spacer(Modifier.height(22.dp))
@@ -529,6 +540,8 @@ private fun Sidebar(
             label = f.name,
             count = notebooks.count { it.folderId == f.id || it.folderId in descendants(folders, f.id) },
             selected = selected == f.id,
+            nav = nav,
+            key = f.id,
             onClick = { onSelect(f.id) },
             onLongClick = { menu = true },
             trailing = if (!hasChildren) null else {
@@ -564,6 +577,8 @@ private fun Sidebar(
         label = "Recently deleted",
         count = trashCount,
         selected = selected == LibraryViewModel.TRASH,
+        nav = nav,
+        key = LibraryViewModel.TRASH,
         onClick = { onSelect(LibraryViewModel.TRASH) },
       )
       Spacer(Modifier.height(4.dp))
@@ -653,21 +668,25 @@ private fun NewFolderDialog(title: String, placeholder: String, initialColor: In
   }
 }
 
+/** The sidebar's "All notebooks" entry, in the same keyspace as folder ids. */
+private const val ALL_NOTEBOOKS = "\u0000all"
+
 @Composable
-private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, trailing: (@Composable () -> Unit)? = null, wash: Brush? = null) {
+private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, selected: Boolean, nav: SlidingSelection, key: Any, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, trailing: (@Composable () -> Unit)? = null, wash: Brush? = null) {
   val c = Tali.colors
+  val ink by animateColorAsState(if (selected) c.ink else c.inkMuted, tween(220), label = "navInk")
   Row(
-    Modifier.fillMaxWidth()
+    Modifier.slidingOption(nav, key, wash)
+      .fillMaxWidth()
       .height(44.dp)
       .clip(RoundedCornerShape(14.dp))
-      .background(if (selected) wash ?: c.washBrush else SolidColor(Color.Transparent))
-      .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
+      .combinedClickable(interactionSource = null, indication = null, role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
       .padding(start = 12.dp, end = if (trailing != null) 4.dp else 12.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     icon()
     Spacer(Modifier.width(12.dp))
-    Text(label, style = MaterialTheme.typography.titleSmall, color = if (selected) c.ink else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    Text(label, style = MaterialTheme.typography.titleSmall, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = c.inkFaint)
     if (trailing != null) {
       Spacer(Modifier.width(2.dp))
@@ -679,18 +698,15 @@ private fun NavRow(icon: @Composable () -> Unit, label: String, count: Int, sele
 @Composable
 private fun CoverSwatches(current: Int, onPick: (Int) -> Unit) {
   val c = Tali.colors
+  val ring = rememberSlidingSelection()
   androidx.compose.foundation.layout.FlowRow(
-    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+    Modifier.padding(horizontal = 12.dp, vertical = 6.dp).slidingHighlight(ring, current, SolidColor(c.ink), corner = 100.dp, ring = 2.dp, above = true),
     horizontalArrangement = Arrangement.spacedBy(8.dp),
     verticalArrangement = Arrangement.spacedBy(8.dp),
     maxItemsInEachRow = 9,
   ) {
     com.tali.notes.data.PICK_COLORS.forEach { col ->
-      Box(
-        Modifier.size(26.dp).clip(CircleShape).background(Color(col))
-          .then(if (col == current) Modifier.border(2.dp, c.ink, CircleShape) else Modifier)
-          .clickable { onPick(col) }
-      )
+      Box(Modifier.slidingOption(ring, col).size(26.dp).clip(CircleShape).background(Color(col)).clickable(interactionSource = null, indication = null, role = Role.RadioButton) { onPick(col) })
     }
   }
 }

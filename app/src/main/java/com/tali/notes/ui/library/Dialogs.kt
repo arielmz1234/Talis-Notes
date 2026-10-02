@@ -58,6 +58,9 @@ import com.tali.notes.ui.components.cloudSurface
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.SectionLabel
+import com.tali.notes.ui.components.rememberSlidingSelection
+import com.tali.notes.ui.components.slidingHighlight
+import com.tali.notes.ui.components.slidingOption
 
 @Composable
 fun DialogCard(onDismiss: () -> Unit, width: Int = 520, content: @Composable () -> Unit) {
@@ -179,14 +182,20 @@ fun NewNotebookDialog(
       Spacer(Modifier.height(14.dp))
       SectionLabel("Cover")
       Spacer(Modifier.height(8.dp))
-      androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), maxItemsInEachRow = 9) {
+      val ring = rememberSlidingSelection()
+      androidx.compose.foundation.layout.FlowRow(
+        Modifier.slidingHighlight(ring, cover, SolidColor(c.ink), corner = 100.dp, ring = 2.5.dp, above = true),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        maxItemsInEachRow = 9,
+      ) {
         com.tali.notes.data.PICK_COLORS.forEach { col ->
           Box(
-            Modifier.size(30.dp)
+            Modifier.slidingOption(ring, col)
+              .size(30.dp)
               .clip(androidx.compose.foundation.shape.CircleShape)
               .background(Color(col))
-              .then(if (col == cover) Modifier.border(2.5.dp, c.ink, androidx.compose.foundation.shape.CircleShape) else Modifier)
-              .clickable(role = Role.RadioButton) { cover = col }
+              .clickable(interactionSource = null, indication = null, role = Role.RadioButton) { cover = col }
           )
         }
       }

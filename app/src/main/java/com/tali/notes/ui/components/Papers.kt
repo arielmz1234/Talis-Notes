@@ -71,6 +71,9 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.SolidColor
 
 /**
  * Paper choices: the built-in styles, then her own backgrounds, then a tile to make a new one. Her
@@ -93,25 +96,35 @@ fun PaperPicker(
   val c = Tali.colors
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
   var expanded by remember { mutableStateOf(false) }
-  FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp), maxItemsInEachRow = perRow) {
-    val tile: @Composable (String, Boolean, () -> Unit, (() -> Unit)?, @Composable (Modifier) -> Unit) -> Unit = { label, on, click, longClick, swatch ->
+  val glide = rememberSlidingSelection()
+  // While folded, More stands in for a paper in use that isn't one of the three, so it holds the highlight.
+  val foldedAway = !expanded && (customId ?: style.name) !in FOLDED
+  FlowRow(
+    modifier.slidingHighlight(glide, if (foldedAway) "more" else customId ?: style, SolidColor(c.accentSoft), 10.dp),
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+    maxItemsInEachRow = perRow,
+  ) {
+    val tile: @Composable (Any, String, Boolean, () -> Unit, (() -> Unit)?, @Composable (Modifier) -> Unit) -> Unit = { key, label, on, click, longClick, swatch ->
+      val edge by animateColorAsState(if (on) c.accent else Color.Transparent, tween(220), label = "swatchEdge")
+      val ink by animateColorAsState(if (on) c.accent else c.inkMuted, tween(220), label = "paperLabel")
       Column(
-        Modifier.width(tileWidth)
+        Modifier.slidingOption(glide, key)
+          .width(tileWidth)
           .clip(RoundedCornerShape(10.dp))
-          .background(if (on) c.accentSoft else Color.Transparent)
-          .combinedClickable(role = Role.RadioButton, onClickLabel = label, onClick = click, onLongClick = longClick)
+          .combinedClickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = label, onClick = click, onLongClick = longClick)
           .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
       ) {
-        swatch(Modifier.width(tileWidth * 0.62f).aspectRatio(1.22f).then(if (on) Modifier.border(1.5.dp, c.accent, RoundedCornerShape(8.dp)) else Modifier))
+        swatch(Modifier.width(tileWidth * 0.62f).aspectRatio(1.22f).border(1.5.dp, edge, RoundedCornerShape(8.dp)))
         Spacer(Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = if (on) c.accent else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
       }
     }
     // Every choice in order: the built-in papers, then hers.
     val all: List<Pair<String, @Composable () -> Unit>> =
-      PaperStyle.entries.map { s -> s.name to @Composable { tile(s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
-        customs.map { cp -> cp.id to @Composable { tile(cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
+      PaperStyle.entries.map { s -> s.name to @Composable { tile(s, s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
+        customs.map { cp -> cp.id to @Composable { tile(cp.id, cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
     // Folded: Blank, Lines and Grid, then More. Open: every paper, hers, and Your own last.
     val current = customId ?: style.name
     val shown = if (expanded) all else FOLDED.mapNotNull { name -> all.firstOrNull { it.first == name } }
@@ -119,7 +132,7 @@ fun PaperPicker(
     // While folded, More stands in for a paper in use that isn't one of the three.
     val hiddenCurrent = !expanded && current !in FOLDED
     val currentCustom = customs.firstOrNull { it.id == customId }
-    tile(if (expanded) "Fewer" else if (hiddenCurrent) (currentCustom?.name ?: style.label) else "More", hiddenCurrent, { expanded = !expanded }, null) { m ->
+    tile("more", if (expanded) "Fewer" else if (hiddenCurrent) (currentCustom?.name ?: style.label) else "More", hiddenCurrent, { expanded = !expanded }, null) { m ->
       Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
         if (hiddenCurrent) {
           if (currentCustom != null) CustomPaperSwatch(currentCustom, Modifier.fillMaxSize()) else PaperSwatch(style, Modifier.fillMaxSize())
@@ -133,7 +146,7 @@ fun PaperPicker(
       }
     }
     if (expanded) {
-      tile("Your own", false, onAdd, null) { m ->
+      tile("own", "Your own", false, onAdd, null) { m ->
         Box(m.clip(RoundedCornerShape(8.dp)).border(1.dp, c.line, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
           Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(18.dp))
         }
@@ -322,13 +335,19 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
               SectionLabel("Lines", Modifier.width(76.dp))
-              LINE_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.lineColor, size = 26.dp) { draft = draft.copy(lineColor = col) } }
+              val lineRing = rememberSlidingSelection()
+              Row(Modifier.colorRing(lineRing, Color(draft.lineColor))) {
+                LINE_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.lineColor, size = 26.dp, selection = lineRing) { draft = draft.copy(lineColor = col) } }
+              }
             }
           }
           Spacer(Modifier.height(6.dp))
           Row(verticalAlignment = Alignment.CenterVertically) {
             SectionLabel("Paper", Modifier.width(76.dp))
-            PAPER_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.paperColor, size = 26.dp) { draft = draft.copy(paperColor = col) } }
+            val paperRing = rememberSlidingSelection()
+            Row(Modifier.colorRing(paperRing, Color(draft.paperColor))) {
+              PAPER_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.paperColor, size = 26.dp, selection = paperRing) { draft = draft.copy(paperColor = col) } }
+            }
           }
           Spacer(Modifier.height(4.dp))
           ToggleRow("Margin line", draft.margin, { draft = draft.copy(margin = it) }, detail = "A red line down the left, like an exercise book")

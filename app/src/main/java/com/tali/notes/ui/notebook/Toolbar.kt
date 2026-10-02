@@ -59,6 +59,12 @@ import com.tali.notes.ui.components.PenGlyph
 import com.tali.notes.ui.components.ShapeIcon
 import com.tali.notes.ui.components.TaliIcons
 import com.tali.notes.ui.components.ToolButton
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.SolidColor
+import com.tali.notes.ui.components.rememberSlidingSelection
+import com.tali.notes.ui.components.slidingHighlight
+import com.tali.notes.ui.components.slidingOption
 
 @Composable
 fun MainToolbar(
@@ -97,21 +103,35 @@ fun MainToolbar(
     }
     // The pen's settings (style, size, colour) open from the little arrow.
     val turn by animateFloatAsState(if (penSettingsOpen) 180f else 0f, label = "turn")
+    val arrowWash by animateColorAsState(if (penSettingsOpen) c.accentSoft else Color.Transparent, tween(200), label = "arrowWash")
     Box(
-      Modifier.size(28.dp, 44.dp).clip(RoundedCornerShape(10.dp)).background(if (penSettingsOpen) c.accentSoft else Color.Transparent).clickable(onClickLabel = "Pen settings", role = Role.Button, onClick = onPenSettings),
+      Modifier.size(28.dp, 44.dp).clip(RoundedCornerShape(10.dp)).background(arrowWash).clickable(onClickLabel = "Pen settings", role = Role.Button, onClick = onPenSettings),
       contentAlignment = Alignment.Center,
     ) {
       Icon(Icons.Outlined.KeyboardArrowDown, "Pen settings", tint = if (penSettingsOpen) c.accent else c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
     }
     Divider()
-    ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true) { onTool(Tool.ERASER) }
-    ToolButton(TaliIcons.Lasso, "Lasso", selected = tool == Tool.LASSO, blue = true) { onTool(Tool.LASSO) }
-    Box(contentAlignment = Alignment.Center) {
-      ToolButton(Icons.Outlined.Category, "Shapes", selected = tool == Tool.SHAPE, blue = true) { onTool(Tool.SHAPE) }
-      if (tool == Tool.SHAPE) {
-        // Show which shape the shape tool will draw.
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.blueSoft).clickable { onTool(Tool.SHAPE) }, contentAlignment = Alignment.Center) {
-          if (customShape != null) GeometryIcon(customShape.geometry, c.blue, size = 26.dp) else ShapeIcon(shapeKind, c.blue, size = 26.dp)
+    // Eraser, lasso and shapes share one highlight that glides between them.
+    val tools = rememberSlidingSelection()
+    val toolKey = when (tool) {
+      Tool.ERASER -> "Eraser"
+      Tool.LASSO -> "Lasso"
+      Tool.SHAPE -> "Shapes"
+      else -> null
+    }
+    Row(Modifier.slidingHighlight(tools, toolKey, SolidColor(c.blueSoft), 14.dp), verticalAlignment = Alignment.CenterVertically) {
+      ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true, selection = tools) { onTool(Tool.ERASER) }
+      ToolButton(TaliIcons.Lasso, "Lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
+      // While the shape tool is on, its button shows which shape it will draw.
+      Box(
+        Modifier.slidingOption(tools, "Shapes").size(44.dp).clip(RoundedCornerShape(14.dp))
+          .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = "Shapes") { onTool(Tool.SHAPE) },
+        contentAlignment = Alignment.Center,
+      ) {
+        when {
+          tool != Tool.SHAPE -> Icon(Icons.Outlined.Category, "Shapes", tint = c.ink, modifier = Modifier.size(22.dp))
+          customShape != null -> GeometryIcon(customShape.geometry, c.blue, size = 26.dp)
+          else -> ShapeIcon(shapeKind, c.blue, size = 26.dp)
         }
       }
     }
