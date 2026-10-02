@@ -41,14 +41,51 @@ canvas.paste(src,(-x0,-y0),m)
 # Ensure areas beyond the source image use the gradient only (paste already handles that since src doesn't cover them).
 full=canvas.resize((432,432),Image.LANCZOS)
 full.save(OUT+'full432.png')
-# Monochrome: the white page and cloud as a silhouette (the lilac lines become gaps).
-s=np.asarray(canvas.convert('RGB')).astype(float)
-lum=np.asarray(Image.fromarray(s.min(2).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2.5))).astype(float)
-alpha=np.clip((lum-170)/14,0,1)*255
-# Keep only the page and the front cloud: drop the background clouds at the sides.
-ax=np.arange(x0,x0+side)[None,:]; ay=np.arange(y0,y0+side)[:,None]
-alpha=alpha*~(((ax<355)&(ay<645))|(ax>965)|(ay>1000))
-mono=Image.fromarray(np.dstack([np.full_like(alpha,255)]*3+[alpha]).astype(np.uint8),'RGBA').resize((432,432),Image.LANCZOS)
+# Monochrome (themed icons): a clean flat drawing of the page and the front cloud, traced by hand in
+# source-picture coordinates, rather than a threshold of the soft 3D picture.
+SS=4; k=432*SS/side
+def P(x, y): return ((x-x0)*k, (y-y0)*k)
+def R(v): return v*k
+def disc(d, cx, cy, r, fill):
+  (px, py) = P(cx, cy); d.ellipse((px-R(r), py-R(r), px+R(r), py+R(r)), fill=fill)
+def cloud(d, grow, fill):
+  for cx, cy, r in ((400, 775, 127), (275, 882, 90), (520, 855, 82), (625, 905, 76)):
+    disc(d, cx, cy, r+grow, fill)
+  d.rounded_rectangle((*P(275-grow, 880-grow), *P(640+grow, 984+grow)), radius=R(50+grow), fill=fill)
+def page_outline():
+  # Corners: top-left, top-right (rounder), down the slightly slanted right side to the curl, along the bottom.
+  pts=[]
+  def arc(cx, cy, r, a0, a1, n=24):
+    import math
+    for i in range(n+1):
+      t=math.radians(a0+(a1-a0)*i/n); pts.append(P(cx+r*math.cos(t), cy+r*math.sin(t)))
+  arc(416, 320, 52, 180, 270)       # top-left
+  arc(850, 340, 72, 270, 345)       # top-right
+  pts.append(P(948, 770))           # right side, where the curl begins
+  pts.append(P(838, 896))           # curl tip on the bottom edge
+  arc(416, 846, 50, 90, 180)        # bottom-left (hidden by the cloud anyway)
+  return pts
+mono_big=Image.new('L',(432*SS,432*SS),0)
+d=ImageDraw.Draw(mono_big)
+d.polygon(page_outline(), fill=255)
+# The lines on the page are cut out.
+for (xa, xb, y) in ((450, 845, 412), (455, 852, 507), (458, 853, 594), (523, 778, 683)):
+  d.rounded_rectangle((*P(xa, y-18), *P(xb, y+18)), radius=R(18), fill=0)
+gap=16
+# The folded corner: a classic dog-ear. The page's corner is cut off along A-B and folded over onto the page
+# (its tip lands at the corner mirrored across A-B), with a gap around the fold.
+A=np.array([948., 770.]); B=np.array([838., 896.]); corner=np.array([948., 896.])
+u=(B-A)/np.linalg.norm(B-A); foot=A+u*np.dot(corner-A, u); tip=2*foot-corner
+tri=[A, B, tip]
+def scaled(t, f):
+  c=sum(t)/3; return [tuple(P(*(c+(v-c)*f))) for v in t]
+d.polygon(scaled(tri, 1.0+gap/28), fill=0)
+d.polygon(scaled(tri, 0.97), fill=255)
+# The cloud sits in front with a gap around it.
+cloud(d, gap, 0)
+cloud(d, 0, 255)
+alpha=np.asarray(mono_big.resize((432,432),Image.LANCZOS)).astype(float)
+mono=Image.fromarray(np.dstack([np.full_like(alpha,255)]*3+[alpha]).astype(np.uint8),'RGBA')
 mono.save(OUT+'mono432.png')
 # Previews: what launchers show (central 72 of 108 dp) under a squircle and a circle mask.
 vis=full.crop((72,72,360,360))
