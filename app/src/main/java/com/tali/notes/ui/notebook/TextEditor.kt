@@ -55,6 +55,8 @@ import com.tali.notes.ui.components.ColorDot
 import com.tali.notes.ui.components.FloatingBar
 import com.tali.notes.ui.components.ToolButton
 import kotlin.math.roundToInt
+import com.tali.notes.ui.components.colorRing
+import com.tali.notes.ui.components.rememberSlidingSelection
 
 /**
  * Typing on the page: a text field laid exactly over the text block (it follows the page when it
@@ -121,7 +123,10 @@ fun TextEditorOverlay(
         SizeButton("A−") { onChange(edit.copy(fontSize = (edit.fontSize / 1.15f).coerceAtLeast(10f))) }
         SizeButton("A+") { onChange(edit.copy(fontSize = (edit.fontSize * 1.15f).coerceAtMost(160f))) }
         Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(24.dp).background(c.line))
-        colors.take(6).forEach { col -> ColorDot(Color(col), selected = col == edit.color, size = 24.dp) { onChange(edit.copy(color = col)) } }
+        val ring = rememberSlidingSelection()
+        Row(Modifier.colorRing(ring, Color(edit.color)), verticalAlignment = Alignment.CenterVertically) {
+          colors.take(6).forEach { col -> ColorDot(Color(col), selected = col == edit.color, size = 24.dp, selection = ring) { onChange(edit.copy(color = col)) } }
+        }
         Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(24.dp).background(c.line))
         ToolButton(Icons.Outlined.DeleteOutline, "Delete text") {
           keyboard?.hide()

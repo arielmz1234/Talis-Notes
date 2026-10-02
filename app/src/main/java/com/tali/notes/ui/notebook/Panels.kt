@@ -72,6 +72,16 @@ import com.tali.notes.ui.components.dashedCircle
 import com.tali.notes.ui.library.NameDialog
 import com.tali.notes.ui.library.ConfirmDialog
 import com.tali.notes.ui.components.combinedClickableCompat
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.SolidColor
+import com.tali.notes.ui.components.colorRing
+import com.tali.notes.ui.components.rememberSlidingSelection
+import com.tali.notes.ui.components.slidingHighlight
+import com.tali.notes.ui.components.slidingOption
 
 @Composable
 private fun PanelColumn(width: Int, content: @Composable () -> Unit) {
@@ -106,17 +116,18 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
   var picking by remember { mutableStateOf(false) }
   var removeTarget by remember { mutableStateOf<Int?>(null) }
   PanelColumn(392) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    val types = rememberSlidingSelection()
+    Row(Modifier.slidingHighlight(types, slot.type, SolidColor(c.accentSoft), 14.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
       PenType.entries.forEach { type ->
-        val on = type == slot.type
+        val ink by animateColorAsState(Color(if (type == slot.type) slot.color else 0xFF8E95A2.toInt()), tween(220), label = "penInk")
         Box(
-          Modifier.size(58.dp, 66.dp)
+          Modifier.slidingOption(types, type)
+            .size(58.dp, 66.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(if (on) c.accentSoft else Color.Transparent)
-            .clickable(role = Role.RadioButton, onClickLabel = type.label) { vm.setPenType(type) },
+            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = type.label) { vm.setPenType(type) },
           contentAlignment = Alignment.BottomCenter,
         ) {
-          PenGlyph(type, Color(if (on) slot.color else 0xFF8E95A2.toInt()), Modifier.padding(bottom = 0.dp))
+          PenGlyph(type, ink, Modifier.padding(bottom = 0.dp))
         }
       }
     }
@@ -133,10 +144,11 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(10.dp))
     SectionLabel("Colours")
     Spacer(Modifier.height(8.dp))
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    val ring = rememberSlidingSelection()
+    FlowRow(Modifier.colorRing(ring, Color(slot.color)), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       settings.savedColors.forEach { col ->
         Box {
-          ColorDot(Color(col), selected = col == slot.color, onLongClick = { removeTarget = col }) { vm.updateActivePen { it.copy(color = col) } }
+          ColorDot(Color(col), selected = col == slot.color, selection = ring, onLongClick = { removeTarget = col }) { vm.updateActivePen { it.copy(color = col) } }
           DropdownMenu(expanded = removeTarget == col, onDismissRequest = { removeTarget = null }) {
             DropdownMenuItem(text = { Text("Remove colour") }, onClick = {
               vm.removeColor(col)
@@ -237,10 +249,14 @@ private fun FilterChips(content: @Composable () -> Unit) {
 private fun FilterChip(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
   val c = Tali.colors
   val shape = RoundedCornerShape(12.dp)
+  val wash by animateColorAsState(if (on) c.blueSoft else Color.Transparent, tween(200), label = "chipWash")
+  val edge by animateColorAsState(if (on) c.sky else c.line, tween(200), label = "chipEdge")
+  val ink by animateColorAsState(if (on) c.blue else c.inkMuted, tween(200), label = "chipInk")
   Row(
-    Modifier.clip(shape)
-      .background(if (on) c.blueSoft else Color.Transparent)
-      .border(1.dp, if (on) c.sky else c.line, shape)
+    Modifier.animateContentSize(spring(stiffness = Spring.StiffnessMediumLow))
+      .clip(shape)
+      .background(wash)
+      .border(1.dp, edge, shape)
       .clickable(role = Role.Checkbox, onClickLabel = label) { onChange(!on) }
       .padding(start = if (on) 8.dp else 12.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -249,7 +265,7 @@ private fun FilterChip(label: String, on: Boolean, onChange: (Boolean) -> Unit) 
       Icon(Icons.Outlined.Check, null, tint = c.blue, modifier = Modifier.size(16.dp))
       Spacer(Modifier.width(4.dp))
     }
-    Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) c.blue else c.inkMuted)
+    Text(label, style = MaterialTheme.typography.labelLarge, color = ink)
   }
 }
 
@@ -356,16 +372,20 @@ private fun MyShapes(shapes: List<CustomShape>, vm: NotebookViewModel) {
 @Composable
 private fun ShapeTile(label: String, on: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: @Composable (Color) -> Unit) {
   val c = Tali.colors
+  // The tiles are cards of their own, so the choice fades across rather than gliding under them.
+  val wash by animateColorAsState(if (on) c.blueSoft else c.background, tween(220), label = "tileWash")
+  val ink by animateColorAsState(if (on) c.blue else c.ink, tween(220), label = "tileInk")
+  val label2 by animateColorAsState(if (on) c.blue else c.inkMuted, tween(220), label = "tileLabel")
   Column(
     Modifier.width(93.dp)
       .clip(RoundedCornerShape(14.dp))
-      .background(if (on) c.blueSoft else c.background)
+      .background(wash)
       .combinedClickableCompat(onClick = onClick, onLongClick = onLongClick)
       .padding(vertical = 8.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    icon(if (on) c.blue else c.ink)
+    icon(ink)
     Spacer(Modifier.height(4.dp))
-    Text(label, style = MaterialTheme.typography.labelSmall, color = if (on) c.blue else c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
+    Text(label, style = MaterialTheme.typography.labelSmall, color = label2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
   }
 }

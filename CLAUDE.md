@@ -118,9 +118,11 @@ In order, see `git log`:
 4. PDF export qualities (Best, Balanced, Light, One long page) with the real file size shown.
 5. Cloud-puff animations (`ui/components/CloudPuff.kt`), hide-toolbars mode, gliding scroll.
 6. Typed text (`TextItem`, `ui/notebook/TextEditor.kt`).
+7. Gliding selection (`ui/components/SlidingSelection.kt`). One highlight springs from option to option and stretches as it travels. It is used in every one-of-many choice: segmented controls, the eraser/lasso/shapes tools, pen types, colour rings, paper tiles, the library sidebar and cover swatches. Options with a gliding highlight have no ripple. Shape tiles (cards of their own) and on/off chips fade their colours instead.
 
 Working setup notes:
 - On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.
 - The `medium_tablet` AVD may need creating. Copy another AVD's `config.ini` with 1334×800 @160dpi, landscape.
 - Python edits on Windows: write files in text mode so they keep CRLF.
+- Compose UI tests also run on the JVM with Robolectric (`app/src/test/.../ui/components/SlidingSelectionTest.kt`, which saves animation frames to `app/build/sliding-frames/`). Use `application = android.app.Application::class`, because the real app loads Ink's native library. After changing state from the test thread under a paused clock, call `Snapshot.sendApplyNotifications()`. If Robolectric can't download `android-all-instrumented`, put the jar in `~/.m2/repository` by hand.
 - Cloud sessions (Linux, no KVM, so no emulator): install the SDK command-line tools from dl.google.com into `~/android-sdk`, then `sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"`, write `local.properties`, and build. Maven Central sometimes answers 429; retry with a pause. Built APKs there are signed with a throwaway debug key, so they won't install over a debug build made on the owner's PC.
