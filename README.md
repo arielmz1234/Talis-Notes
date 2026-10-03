@@ -9,7 +9,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - The highlighter draws straight lines by default (level or upright when within 4°), or freehand; its tip can be round or square. Both are set in its pen settings.
 - **Laser:** a pointer in the toolbar that leaves a glowing red trail; it stays lit while she keeps pointing (several strokes too) and fades about a second after she stops. Nothing is saved.
 - **Line styles:** any pen (not the highlighter) can draw Solid, Dotted, Long dash, Short dash, Dot and dash or Mixed dash, chosen in the pen settings. The pattern draws live under the pen, and shapes drawn with that pen use it too (arrow barbs stay solid).
-- **Quick colours:** three colour dots beside the pens switch the active pen's colour without opening its settings. They are that pen's three most recent colours; a new colour takes the place of the one used longest ago, so the dots don't jump around.
+- **Quick colours:** the first few of her saved colours sit beside the pens (how many, 0-6, is set under the colours in the pen settings, for every notebook). Hold a colour in the pen settings and drag it to change the order.
 - Low-latency inking (androidx.ink), with pressure.
 - The S Pen side button erases while held.
 - **Hold to perfect:** pause at the end of a stroke and it snaps into a clean shape: a line (with 0°, 30°, 45°, 60° and 90° snapping), arrow, circle, ellipse, triangle, rectangle, polygon or star. Keep moving without lifting to resize it (a line follows the pen tip).

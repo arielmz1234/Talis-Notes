@@ -424,7 +424,21 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         .then(if (key.isEmpty()) Modifier else Modifier.onGloballyPositioned { recordBar(key, it) })
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
-      val titlePill: @Composable () -> Unit = { Box(Modifier.bar("title", 0)) { TitlePill(meta?.title ?: "", onBack = onBack, onRename = { renaming = true }) } }
+      // Back, the notebook's name, and undo/redo beside it: far from the eye at the other end, which
+      // she kept pressing by accident when it sat next to redo.
+      val titlePill: @Composable () -> Unit = {
+        Box(Modifier.bar("title", 0)) {
+          TitlePill(
+            meta?.title ?: "",
+            onBack = onBack,
+            onRename = { renaming = true },
+            canUndo = vm.canUndo,
+            canRedo = vm.canRedo,
+            onUndo = { holder.view?.runSafely { undo() } },
+            onRedo = { holder.view?.runSafely { redo() } },
+          )
+        }
+      }
       val tools: @Composable () -> Unit = {
         Column(Modifier.bar("", 1), horizontalAlignment = Alignment.CenterHorizontally) {
           MainToolbar(
@@ -482,14 +496,12 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
       val undoBar: @Composable () -> Unit = {
         Box(Modifier.bar("undo", 2)) {
-          UndoRedoBar(
-            canUndo = vm.canUndo,
-            canRedo = vm.canRedo,
-            onUndo = { holder.view?.runSafely { undo() } },
-            onRedo = { holder.view?.runSafely { redo() } },
-          ) {
-            // The eye sits at the far end, past ⋯: right beside redo, a slip of the finger hid every
-            // toolbar; now a slip only opens the menu.
+          // The eye, then ⋯ always in the top-right corner.
+          FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
+            ToolButton(Icons.Outlined.VisibilityOff, "Hide toolbars") {
+              vm.panel = null
+              vm.focus = true
+            }
             MoreMenu(
               paged = paged,
               darkPaper = darkPaper,
@@ -530,10 +542,6 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               hideNavBar = settings.hideNavBar,
               onHideNavBar = vm::setHideNavBar,
             )
-            ToolButton(Icons.Outlined.VisibilityOff, "Hide toolbars") {
-              vm.panel = null
-              vm.focus = true
-            }
           }
         }
       }
@@ -676,7 +684,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 }
 
 @Composable
-private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit) {
+private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit) {
   val c = Tali.colors
   // Back on a little cloud of its own; the name beside it, with a pencil to rename.
   Row(verticalAlignment = Alignment.CenterVertically) {
@@ -693,6 +701,11 @@ private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         Icon(Icons.Outlined.Edit, "Rename", tint = c.inkFaint, modifier = Modifier.size(16.dp))
       }
+    }
+    Spacer(Modifier.width(10.dp))
+    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
+      ToolButton(Icons.AutoMirrored.Outlined.Undo, "Undo", enabled = canUndo, onClick = onUndo)
+      ToolButton(Icons.AutoMirrored.Outlined.Redo, "Redo", enabled = canRedo, onClick = onRedo)
     }
   }
 }

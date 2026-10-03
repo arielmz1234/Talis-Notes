@@ -77,6 +77,8 @@ data class AppSettings(
   val paperLineWeight: Float = 1f,
   /** The system navigation bar is hidden inside notebooks (swipe up to see it). */
   val hideNavBar: Boolean = false,
+  /** How many of her saved colours (the first ones, in her order) sit beside the pens in the toolbar. */
+  val toolbarColors: Int = 3,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
 ) {

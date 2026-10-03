@@ -153,16 +153,24 @@ class CloudPuffTest {
   }
 
   @Test
-  fun deletionMistIsNotCutOffByItsList() {
+  fun deletionMistIsNotCutOffByItsList() = mistAboveTheList(centred = false)
+
+  /** The pages window centres its content; the mist must still play over the page, not off to one side. */
+  @Test
+  fun deletionMistStaysOnItsPageInACentredWindow() = mistAboveTheList(centred = true)
+
+  private fun mistAboveTheList(centred: Boolean) {
     rule.mainClock.autoAdvance = false
     val bg = Color(0xFFF4EEFF)
     rule.setContent {
       TaliTheme(darkTheme = false) {
-        PuffLayerHost(Modifier.testTag("stage").size(400.dp, 400.dp).background(bg)) {
+        PuffLayerHost(Modifier.testTag("stage").size(400.dp, 400.dp).background(bg), contentAlignment = if (centred) Alignment.Center else Alignment.TopStart) {
           // Like the pages grid: a list that clips to its own bounds, a card at its top edge.
-          Box(Modifier.padding(top = 160.dp, start = 100.dp).size(200.dp, 200.dp).clipToBounds()) {
-            PuffBox(leaving = leaving, appearing = false) {
-              Box(Modifier.size(200.dp, 120.dp).background(Color.White))
+          Box(Modifier.size(400.dp, 400.dp)) {
+            Box(Modifier.padding(top = 160.dp, start = 100.dp).size(200.dp, 200.dp).clipToBounds()) {
+              PuffBox(leaving = leaving, appearing = false) {
+                Box(Modifier.size(200.dp, 120.dp).background(Color.White))
+              }
             }
           }
         }
@@ -171,12 +179,14 @@ class CloudPuffTest {
     rule.mainClock.advanceTimeBy(500)
     leaving = true
     Snapshot.sendApplyNotifications()
-    record("unclipped", 30)
-    // Mid-puff, the mist has risen above the list's top edge, where the list would have cut it off.
-    rule.mainClock.advanceTimeBy(0)
+    record(if (centred) "centred" else "unclipped", 30)
+    // Mid-puff, the mist has risen above the list's top edge, right over where the card was.
     val mid = rule.onNodeWithTag("stage").captureToImage().asAndroidBitmap()
     val above = (0 until 150).count { y -> mid.getPixel(200, y) != bg.toArgb() }
-    assertTrue("no mist above the list ($above px)", above > 10)
+    assertTrue("no mist above the card ($above px)", above > 10)
+    // And none far off to the bottom right, where a shifted puff would land.
+    val offside = (330 until 400).count { y -> mid.getPixel(390, y) != bg.toArgb() }
+    assertEquals("mist off to the side", 0, offside)
     rule.mainClock.advanceTimeBy(1200)
     val after = rule.onNodeWithTag("stage").captureToImage().asAndroidBitmap()
     assertEquals(bg.toArgb(), after.getPixel(200, 120))

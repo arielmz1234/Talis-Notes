@@ -1,5 +1,11 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.zIndex
 import android.graphics.Matrix
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -37,6 +43,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -117,7 +124,6 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
   val slot = settings.activeSlot
   var picking by remember { mutableStateOf(false) }
-  var removeTarget by remember { mutableStateOf<Int?>(null) }
   PanelColumn(392) {
     val types = rememberSlidingSelection()
     Row(Modifier.slidingHighlight(types, slot.type, SolidColor(c.accentSoft), 14.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -164,27 +170,25 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(10.dp))
     SectionLabel("Colours")
     Spacer(Modifier.height(8.dp))
-    val ring = rememberSlidingSelection()
-    FlowRow(Modifier.colorRing(ring, Color(slot.color)), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-      settings.savedColors.forEach { col ->
-        Box {
-          ColorDot(Color(col), selected = col == slot.color, selection = ring, onLongClick = { removeTarget = col }) { vm.pickPenColor(col) }
-          DropdownMenu(expanded = removeTarget == col, onDismissRequest = { removeTarget = null }) {
-            DropdownMenuItem(text = { Text("Remove colour") }, onClick = {
-              vm.removeColor(col)
-              removeTarget = null
-            })
-          }
-        }
-      }
-      Box(
-        Modifier.size(38.dp).clip(CircleShape).clickable(onClickLabel = "Add a colour") { picking = !picking },
-        contentAlignment = Alignment.Center,
-      ) {
-        Canvas(Modifier.size(30.dp)) { dashedCircle(c.inkFaint, size.width / 2 - 2f) }
-        Icon(Icons.Outlined.Add, null, tint = c.inkMuted, modifier = Modifier.size(18.dp))
+    ReorderableColors(
+      colors = settings.savedColors,
+      selected = slot.color,
+      inToolbar = settings.toolbarColors,
+      onPick = vm::pickPenColor,
+      onReorder = vm::reorderColors,
+      onRemove = vm::removeColor,
+      onAdd = { picking = !picking },
+    )
+    Spacer(Modifier.height(12.dp))
+    // The first few colours above sit in the toolbar beside the pens, for every notebook.
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Column(Modifier.weight(1f)) {
+        Text("In the toolbar", style = MaterialTheme.typography.bodyMedium, color = c.ink)
+        Text("The first colours, in this order · hold one and drag to move it", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
       }
     }
+    Spacer(Modifier.height(8.dp))
+    Segmented((0..6).toList(), settings.toolbarColors, { if (it == 0) "None" else "$it" }, vm::setToolbarColors, Modifier.fillMaxWidth())
     if (picking) {
       Spacer(Modifier.height(12.dp))
       ColorPicker(
@@ -466,5 +470,104 @@ private fun ShapeTile(label: String, on: Boolean, onClick: () -> Unit, onLongCli
     icon(ink)
     Spacer(Modifier.height(4.dp))
     Text(label, style = MaterialTheme.typography.labelSmall, color = label2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
+  }
+}
+
+/**
+ * Her saved colours. Tap one to use it; hold one and drag it to a new place (the others make room
+ * as it passes); hold one without moving for "Remove colour". The first [inToolbar] are marked
+ * with a small dot: those are the ones beside the pens in the toolbar.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReorderableColors(
+  colors: List<Int>,
+  selected: Int,
+  inToolbar: Int,
+  onPick: (Int) -> Unit,
+  onReorder: (List<Int>) -> Unit,
+  onRemove: (Int) -> Unit,
+  onAdd: () -> Unit,
+) {
+  val c = Tali.colors
+  val ring = rememberSlidingSelection()
+  // While dragging, the order shown follows the finger; it's saved when she lets go.
+  var order by remember { mutableStateOf(colors) }
+  var dragging by remember { mutableStateOf<Int?>(null) }
+  var dragAt by remember { mutableStateOf(Offset.Zero) }
+  var removeTarget by remember { mutableStateOf<Int?>(null) }
+  if (dragging == null && order != colors) order = colors
+  val centres = remember { HashMap<Int, Offset>() }
+  FlowRow(Modifier.colorRing(ring, Color(selected)), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    order.forEachIndexed { i, col ->
+      // Keyed by colour, so a dot keeps its drag going as it moves to a new place.
+      key(col) {
+      val lifted = dragging == col
+      val scale by androidx.compose.animation.core.animateFloatAsState(if (lifted) 1.18f else 1f, tween(160), label = "colourLift")
+      Box(
+        Modifier
+          .zIndex(if (lifted) 1f else 0f)
+          .onGloballyPositioned { centres[col] = it.boundsInRoot().center }
+          .graphicsLayer {
+            if (lifted) {
+              val home = centres[col] ?: dragAt
+              translationX = dragAt.x - home.x
+              translationY = dragAt.y - home.y
+            }
+            scaleX = scale
+            scaleY = scale
+          }
+          .pointerInput(col) {
+            var moved = false
+            detectDragGesturesAfterLongPress(
+              onDragStart = {
+                moved = false
+                dragging = col
+                dragAt = centres[col] ?: Offset.Zero
+              },
+              onDrag = { change, amount ->
+                change.consume()
+                moved = moved || amount.getDistance() > 0.5f
+                dragAt += amount
+                // Make room: take the place of whichever colour the finger is now over.
+                val over = order.minByOrNull { other -> centres[other]?.let { (it - dragAt).getDistance() } ?: Float.MAX_VALUE }
+                if (over != null && over != col && (centres[over]!! - dragAt).getDistance() < 24.dp.toPx()) {
+                  val list = order.toMutableList()
+                  list.remove(col)
+                  list.add(order.indexOf(over), col)
+                  order = list
+                }
+              },
+              onDragEnd = {
+                dragging = null
+                if (moved) onReorder(order) else removeTarget = col
+              },
+              onDragCancel = {
+                dragging = null
+                order = colors
+              },
+            )
+          },
+        contentAlignment = Alignment.BottomCenter,
+      ) {
+        ColorDot(Color(col), selected = col == selected, selection = ring) { onPick(col) }
+        // In the toolbar: a small dot under it.
+        if (i < inToolbar) Box(Modifier.size(4.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.7f)))
+        DropdownMenu(expanded = removeTarget == col, onDismissRequest = { removeTarget = null }) {
+          DropdownMenuItem(text = { Text("Remove colour") }, onClick = {
+            onRemove(col)
+            removeTarget = null
+          })
+        }
+      }
+      }
+    }
+    Box(
+      Modifier.size(38.dp).clip(CircleShape).clickable(onClickLabel = "Add a colour", onClick = onAdd),
+      contentAlignment = Alignment.Center,
+    ) {
+      Canvas(Modifier.size(30.dp)) { dashedCircle(c.inkFaint, size.width / 2 - 2f) }
+      Icon(Icons.Outlined.Add, null, tint = c.inkMuted, modifier = Modifier.size(18.dp))
+    }
   }
 }

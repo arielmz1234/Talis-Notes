@@ -63,9 +63,14 @@ import com.tali.notes.ui.components.slidingHighlight
 import com.tali.notes.ui.components.slidingOption
 
 @Composable
-fun DialogCard(onDismiss: () -> Unit, width: Int = 520, content: @Composable () -> Unit) {
+fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, content: @Composable () -> Unit) {
   val c = Tali.colors
   Dialog(onDismissRequest = onDismiss) {
+    if (!dim) {
+      // No darkened screen behind it: the card floats on its own shadow.
+      val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+      androidx.compose.runtime.SideEffect { window?.setDimAmount(0f) }
+    }
     Column(
       // The same soft cloud surface as the notebook panels, floating on a lilac shadow.
       Modifier.width(width.dp).cloudSurface(24.dp, shadowDepth = 12.dp).padding(28.dp)
@@ -257,7 +262,8 @@ fun NameDialog(title: String, initial: String, placeholder: String, confirm: Str
 @Composable
 fun ConfirmDialog(title: String, body: String, confirm: String, destructive: Boolean = false, onDismiss: () -> Unit, onConfirm: () -> Unit) {
   val c = Tali.colors
-  DialogCard(onDismiss, width = 460) {
+  // Confirmations don't darken the screen (the owner found the tint heavy-handed).
+  DialogCard(onDismiss, width = 460, dim = false) {
     Text(title, style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(10.dp))
     Text(body, style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)

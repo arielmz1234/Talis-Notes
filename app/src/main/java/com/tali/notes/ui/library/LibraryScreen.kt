@@ -361,7 +361,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   }
   if (backups) BackupDialog(onDismiss = { backups = false })
   trashAction?.let { nb ->
-    DialogCard(onDismiss = { trashAction = null }, width = 480) {
+    DialogCard(onDismiss = { trashAction = null }, width = 480, dim = false) {
       Text("“${nb.title}”", style = MaterialTheme.typography.titleLarge, color = c.ink)
       Spacer(Modifier.height(8.dp))
       val left = NotesRepository.TRASH_DAYS - ((System.currentTimeMillis() - (nb.deleted ?: 0L)) / 86_400_000L).toInt()

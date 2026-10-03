@@ -268,6 +268,11 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun removeColor(color: Int) = store.update { s -> s.copy(savedColors = s.savedColors - color) }
 
+  /** Her colours in a new order (the toolbar shows the first few). */
+  fun reorderColors(order: List<Int>) = store.update { s -> if (order.toSet() == s.savedColors.toSet()) s.copy(savedColors = order) else s }
+
+  fun setToolbarColors(n: Int) = store.update { it.copy(toolbarColors = n.coerceIn(0, 6)) }
+
   fun setEraserAffects(type: PenType, on: Boolean) = store.update { it.copy(eraserAffects = it.eraserAffects + (type to on)) }
 
   fun setLassoAffects(type: PenType, on: Boolean) = store.update { it.copy(lassoAffects = it.lassoAffects + (type to on)) }

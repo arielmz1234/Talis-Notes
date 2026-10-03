@@ -120,10 +120,10 @@ fun MainToolbar(
     ) {
       Icon(Icons.Outlined.KeyboardArrowDown, "Pen settings", tint = if (penSettingsOpen) c.accent else c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
     }
-    // The pen's three quick colours: switch without opening its settings. The ring glides between
-    // them, and to their new places when another pen is picked.
+    // Her first few saved colours (as many as she chose, in her order): switch the pen's colour
+    // without opening its settings. The ring glides between them.
     AnimatedVisibility(
-      tool == Tool.PEN,
+      tool == Tool.PEN && settings.toolbarColors > 0,
       enter = fadeIn(tween(180)) + expandHorizontally(tween(220, easing = EaseOutStrong), expandFrom = Alignment.Start),
       exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160, easing = EaseOutStrong), shrinkTowards = Alignment.Start),
     ) {
@@ -131,7 +131,7 @@ fun MainToolbar(
       fun shown(col: Int) = Color(if (darkPaper) com.tali.notes.ink.Brushes.onDarkPaper(col) else col)
       val ring = rememberSlidingSelection()
       Row(Modifier.padding(start = 2.dp).colorRing(ring, shown(slot.color)), verticalAlignment = Alignment.CenterVertically) {
-        slot.quickColors.forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
+        settings.savedColors.take(settings.toolbarColors).forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
       }
     }
     Divider()
@@ -187,16 +187,6 @@ fun MainToolbar(
     // Typing: a text block where the next line would go.
     ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard)
     Spacer(Modifier.width(2.dp))
-  }
-}
-
-@Composable
-fun UndoRedoBar(canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, trailing: @Composable () -> Unit) {
-  FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
-    ToolButton(Icons.AutoMirrored.Outlined.Undo, "Undo", enabled = canUndo, onClick = onUndo)
-    ToolButton(Icons.AutoMirrored.Outlined.Redo, "Redo", enabled = canRedo, onClick = onRedo)
-    Divider()
-    trailing()
   }
 }
 

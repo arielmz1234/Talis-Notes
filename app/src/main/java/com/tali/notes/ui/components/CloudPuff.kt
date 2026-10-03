@@ -83,8 +83,8 @@ const val SUBTLE_PUFF_MS = 520
  * Deleting a card, row or page: the element takes a little longer to go and its fuller mist lasts
  * longer, so it's noticed. Callers wait [PUFF_LEAVE_MS] before removing it.
  */
-private const val DELETE_LEAVE_MS = 240
-const val PUFF_LEAVE_MS = 700
+private const val DELETE_LEAVE_MS = 220
+const val PUFF_LEAVE_MS = 600
 private const val ELEMENT_ARRIVE_MS = 260
 private const val PUFF_ARRIVE_MS = 520
 
@@ -129,8 +129,9 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
           val cx = m + w / 2
           val cy = m + h / 2
           // The whole cloud rises and swells together; each wisp only wanders a little from it.
-          val lift = -minOf(h, w) * 0.28f * EaseOutStrong.transform(t)
-          val swell = 1f + 0.22f * EaseOutStrong.transform(t)
+          // A deletion's fuller cloud stays a touch smaller, so it doesn't overwhelm the screen.
+          val lift = -minOf(h, w) * (if (vivid) 0.22f else 0.28f) * EaseOutStrong.transform(t)
+          val swell = 1f + (if (vivid) 0.14f else 0.22f) * EaseOutStrong.transform(t)
           for (pass in (if (shade != null) 0 else 1)..1) for (p in wisps) {
             // The lilac underside sits only under the lower part of the cloud.
             if (pass == 0 && p.tone < TONES / 2) continue
@@ -143,7 +144,7 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
             if (a <= 0.004f) continue
             val x = cx + p.x * swell + p.dx * go
             val y = cy + p.y * swell + p.dy * go + lift + if (pass == 0) p.r * 0.3f else 0f
-            val r = p.r * (0.9f + 0.45f * go)
+            val r = p.r * (if (vivid) 0.82f + 0.36f * go else 0.9f + 0.45f * go)
             val d = (2 * r).roundToInt().coerceAtLeast(1)
             drawImage(
               sprite,
@@ -257,6 +258,8 @@ fun PuffLayerHost(modifier: Modifier = Modifier, contentAlignment: Alignment = A
   val layer = remember(scope) { PuffLayer(scope) }
   Box(modifier.onGloballyPositioned { layer.host = it }, contentAlignment = contentAlignment) {
     CompositionLocalProvider(LocalPuffLayer provides layer) { this@Box.content() }
+    // Its own top-left-aligned box: the host may centre its content, which would shift the mist.
+    Box(Modifier.matchParentSize()) {
     layer.puffs.forEach { p ->
       key(p) {
         CloudPuff(
@@ -269,6 +272,7 @@ fun PuffLayerHost(modifier: Modifier = Modifier, contentAlignment: Alignment = A
           vivid = true,
         )
       }
+    }
     }
   }
 }
