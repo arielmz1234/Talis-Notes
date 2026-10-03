@@ -319,7 +319,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   /** Sets the active pen's [i]th thickness. */
   fun setPenPreset(i: Int, v: Float) = updateActivePen { it.setPreset(i, v.coerceIn(it.type.minSize, it.type.maxSize)) }
 
-  fun setToolbarColors(n: Int) = store.update { it.copy(toolbarColors = n.coerceIn(0, 6)) }
+  /** How many colours the active pen shows in the toolbar (each pen has its own). */
+  fun setToolbarColors(n: Int) = updateActivePen { it.copy(toolbarColors = n.coerceIn(0, 6)) }
 
   fun setEraserAffects(type: PenType, on: Boolean) = store.update { it.copy(eraserAffects = it.eraserAffects + (type to on)) }
 

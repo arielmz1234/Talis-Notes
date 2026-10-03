@@ -68,6 +68,8 @@ data class PenSlot(
   val sizes: List<Float> = emptyList(),
   /** Which of the three thicknesses [size] is. */
   val sizeSlot: Int = 1,
+  /** How many of its palette's first colours sit beside the pens while it's in use; null until set (the app-wide number). */
+  val toolbarColors: Int? = null,
   /** Starred pens are the ones a double (next) or triple (back) press of the S Pen button cycles through. */
   val starred: Boolean = false,
 ) {

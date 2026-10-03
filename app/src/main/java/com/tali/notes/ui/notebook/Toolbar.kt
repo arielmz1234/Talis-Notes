@@ -139,7 +139,7 @@ fun MainToolbar(
     // Her first few saved colours (as many as she chose, in her order): switch the pen's colour
     // without opening its settings. The ring glides between them.
     AnimatedVisibility(
-      tool == Tool.PEN && settings.toolbarColors > 0,
+      tool == Tool.PEN && settings.toolbarColorsFor(settings.activeSlot) > 0,
       enter = fadeIn(tween(180)) + expandHorizontally(tween(220, easing = EaseOutStrong), expandFrom = Alignment.Start),
       exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160, easing = EaseOutStrong), shrinkTowards = Alignment.Start),
     ) {
@@ -148,7 +148,7 @@ fun MainToolbar(
       val ring = rememberSlidingSelection()
       // Changing how many colours there are eases the toolbar to its new width instead of jumping.
       Row(Modifier.animateContentSize(tween(220, easing = EaseOutStrong)).padding(start = 2.dp).colorRing(ring, shown(slot.color)), verticalAlignment = Alignment.CenterVertically) {
-        settings.paletteFor(slot).take(settings.toolbarColors).forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
+        settings.paletteFor(slot).take(settings.toolbarColorsFor(slot)).forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
       }
     }
     // Her three thicknesses for this pen. Tap one to write with it; tap the one in use to set it.
@@ -159,7 +159,7 @@ fun MainToolbar(
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         // A short line keeps the colours and the thicknesses apart.
-        if (settings.toolbarColors > 0) Box(Modifier.padding(start = 6.dp, end = 2.dp).width(1.dp).height(20.dp).background(c.line))
+        if (settings.toolbarColorsFor(settings.activeSlot) > 0) Box(Modifier.padding(start = 6.dp, end = 2.dp).width(1.dp).height(20.dp).background(c.line))
         QuickSizes(settings.activeSlot, onQuickSize, onSetSize)
       }
     }

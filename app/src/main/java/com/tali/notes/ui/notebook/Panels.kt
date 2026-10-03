@@ -212,7 +212,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     ReorderableColors(
       colors = settings.paletteFor(slot),
       selected = slot.color,
-      inToolbar = settings.toolbarColors,
+      inToolbar = settings.toolbarColorsFor(slot),
       onPick = vm::pickPenColor,
       onReorder = vm::reorderColors,
       onRemove = vm::removeColor,
@@ -222,12 +222,12 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     // The first few colours above sit in the toolbar beside the pens, for every notebook.
     Row(verticalAlignment = Alignment.CenterVertically) {
       Column(Modifier.weight(1f)) {
-        Text("In the toolbar", style = MaterialTheme.typography.bodyMedium, color = c.ink)
+        Text("In the toolbar with this pen", style = MaterialTheme.typography.bodyMedium, color = c.ink)
         Text("The colours before the line · hold one and drag to move it", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
       }
     }
     Spacer(Modifier.height(8.dp))
-    Segmented((0..6).toList(), settings.toolbarColors, { if (it == 0) "None" else "$it" }, vm::setToolbarColors, Modifier.fillMaxWidth())
+    Segmented((0..6).toList(), settings.toolbarColorsFor(slot), { if (it == 0) "None" else "$it" }, vm::setToolbarColors, Modifier.fillMaxWidth())
     if (picking) {
       Spacer(Modifier.height(12.dp))
       ColorPicker(

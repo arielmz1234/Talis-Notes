@@ -96,7 +96,7 @@ data class AppSettings(
   val hideNavBar: Boolean = false,
   /** On A4 pages, one stroke may carry on across the gap between pages (the gap isn't exported). Off, ink stops at each page's edge. */
   val inkBetweenPages: Boolean = false,
-  /** How many of her saved colours (the first ones, in her order) sit beside the pens in the toolbar. */
+  /** How many colours a pen shows beside the pens until she sets its own number (`PenSlot.toolbarColors`). */
   val toolbarColors: Int = 3,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
@@ -122,6 +122,9 @@ data class AppSettings(
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 
   fun lassoHits(pen: PenType?) = if (pen == null) lassoSelectsImages else lassoAffects[pen] != false
+
+  /** How many colours [slot] shows in the toolbar: its own number, else the app-wide one. */
+  fun toolbarColorsFor(slot: PenSlot): Int = slot.toolbarColors ?: toolbarColors
 
   /** The palette for [slot]: the highlighter has its own. */
   fun paletteFor(slot: PenSlot): List<Int> = if (slot.type.isHighlighter) highlighterColors else savedColors
