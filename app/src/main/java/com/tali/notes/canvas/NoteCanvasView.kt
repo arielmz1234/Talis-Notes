@@ -651,7 +651,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawMeasure(canvas)
     drawEraserCursor(canvas)
     drawLaser(canvas)
-    drawHoldRing(canvas)
+    drawLockCues(canvas)
   }
 
   private fun drawLasso(canvas: Canvas) {
@@ -1663,11 +1663,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val lengthPx = Geo.pathLength(pts) * camera.scale
     if (lengthPx < 12f * density) {
       // A tap with the lasso picks up whatever is under it.
-      hitTest(end ?: pts.firstOrNull() ?: return, anyLock = settings.lassoLocked, filter = settings::lassoHits)?.let { selectSingle(it) }
+      hitTest(end ?: pts.firstOrNull() ?: return, anyLock = settings.lassoLocked, filter = settings::lassoHits)?.let { selectGroup(it) }
       return
     }
     val area = Rect.around(pts) ?: return
-    val picked = d.all.filter { item -> (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) }
+    val picked = withFills(d.all.filter { item -> (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) })
     setSelection(picked)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
@@ -1724,6 +1724,50 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     selectSingle(shape)
     softSelection = soft
     host.onTip("shape-tap", "Drag a dot to reshape it · the menu changes its colour, thickness and line")
+  }
+
+  /** Picks up [item], with the fill it outlines or the outline around it if it's a fill. */
+  private fun selectGroup(item: CanvasItem) {
+    val all = withFills(listOf(item))
+    if (all.size == 1) selectSingle(item) else setSelection(all)
+  }
+
+  private fun isAreaFill(item: CanvasItem) = item is ImageItem && item.file.startsWith(FILL_PREFIX)
+
+  /**
+   * A fill and the drawing around it move as one: adds to [items] every area fill outlined by
+   * something in it, and every outline stroke of any fill in it (so a box drawn in four strokes
+   * comes along whole). An outline is anything reaching the fill's edge; writing inside the filled
+   * area isn't. Only the eraser still treats them apart, so she can erase just a fill or a line.
+   */
+  private fun withFills(items: List<CanvasItem>, locked: Boolean = settings.lassoLocked): List<CanvasItem> {
+    val d = doc ?: return items
+    val fills = d.all.filterIsInstance<ImageItem>().filter { isAreaFill(it) && (!it.locked || locked) }
+    if (fills.isEmpty() || items.isEmpty()) return items
+    val margin = 3f
+    fun walls(f: ImageItem): List<CanvasItem> {
+      val inner = Rect(f.rect.left + margin, f.rect.top + margin, f.rect.right - margin, f.rect.bottom - margin)
+      val outer = Rect(f.rect.left - margin, f.rect.top - margin, f.rect.right + margin, f.rect.bottom + margin)
+      return d.intersecting(outer).filter { w ->
+        w !is ImageItem && w !is TextItem && (!w.locked || locked) &&
+          !(w.bounds.left > inner.left && w.bounds.top > inner.top && w.bounds.right < inner.right && w.bounds.bottom < inner.bottom)
+      }
+    }
+    val group = LinkedHashMap<String, CanvasItem>()
+    items.forEach { group[it.id] = it }
+    var changed = true
+    var rounds = 0
+    while (changed && rounds++ < 4) {
+      changed = false
+      for (f in fills) {
+        val w = walls(f)
+        if (f.id in group || w.any { it.id in group }) {
+          if (group.put(f.id, f) == null) changed = true
+          w.forEach { if (group.put(it.id, it) == null) changed = true }
+        }
+      }
+    }
+    return group.values.toList()
   }
 
   private fun selectSingle(item: CanvasItem) {
@@ -2101,9 +2145,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (item.id != target.id) return@Runnable
     longPressed = true
     performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-    val unlocked = item.withLocked(false)
-    d.commit(Change(listOf(item), listOf(unlocked)))
-    selectSingle(unlocked)
+    // A fill and its outline unlock together, as they were locked together.
+    val group = withFills(listOf(item), locked = true).filter { it.locked }
+    val unlocked = group.map { it.withLocked(false) }
+    d.commit(Change(group, unlocked))
+    if (unlocked.size == 1) selectSingle(unlocked[0]) else setSelection(unlocked)
+    // The padlock that was building up above her finger pops open and goes.
+    lockCue = LockCue(camera.toWorld(fingerStart.x, fingerStart.y - HOLD_LIFT_DP * density), locking = false, start = SystemClock.uptimeMillis() - CUE_SHACKLE_FROM, fromHold = true)
+    postInvalidateOnAnimation()
     host.onHint("Unlocked \u2014 it can be picked up and erased again")
   }
 
@@ -2116,9 +2165,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val unlocked = selection.map { it.withLocked(false) }
       d.commit(Change(selection, unlocked))
       setSelection(unlocked)
+      selectionBounds?.let { playLockCue(it.center, locking = false) }
       host.onHint(if (unlocked.size == 1) "Unlocked" else "${unlocked.size} items unlocked")
       return
     }
+    selectionBounds?.let { playLockCue(it.center, locking = true) }
     val locked = selection.map { it.withLocked(true) }
     d.commit(Change(selection, locked))
     clearSelection()
@@ -2179,37 +2230,81 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun cancelHold() {
     removeCallbacks(longPress)
     if (holdTarget != null) {
+      // Let go early: whatever of the padlock had appeared fades away quickly.
+      val shown = holdProgress()
+      if (shown != null) holdFade = HoldFade(SystemClock.uptimeMillis(), shown.first, shown.second, Pt(fingerStart.x, fingerStart.y))
       holdTarget = null
       invalidate()
     }
   }
 
-  private val holdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    style = Paint.Style.STROKE
-    strokeCap = Paint.Cap.ROUND
-  }
-  private val holdOval = RectF()
+  // ---- The padlock cue ----
 
   /**
-   * While a finger is held on a locked item, a ring fills around it, so she can see the hold is
-   * working. It only appears after a moment, so a passing touch shows nothing.
+   * A small padlock in a frosted chip, shown when something is locked or unlocked. Minimal and
+   * quick: it comes in from 90% (never from nothing) with a strong ease-out, the shackle clicks
+   * shut or swings open, then it rises a touch and fades, a little faster out than in.
    */
-  private fun drawHoldRing(canvas: Canvas) {
-    if (holdTarget == null) return
-    val t = (SystemClock.uptimeMillis() - holdStart - HOLD_RING_DELAY_MS).toFloat() / (LONG_PRESS_MS - HOLD_RING_DELAY_MS)
-    if (t > 0f) {
-      val r = 30f * density
-      holdOval.set(fingerStart.x - r, fingerStart.y - r, fingerStart.x + r, fingerStart.y + r)
-      val fade = (t * 4f).coerceAtMost(1f)
-      holdPaint.strokeWidth = 4f * density
-      holdPaint.color = 0xFF9B6BF2.toInt()
-      holdPaint.alpha = (60 * fade).toInt()
-      canvas.drawOval(holdOval, holdPaint)
-      holdPaint.alpha = (255 * fade).toInt()
-      canvas.drawArc(holdOval, -90f, 360f * t.coerceAtMost(1f), false, holdPaint)
-    }
+  private class LockCue(val at: Pt, val locking: Boolean, val start: Long, val fromHold: Boolean = false)
+
+  private var lockCue: LockCue? = null
+
+  /** A hold let go early: the padlock fades from how it looked. */
+  private class HoldFade(val start: Long, val alpha: Float, val open: Float, val screen: Pt)
+
+  private var holdFade: HoldFade? = null
+
+
+  private fun playLockCue(world: Pt, locking: Boolean) {
+    lockCue = LockCue(world, locking, SystemClock.uptimeMillis())
     postInvalidateOnAnimation()
   }
+
+  private fun easeOut(t: Float) = 1f - (1f - t.coerceIn(0f, 1f)).let { it * it * it }
+
+  /** While a finger is held on a locked item: the padlock's (alpha, shackle opening), or null before it shows. */
+  private fun holdProgress(): Pair<Float, Float>? {
+    if (holdTarget == null) return null
+    val since = SystemClock.uptimeMillis() - holdStart - HOLD_RING_DELAY_MS
+    if (since <= 0) return null
+    val t = since.toFloat() / (LONG_PRESS_MS - HOLD_RING_DELAY_MS)
+    // It fades in, then the shackle slowly lifts as if under tension, ready to pop open.
+    return easeOut(since / 160f) to 0.3f * t.coerceAtMost(1f)
+  }
+
+  private fun drawLockCues(canvas: Canvas) {
+    val now = SystemClock.uptimeMillis()
+    var animating = false
+    holdProgress()?.let { (alpha, open) ->
+      drawPadlock(canvas, fingerStart.x, fingerStart.y - HOLD_LIFT_DP * density, alpha, 0.9f + 0.1f * alpha, open)
+      animating = true
+    }
+    holdFade?.let { f ->
+      val t = (now - f.start) / 120f
+      if (t >= 1f) holdFade = null
+      else {
+        drawPadlock(canvas, f.screen.x, f.screen.y - HOLD_LIFT_DP * density, f.alpha * (1f - t), 1f - 0.04f * t, f.open)
+        animating = true
+      }
+    }
+    lockCue?.let { cue ->
+      val t = (now - cue.start).toFloat()
+      if (t >= CUE_TOTAL) lockCue = null
+      else {
+        val appear = if (cue.fromHold) 1f else easeOut(t / 160f)
+        val leave = easeOut((t - CUE_LEAVE_FROM) / (CUE_TOTAL - CUE_LEAVE_FROM))
+        val click = easeOut((t - CUE_SHACKLE_FROM) / 180f)
+        val open = if (cue.locking) 1f - click else (if (cue.fromHold) 0.3f else 0f) + (if (cue.fromHold) 0.7f else 1f) * click
+        val sp = camera.toScreen(cue.at)
+        drawPadlock(canvas, sp.x, sp.y - 4f * density * leave, appear * (1f - leave), (0.9f + 0.1f * appear) - 0.04f * leave, open)
+        animating = true
+      }
+    }
+    if (animating) postInvalidateOnAnimation()
+  }
+
+  private fun drawPadlock(canvas: Canvas, cx: Float, cy: Float, alpha: Float, scale: Float, open: Float) =
+    LockGlyph.draw(canvas, density, darkPaper || deskIsDark(), cx, cy, alpha, scale, open)
 
   private fun startPinch(e: MotionEvent) {
     mode = Mode.PINCH
@@ -2328,7 +2423,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // A finger tap only picks something up with the lasso tool (she found taps picking things up by
     // accident); elsewhere it just lets go of the selection. A pen tap on a shape still picks it up.
     val item = if (tool == Tool.LASSO) hitTest(p, pages = false, anyLock = settings.lassoLocked, filter = settings::lassoHits) else null
-    if (item == null) clearSelection() else selectSingle(item)
+    if (item == null) clearSelection() else selectGroup(item)
   }
 
   fun undo() {
@@ -2630,8 +2725,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PEN_TAP_MS = 250L
     /** How long a finger is held on a locked item to unlock it. */
     private const val LONG_PRESS_MS = 1500L
-    /** The unlock ring starts filling only after this, so a passing touch shows nothing. */
+    /** The unlock padlock starts showing only after this, so a passing touch shows nothing. */
     private const val HOLD_RING_DELAY_MS = 300L
+    /** The hold's padlock sits this far above the fingertip, where the finger doesn't hide it. */
+    private const val HOLD_LIFT_DP = 64f
+    /** The lock cue's timeline (ms): the shackle moves from 120, it leaves from 560, gone at 720. */
+    private const val CUE_SHACKLE_FROM = 120L
+    private const val CUE_LEAVE_FROM = 560f
+    private const val CUE_TOTAL = 720f
     /** A touch wider than this (mm) is a palm or the side of a hand, not a fingertip. */
     private const val PALM_MM = 14f
     /** No unlocking while the S Pen touched or hovered this recently: her hand is resting to write. */

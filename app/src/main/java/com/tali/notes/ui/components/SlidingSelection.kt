@@ -7,7 +7,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -128,8 +131,10 @@ private class Glide {
 
   /** Blend from [from] to [to] when options have their own brushes. */
   val mix = Animatable(1f)
-  var from: Brush? = null
-  var to: Brush? = null
+  // State, so the highlight redraws when its colour changes on its own (the theme or dark paper
+  // switching): as plain fields it kept drawing the old theme's colour, white or black.
+  var from: Brush? by mutableStateOf(null)
+  var to: Brush? by mutableStateOf(null)
   var key: Any? = null
 
   suspend fun go(newKey: Any?, target: Rect?, brush: Brush) = coroutineScope {
