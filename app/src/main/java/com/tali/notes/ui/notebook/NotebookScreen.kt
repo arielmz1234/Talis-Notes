@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.LineWeight
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -996,6 +997,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
   val density = LocalDensity.current
   // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
   var more by remember(sel.count) { mutableStateOf(false) }
+  // Under ⋯: the palette button opens just the colours, the thickness button just the thickness.
+  var extra by remember(sel.count) { mutableStateOf<SelectionExtra?>(null) }
   Box(
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val gap = with(density) { 14.dp.roundToPx() }
@@ -1029,11 +1032,17 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
         ToolButton(Icons.Outlined.LibraryAdd, "Duplicate", onClick = onDuplicate)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
         Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
-        ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more }
+        ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more; extra = null }
       }
       if (more) {
-        // The rest of what the menu always had, as plain buttons, plus colour and thickness.
+        // The rest of what the menu always had, as plain buttons; colour and thickness each open their own row.
         Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+          if (!sel.hasImage || sel.count > 1) {
+            ToolButton(Icons.Outlined.Palette, "Colour", selected = extra == SelectionExtra.COLOUR) { extra = if (extra == SelectionExtra.COLOUR) null else SelectionExtra.COLOUR }
+          }
+          if (sel.lineSize != null) {
+            ToolButton(Icons.Outlined.LineWeight, "Thickness", selected = extra == SelectionExtra.THICKNESS) { extra = if (extra == SelectionExtra.THICKNESS) null else SelectionExtra.THICKNESS }
+          }
           ToolButton(Icons.Outlined.FlipToFront, "Bring to front") { onArrange(true) }
           ToolButton(Icons.Outlined.FlipToBack, "Send to back") { onArrange(false) }
           // Writing and shapes flip; pictures and text keep facing the right way.
@@ -1044,28 +1053,36 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
           sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
           if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         }
-        if (!sel.hasImage || sel.count > 1) SelectionQuick(sel, colors, onColor, onRestyle)
+        when (extra) {
+          SelectionExtra.COLOUR -> SelectionColours(sel, colors, onColor)
+          SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, onRestyle) }
+          null -> {}
+        }
       }
     }
   }
 }
 
-/** Colour dots in one row, and the thickness for writing and shapes: the opened selection menu's extras. */
+private enum class SelectionExtra { COLOUR, THICKNESS }
+
+/** The selection's colour as one row of dots, opened from the palette button. */
 @Composable
-private fun SelectionQuick(sel: SelectionInfo, colors: List<Int>, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit) {
+private fun SelectionColours(sel: SelectionInfo, colors: List<Int>, onColor: (Int) -> Unit) {
+  val ring = rememberSlidingSelection()
+  Row(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp).horizontalScroll(rememberScrollState()).colorRing(ring, sel.color?.let { Color(it) }).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    colors.forEach { col -> ColorDot(Color(col), selected = col == sel.color, size = 26.dp, selection = ring) { onColor(col) } }
+  }
+}
+
+/** The thickness of selected writing and shapes, opened from the thickness button. */
+@Composable
+private fun SelectionThickness(size: Float, onRestyle: (Float?, LineStyle?) -> Unit) {
   val c = Tali.colors
-  Column(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp)) {
-    val ring = rememberSlidingSelection()
-    Row(Modifier.horizontalScroll(rememberScrollState()).colorRing(ring, sel.color?.let { Color(it) }).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-      colors.forEach { col -> ColorDot(Color(col), selected = col == sel.color, size = 26.dp, selection = ring) { onColor(col) } }
-    }
-    val size = sel.lineSize ?: return@Column
-    // Follows the finger here and changes the writing once let go (one undo step).
-    var value by remember(size) { mutableFloatStateOf(size) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
-      Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
-    }
+  // Follows the finger here and changes the writing once let go (one undo step).
+  var value by remember(size) { mutableFloatStateOf(size) }
+  Row(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
+    Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
   }
 }
 
