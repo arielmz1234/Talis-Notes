@@ -1,5 +1,6 @@
 package com.tali.notes.ui.library
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
@@ -179,9 +180,9 @@ fun NewNotebookDialog(
             Text("In $folderName", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
           }
         }
-        com.tali.notes.ui.components.DriftingCloud(width = 84.dp, variant = 2, driftDp = 5f)
+        com.tali.notes.ui.components.DriftingCloud(width = 64.dp, variant = 2, driftDp = 4f)
       }
-      Spacer(Modifier.height(18.dp))
+      Spacer(Modifier.height(10.dp))
       // Done on the keyboard just puts the keyboard away: she keeps choosing the paper and the
       // rest, and the notebook is made only with Create.
       val focus = androidx.compose.ui.platform.LocalFocusManager.current
@@ -190,9 +191,10 @@ fun NewNotebookDialog(
         keyboard?.hide()
         focus.clearFocus()
       }
-      Spacer(Modifier.height(22.dp))
+      // Laid out compactly so the whole card fits lying down without scrolling.
+      Spacer(Modifier.height(14.dp))
       SectionLabel("Paper")
-      Spacer(Modifier.height(8.dp))
+      Spacer(Modifier.height(4.dp))
       PaperPicker(
         style = paper,
         customId = custom,
@@ -210,52 +212,48 @@ fun NewNotebookDialog(
         tileWidth = 80.dp,
         perRow = 7,
       )
-      Spacer(Modifier.height(20.dp))
-      SectionLabel("Pages")
-      Spacer(Modifier.height(8.dp))
-      Segmented(listOf(true, false), paged, { if (it) "A4 pages" else "Endless canvas" }, { paged = it }, Modifier.fillMaxWidth())
+      Spacer(Modifier.height(12.dp))
+      // Pages and orientation side by side. With an endless canvas, orientation fades out but keeps
+      // its place, so nothing below jumps.
+      Row {
+        Column(Modifier.weight(1f)) {
+          SectionLabel("Pages")
+          Spacer(Modifier.height(6.dp))
+          Segmented(listOf(true, false), paged, { if (it) "A4 pages" else "Endless" }, { paged = it }, Modifier.fillMaxWidth())
+        }
+        Spacer(Modifier.width(14.dp))
+        val shown by androidx.compose.animation.core.animateFloatAsState(if (paged) 1f else 0f, androidx.compose.animation.core.tween(if (paged) 200 else 140), label = "orientation")
+        Column(Modifier.weight(1f).graphicsLayer { alpha = shown }) {
+          SectionLabel("Orientation")
+          Spacer(Modifier.height(6.dp))
+          Segmented(listOf(false, true), landscape, { if (it) "Landscape" else "Portrait" }, { if (paged) landscape = it }, Modifier.fillMaxWidth())
+        }
+      }
       Spacer(Modifier.height(6.dp))
       Text(
-        if (paged) "Pages one under the other, like a real notebook. Prints and exports page by page." else "One page that goes on forever in every direction, for big drawings and mind maps.",
+        when {
+          !paged -> "One page that goes on forever in every direction, for big drawings and mind maps."
+          landscape -> "Wide A4 pages on their side, one under the other: good for slides and wide diagrams."
+          else -> "Upright A4 pages one under the other, like a real notebook. Exports page by page."
+        },
         style = MaterialTheme.typography.bodySmall,
         color = c.inkMuted,
       )
-      // Which way up the pages are, whichever way she holds the tablet.
-      androidx.compose.animation.AnimatedVisibility(
-        paged,
-        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 60)) +
-          androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(240, easing = com.tali.notes.ui.components.EaseOutStrong), expandFrom = Alignment.Top),
-        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) +
-          androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(200, easing = com.tali.notes.ui.components.EaseOutStrong), shrinkTowards = Alignment.Top),
-      ) {
-        Column {
-          Spacer(Modifier.height(16.dp))
-          SectionLabel("Orientation")
-          Spacer(Modifier.height(8.dp))
-          Segmented(listOf(false, true), landscape, { if (it) "Landscape" else "Portrait" }, { landscape = it }, Modifier.fillMaxWidth())
-          Spacer(Modifier.height(6.dp))
-          Text(
-            if (landscape) "Wide A4 pages on their side: good for slides, timelines and wide diagrams." else "Upright A4 pages, like a normal notebook.",
-            style = MaterialTheme.typography.bodySmall,
-            color = c.inkMuted,
-          )
-        }
-      }
-      Spacer(Modifier.height(12.dp))
+      Spacer(Modifier.height(6.dp))
       ToggleRow("Dark paper", dark, { dark = it }, detail = "A black page; your pens switch to light colours")
-      Spacer(Modifier.height(14.dp))
-      SectionLabel("Cover")
       Spacer(Modifier.height(8.dp))
+      SectionLabel("Cover")
+      Spacer(Modifier.height(6.dp))
       val ring = rememberSlidingSelection()
       androidx.compose.foundation.layout.FlowRow(
-        Modifier.slidingHighlight(ring, cover, SolidColor(c.ink), corner = 100.dp, ring = 2.5.dp, above = true),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.padding(start = 3.dp).slidingHighlight(ring, cover, SolidColor(c.ink), corner = 100.dp, ring = 2.dp, above = true),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
       ) {
         com.tali.notes.data.PICK_COLORS.forEach { col ->
           Box(
             Modifier.slidingOption(ring, col)
-              .size(30.dp)
+              .size(26.dp)
               .clip(androidx.compose.foundation.shape.CircleShape)
               .background(Color(col))
               .clickable(interactionSource = null, indication = null, role = Role.RadioButton) { cover = col }
@@ -263,7 +261,7 @@ fun NewNotebookDialog(
         }
       }
     }
-    Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(16.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton("Cancel", onClick = onDismiss)
       PrimaryButton("Create") { create() }

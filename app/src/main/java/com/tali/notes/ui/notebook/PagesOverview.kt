@@ -282,7 +282,8 @@ fun PagesOverview(
             PageTile(
               vm, items, i, version,
               number = pos + 1,
-              selected = pos == current,
+              // While picking, the page she's on isn't marked: it looked picked.
+              selected = pos == current && chosen == null,
               leaving = i == removing || i in vanishing,
               picking = chosen != null,
               picked = chosen?.contains(i) == true,
