@@ -60,6 +60,7 @@ import com.tali.notes.ui.components.ColorDot
 import com.tali.notes.ui.components.EaseOutStrong
 import com.tali.notes.ui.components.colorRing
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -130,7 +131,8 @@ fun MainToolbar(
       val slot = settings.activeSlot
       fun shown(col: Int) = Color(if (darkPaper) com.tali.notes.ink.Brushes.onDarkPaper(col) else col)
       val ring = rememberSlidingSelection()
-      Row(Modifier.padding(start = 2.dp).colorRing(ring, shown(slot.color)), verticalAlignment = Alignment.CenterVertically) {
+      // Changing how many colours there are eases the toolbar to its new width instead of jumping.
+      Row(Modifier.animateContentSize(tween(220, easing = EaseOutStrong)).padding(start = 2.dp).colorRing(ring, shown(slot.color)), verticalAlignment = Alignment.CenterVertically) {
         settings.savedColors.take(settings.toolbarColors).forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
       }
     }

@@ -555,10 +555,23 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) { tools() }
       } else {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-          Box(Modifier.weight(1f)) { titlePill() }
-          tools()
-          Box(Modifier.weight(1f), contentAlignment = Alignment.TopEnd) { undoBar() }
+        // The tools sit in the middle when there's room; when they grow (more colours) they shift
+        // over rather than run into the title side, and the notebook's name shortens before
+        // anything overlaps.
+        androidx.compose.ui.layout.Layout(content = { titlePill(); tools(); undoBar() }, modifier = Modifier.fillMaxWidth()) { parts, cons ->
+          val gap = 12.dp.roundToPx()
+          val loose = cons.copy(minWidth = 0, minHeight = 0)
+          val corner = parts[2].measure(loose)
+          val toolbar = parts[1].measure(loose)
+          val title = parts[0].measure(loose.copy(maxWidth = (cons.maxWidth - corner.width - toolbar.width - 2 * gap).coerceAtLeast(0)))
+          val from = title.width + gap
+          val to = (cons.maxWidth - corner.width - gap - toolbar.width).coerceAtLeast(from)
+          val x = ((cons.maxWidth - toolbar.width) / 2).coerceIn(from, to)
+          layout(cons.maxWidth, maxOf(title.height, toolbar.height, corner.height)) {
+            title.place(0, 0)
+            toolbar.place(x, 0)
+            corner.place(cons.maxWidth - corner.width, 0)
+          }
         }
       }
       Spacer(Modifier.weight(1f))
@@ -692,12 +705,13 @@ private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit, c
       ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back to notebooks", onClick = onBack)
     }
     Spacer(Modifier.width(10.dp))
-    FloatingBar(Modifier.height(44.dp), crown = CloudCrown.NONE) {
+    // The name gives way first when space is short.
+    FloatingBar(Modifier.weight(1f, fill = false).height(44.dp), crown = CloudCrown.NONE) {
       Row(
-        Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Rename", onClick = onRename).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        Modifier.weight(1f, fill = false).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Rename", onClick = onRename).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 200.dp))
+        Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 200.dp))
         Spacer(Modifier.width(8.dp))
         Icon(Icons.Outlined.Edit, "Rename", tint = c.inkFaint, modifier = Modifier.size(16.dp))
       }

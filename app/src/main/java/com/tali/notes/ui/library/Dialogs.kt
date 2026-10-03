@@ -67,9 +67,11 @@ fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, con
   val c = Tali.colors
   Dialog(onDismissRequest = onDismiss) {
     if (!dim) {
-      // No darkened screen behind it: the card floats on its own shadow.
+      // No tint of its own: the card floats on its own shadow. (It asks for no dimming at all rather
+      // than a dimming of 0: the system keeps one dim layer behind the top window that wants one,
+      // so a 0 here also wiped the tint of a dialog underneath, like the pages overview.)
       val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-      androidx.compose.runtime.SideEffect { window?.setDimAmount(0f) }
+      androidx.compose.runtime.SideEffect { window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) }
     }
     Column(
       // The same soft cloud surface as the notebook panels, floating on a lilac shadow.

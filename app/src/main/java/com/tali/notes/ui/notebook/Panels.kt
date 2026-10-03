@@ -184,7 +184,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Column(Modifier.weight(1f)) {
         Text("In the toolbar", style = MaterialTheme.typography.bodyMedium, color = c.ink)
-        Text("The first colours, in this order · hold one and drag to move it", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+        Text("The colours before the line · hold one and drag to move it", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
       }
     }
     Spacer(Modifier.height(8.dp))
@@ -475,8 +475,8 @@ private fun ShapeTile(label: String, on: Boolean, onClick: () -> Unit, onLongCli
 
 /**
  * Her saved colours. Tap one to use it; hold one and drag it to a new place (the others make room
- * as it passes); hold one without moving for "Remove colour". The first [inToolbar] are marked
- * with a small dot: those are the ones beside the pens in the toolbar.
+ * as it passes); hold one without moving for "Remove colour". A thin line after the first
+ * [inToolbar] sets apart the ones beside the pens in the toolbar (clear of the dots and their ring).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -548,11 +548,9 @@ private fun ReorderableColors(
               },
             )
           },
-        contentAlignment = Alignment.BottomCenter,
+        contentAlignment = Alignment.Center,
       ) {
         ColorDot(Color(col), selected = col == selected, selection = ring) { onPick(col) }
-        // In the toolbar: a small dot under it.
-        if (i < inToolbar) Box(Modifier.size(4.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.7f)))
         DropdownMenu(expanded = removeTarget == col, onDismissRequest = { removeTarget = null }) {
           DropdownMenuItem(text = { Text("Remove colour") }, onClick = {
             onRemove(col)
@@ -560,6 +558,14 @@ private fun ReorderableColors(
           })
         }
       }
+      }
+      // The line after the last colour in the toolbar.
+      if (i == inToolbar - 1 && i < order.size - 1) {
+        key("toolbar-line") {
+          Box(Modifier.size(8.dp, 38.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(2.dp, 24.dp).clip(RoundedCornerShape(1.dp)).background(c.accent.copy(alpha = 0.45f)))
+          }
+        }
       }
     }
     Box(
