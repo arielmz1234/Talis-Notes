@@ -275,6 +275,41 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   /** Her colours in a new order (the toolbar shows the first few). */
   fun reorderColors(order: List<Int>) = updatePalette { if (order.toSet() == it.toSet()) order else it }
 
+  /** Stars or unstars the active pen for cycling with the S Pen button. */
+  fun toggleStar() {
+    val on = !settings.value.activeSlot.starred
+    updateActivePen { it.copy(starred = on) }
+    if (on) {
+      val count = settings.value.pens.count { it.starred }
+      showHint(
+        if (count < 2) "Starred. Star another pen, then double-press the S Pen button to switch to the next starred pen, or triple-press to go back"
+        else "Starred. Double-press the S Pen button to switch to the next starred pen, or triple-press to go back"
+      )
+    }
+  }
+
+  /**
+   * A double (+1) or triple (-1) press of the S Pen button: the next or previous starred pen, round
+   * and round. From another tool, or a pen that isn't starred, it starts at the first (or last).
+   */
+  fun cyclePen(step: Int) {
+    val s = settings.value
+    val starred = s.pens.filter { it.starred }
+    if (starred.isEmpty()) {
+      showHint("Star pens in their settings to switch between them with the S Pen button")
+      return
+    }
+    val at = starred.indexOfFirst { it.id == s.activePen }
+    val next =
+      if (tool != Tool.PEN || at < 0) (if (step > 0) starred.first() else starred.last())
+      else starred[Math.floorMod(at + step, starred.size)]
+    store.update { it.copy(activePen = next.id) }
+    tool = Tool.PEN
+    panel = null
+    // With the toolbars hidden she can't see which pen is up, so say it.
+    if (focus) showHint(next.type.label)
+  }
+
   /** Switches the active pen to its [i]th thickness. */
   fun pickPenSize(i: Int) = updateActivePen { it.pickSize(i) }
 

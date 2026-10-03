@@ -86,6 +86,9 @@ interface CanvasHost {
 
   /** The view moved or zoomed (an open text editor follows it). */
   fun onCameraMoved() = Unit
+
+  /** The S Pen button was double-pressed (+1, next starred pen) or triple-pressed (-1, back). */
+  fun onPenCycle(step: Int) = Unit
 }
 
 /** A text block being typed: [id] is null for a new one. Positions and sizes are in world units. */
@@ -1000,6 +1003,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if ((0 until e.pointerCount).any { isStylus(e.getToolType(it)) }) {
       lastPenAt = SystemClock.uptimeMillis()
       cancelHold()
+      // Writing (or erasing with the button held) isn't part of a double or triple press.
+      if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+        removeCallbacks(penPressesDone)
+        penPresses = 0
+        penButtonDown = false
+      }
     }
     // Any new touch catches a gliding page, like putting a finger on a moving list.
     if (e.actionMasked == MotionEvent.ACTION_DOWN) stopFling()
@@ -1058,16 +1067,27 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   override fun dispatchGenericMotionEvent(e: MotionEvent): Boolean {
     when (e.actionMasked) {
+      MotionEvent.ACTION_BUTTON_PRESS,
+      MotionEvent.ACTION_BUTTON_RELEASE -> {
+        if (isStylus(e.getToolType(0)) && e.actionButton and PEN_BUTTONS != 0) penButton(e.actionMasked == MotionEvent.ACTION_BUTTON_PRESS)
+        return true
+      }
       MotionEvent.ACTION_HOVER_ENTER,
       MotionEvent.ACTION_HOVER_MOVE -> {
         if (isStylus(e.getToolType(0))) {
           lastPenAt = SystemClock.uptimeMillis()
           cancelHold()
+          // Some pens only report the button through the hover's button state.
+          penButton(e.buttonState and PEN_BUTTONS != 0)
         }
         eraserOverride = e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
         return true
       }
-      MotionEvent.ACTION_HOVER_EXIT -> return true
+      MotionEvent.ACTION_HOVER_EXIT -> {
+        // Pulled away with the button down: not a press.
+        penButtonDown = false
+        return true
+      }
       MotionEvent.ACTION_SCROLL -> {
         val v = e.getAxisValue(MotionEvent.AXIS_VSCROLL)
         val h = e.getAxisValue(MotionEvent.AXIS_HSCROLL)
@@ -2238,6 +2258,42 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
+  // ---- S Pen button presses ----
+
+  private var penButtonDown = false
+  private var penButtonAt = 0L
+  private var penPresses = 0
+
+  /** After the last quick press, a moment to see whether another follows; then 2 = next pen, 3 = back. */
+  private val penPressesDone = Runnable {
+    when (penPresses) {
+      2 -> host.onPenCycle(1)
+      3 -> host.onPenCycle(-1)
+    }
+    penPresses = 0
+  }
+
+  /**
+   * The S Pen button while hovering: counts quick presses. A long press (holding it to erase)
+   * doesn't count and starts the count over.
+   */
+  private fun penButton(down: Boolean) {
+    val now = SystemClock.uptimeMillis()
+    if (down && !penButtonDown) {
+      penButtonDown = true
+      penButtonAt = now
+      removeCallbacks(penPressesDone)
+    } else if (!down && penButtonDown) {
+      penButtonDown = false
+      if (now - penButtonAt <= PEN_PRESS_MAX_MS) {
+        penPresses++
+        postDelayed(penPressesDone, PEN_PRESS_GAP_MS)
+      } else {
+        penPresses = 0
+      }
+    }
+  }
+
   // ---- The padlock cue ----
 
   /**
@@ -2725,6 +2781,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PEN_TAP_MS = 250L
     /** How long a finger is held on a locked item to unlock it. */
     private const val LONG_PRESS_MS = 1500L
+    /** The S Pen's side button, as different pens report it. */
+    private const val PEN_BUTTONS = MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_SECONDARY
+    /** A press of the S Pen button no longer than this counts towards a double or triple press. */
+    private const val PEN_PRESS_MAX_MS = 350L
+    /** How long to wait after a press for another before acting on the count. */
+    private const val PEN_PRESS_GAP_MS = 320L
     /** The unlock padlock starts showing only after this, so a passing touch shows nothing. */
     private const val HOLD_RING_DELAY_MS = 300L
     /** The hold's padlock sits this far above the fingertip, where the finger doesn't hide it. */

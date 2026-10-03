@@ -312,6 +312,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 
                 override fun onHint(message: String) = vm.showHint(message)
 
+                override fun onPenCycle(step: Int) = vm.cyclePen(step)
+
                 override fun onTip(id: String, message: String) = vm.tip(id, message)
 
                 override fun onPageChanged(index: Int, count: Int) {

@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -141,7 +144,10 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
       }
     }
     Spacer(Modifier.height(10.dp))
-    Text(slot.type.label, style = MaterialTheme.typography.titleMedium, color = c.ink)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text(slot.type.label, style = MaterialTheme.typography.titleMedium, color = c.ink, modifier = Modifier.weight(1f))
+      StarToggle(slot.starred, vm::toggleStar)
+    }
     Spacer(Modifier.height(10.dp))
     StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle, slot.square, slot.straight)
     Spacer(Modifier.height(12.dp))
@@ -216,6 +222,39 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     }
   }
 }
+
+/**
+ * The pen's star: starred pens are the ones the S Pen button cycles through. It pops a little when
+ * starred (from 85%, a quick spring) and its colour fades.
+ */
+@Composable
+private fun StarToggle(on: Boolean, onToggle: () -> Unit) {
+  val c = Tali.colors
+  val pop = remember { androidx.compose.animation.core.Animatable(1f) }
+  var first by remember { mutableStateOf(true) }
+  LaunchedEffect(on) {
+    if (first) { first = false; return@LaunchedEffect }
+    if (on) {
+      pop.snapTo(0.85f)
+      pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 900f))
+    }
+  }
+  val tint by animateColorAsState(if (on) STAR_GOLD else c.inkFaint, tween(200), label = "star")
+  Box(
+    Modifier.size(40.dp).clip(CircleShape)
+      .clickable(role = Role.Switch, onClickLabel = if (on) "Unstar this pen" else "Star this pen", onClick = onToggle),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(
+      if (on) Icons.Filled.Star else Icons.Outlined.StarBorder,
+      if (on) "Starred: the S Pen button switches to it" else "Not starred",
+      tint = tint,
+      modifier = Modifier.size(24.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value },
+    )
+  }
+}
+
+private val STAR_GOLD = Color(0xFFF5B83D)
 
 /** Draws a sample stroke with the real Ink brush, so size and style changes show exactly as they'll look. */
 @Composable
