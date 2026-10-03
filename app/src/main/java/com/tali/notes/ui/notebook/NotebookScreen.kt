@@ -151,6 +151,10 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.animateContentSize
+import androidx.compose.material.icons.outlined.LibraryAdd
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.graphics.TransformOrigin
@@ -626,6 +630,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           sel,
           narrow = narrow,
           colors = settings.savedColors,
+          pasteCount = Clipboard.items.size,
+          onPaste = { holder.view?.runSafely { pasteBySelection() } },
           onDelete = { holder.view?.runSafely { deleteSelection() } },
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
           onCopy = { holder.view?.runSafely { copySelection() } },
@@ -984,20 +990,20 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit) {
+internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, pasteCount: Int, onPaste: () -> Unit, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
-  var picking by remember(sel.count) { mutableStateOf(false) }
-  var arranging by remember(sel.count) { mutableStateOf(false) }
+  // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
+  var more by remember(sel.count) { mutableStateOf(false) }
   Box(
     Modifier.fillMaxSize().layout { measurable, constraints ->
-      val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
       val gap = with(density) { 14.dp.roundToPx() }
       // Keep clear of the toolbars along the top.
       val topLimit = with(density) { (if (narrow) 196 else 128).dp.roundToPx() }
+      val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxHeight = (constraints.maxHeight - topLimit - gap).coerceAtLeast(0)))
       val bottomLimit = constraints.maxHeight - p.height - gap
       val cx = sel.screenRect.centerX().roundToInt()
-      val x = (cx - p.width / 2).coerceIn(gap, constraints.maxWidth - p.width - gap)
+      val x = (cx - p.width / 2).coerceIn(gap, (constraints.maxWidth - p.width - gap).coerceAtLeast(gap))
       val above = sel.screenRect.top.roundToInt() - p.height - gap
       // Leave room for the rotate handle hanging under the selection.
       val below = sel.screenRect.bottom.roundToInt() + gap + if (sel.rotatable) with(density) { 48.dp.roundToPx() } else 0
@@ -1010,47 +1016,60 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
       layout(constraints.maxWidth, constraints.maxHeight) { p.place(x, y) }
     }
   ) {
-    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
-      run {
-        // Style: colour for anything coloured, plus thickness and line for writing and shapes.
-        if (!sel.hasImage || sel.count > 1) {
-          Box {
-            ToolButton(Icons.Outlined.Palette, if (sel.lineSize != null) "Style" else "Colour", selected = picking) { picking = true }
-            DropdownMenu(expanded = picking, onDismissRequest = { picking = false }, shape = RoundedCornerShape(18.dp), containerColor = c.surface) {
-              SelectionStyle(sel, colors, onColor, onRestyle)
-            }
-          }
-        }
-        ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
+    Column(
+      Modifier.cloudSurface(22.dp, CloudCrown.SOFT_EDGE)
+        .animateContentSize(tween(220, easing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)))
+        .padding(horizontal = 6.dp, vertical = 4.dp)
+    ) {
+      Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+        ToolButton(Icons.Outlined.ContentCopy, "Copy (hold anywhere to paste it, here or in any notebook)", onClick = onCopy)
         ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
-        ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
+        if (pasteCount > 0) ToolButton(Icons.Outlined.ContentPaste, if (pasteCount == 1) "Paste" else "Paste $pasteCount items", onClick = onPaste)
+        ToolButton(Icons.Outlined.LibraryAdd, "Duplicate", onClick = onDuplicate)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
-        // What's in front and what's behind: pictures can go over the writing or under it.
-        Box {
-          ToolButton(Icons.Outlined.Layers, "Arrange", selected = arranging) { arranging = true }
-          DropdownMenu(expanded = arranging, onDismissRequest = { arranging = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-            DropdownMenuItem(
-              text = { Column { Text("Bring to front"); Text(if (sel.hasImage) "Over your writing" else "Over everything else", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-              leadingIcon = { Icon(Icons.Outlined.FlipToFront, null) },
-              onClick = { arranging = false; onArrange(true) },
-            )
-            DropdownMenuItem(
-              text = { Column { Text("Send to back"); Text(if (sel.hasImage) "Behind your writing" else "Behind everything else", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-              leadingIcon = { Icon(Icons.Outlined.FlipToBack, null) },
-              onClick = { arranging = false; onArrange(false) },
-            )
+        Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
+        ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more }
+      }
+      if (more) {
+        Column(Modifier.width(348.dp).weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+          Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(start = 10.dp, top = 6.dp))
+          // Style: colour for anything coloured, plus thickness and line for writing and shapes.
+          if (!sel.hasImage || sel.count > 1) {
+            Box(Modifier.offset(x = (-6).dp)) { SelectionStyle(sel, colors, onColor, onRestyle) }
+          }
+          Spacer(Modifier.height(4.dp))
+          SectionLabel("Arrange and more", Modifier.padding(start = 10.dp))
+          Spacer(Modifier.height(6.dp))
+          FlowRow(Modifier.padding(horizontal = 4.dp).padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            MenuTile(Icons.Outlined.FlipToFront, "To front") { onArrange(true) }
+            MenuTile(Icons.Outlined.FlipToBack, "To back") { onArrange(false) }
+            // Writing and shapes flip; pictures and text keep facing the right way.
+            MenuTile(com.tali.notes.ui.components.TaliIcons.MirrorHorizontal, "Left–right") { onMirror(true) }
+            MenuTile(com.tali.notes.ui.components.TaliIcons.MirrorVertical, "Upside down") { onMirror(false) }
+            // Locked things stay put: the lasso, taps and the eraser leave them alone.
+            if (sel.locked) MenuTile(Icons.Outlined.LockOpen, "Unlock", onClick = onLock) else MenuTile(Icons.Outlined.Lock, "Lock", onClick = onLock)
+            sel.textId?.let { id -> MenuTile(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
+            if (sel.hasDrawing) MenuTile(Icons.Outlined.AutoAwesome, "Save shape", onClick = onSaveShape)
           }
         }
-        sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
-        // Mirror left to right, or upside down (writing and shapes flip; pictures and text keep facing the right way).
-        ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorHorizontal, "Mirror left to right") { onMirror(true) }
-        ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorVertical, "Mirror upside down") { onMirror(false) }
-        // Locked things stay put: the lasso, taps and the eraser leave them alone.
-        if (sel.locked) ToolButton(Icons.Outlined.LockOpen, "Unlock", onClick = onLock) else ToolButton(Icons.Outlined.Lock, "Lock in place", onClick = onLock)
-        if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
-        Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
       }
     }
+  }
+}
+
+/** One labelled action in the selection menu's bigger card. */
+@Composable
+private fun MenuTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+  val c = Tali.colors
+  Column(
+    Modifier.width(80.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Box(Modifier.size(40.dp).clip(CircleShape).background(c.accentSoft), contentAlignment = Alignment.Center) {
+      Icon(icon, null, tint = c.ink, modifier = Modifier.size(22.dp))
+    }
+    Spacer(Modifier.height(4.dp))
+    Text(label, style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1)
   }
 }
 

@@ -2411,7 +2411,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
 
-  /** Pastes the clipboard centred on [at] (the middle of the screen if null), selected so it can be moved into place. */
+  /** Pastes the clipboard a little down and right of the selection (from the selection menu). */
+  fun pasteBySelection() {
+    val b = selectionBounds
+    paste(b?.let { Pt(it.center.x + PASTE_NUDGE, it.center.y + PASTE_NUDGE) })
+  }
+
+    /** Pastes the clipboard centred on [at] (the middle of the screen if null), selected so it can be moved into place. */
   fun paste(at: Pt? = null) {
     val d = doc ?: return
     val items = Clipboard.items
@@ -3453,6 +3459,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** How long a pen or finger stays still on the page before Paste is offered (after hold-to-shape's 450 ms, which needs a stroke). */
     private const val PASTE_HOLD_MS = 600L
+
+    /** How far a paste from the selection menu lands from the selection's middle (world units). */
+    private const val PASTE_NUDGE = 32f
     /** How long a finger is held on a locked item to unlock it. */
     private const val LONG_PRESS_MS = 1500L
     /** The S Pen's side button, as different pens report it. */
