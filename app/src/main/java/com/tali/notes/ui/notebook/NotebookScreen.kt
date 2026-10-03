@@ -1025,7 +1025,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
         .animateContentSize(tween(220, easing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)))
         .padding(horizontal = 6.dp, vertical = 4.dp)
     ) {
-      Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+      // One row: ⋯ adds the rest straight after itself (scrolls sideways only if the screen is too narrow).
+      Row(Modifier.height(44.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
         ToolButton(Icons.Outlined.ContentCopy, "Copy (hold anywhere to paste it, here or in any notebook)", onClick = onCopy)
         ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
         if (pasteCount > 0) ToolButton(Icons.Outlined.ContentPaste, if (pasteCount == 1) "Paste" else "Paste $pasteCount items", onClick = onPaste)
@@ -1033,10 +1034,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
         Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
         ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more; extra = null }
-      }
-      if (more) {
-        // The rest of what the menu always had, as plain buttons; colour and thickness each open their own row.
-        Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (more) {
+          // The rest of what the menu always had, as plain buttons; colour and thickness each open their own row.
           if (!sel.hasImage || sel.count > 1) {
             ToolButton(Icons.Outlined.Palette, "Colour", selected = extra == SelectionExtra.COLOUR) { extra = if (extra == SelectionExtra.COLOUR) null else SelectionExtra.COLOUR }
           }
@@ -1053,6 +1052,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
           sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
           if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         }
+      }
+      if (more) {
         when (extra) {
           SelectionExtra.COLOUR -> SelectionColours(sel, colors, onColor)
           SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, onRestyle) }
