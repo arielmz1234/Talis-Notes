@@ -45,6 +45,18 @@ class PaperPickerShotTest {
 
   @Test fun menuLight() = shot("menu-light", false, true)
 
+  // In a dropdown menu, which sizes itself from its content's natural width (it once crashed there).
+  @Test fun insideAMenuDoesNotCrash() {
+    rule.setContent {
+      TaliTheme(darkTheme = false) {
+        androidx.compose.foundation.layout.Column(Modifier.testTag("stage").width(androidx.compose.foundation.layout.IntrinsicSize.Max)) {
+          PaperPicker(PaperStyle.LINES, null, emptyList(), {}, {}, {}, {}, lineWeight = 1f, onLineWeight = {})
+        }
+      }
+    }
+    rule.waitForIdle()
+  }
+
   @Test fun menuDark() = shot("menu-dark", true, true)
 
   @Test fun dialogLight() = shot("dialog-light", false, false)

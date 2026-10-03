@@ -1,5 +1,6 @@
 package com.tali.notes.ui.components
 
+import androidx.compose.ui.layout.onSizeChanged
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -101,9 +102,16 @@ fun PaperPicker(
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
   var expanded by remember { mutableStateOf(false) }
   val glide = rememberSlidingSelection()
-  androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
-  // As many tiles as fit across (up to perRow); folded, that's papers plus More on one line.
-  val fit = ((maxWidth + 4.dp) / (tileWidth + 4.dp)).toInt().coerceIn(2, maxOf(2, perRow))
+  // As many tiles as fit across (up to perRow); folded, that's papers plus More on one line. The
+  // width is read once laid out, not with BoxWithConstraints: this picker also sits in a dropdown
+  // menu, which asks its content for its natural width, and BoxWithConstraints can't answer that
+  // (it crashed opening the paper menu).
+  var widthPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+  val density = androidx.compose.ui.platform.LocalDensity.current
+  val fit =
+    if (widthPx == 0) maxOf(2, perRow)
+    else with(density) { ((widthPx.toDp() + 4.dp) / (tileWidth + 4.dp)).toInt() }.coerceIn(2, maxOf(2, perRow))
+  Box(modifier.onSizeChanged { widthPx = it.width }) {
   // Folded: the papers she's most likely to want first, as many as fit beside More.
   val folded = (FOLDED + PaperStyle.entries.map { it.name }.filterNot { it in FOLDED } + customs.map { it.id }).take(fit - 1)
   // While folded, More stands in for a paper in use that isn't showing, so it holds the highlight.

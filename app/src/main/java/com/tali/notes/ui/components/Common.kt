@@ -211,7 +211,8 @@ fun QuietButton(text: String, modifier: Modifier = Modifier, color: Color = Tali
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
   val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.96f else 1f, androidx.compose.animation.core.tween(if (pressed) 90 else 160), label = "quietPress")
-  val wash = if (color == c.ink) c.accentSoft else color.copy(alpha = 0.12f)
+  // In light mode a touch deeper than the plain soft accent, which read too faint on the pale sky.
+  val wash = if (color == c.ink) (if (c.isDark) c.accentSoft else androidx.compose.ui.graphics.lerp(c.accentSoft, c.accent, 0.12f)) else color.copy(alpha = if (c.isDark) 0.12f else 0.15f)
   Box(
     modifier
       .graphicsLayer { scaleX = scale; scaleY = scale }
