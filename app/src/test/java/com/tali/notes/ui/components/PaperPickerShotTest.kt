@@ -49,6 +49,20 @@ class PaperPickerShotTest {
 
   @Test fun dialogLight() = shot("dialog-light", false, false)
 
+  // As wide as the new-notebook card: more papers fit beside More.
+  @Test fun dialogWide() {
+    rule.setContent {
+      TaliTheme(darkTheme = false) {
+        Box(Modifier.testTag("stage").background(Tali.colors.surface).padding(12.dp).width(584.dp)) {
+          PaperPicker(PaperStyle.GRID, null, emptyList(), {}, {}, {}, {}, tileWidth = 80.dp, perRow = 7)
+        }
+      }
+    }
+    rule.waitForIdle()
+    val dir = File("build/papers").apply { mkdirs() }
+    rule.onNodeWithTag("stage").captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, File(dir, "dialog-wide.png").outputStream())
+  }
+
   // At her tablet's density, where the stray line showed.
   @Test @Config(qualifiers = "w800dp-h600dp-xhdpi") fun dialogDarkXhdpi() = shot("dialog-dark-xhdpi", true, false)
 

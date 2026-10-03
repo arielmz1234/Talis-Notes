@@ -101,14 +101,19 @@ fun PaperPicker(
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
   var expanded by remember { mutableStateOf(false) }
   val glide = rememberSlidingSelection()
-  // While folded, More stands in for a paper in use that isn't one of the three, so it holds the highlight.
-  val foldedAway = !expanded && (customId ?: style.name) !in FOLDED
-  Column(modifier) {
+  androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+  // As many tiles as fit across (up to perRow); folded, that's papers plus More on one line.
+  val fit = ((maxWidth + 4.dp) / (tileWidth + 4.dp)).toInt().coerceIn(2, maxOf(2, perRow))
+  // Folded: the papers she's most likely to want first, as many as fit beside More.
+  val folded = (FOLDED + PaperStyle.entries.map { it.name }.filterNot { it in FOLDED } + customs.map { it.id }).take(fit - 1)
+  // While folded, More stands in for a paper in use that isn't showing, so it holds the highlight.
+  val foldedAway = !expanded && (customId ?: style.name) !in folded
+  Column {
   FlowRow(
     Modifier.slidingHighlight(glide, if (foldedAway) "more" else customId ?: style, SolidColor(c.accentSoft), 10.dp),
     horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalArrangement = Arrangement.spacedBy(4.dp),
-    maxItemsInEachRow = perRow,
+    maxItemsInEachRow = fit,
   ) {
     val tile: @Composable (Any, String, Boolean, () -> Unit, (() -> Unit)?, @Composable (Modifier) -> Unit) -> Unit = { key, label, on, click, longClick, swatch ->
       val edge by animateColorAsState(if (on) c.accent else Color.Transparent, tween(220), label = "swatchEdge")
@@ -130,12 +135,12 @@ fun PaperPicker(
     val all: List<Pair<String, @Composable () -> Unit>> =
       PaperStyle.entries.map { s -> s.name to @Composable { tile(s, s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
         customs.map { cp -> cp.id to @Composable { tile(cp.id, cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
-    // Folded: Blank, Lines and Grid, then More. Open: every paper, hers, and Your own last.
+    // Folded: as many as fit (Blank, Lines and Grid first), then More. Open: every paper, hers, and Your own last.
     val current = customId ?: style.name
-    val shown = if (expanded) all else FOLDED.mapNotNull { name -> all.firstOrNull { it.first == name } }
+    val shown = if (expanded) all else folded.mapNotNull { name -> all.firstOrNull { it.first == name } }
     shown.forEach { it.second() }
     // While folded, More stands in for a paper in use that isn't one of the three.
-    val hiddenCurrent = !expanded && current !in FOLDED
+    val hiddenCurrent = !expanded && current !in folded
     val currentCustom = customs.firstOrNull { it.id == customId }
     tile("more", if (expanded) "Fewer" else if (hiddenCurrent) (currentCustom?.name ?: style.label) else "More", hiddenCurrent, { expanded = !expanded }, null) { m ->
       Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
@@ -159,6 +164,7 @@ fun PaperPicker(
     }
   }
   if (lineWeight != null && onLineWeight != null) LineWeightRow(lineWeight, onLineWeight)
+  }
   }
   removing?.let { cp ->
     ConfirmDialog(

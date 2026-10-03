@@ -1,5 +1,6 @@
 package com.tali.notes.ui.components
 
+import androidx.compose.ui.graphics.graphicsLayer
 import android.graphics.BitmapFactory
 import android.text.format.DateUtils
 import androidx.compose.foundation.BorderStroke
@@ -204,8 +205,24 @@ fun PrimaryButton(text: String, icon: ImageVector? = null, modifier: Modifier = 
 
 @Composable
 fun QuietButton(text: String, modifier: Modifier = Modifier, color: Color = Tali.colors.ink, onClick: () -> Unit) {
-  Surface(onClick = onClick, shape = RoundedCornerShape(14.dp), color = Color.Transparent, border = BorderStroke(1.dp, Tali.colors.line), modifier = modifier.height(44.dp)) {
-    Box(Modifier.padding(horizontal = 18.dp), contentAlignment = Alignment.Center) { Text(text, style = MaterialTheme.typography.labelLarge, color = color) }
+  val c = Tali.colors
+  // A soft lilac pill (a faint wash of its own colour for a warning like Delete), no outline: a thin
+  // grey border all but vanished on the sky and on white cards. It presses in like the main button.
+  val interaction = remember { MutableInteractionSource() }
+  val pressed by interaction.collectIsPressedAsState()
+  val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.96f else 1f, androidx.compose.animation.core.tween(if (pressed) 90 else 160), label = "quietPress")
+  val wash = if (color == c.ink) c.accentSoft else color.copy(alpha = 0.12f)
+  Box(
+    modifier
+      .graphicsLayer { scaleX = scale; scaleY = scale }
+      .height(44.dp)
+      .clip(RoundedCornerShape(14.dp))
+      .background(wash)
+      .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+      .padding(horizontal = 18.dp),
+    contentAlignment = Alignment.Center,
+  ) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = if (color == c.ink) c.accent else color)
   }
 }
 

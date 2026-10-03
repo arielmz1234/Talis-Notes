@@ -1108,7 +1108,7 @@ private fun MoveFolderDialog(f: Folder, folders: List<Folder>, onDismiss: () -> 
   DialogCard(onDismiss, width = 460) {
     Text("Move “${f.name}”", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(12.dp))
-    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+    Column(Modifier.weight(1f, fill = false).heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
       MoveTarget("Top level", Icons.Outlined.AutoStories, c.inkMuted, depth = 0, current = f.parentId == null) { onMove(null) }
       folderTree(folders).filter { it.first.id !in blocked }.forEach { (target, depth) ->
         MoveTarget(target.name, Icons.Outlined.Folder, Color(target.color), depth = depth + 1, current = target.id == f.parentId) { onMove(target.id) }
@@ -1159,7 +1159,12 @@ private fun PickBar(
     Text(if (count == 1) "1 selected" else "$count selected", style = MaterialTheme.typography.titleMedium, color = c.ink)
     Spacer(Modifier.width(12.dp))
     QuietButton(if (allPicked) "Select none" else "Select all", onClick = onAll)
-    Spacer(Modifier.width(4.dp))
+    Spacer(Modifier.width(10.dp))
+    // The actions together in one frosted pill, so they read as a group on the sky.
+    Row(
+      Modifier.clip(RoundedCornerShape(16.dp)).background(c.surface.copy(alpha = 0.72f)).padding(horizontal = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
     Box {
       com.tali.notes.ui.components.ToolButton(Icons.AutoMirrored.Outlined.DriveFileMove, "Move to folder", enabled = count > 0) { moving = true }
       DropdownMenu(expanded = moving, onDismissRequest = { moving = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
@@ -1177,7 +1182,8 @@ private fun PickBar(
     }
     com.tali.notes.ui.components.ToolButton(Icons.Outlined.ContentCopy, "Duplicate", enabled = count > 0, onClick = onDuplicate)
     com.tali.notes.ui.components.ToolButton(Icons.Outlined.DeleteOutline, "Delete", enabled = count > 0, onClick = onDelete)
-    Spacer(Modifier.width(8.dp))
+    }
+    Spacer(Modifier.width(10.dp))
     PrimaryButton("Done", onClick = onDone)
   }
 }

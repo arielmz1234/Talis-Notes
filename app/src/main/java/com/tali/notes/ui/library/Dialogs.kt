@@ -70,7 +70,7 @@ import com.tali.notes.ui.components.slidingHighlight
 import com.tali.notes.ui.components.slidingOption
 
 @Composable
-fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, content: @Composable () -> Unit) {
+fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
   val c = Tali.colors
   // The dialog's window fills the screen and the card is laid out inside it. A wrap-content window
   // had to be resized and re-centred by the system on every frame when the card's height animated
@@ -169,7 +169,8 @@ fun NewNotebookDialog(
   var makingPaper by remember { mutableStateOf(false) }
   val create = { onCreate(NewNotebook(title.text, paper, custom, paged, dark, cover, landscape = paged && landscape)) }
   DialogCard(onDismiss, width = 640) {
-    Column(Modifier.heightIn(max = 640.dp).verticalScroll(rememberScrollState())) {
+    // The choices scroll and give way first, so Cancel and Create below always fit on screen.
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
       Row(verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
           Text("New notebook", style = MaterialTheme.typography.titleLarge, color = c.ink)
@@ -250,7 +251,6 @@ fun NewNotebookDialog(
         Modifier.slidingHighlight(ring, cover, SolidColor(c.ink), corner = 100.dp, ring = 2.5.dp, above = true),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        maxItemsInEachRow = 9,
       ) {
         com.tali.notes.data.PICK_COLORS.forEach { col ->
           Box(
