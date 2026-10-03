@@ -25,7 +25,7 @@ import org.robolectric.annotation.GraphicsMode
 /** The old lasso, the dotted lasso and the free-form circle, large; in build/select-icons. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w400dp-h200dp-xhdpi", application = android.app.Application::class)
+@Config(sdk = [35], qualifiers = "w600dp-h200dp-xhdpi", application = android.app.Application::class)
 class SelectIconsShotTest {
   @get:Rule val rule = createComposeRule()
 
@@ -33,7 +33,7 @@ class SelectIconsShotTest {
   fun icons() {
     rule.setContent {
       Row(Modifier.testTag("stage").background(Color.White).padding(12.dp)) {
-        listOf(TaliIcons.Lasso, TaliIcons.LassoDotted, TaliIcons.FreeSelect).forEach { Icon(it, null, tint = Color(0xFF1B1F2A), modifier = Modifier.padding(8.dp).size(64.dp)) }
+        listOf(TaliIcons.Lasso, TaliIcons.LassoDotted, TaliIcons.FreeSelect, TaliIcons.MirrorHorizontal, TaliIcons.MirrorVertical).forEach { Icon(it, null, tint = Color(0xFF1B1F2A), modifier = Modifier.padding(8.dp).size(64.dp)) }
       }
     }
     rule.waitForIdle()

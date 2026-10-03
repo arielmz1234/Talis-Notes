@@ -352,6 +352,14 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setHideNavBar(on: Boolean) = store.update { it.copy(hideNavBar = on) }
 
+  /** How writing is clipped to the pages in pictures of them (as on screen), or null on an endless canvas. */
+  private fun pageClip(): ((com.tali.notes.model.CanvasItem) -> com.tali.notes.geometry.Rect?)? {
+    val n = pageCount ?: return null
+    val layout = pageLayout
+    val between = settings.value.inkBetweenPages
+    return { item -> layout.clipFor(item, n, between) }
+  }
+
   fun setInkBetweenPages(on: Boolean) = store.update { it.copy(inkBetweenPages = on) }
 
 
@@ -391,7 +399,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val custom = customPaperOf(m, settings.value)
     val page = pageLayout.rect(index)
     return withContext(Dispatchers.Default) {
-      runCatching { Exporter.thumbnail(items.filter { it.bounds.intersects(page) }, page, m?.paper ?: PaperStyle.DOTS, widthPx, repo.images, m?.dark == true, originY = page.top, custom = custom, page = page) }.getOrNull()
+      runCatching { Exporter.thumbnail(items.filter { it.bounds.intersects(page) }, page, m?.paper ?: PaperStyle.DOTS, widthPx, repo.images, m?.dark == true, originY = page.top, custom = custom, page = page, clip = pageClip()) }.getOrNull()
     }
   }
 
@@ -459,7 +467,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         val layout = pageLayout
         val page = layout.rect(layout.indexAt(visible.top + visible.height * 0.4f).coerceIn(0, pages - 1))
         val region = Rect(page.left, page.top, page.right, minOf(page.bottom, page.top + page.width / 1.32f))
-        val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page) }.getOrNull() ?: return@launch
+        val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page, clip = pageClip()) }.getOrNull() ?: return@launch
         repo.saveThumbnail(notebookId, bmp)
         return@launch
       }
@@ -500,7 +508,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       withContext(Dispatchers.Default) {
         // One folder per choice, so the file she shares is still called after the notebook.
         val out = File(File(File(getApplication<Application>().cacheDir, "exports"), "${layout.name}-${quality.name}"), "$title.pdf")
-        runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality, landscape = landscape) }.map { out }.getOrNull()
+        runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality, landscape = landscape, inkBetweenPages = settings.value.inkBetweenPages) }.map { out }.getOrNull()
       }?.also { exported[key] = it }
     }
 }

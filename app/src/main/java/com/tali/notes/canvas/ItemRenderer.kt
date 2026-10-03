@@ -28,6 +28,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   }
   private val rectF = RectF()
 
+  /** On A4 pages: the area each stroke or shape is shown in (see `Pages.clipFor`), or null to draw it whole. */
+  var clipFor: ((CanvasItem) -> com.tali.notes.geometry.Rect?)? = null
+
   /** Dark paper: ink is drawn in its light counterpart colours; pictures stay as they are. */
   var dark = false
 
@@ -76,6 +79,18 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   }
 
   fun draw(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
+    val clip = clipFor?.invoke(item)
+    if (clip != null) {
+      canvas.save()
+      canvas.clipRect(clip.left, clip.top, clip.right, clip.bottom)
+      drawItem(canvas, item, worldToScreen)
+      canvas.restore()
+    } else {
+      drawItem(canvas, item, worldToScreen)
+    }
+  }
+
+  private fun drawItem(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
     when (item) {
       is InkItem -> strokes.draw(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
       is ShapeItem -> {

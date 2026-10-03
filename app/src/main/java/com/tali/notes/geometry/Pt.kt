@@ -112,6 +112,13 @@ data class Affine(val a: Float = 1f, val b: Float = 0f, val c: Float = 0f, val d
   val isIdentity: Boolean
     get() = this == IDENTITY
 
+  /** Where a direction at angle [t] points after this transform (right for rotations and mirroring alike). */
+  fun mapAngle(t: Float): Float = kotlin.math.atan2(b * kotlin.math.cos(t) + d * kotlin.math.sin(t), a * kotlin.math.cos(t) + c * kotlin.math.sin(t))
+
+  /** Whether this transform mirrors (turns clockwise into anticlockwise). */
+  val mirrors: Boolean
+    get() = a * d - b * c < 0f
+
   companion object {
     val IDENTITY = Affine()
 

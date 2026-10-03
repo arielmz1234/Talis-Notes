@@ -67,6 +67,7 @@ object Exporter {
     originY: Float = 0f,
     custom: CustomPaper? = null,
     page: Rect? = null,
+    clip: ((CanvasItem) -> Rect?)? = null,
   ): Bitmap {
     val heightPx = (widthPx * world.height / world.width).toInt().coerceIn(1, widthPx * 2)
     val bmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
@@ -78,7 +79,7 @@ object Exporter {
       pageRect = page
     }.draw(canvas, paper, camera, widthPx, heightPx)
     canvas.concat(camera.worldToScreen)
-    renderer(images, dark).drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
+    renderer(images, dark).also { it.clipFor = clip }.drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
     return bmp
   }
 
@@ -111,6 +112,7 @@ object Exporter {
     custom: CustomPaper? = null,
     quality: PdfQuality = PdfQuality.BEST,
     landscape: Boolean = false,
+    inkBetweenPages: Boolean = false,
   ) {
     val pageLayout = Pages.of(landscape)
     val content = items.map { it.bounds }.reduceOrNull(Rect::union)?.outset(MARGIN_DP) ?: Rect(0f, 0f, 1322f, 1871f)
@@ -125,7 +127,11 @@ object Exporter {
         PdfLayout.PDF_PAGES -> pdfPages(items).ifEmpty { splitTall(content) }
       }
     val doc = PdfDocument()
-    val r = renderer(images, dark).apply { imagePxPerDp = quality.imagePxPerDp }
+    // A paged notebook's writing shows only on its page, as on screen.
+    val r = renderer(images, dark).apply {
+      imagePxPerDp = quality.imagePxPerDp
+      if (pageCount != null) clipFor = { item -> pageLayout.clipFor(item, pageCount, inkBetweenPages) }
+    }
     val paperRenderer = paperRenderer(dark, custom, images).apply {
       print = true
       // A picture background shrinks like any picture (it fills an A4 page).

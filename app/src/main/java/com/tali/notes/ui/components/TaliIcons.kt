@@ -46,6 +46,25 @@ object TaliIcons {
     outline("Free form", dottedEllipse(12f, 12f, 8.4f, 8.4f, 12, 0.13f))
   }
 
+  /** A filled half and its outlined reflection, either side of a gap. */
+  private fun mirror(name: String, filled: String, outlined: String): ImageVector =
+    ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
+      .apply {
+        addPath(pathData = addPathNodes(filled), fill = SolidColor(Color.Black), stroke = SolidColor(Color.Black), strokeLineWidth = 1.6f, strokeLineJoin = StrokeJoin.Round)
+        addPath(pathData = addPathNodes(outlined), fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+      }
+      .build()
+
+  /** Mirror left to right: a tall wedge filled on the left, its reflection outlined on the right. */
+  val MirrorHorizontal: ImageVector by lazy {
+    mirror("Mirror left to right", "M10.4 4.6 L10.4 19.4 L4.2 16.6 L5.6 7.2 Z", "M13.6 4.6 L13.6 19.4 L19.8 16.6 L18.4 7.2 Z")
+  }
+
+  /** Mirror upside down: a wide wedge filled on top, its reflection outlined below. */
+  val MirrorVertical: ImageVector by lazy {
+    mirror("Mirror upside down", "M4.6 10.4 L19.4 10.4 L16.6 4.2 L7.2 5.6 Z", "M4.6 13.6 L19.4 13.6 L16.6 19.8 L7.2 18.4 Z")
+  }
+
   val Eraser: ImageVector by lazy {
     outline(
       "Eraser",

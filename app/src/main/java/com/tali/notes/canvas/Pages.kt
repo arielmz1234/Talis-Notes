@@ -32,6 +32,20 @@ class Pages private constructor(val landscape: Boolean) {
     return i < count && y - i * pitch <= height
   }
 
+  /**
+   * Where [item] is shown on the first [count] pages: writing and shapes are never drawn past a
+   * page's sides; with [between] (Write between pages) they may cross the gaps, otherwise each stays
+   * on its own page (where a stroke began, or where most of a shape is). The rest is only hidden:
+   * moved, it shows again. Null for pictures and text, which aren't clipped.
+   */
+  fun clipFor(item: com.tali.notes.model.CanvasItem, count: Int, between: Boolean): Rect? {
+    if (item !is com.tali.notes.model.InkItem && item !is com.tali.notes.model.ShapeItem) return null
+    if (count <= 0) return null
+    if (between) return Rect(0f, 0f, width, rect(count - 1).bottom)
+    val y = if (item is com.tali.notes.model.InkItem) item.start.y else item.bounds.center.y
+    return rect(indexAt(y).coerceIn(0, count - 1))
+  }
+
   /** How many pages it takes to hold everything down to [content]'s bottom edge. */
   fun needed(content: Rect?): Int = if (content == null) 1 else (indexAt(content.bottom) + 1).coerceAtLeast(1)
 

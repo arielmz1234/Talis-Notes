@@ -80,7 +80,7 @@ data class PolyShape(
 ) : ShapeGeometry {
   override fun paths(penSize: Float) = listOf(if (closed) points + points.first() else if (smooth) Geo.smooth(points) else points)
 
-  override fun transformed(m: Affine) = copy(points = points.map(m::apply), rotation = rotation + atan2(m.b, m.a))
+  override fun transformed(m: Affine) = copy(points = points.map(m::apply), rotation = m.mapAngle(rotation))
 
   // Dots only where they change the shape (the resize chip resizes it): a rectangle's in the middle
   // of each side, to stretch it one way; every other polygon's at its corners. A hand-drawn line
@@ -185,10 +185,9 @@ data class EllipseShape(
   fun point(t: Float) = center + Pt(rx * cos(t), ry * sin(t)).rotated(rotation)
 
   override fun transformed(m: Affine): ShapeGeometry {
-    // Uniform scale, translation and rotation keep an ellipse an ellipse; that's all selections do.
+    // Uniform scale, translation, rotation and mirroring keep an ellipse an ellipse; that's all selections do.
     val s = m.scaleFactor()
-    val rot = atan2(m.b, m.a)
-    return copy(center = m.apply(center), rx = rx * s, ry = ry * s, rotation = rotation + rot)
+    return copy(center = m.apply(center), rx = rx * s, ry = ry * s, rotation = m.mapAngle(rotation))
   }
 
   // A circle's dots could only resize it (the resize chip does that); an ellipse's change its shape.
@@ -219,7 +218,8 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
     return listOf(arc) + arrowHead(arc[arc.size - 2], arc.last(), penSize)
   }
 
-  override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = start + atan2(m.b, m.a))
+  // Mirrored, it runs the other way round from its (mirrored) start.
+  override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = m.mapAngle(start), sweep = if (m.mirrors) -sweep else sweep)
 
   override fun handles() = listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep))
 
@@ -271,7 +271,7 @@ data class SectorShape(val center: Pt, val radius: Float, val start: Float, val 
     return if (fraction >= 0.999f) listOf(arc) else listOf(listOf(center) + arc + listOf(center))
   }
 
-  override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = start + atan2(m.b, m.a))
+  override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = m.mapAngle(start), sweep = if (m.mirrors) -sweep else sweep)
 
   override fun handles() = listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep), center + Pt.polar(radius, start + sweep / 2))
 
@@ -441,10 +441,12 @@ internal fun positiveTurn(a: Float): Float {
 fun arrowHead(from: Pt, tip: Pt, penSize: Float): List<List<Pt>> {
   val dir = (tip - from).normalized()
   if (dir == Pt.ZERO) return emptyList()
-  val len = min(max(10f, penSize * 5f), from.dist(tip) * 0.45f)
+  // A clear head, like a hand-drawn arrow's: about 3 mm or 7 pen widths, whichever is bigger,
+  // opening at 30° each side (it used to be small enough to get lost on a thin pen).
+  val len = min(max(20f, penSize * 7f), from.dist(tip) * 0.4f)
   val back = dir * -len
-  val left = tip + back.rotated(0.45f)
-  val right = tip + back.rotated(-0.45f)
+  val left = tip + back.rotated(0.52f)
+  val right = tip + back.rotated(-0.52f)
   return listOf(listOf(left, tip, right))
 }
 

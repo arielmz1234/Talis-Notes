@@ -4,6 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.drawToBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.tali.notes.backup.DriveBackup
@@ -24,8 +28,32 @@ class MainActivity : ComponentActivity() {
       // The status bar's icons match the chosen theme, not the tablet's.
       val view = androidx.compose.ui.platform.LocalView.current
       androidx.compose.runtime.SideEffect { androidx.core.view.WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !dark }
+      // A change of theme or style fades over from a capture of the screen as it was (ThemeFade).
+      androidx.compose.runtime.DisposableEffect(view) {
+        com.tali.notes.ui.components.ThemeFade.capture = {
+          runCatching { window.decorView.drawToBitmap() }.getOrNull()?.let { com.tali.notes.ui.components.ThemeFade.snapshot = it.asImageBitmap() }
+        }
+        onDispose { com.tali.notes.ui.components.ThemeFade.capture = null }
+      }
       TaliTheme(darkTheme = dark) {
-        androidx.compose.runtime.CompositionLocalProvider(com.tali.notes.theme.LocalMinimal provides s.minimal) { MainNavigation() }
+        androidx.compose.runtime.CompositionLocalProvider(com.tali.notes.theme.LocalMinimal provides s.minimal) {
+          androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+            MainNavigation()
+            com.tali.notes.ui.components.ThemeFade.snapshot?.let { shot ->
+              val fade = androidx.compose.runtime.remember(shot) { androidx.compose.animation.core.Animatable(1f) }
+              androidx.compose.runtime.LaunchedEffect(shot) {
+                fade.animateTo(0f, androidx.compose.animation.core.tween(450, easing = com.tali.notes.ui.components.EaseOutStrong))
+                if (com.tali.notes.ui.components.ThemeFade.snapshot === shot) com.tali.notes.ui.components.ThemeFade.snapshot = null
+              }
+              androidx.compose.foundation.Image(
+                shot,
+                null,
+                contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+                modifier = androidx.compose.ui.Modifier.fillMaxSize().graphicsLayer { alpha = fade.value },
+              )
+            }
+          }
+        }
       }
     }
   }

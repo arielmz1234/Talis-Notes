@@ -1,5 +1,7 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.material.icons.outlined.ContentCut
+import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.VerticalAlignCenter
@@ -613,11 +615,13 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onDelete = { holder.view?.runSafely { deleteSelection() } },
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
           onCopy = { holder.view?.runSafely { copySelection() } },
+          onCut = { holder.view?.runSafely { cutSelection() } },
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
           onRestyle = { size, line -> holder.view?.runSafely { restyleSelection(size, line) } },
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
           onEditText = { id -> holder.view?.runSafely { editText(id) } },
           onArrange = { front -> holder.view?.runSafely { arrangeSelection(front) } },
+          onMirror = { horizontal -> holder.view?.runSafely { mirrorSelection(horizontal) } },
           onLock = { holder.view?.runSafely { lockSelection() } },
         )
       }
@@ -940,7 +944,7 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
@@ -978,6 +982,7 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
           }
         }
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
+        ToolButton(Icons.Outlined.ContentCut, "Cut (paste it from ⋯ here or in any notebook)", onClick = onCut)
         ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
         // What's in front and what's behind: pictures can go over the writing or under it.
@@ -997,6 +1002,9 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
           }
         }
         sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
+        // Mirror left to right, or upside down (writing and shapes flip; pictures and text keep facing the right way).
+        ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorHorizontal, "Mirror left to right") { onMirror(true) }
+        ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorVertical, "Mirror upside down") { onMirror(false) }
         // Locked things stay put: the lasso, taps and the eraser leave them alone.
         if (sel.locked) ToolButton(Icons.Outlined.LockOpen, "Unlock", onClick = onLock) else ToolButton(Icons.Outlined.Lock, "Lock in place", onClick = onLock)
         if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)

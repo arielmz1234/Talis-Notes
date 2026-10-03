@@ -93,6 +93,9 @@ fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, con
         .padding(24.dp),
       contentAlignment = Alignment.Center,
     ) {
+      // A theme change (from Settings) cross-fades the card instead of switching at once.
+      androidx.compose.animation.Crossfade(Tali.colors, animationSpec = androidx.compose.animation.core.tween(450), label = "cardTheme") { colors ->
+      com.tali.notes.theme.TaliColorsScope(colors) {
       Column(
         // The same soft cloud surface as the notebook panels, floating on a lilac shadow.
         Modifier.widthIn(max = width.dp)
@@ -103,6 +106,8 @@ fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, con
           .padding(28.dp)
       ) {
         content()
+      }
+      }
       }
     }
   }

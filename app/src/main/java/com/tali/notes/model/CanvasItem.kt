@@ -63,6 +63,12 @@ private constructor(
   /** The stroke in its dark-paper colour, made the first time dark paper draws it. */
   val darkStroke: Stroke by lazy { Brushes.forDarkPaper(stroke) }
 
+  /** Where the stroke began (on A4 pages it belongs to that page). */
+  val start: com.tali.notes.geometry.Pt by lazy {
+    val inputs = stroke.inputs
+    if (inputs.size > 0) inputs.get(0).let { com.tali.notes.geometry.Pt(it.x, it.y) } else bounds.center
+  }
+
   companion object {
     fun deferred(id: String, z: Long, pen: PenType, bounds: Rect, color: Int, locked: Boolean = false, build: () -> Stroke) = InkItem(id, z, pen, lazy(build), bounds, color, locked)
   }

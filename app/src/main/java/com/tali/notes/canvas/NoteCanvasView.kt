@@ -134,6 +134,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
   private val tiles = TileCache(itemRenderer)
+
+  init {
+    // On A4 pages, writing and shapes show only on their page (or the page column with Write
+    // between pages); the parts past it are kept, just not drawn.
+    itemRenderer.clipFor = { item -> pageCount?.let { n -> pageLayout.clipFor(item, n, settings.inkBetweenPages) } }
+  }
   private val paper = PaperRenderer()
   private val predictor = MotionEventPredictor.newInstance(this)
   private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
@@ -145,7 +151,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     set(value) {
       // The paper redraws when her line weight changes.
       if (value.paperLineWeight != field.paperLineWeight) invalidate()
+      val reclip = value.inkBetweenPages != field.inkBetweenPages
       field = value
+      // Writing past the pages shows or hides again with Write between pages.
+      if (reclip) {
+        tiles.invalidateAll()
+        invalidate()
+      }
     }
   var tool = Tool.PEN
     set(value) {
@@ -273,8 +285,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // Ink
   private var strokeId: InProgressStrokeId? = null
   private val strokePens = HashMap<InProgressStrokeId, PenType>()
-  /** The page each stroke started on: with Write between pages off, it stays on that page. */
-  private val strokeStartPages = HashMap<InProgressStrokeId, Int>()
 
   /** The pen colour each stroke really has (on dark paper the stroke is drawn live in its light version). */
   private val strokeColors = HashMap<InProgressStrokeId, Int>()
@@ -499,8 +509,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
             // On dark paper the live stroke used the light version of the colour; store the real one.
             val real = strokeColors.remove(id)?.let { Brushes.inkColor(pen, it) }
             val stroke = if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s
-            // On A4 pages, writing that ran off the page is cut at its edge.
-            clipToPages(stroke, strokeStartPages.remove(id)).map { InkItem(d.newId(), d.nextZ(), pen, it) }
+            // Kept whole: on A4 pages the part past its page is only hidden (ItemRenderer.clipFor).
+            listOf(InkItem(d.newId(), d.nextZ(), pen, stroke))
           }
         if (added.isNotEmpty()) d.commit(Change(emptyList(), added))
       } catch (t: Throwable) {
@@ -655,7 +665,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (isDraggingSelection() && selection.isNotEmpty()) {
       canvas.save()
       canvas.concat(dragTransform.toMatrix())
+      // Carried whole (not clipped to its page) while it's being moved.
+      val clip = itemRenderer.clipFor
+      itemRenderer.clipFor = null
       itemRenderer.drawAll(canvas, selection, camera.worldToScreen)
+      itemRenderer.clipFor = clip
       canvas.restore()
     }
     canvas.restore()
@@ -685,6 +699,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.HANDLE_DRAG -> liveEdit?.geometry
       Mode.SHAPE_CREATE -> shapePreview?.geometry
       Mode.LIVE_SHAPE -> liveShape?.geometry
+      // Resizing it with the chip keeps it square (or round): still say so.
+      Mode.SCALE_SELECTION -> ((selection.singleOrNull() as? ShapeItem)?.geometry)?.transformed(dragTransform)
       else -> null
     } ?: return
     val (a, b) = when {
@@ -1320,7 +1336,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val id = inProgress.startStroke(e, e.getPointerId(idx), brush, camera.screenToWorld)
     strokeId = id
     strokePens[id] = slot.type
-    pageAt(p)?.let { strokeStartPages[id] = it }
     if (darkPaper) strokeColors[id] = slot.color
     strokePoints.clear()
     strokePoints += p
@@ -1551,7 +1566,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           strokeId?.let {
             inProgress.cancelStroke(it, e)
             strokePens.remove(it)
-            strokeStartPages.remove(it)
             strokeColors.remove(it)
           }
           strokeId = null
@@ -1679,8 +1693,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val slot = settings.activeSlot
     // Stored in the real colour; dark paper only changes how it's shown.
     val stroke = preview.stroke.let { st -> st.copy(st.brush.copyWithColorIntArgb(Brushes.inkColor(slot.type, slot.color))) }
-    val pieces = clipToPages(stroke, pageAt(straightStart)).map { InkItem(d.newId(), d.nextZ(), slot.type, it) }
-    if (pieces.isNotEmpty()) d.commit(Change(emptyList(), pieces))
+    d.commit(Change(emptyList(), listOf(InkItem(d.newId(), d.nextZ(), slot.type, stroke))))
   }
 
   // ---- Scrolling while carrying something to an edge ----
@@ -1762,59 +1775,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       areas.forEach { addRect(it.left, it.top, it.right, it.bottom, android.graphics.Path.Direction.CW) }
       if (toScreen != null) transform(toScreen)
     }
-
-  /**
-   * [stroke] cut to the pages (see [inkAreas]): whole if it stayed on, else the pieces that are on,
-   * each ending exactly where it left (pressure, tilt and timing carried over).
-   */
-  private fun clipToPages(stroke: Stroke, startPage: Int?): List<Stroke> {
-    val areas = inkAreas(stroke.brush.size / 2f, startPage) ?: return listOf(stroke)
-    val inputs = stroke.inputs
-    val n = inputs.size
-    if (n == 0) return emptyList()
-    val samples = List(n) { inputs.get(it) }
-    val runs = com.tali.notes.geometry.PageClip.runs(samples.map { Pt(it.x, it.y) }, areas)
-    if (runs.size == 1 && runs[0].start == 0f && runs[0].end >= n - 1f) return listOf(stroke)
-    return runs.mapNotNull { run ->
-      val at = ArrayList<Float>()
-      at += run.start
-      var k = kotlin.math.floor(run.start).toInt() + 1
-      while (k < run.end) {
-        at += k.toFloat()
-        k++
-      }
-      if (run.end > run.start) at += run.end
-      val batch = androidx.ink.strokes.MutableStrokeInputBatch()
-      val t0 = sampleAt(samples, run.start).elapsedTimeMillis
-      runCatching {
-        for (s in at) {
-          val q = sampleAt(samples, s)
-          batch.add(q.toolType, q.x, q.y, q.elapsedTimeMillis - t0, q.strokeUnitLengthCm, q.pressure, q.tiltRadians, q.orientationRadians)
-        }
-        Stroke(stroke.brush, batch)
-      }.getOrNull()
-    }
-  }
-
-  /** The pen sample at [s] along [samples] (point i, then t of the way to the next), blended. */
-  private fun sampleAt(samples: List<androidx.ink.strokes.StrokeInput>, s: Float): androidx.ink.strokes.StrokeInput {
-    val i = kotlin.math.floor(s).toInt().coerceIn(0, samples.size - 1)
-    val t = s - i
-    val a = samples[i]
-    if (t < 1e-4f || i >= samples.size - 1) return a
-    val b = samples[i + 1]
-    fun mix(x: Float, y: Float) = x + (y - x) * t
-    return androidx.ink.strokes.StrokeInput.create(
-      mix(a.x, b.x),
-      mix(a.y, b.y),
-      a.elapsedTimeMillis + ((b.elapsedTimeMillis - a.elapsedTimeMillis) * t).toLong(),
-      a.toolType,
-      a.strokeUnitLengthCm,
-      if (a.hasPressure && b.hasPressure) mix(a.pressure, b.pressure) else a.pressure,
-      if (a.hasTilt && b.hasTilt) mix(a.tiltRadians, b.tiltRadians) else a.tiltRadians,
-      if (a.hasOrientation && b.hasOrientation) mix(a.orientationRadians, b.orientationRadians) else a.orientationRadians,
-    )
-  }
 
   /**
    * On A4 pages, pictures stay on a page: moved off (to the side or into a gap), the selection is
@@ -2230,6 +2190,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     d.commit(Change(sel, emptyList()))
   }
 
+  /** Cuts the selection: onto the clipboard, then off the page (undo brings it back). */
+  fun cutSelection() {
+    if (selection.isEmpty()) return
+    val n = selection.size
+    Clipboard.items = selection
+    deleteSelection()
+    host.onHint(if (n == 1) "Cut \u2014 paste it from \u22EF here or in any notebook" else "Cut $n items \u2014 paste them from \u22EF here or in any notebook")
+  }
+
   fun copySelection() {
     if (selection.isEmpty()) return
     Clipboard.items = selection
@@ -2246,6 +2215,32 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val copies = items.sortedBy { it.z }.map { it.transformed(move, d.newId(), d.nextZ()) }
     d.commit(Change(emptyList(), copies))
     setSelection(copies)
+  }
+
+  /**
+   * Mirrors the selection in place, left to right ([horizontal]) or upside down, around its middle
+   * (one undo step). Writing and shapes flip; pictures and text move to their mirrored places but
+   * keep facing the right way.
+   */
+  fun mirrorSelection(horizontal: Boolean) {
+    val d = doc ?: return
+    val b = selectionBounds ?: return
+    val sel = selection.mapNotNull { d[it.id] }
+    if (sel.isEmpty()) return
+    val m = if (horizontal) Affine.scaleAround(b.center, -1f, 1f) else Affine.scaleAround(b.center, 1f, -1f)
+    val mirrored = sel.map { item ->
+      when (item) {
+        is ImageItem, is TextItem -> {
+          val c = item.bounds.center
+          val to = m.apply(c)
+          item.transformed(Affine.translate(to.x - c.x, to.y - c.y))
+        }
+        else -> item.transformed(m)
+      }
+    }
+    d.commit(Change(sel, mirrored))
+    setSelection(mirrored)
+    if (mirrored.size == 1 && mirrored[0] is ShapeItem) activeShapeId = mirrored[0].id
   }
 
   fun duplicateSelection() {
@@ -2918,6 +2913,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // ---- A4 pages ----
 
   private fun setPages(count: Int) {
+    // The page column's bottom moves with the count: what's shown past it changes.
+    if (count != pageCount) tiles.invalidateAll()
     pageCount = count
     host.onPagesChanged(count)
   }

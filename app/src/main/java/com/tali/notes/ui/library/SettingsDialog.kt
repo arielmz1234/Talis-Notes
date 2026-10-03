@@ -30,14 +30,14 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinima
     Segmented(
       listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK),
       settings.themeMode,
-      { when (it) { ThemeMode.SYSTEM -> "Like the tablet"; ThemeMode.LIGHT -> "Light"; ThemeMode.DARK -> "Dark" } },
-      onTheme,
+      { when (it) { ThemeMode.SYSTEM -> "System default"; ThemeMode.LIGHT -> "Light"; ThemeMode.DARK -> "Dark" } },
+      { com.tali.notes.ui.components.ThemeFade.beforeChange(); onTheme(it) },
       Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.height(18.dp))
     SectionLabel("Style")
     Spacer(Modifier.height(8.dp))
-    Segmented(listOf(false, true), settings.minimal, { if (it) "Minimal" else "Cloudy" }, onMinimal, Modifier.fillMaxWidth())
+    Segmented(listOf(false, true), settings.minimal, { if (it) "Minimal" else "Cloudy" }, { com.tali.notes.ui.components.ThemeFade.beforeChange(); onMinimal(it) }, Modifier.fillMaxWidth())
     Spacer(Modifier.height(6.dp))
     Text(
       if (settings.minimal) "Clean edges on bars and cards, no clouds in the sky, and more room at the top."
