@@ -295,10 +295,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun cyclePen(step: Int) {
     val s = settings.value
     val starred = s.pens.filter { it.starred }
-    if (starred.isEmpty()) {
-      showHint("Star pens in their settings to switch between them with the S Pen button")
-      return
-    }
+    // Nothing starred (the default): the presses do nothing at all.
+    if (starred.isEmpty()) return
     val at = starred.indexOfFirst { it.id == s.activePen }
     val next =
       if (tool != Tool.PEN || at < 0) (if (step > 0) starred.first() else starred.last())

@@ -1,5 +1,10 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -27,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -90,6 +96,7 @@ fun PagesOverview(
   onDismiss: () -> Unit,
   onGo: (Int) -> Unit,
   onAdd: () -> Unit,
+  onMove: (from: Int, to: Int) -> Unit,
   onDelete: (Int) -> Unit,
 ) = androidx.compose.runtime.CompositionLocalProvider(LocalPageAspect provides vm.pageLayout.aspect) {
   val c = Tali.colors
@@ -109,6 +116,67 @@ fun PagesOverview(
   val items = remember(version, count) { doc.all.toList() }
   val grid = rememberLazyGridState()
   LaunchedEffect(Unit) { grid.scrollToItem(current.coerceIn(0, count - 1)) }
+  // Hold a page (finger or pen) and drag it to a new place: the others make way as it passes, and
+  // it moves for real when let go. `order` is the pages as shown, by their real index.
+  var order by remember(count, version) { mutableStateOf((0 until count).toList()) }
+  var dragging by remember { mutableStateOf<Int?>(null) }
+  var dragOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+  // Each page's latest picture, so after a move the tiles keep showing the right page while
+  // their new pictures are made (instead of flashing blank).
+  val thumbs = remember(count) { androidx.compose.runtime.mutableStateMapOf<Int, ImageBitmap>() }
+  // Right after a drop the tiles settle in place without sliding back and forth.
+  var settling by remember { mutableStateOf(false) }
+  LaunchedEffect(version) { settling = false }
+  val edgePx = with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
+  fun itemInfo(key: Any) = grid.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }
+  fun dragBy(delta: androidx.compose.ui.geometry.Offset) {
+    val key = dragging ?: return
+    dragOffset += delta
+    val me = itemInfo(key) ?: return
+    val centre = androidx.compose.ui.geometry.Offset(me.offset.x + dragOffset.x + me.size.width / 2f, me.offset.y + dragOffset.y + me.size.height / 2f)
+    val target = grid.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+      info.key is Int && info.key != key &&
+        centre.x >= info.offset.x && centre.x <= info.offset.x + info.size.width &&
+        centre.y >= info.offset.y && centre.y <= info.offset.y + info.size.height
+    }
+    if (target != null) {
+      val from = order.indexOf(key)
+      val to = order.indexOf(target.key as Int)
+      if (from >= 0 && to >= 0) {
+        order = order.toMutableList().apply { add(to, removeAt(from)) }
+        // The tile now sits where the target was: keep it under the finger.
+        dragOffset += androidx.compose.ui.geometry.Offset((me.offset.x - target.offset.x).toFloat(), (me.offset.y - target.offset.y).toFloat())
+      }
+    }
+    // Near the top or bottom edge, the grid scrolls along.
+    val view = grid.layoutInfo.viewportSize.height
+    val edge = edgePx
+    val y = me.offset.y + dragOffset.y + me.size.height / 2f
+    val scroll = when {
+      y < edge -> -(edge - y) * 0.25f
+      y > view - edge -> (y - (view - edge)) * 0.25f
+      else -> 0f
+    }
+    if (scroll != 0f) {
+      val moved = grid.dispatchRawDelta(scroll)
+      dragOffset += androidx.compose.ui.geometry.Offset(0f, moved)
+    }
+  }
+  fun drop() {
+    val key = dragging ?: return
+    dragging = null
+    dragOffset = androidx.compose.ui.geometry.Offset.Zero
+    val to = order.indexOf(key)
+    if (to >= 0 && to != key) {
+      // The pictures follow their pages to their new places.
+      val moved = order.mapIndexed { pos, page -> pos to thumbs[page] }
+      moved.forEach { (pos, img) -> if (img != null) thumbs[pos] = img else thumbs.remove(pos) }
+      settling = true
+      onMove(key, to)
+    } else {
+      order = (0 until count).toList()
+    }
+  }
   Dialog(onDismissRequest = { if (peek != null) peek = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     // A deleted page's puff drifts out over the panel's edge freely instead of being cut off by the grid.
     com.tali.notes.ui.components.PuffLayerHost(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss), contentAlignment = Alignment.Center) {
@@ -123,7 +191,7 @@ fun PagesOverview(
           Column(Modifier.weight(1f)) {
             Text("Pages", style = MaterialTheme.typography.titleLarge, color = c.ink)
             Text(
-              (if (count == 1) "1 page" else "$count pages") + " · tap a page to look closer",
+              (if (count == 1) "1 page" else "$count pages") + " · tap a page to look closer, hold and drag to move it",
               style = MaterialTheme.typography.bodyMedium,
               color = c.inkMuted,
             )
@@ -140,8 +208,28 @@ fun PagesOverview(
           contentPadding = PaddingValues(bottom = 28.dp, top = 4.dp, start = 4.dp, end = 4.dp),
           modifier = Modifier.weight(1f),
         ) {
-          items(count, key = { it }) { i ->
-            PageTile(vm, items, i, version, selected = i == current, leaving = i == removing, modifier = Modifier.animateItem()) {
+          items(order, key = { it }) { i ->
+            val lifted = dragging == i
+            val pos = order.indexOf(i)
+            PageTile(
+              vm, items, i, version,
+              number = pos + 1,
+              selected = pos == current,
+              leaving = i == removing,
+              lifted = lifted,
+              cached = thumbs[i],
+              onPicture = { thumbs[i] = it },
+              modifier = (if (lifted) Modifier.zIndex(2f).graphicsLayer { translationX = dragOffset.x; translationY = dragOffset.y }
+                else Modifier.animateItem(placementSpec = if (settling) null else spring(dampingRatio = 0.85f, stiffness = 500f, visibilityThreshold = androidx.compose.ui.unit.IntOffset.VisibilityThreshold)))
+                .pointerInput(i, count) {
+                  detectDragGesturesAfterLongPress(
+                    onDragStart = { dragging = i; dragOffset = androidx.compose.ui.geometry.Offset.Zero },
+                    onDrag = { change, delta -> change.consume(); dragBy(delta) },
+                    onDragEnd = { drop() },
+                    onDragCancel = { drop() },
+                  )
+                },
+            ) {
               lastPeek = i
               peek = i
             }
@@ -187,9 +275,26 @@ private fun rememberPage(vm: NotebookViewModel, items: List<CanvasItem>, index: 
 }
 
 @Composable
-private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int, version: Int, selected: Boolean, leaving: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun PageTile(
+  vm: NotebookViewModel,
+  items: List<CanvasItem>,
+  index: Int,
+  version: Int,
+  number: Int,
+  selected: Boolean,
+  leaving: Boolean,
+  lifted: Boolean,
+  cached: ImageBitmap?,
+  onPicture: (ImageBitmap) -> Unit,
+  modifier: Modifier = Modifier,
+  onClick: () -> Unit,
+) {
   val c = Tali.colors
-  val image = rememberPage(vm, items, index, version, 480)
+  val fresh = rememberPage(vm, items, index, version, 480)
+  LaunchedEffect(fresh) { fresh?.let(onPicture) }
+  val image = fresh ?: cached
+  // Picked up: it lifts a little (bigger shadow, a touch larger) while it's carried.
+  val lift by androidx.compose.animation.core.animateFloatAsState(if (lifted) 1f else 0f, tween(160), label = "pageLift")
   val shape = RoundedCornerShape(10.dp)
   // A deleted page dissolves into a small puff of cloud.
   com.tali.notes.ui.components.PuffBox(leaving = leaving, appearing = false, modifier = modifier) {
@@ -197,17 +302,18 @@ private fun PageTile(vm: NotebookViewModel, items: List<CanvasItem>, index: Int,
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(PAGE_ASPECT)
-        .shadow(if (selected) 10.dp else 5.dp, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6))
+        .graphicsLayer { scaleX = 1f + 0.05f * lift; scaleY = 1f + 0.05f * lift }
+        .shadow((if (selected) 10.dp else 5.dp) + 14.dp * lift, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6))
         .clip(shape)
         .background(Color.White)
         .border(if (selected) 2.5.dp else 1.dp, if (selected) c.accent else c.line, shape)
-        .clickable(onClickLabel = "Look at page ${index + 1}", onClick = onClick)
+        .clickable(onClickLabel = "Look at page $number", onClick = onClick)
     ) {
       if (image != null) Image(image, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
     }
     Spacer(Modifier.height(8.dp))
     Text(
-      "${index + 1}",
+      "$number",
       style = MaterialTheme.typography.labelLarge,
       color = if (selected) c.onAccent else c.inkMuted,
       modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) c.accent else Color.Transparent).padding(horizontal = 10.dp, vertical = 2.dp),

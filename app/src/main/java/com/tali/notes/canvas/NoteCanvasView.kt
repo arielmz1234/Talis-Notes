@@ -57,6 +57,7 @@ import com.tali.notes.model.Tool
 import com.tali.notes.model.TextItem
 import com.tali.notes.model.TriangleShape
 import kotlin.math.hypot
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.abs
@@ -2629,6 +2630,29 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * Removes page [index] with everything on it, and moves the pages below up. The writing comes
    * back with undo; the last page left is only cleared.
    */
+  /**
+   * Moves page [from] to position [to]: everything on it goes there, and the pages in between move
+   * up or down one. One undo step.
+   */
+  fun movePage(from: Int, to: Int) {
+    val d = doc ?: return
+    val n = pageCount ?: return
+    if (from == to || from !in 0 until n || to !in 0 until n) return
+    val pitch = pageLayout.pitch
+    val before = ArrayList<CanvasItem>()
+    val after = ArrayList<CanvasItem>()
+    for (item in d.all) {
+      val p = floor(item.bounds.center.y / pitch).toInt().coerceIn(0, n - 1)
+      val q = Pages.movedIndex(p, from, to)
+      if (q != p) {
+        before += item
+        after += item.transformed(Affine.translate(0f, (q - p) * pitch))
+      }
+    }
+    clearSelection()
+    if (before.isNotEmpty()) d.commit(Change(before, after))
+  }
+
   fun deletePage(index: Int) {
     val d = doc ?: return
     val n = pageCount ?: return

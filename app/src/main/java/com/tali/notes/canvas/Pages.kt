@@ -36,6 +36,15 @@ class Pages private constructor(val landscape: Boolean) {
   fun needed(content: Rect?): Int = if (content == null) 1 else (indexAt(content.bottom) + 1).coerceAtLeast(1)
 
   companion object {
+    /** Where page [p] ends up when page [from] is moved to position [to] (the ones between shift one place). */
+    fun movedIndex(p: Int, from: Int, to: Int): Int =
+      when {
+        p == from -> to
+        from < to && p in from + 1..to -> p - 1
+        from > to && p in to until from -> p + 1
+        else -> p
+      }
+
     const val GAP = 40f
     val PORTRAIT = Pages(false)
     val LANDSCAPE = Pages(true)
