@@ -118,7 +118,14 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
         rectF.set(item.rect.left, item.rect.top, item.rect.right, item.rect.bottom)
         val bmp = if (sync) images.loadNow(item.file) else images.peek(item.file)
         if (bmp != null) {
+          // A mirrored fill is drawn flipped about its middle.
+          val flip = item.flipX || item.flipY
+          if (flip) {
+            canvas.save()
+            canvas.scale(if (item.flipX) -1f else 1f, if (item.flipY) -1f else 1f, rectF.centerX(), rectF.centerY())
+          }
           canvas.drawBitmap(reduce(item.file, bmp, item.rect), null, rectF, imagePaint)
+          if (flip) canvas.restore()
         } else {
           if (!sync) images.request(item.file)
           canvas.drawRect(rectF, placeholderFill)

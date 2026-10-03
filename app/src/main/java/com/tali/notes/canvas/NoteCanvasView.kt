@@ -302,6 +302,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var erasePrev = Pt.ZERO
   private val erasedOriginals = LinkedHashMap<String, CanvasItem>()
   private val erasePieces = LinkedHashMap<String, InkItem>()
+  /** For each piece the eraser has made, the item it came from (so a fill's outline can follow its pieces). */
+  private val pieceRoot = HashMap<String, String>()
   private var eraserOverride = false
 
   // Lasso and selection
@@ -794,8 +796,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun fillCovers(item: CanvasItem, p: Pt): Boolean {
     val img = item as ImageItem
     val bmp = images.peek(img.file) ?: return true
-    val x = ((p.x - img.rect.left) / img.rect.width * bmp.width).toInt().coerceIn(0, bmp.width - 1)
-    val y = ((p.y - img.rect.top) / img.rect.height * bmp.height).toInt().coerceIn(0, bmp.height - 1)
+    var x = ((p.x - img.rect.left) / img.rect.width * bmp.width).toInt().coerceIn(0, bmp.width - 1)
+    var y = ((p.y - img.rect.top) / img.rect.height * bmp.height).toInt().coerceIn(0, bmp.height - 1)
+    if (img.flipX) x = bmp.width - 1 - x
+    if (img.flipY) y = bmp.height - 1 - y
     return (bmp.getPixel(x, y) ushr 24) > 0
   }
 
@@ -1981,13 +1985,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       if (splits.all { it.second == null }) continue
       if (isPiece) erasePieces.remove(item.id) else erasedOriginals[item.id] = item
+      val root = pieceRoot[item.id] ?: item.id
       for ((ink, parts) in splits) {
         if (parts == null) {
           erasePieces[ink.id] = ink
+          pieceRoot[ink.id] = root
         } else {
           parts.forEach { s ->
             val id = d.newId()
             erasePieces[id] = InkItem(id, ink.z, ink.pen, s)
+            pieceRoot[id] = root
           }
         }
       }
@@ -1997,7 +2004,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun finishErase() {
     val d = doc ?: return
-    val change = Change(erasedOriginals.values.toList(), erasePieces.values.toList())
+    // A fill whose outline was split keeps outlining the pieces that are left.
+    val gone = erasedOriginals.keys
+    val fills = d.all.filterIsInstance<ImageItem>().filter { f -> f.walls.any { it in gone } }
+    val regrouped = fills.map { f ->
+      val kept = f.walls.filterNot { it in gone }.toSet()
+      val pieces = erasePieces.keys.filter { pieceRoot[it] in f.walls }.toSet()
+      f.withWalls(kept + pieces)
+    }
+    pieceRoot.clear()
+    val change = Change(erasedOriginals.values.toList() + fills, erasePieces.values.toList() + regrouped)
     erasePieces.clear()
     erasedOriginals.clear()
     d.commit(change)
@@ -2250,15 +2266,27 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val bounds = items.map { it.bounds }.reduceOrNull(Rect::union) ?: return
     val c = camera.visibleWorld(width, height).center
     val move = Affine.translate(c.x - bounds.center.x, c.y - bounds.center.y)
-    val copies = items.sortedBy { it.z }.map { it.transformed(move, d.newId(), d.nextZ()) }
+    val copies = copiesOf(items.sortedBy { it.z }, move, d)
     d.commit(Change(emptyList(), copies))
     setSelection(copies)
   }
 
   /**
+   * Copies of [items] moved by [m], with new ids. A fill copied with its outline keeps outlining
+   * the copies, so the copy is one filled shape too.
+   */
+  private fun copiesOf(items: List<CanvasItem>, m: Affine, d: Document): List<CanvasItem> {
+    val ids = items.associate { it.id to d.newId() }
+    return items.map { item ->
+      val copy = item.transformed(m, ids.getValue(item.id), d.nextZ())
+      if (copy is ImageItem && item is ImageItem && item.walls.isNotEmpty()) copy.withWalls(item.walls.mapNotNull { ids[it] }.toSet()) else copy
+    }
+  }
+
+  /**
    * Mirrors the selection in place, left to right ([horizontal]) or upside down, around its middle
-   * (one undo step). Writing and shapes flip; pictures and text move to their mirrored places but
-   * keep facing the right way.
+   * (one undo step). Writing, shapes and area fills flip; pictures and text move to their mirrored
+   * places but keep facing the right way.
    */
   fun mirrorSelection(horizontal: Boolean) {
     val d = doc ?: return
@@ -2271,7 +2299,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         is ImageItem, is TextItem -> {
           val c = item.bounds.center
           val to = m.apply(c)
-          item.transformed(Affine.translate(to.x - c.x, to.y - c.y))
+          val moved = item.transformed(Affine.translate(to.x - c.x, to.y - c.y))
+          // An area fill flips with its outline; other pictures and text keep facing the right way.
+          if (moved is ImageItem && isAreaFill(moved)) moved.flipped(horizontal) else moved
         }
         else -> item.transformed(m)
       }
@@ -2284,7 +2314,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun duplicateSelection() {
     val d = doc ?: return
     val offset = Affine.translate(24f, 24f)
-    val copies = selection.map { it.transformed(offset, d.newId(), d.nextZ()) }
+    val copies = copiesOf(selection, offset, d)
     d.commit(Change(emptyList(), copies))
     setSelection(copies)
   }
