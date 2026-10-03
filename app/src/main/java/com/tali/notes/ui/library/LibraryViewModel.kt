@@ -43,7 +43,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     viewModelScope.launch {
       val meta =
         repo.create(
-          n.title.ifBlank { "Untitled" },
+          n.title.ifBlank { "New notebook" },
           n.paper,
           selectedFolder.value?.takeIf { it != TRASH },
           pages = if (n.paged) 1 else null,

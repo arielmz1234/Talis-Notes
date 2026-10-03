@@ -282,7 +282,7 @@ class PaperRenderer {
     if (step < 7f && !print) return
     paint.color = color
     paint.alpha = ((if (print) 1f else ((step - 7f) / 10f).coerceIn(0f, 1f)) * (color ushr 24)).toInt()
-    paint.strokeWidth = (if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)) * lineWeight
+    paint.strokeWidth = (if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)) * lineWeight.coerceAtMost(3f)
     paint.strokeCap = Paint.Cap.ROUND
     val world = camera.visibleWorld(width, height)
     var n = 0

@@ -145,9 +145,12 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(10.dp))
     StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle, slot.square, slot.straight)
     Spacer(Modifier.height(12.dp))
+    // Her three thicknesses (also beside the colours in the toolbar): pick one, then the slider sets it.
+    Segmented(listOf(0, 1, 2), slot.sizeSlot.coerceIn(0, 2), { i -> String.format(java.util.Locale.US, "%.1f", slot.presetSizes[i]) }, vm::pickPenSize, Modifier.fillMaxWidth())
+    Spacer(Modifier.height(8.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
-      StepSlider(slot.size, slot.type.minSize..slot.type.maxSize, 0.1f, { v -> vm.updateActivePen { it.copy(size = v) } }, Modifier.weight(1f))
+      StepSlider(slot.size, slot.type.minSize..slot.type.maxSize, 0.5f, { v -> vm.updateActivePen { it.withSize(v) } }, Modifier.weight(1f))
       Text(String.format(java.util.Locale.US, "%.1f", slot.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
     if (slot.type.takesLineStyle) {
@@ -168,10 +171,10 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
       Segmented(listOf(false, true), slot.square, { if (it) "Square" else "Round" }, { square -> vm.updateActivePen { it.copy(squareTip = square) } }, Modifier.fillMaxWidth())
     }
     Spacer(Modifier.height(10.dp))
-    SectionLabel("Colours")
+    SectionLabel(if (slot.type.isHighlighter) "Highlighter colours" else "Colours")
     Spacer(Modifier.height(8.dp))
     ReorderableColors(
-      colors = settings.savedColors,
+      colors = settings.paletteFor(slot),
       selected = slot.color,
       inToolbar = settings.toolbarColors,
       onPick = vm::pickPenColor,
@@ -353,7 +356,7 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
   PanelColumn(340) {
     PanelTitle("Lasso")
-    Text("Circle anything to move, resize, recolour or copy it. Tap a single item to pick just that one.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    Text("Circle anything to move, resize, recolour or copy it. Tap a single item with the lasso to pick just that one.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(14.dp))
     SectionLabel("Picks up")
     Spacer(Modifier.height(4.dp))
@@ -362,6 +365,8 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
       PenType.offered.forEach { type -> FilterChip(type.label, settings.lassoHits(type)) { vm.setLassoAffects(type, it) } }
       FilterChip("Images", settings.lassoSelectsImages, vm::setLassoImages)
     }
+    Spacer(Modifier.height(10.dp))
+    ToggleRow("Pick up locked items", settings.lassoLocked, vm::setLassoLocked, detail = "To move them or unlock them. Off, the lasso leaves locked items alone.")
   }
 }
 

@@ -400,7 +400,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val parentName = folders.firstOrNull { it.id == parentId }?.name
     NewFolderDialog(
       title = if (parentName != null) "New folder in $parentName" else "New folder",
-      placeholder = if (parentName != null) "Lectures" else "Statics",
+      placeholder = "New folder",
       initialColor = remember(request) { vm.nextFolderColor(parentId) },
       onDismiss = { newFolder = null },
     ) { name, color ->

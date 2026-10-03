@@ -48,4 +48,9 @@ class PaperPickerShotTest {
   @Test fun menuDark() = shot("menu-dark", true, true)
 
   @Test fun dialogLight() = shot("dialog-light", false, false)
+
+  // At her tablet's density, where the stray line showed.
+  @Test @Config(qualifiers = "w800dp-h600dp-xhdpi") fun dialogDarkXhdpi() = shot("dialog-dark-xhdpi", true, false)
+
+  @Test @Config(qualifiers = "w800dp-h600dp-xhdpi") fun menuDarkXhdpi() = shot("menu-dark-xhdpi", true, true)
 }

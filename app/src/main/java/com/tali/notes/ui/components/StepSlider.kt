@@ -41,7 +41,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * A slider with − and + on either side for fine steps of [step] (0.1 for thickness). Holding a
+ * A slider with − and + on either side for steps of [step] (0.5 for thickness). Holding a
  * button keeps stepping, faster the longer it's held. Values always land on whole steps.
  * [onChangeFinished] runs when the slider or a button is let go, for things that should only
  * happen once per change (an undo step).

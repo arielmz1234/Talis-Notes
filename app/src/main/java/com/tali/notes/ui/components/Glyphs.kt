@@ -1,5 +1,7 @@
 package com.tali.notes.ui.components
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -178,7 +180,9 @@ fun GeometryIcon(geometry: ShapeGeometry, color: Color, modifier: Modifier = Mod
 @Composable
 fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
   val c = Tali.colors
-  Canvas(modifier) {
+  // Clipped to its rounded corners: the white paper and its lines used to reach past the corners
+  // and the edge, which showed as a stray bright line against the dark theme.
+  Canvas(modifier.clip(RoundedCornerShape(8.dp))) {
     drawRoundRect(Color.White, cornerRadius = CornerRadius(8.dp.toPx()))
     val line = Color(0xFFC4C4C4)
     val step = size.width / 7f

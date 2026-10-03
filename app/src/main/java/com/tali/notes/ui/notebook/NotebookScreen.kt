@@ -169,13 +169,14 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   // The status bar sits over the paper, or over the desk around the pages: light icons when that's dark.
   val darkTop = darkPaper || (systemDark && vm.pageCount != null)
   val view = LocalView.current
-  // Her choice to hide the system navigation bar holds in every notebook; it comes back in the library.
+  // Her choice to hide the system bars (the clock bar at the top and the navigation bar) holds in
+  // every notebook; they come back in the library.
   val hideNavBar = vm.settings.collectAsState().value.hideNavBar
   val navOwner = LocalLifecycleOwner.current
   DisposableEffect(hideNavBar, navOwner) {
     val window = (view.context as? android.app.Activity)?.window
     val bars = window?.let { WindowCompat.getInsetsController(it, view) }
-    val nav = androidx.core.view.WindowInsetsCompat.Type.navigationBars()
+    val nav = androidx.core.view.WindowInsetsCompat.Type.systemBars()
     fun apply() {
       if (hideNavBar) {
         bars?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -452,6 +453,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             penSettingsOpen = vm.panel == PanelKind.PEN,
             onPenSettings = vm::togglePenSettings,
             onQuickColor = vm::pickPenColor,
+            onQuickSize = vm::pickPenSize,
+            onSetSize = vm::setPenPreset,
             onTool = vm::onToolTapped,
             onImage = {
               vm.panel = null
@@ -842,7 +845,7 @@ private fun MoreMenu(
         onClick = { onSmartUndo(!smartUndo) },
       )
       DropdownMenuItem(
-        text = { Column { Text("Hide navigation bar"); Text("More room to write; swipe up from the bottom to see it", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+        text = { Column { Text("Full screen"); Text("Hides the clock bar and navigation bar; swipe from the edge to see them", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
         leadingIcon = { Icon(Icons.Outlined.Fullscreen, null) },
         trailingIcon = { if (hideNavBar) Icon(Icons.Outlined.Check, null, tint = c.accent) },
         onClick = { onHideNavBar(!hideNavBar) },
@@ -967,7 +970,7 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
         }
         sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
         // Locked things stay put: the lasso, taps and the eraser leave them alone.
-        ToolButton(Icons.Outlined.Lock, "Lock in place", onClick = onLock)
+        if (sel.locked) ToolButton(Icons.Outlined.LockOpen, "Unlock", onClick = onLock) else ToolButton(Icons.Outlined.Lock, "Lock in place", onClick = onLock)
         if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
       }
@@ -992,7 +995,7 @@ private fun SelectionStyle(sel: SelectionInfo, colors: List<Int>, onColor: (Int)
     // Follows the finger here and changes the writing once let go (one undo step).
     var value by remember(size) { mutableFloatStateOf(size) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-      StepSlider(value, 0.8f..20f, 0.1f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
+      StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
       Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
     Spacer(Modifier.height(4.dp))

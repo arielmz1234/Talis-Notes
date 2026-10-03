@@ -156,7 +156,14 @@ fun NewNotebookDialog(
         com.tali.notes.ui.components.DriftingCloud(width = 84.dp, variant = 2, driftDp = 5f)
       }
       Spacer(Modifier.height(18.dp))
-      TitleField(title, { title = it }, "Statics, week 3", autoFocus = false) { create() }
+      // Done on the keyboard just puts the keyboard away: she keeps choosing the paper and the
+      // rest, and the notebook is made only with Create.
+      val focus = androidx.compose.ui.platform.LocalFocusManager.current
+      val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+      TitleField(title, { title = it }, "New notebook", autoFocus = false) {
+        keyboard?.hide()
+        focus.clearFocus()
+      }
       Spacer(Modifier.height(22.dp))
       SectionLabel("Paper")
       Spacer(Modifier.height(8.dp))

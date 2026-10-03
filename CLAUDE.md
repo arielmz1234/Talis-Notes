@@ -117,7 +117,7 @@ Backups come in three layers:
 - The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
 - The owner reviews visual changes on his own Galaxy Tab S9 FE (debug builds over USB). He asked to review: the frosted eye "show toolbars" button, the back-cloud plus title-with-pencil layout, and how scrolling feels after the glide fix.
 - Everything from the 2 Oct 2026 session (items 7-21 below, including the Ink line-style brushes) was tested by the owner on his tablet and works. Items 22-28 (3 Oct) are not yet seen on a device: especially the first-stroke fix, the square highlighter brush, the laser and lock.
-- Session hand-off (3 Oct 2026): everything through item 32 is merged: `master` and the working branch `claude/vigilant-fermat-8fu4pj` are identical. A cloud-built (debug-key) release APK of it was handed to the owner.
+- Session hand-off (3 Oct 2026): everything through item 32 is merged; item 33 is on the working branch only, not yet merged to master: `master` and the working branch `claude/vigilant-fermat-8fu4pj` are identical. A cloud-built (debug-key) release APK of it was handed to the owner.
 - **Tali's signing changed (2 Oct 2026):** the owner chose to have Tali uninstall (losing her notes, which he said was fine) and install a release APK built in a cloud session, signed with that session's throwaway debug key. So her installed app is **no longer** signed with the `keystore/` release key, and no future build (cloud or PC) will install over it: each one again needs an uninstall, which wipes her notes unless she backs up first and restores (restore merges). To get her back onto one stable key, the next update should be built on the owner's PC with `keystore/` (`assembleRelease`), after a backup and one last uninstall; from then on updates install over it. Remind the owner of this before handing her any APK.
 
 ## Recent work (October 2026)
@@ -166,6 +166,20 @@ In order, see `git log`:
 31. Confirmation dialogs (`ConfirmDialog`, and the Recently deleted choice) add no tint of their own: `DialogCard(dim = false)` clears the window's `FLAG_DIM_BEHIND`. (Setting a dim amount of 0 instead also removed the tint of the pages overview underneath, because the system keeps a single dim layer behind the top window that asks for one; the owner wants the overview's tint kept.)
 
 32. The add-page sign below the last page shows only while fingers are pulling (`pulling`), measured from where the pull began (`effectivePull`, `pullOffset`): at rest there's always `REST_DP` of room there, and zoomed out far more, which used to leave the sign on screen (and could add a page on any lift when zoomed out). The paper line weight is a `Segmented` (Thin, Standard, Bold, Bolder = 0.6, 1, 1.6, 2.4) labelled *Line thickness*: the bare slider read as a stray white line under the papers. Paper swatches stop their pattern half a step short of the edge (float drift drew a line on the Grid swatch's edge).
+
+33. Tali's third round (3 Oct 2026):
+    - Pens: every type goes down to 0.5 (`PenType` min sizes), so changing type keeps her thickness; changing type no longer turns the colour yellow. Thickness steps are 0.5. Three thicknesses per pen (`PenSlot.sizes`, `sizeSlot`, `presetSizes`, `withSize`/`pickSize`/`setPreset`): dots after the toolbar colours (`QuickSizes` in `Toolbar.kt`; tap the one in use to set it), and a three-way choice above the pen panel's size slider, which sets the chosen one.
+    - The highlighter has its own palette (`AppSettings.highlighterColors`, `paletteFor`); palette edits go to whichever the active pen uses.
+    - Highlighter tips are built in `Brushes.highlighterFamily` (circle vs upright square, self-overlap discarded). The stock highlighter is a slanted chisel, so squaring its corners looked the same as before.
+    - Paper line thickness adds Bold 2, Bolder 3.5, Heavy 5 (widths are screen pixels, so 2.4 was still thin on her tablet).
+    - *Full screen* in the ⋯ menu (was Hide navigation bar, same `hideNavBar` setting) hides the status bar too.
+    - Laser: putting the laser down again relights everything still fading; idle wait 1 s.
+    - Lasso panel: *Pick up locked items* (`lassoLocked`); the selection menu's lock button unlocks when everything picked up is locked.
+    - Finger taps no longer pick things up (only with the lasso tool); a pen tap on a shape's outline still does.
+    - Lines snap only to every 45° (within 6°), when drawn, when an end is dragged, and when the whole line is turned (by its own direction). The end-drag direction lock is down to 2°.
+    - Rectangles and squares get a dot in the middle of each side (`PolyShape.isRect`, `withSide`) to stretch one way, snapping to a square within 4%; a rectangle's corner snaps to square too.
+    - New notebooks and folders are suggested as "New notebook" / "New folder"; Done on the keyboard in the new-notebook card only hides the keyboard.
+    - Paper swatches are clipped to their rounded corners (white leaked past them in dark mode: the "little white line").
 
 Working setup notes:
 - On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.

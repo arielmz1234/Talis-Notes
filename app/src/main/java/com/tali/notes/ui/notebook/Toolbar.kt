@@ -87,6 +87,8 @@ fun MainToolbar(
   penSettingsOpen: Boolean,
   onPenSettings: () -> Unit,
   onQuickColor: (Int) -> Unit,
+  onQuickSize: (Int) -> Unit,
+  onSetSize: (Int, Float) -> Unit,
   onTool: (Tool) -> Unit,
   onImage: () -> Unit,
   onCamera: () -> Unit,
@@ -133,8 +135,16 @@ fun MainToolbar(
       val ring = rememberSlidingSelection()
       // Changing how many colours there are eases the toolbar to its new width instead of jumping.
       Row(Modifier.animateContentSize(tween(220, easing = EaseOutStrong)).padding(start = 2.dp).colorRing(ring, shown(slot.color)), verticalAlignment = Alignment.CenterVertically) {
-        settings.savedColors.take(settings.toolbarColors).forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
+        settings.paletteFor(slot).take(settings.toolbarColors).forEach { col -> ColorDot(shown(col), selected = col == slot.color, size = 22.dp, selection = ring) { onQuickColor(col) } }
       }
+    }
+    // Her three thicknesses for this pen. Tap one to write with it; tap the one in use to set it.
+    AnimatedVisibility(
+      tool == Tool.PEN,
+      enter = fadeIn(tween(180)) + expandHorizontally(tween(220, easing = EaseOutStrong), expandFrom = Alignment.Start),
+      exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160, easing = EaseOutStrong), shrinkTowards = Alignment.Start),
+    ) {
+      QuickSizes(settings.activeSlot, onQuickSize, onSetSize)
     }
     Divider()
     // Eraser, lasso and shapes share one highlight that glides between them.
@@ -200,4 +210,45 @@ private fun Divider() {
 @Composable
 fun ColorChip(color: Color, onClick: () -> Unit) {
   Box(Modifier.size(28.dp).clip(CircleShape).background(color).clickable(onClick = onClick))
+}
+
+/**
+ * Three dots, small to large by her three thicknesses, with one highlight gliding between them.
+ * Tapping the one in use opens a little slider (− and + in 0.5 steps) to set that thickness.
+ */
+@Composable
+private fun QuickSizes(slot: PenSlot, onPick: (Int) -> Unit, onSet: (Int, Float) -> Unit) {
+  val c = Tali.colors
+  val sizes = slot.presetSizes
+  val current = slot.sizeSlot.coerceIn(0, 2)
+  // Dot sizes follow the order of her thicknesses, not their real width (a highlighter would be huge).
+  val rank = sizes.indices.sortedBy { sizes[it] }
+  val glide = rememberSlidingSelection()
+  var editing by remember { mutableStateOf<Int?>(null) }
+  Row(Modifier.padding(start = 4.dp).slidingHighlight(glide, current, SolidColor(c.accentSoft), 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    sizes.indices.forEach { i ->
+      val dot by animateDpAsState((4 + 4 * rank.indexOf(i)).dp, tween(200), label = "sizeDot")
+      val ink by animateColorAsState(if (i == current) c.accent else c.inkMuted, tween(200), label = "sizeInk")
+      Box {
+        Box(
+          Modifier.slidingOption(glide, i).size(28.dp, 36.dp).clip(RoundedCornerShape(12.dp))
+            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = "Thickness ${i + 1}") {
+              if (i == current) editing = i else onPick(i)
+            },
+          contentAlignment = Alignment.Center,
+        ) {
+          Box(Modifier.size(dot).clip(CircleShape).background(ink))
+        }
+        DropdownMenu(expanded = editing == i, onDismissRequest = { editing = null }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+          Column(Modifier.width(280.dp).padding(horizontal = 14.dp, vertical = 4.dp)) {
+            Text("Thickness ${i + 1}", style = MaterialTheme.typography.titleSmall, color = c.ink)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              com.tali.notes.ui.components.StepSlider(sizes[i], slot.type.minSize..slot.type.maxSize, 0.5f, { onSet(i, it) }, Modifier.weight(1f))
+              Text(String.format(java.util.Locale.US, "%.1f", sizes[i]), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+            }
+          }
+        }
+      }
+    }
+  }
 }

@@ -1,0 +1,65 @@
+package com.tali.notes.model
+
+import com.tali.notes.geometry.Pt
+import com.tali.notes.geometry.ShapeRecognizer
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class RoundThreeTest {
+  private val rect = PolyShape(listOf(Pt(0f, 0f), Pt(100f, 0f), Pt(100f, 60f), Pt(0f, 60f)), closed = true)
+
+  private fun box(p: PolyShape) = Pair(p.points.maxOf { it.x } - p.points.minOf { it.x }, p.points.maxOf { it.y } - p.points.minOf { it.y })
+
+  @Test
+  fun rectangleHasSideDots() {
+    assertEquals(8, rect.handles().size)
+    assertEquals(Pt(100f, 30f), rect.handles()[5])
+  }
+
+  @Test
+  fun sideDotStretchesOneWayOnly() {
+    val out = rect.withHandle(5, Pt(150f, 10f)) as PolyShape
+    val (w, h) = box(out)
+    assertEquals(150f, w, 0.01f)
+    assertEquals(60f, h, 0.01f)
+    assertEquals(0f, out.points.minOf { it.x }, 0.01f)
+  }
+
+  @Test
+  fun sideDotSnapsToSquare() {
+    val out = rect.withHandle(6, Pt(50f, 98f)) as PolyShape
+    val (w, h) = box(out)
+    assertEquals(w, h, 0.01f)
+  }
+
+  @Test
+  fun squareCanBecomeARectangle() {
+    val square = PolyShape(listOf(Pt(0f, 0f), Pt(80f, 0f), Pt(80f, 80f), Pt(0f, 80f)), closed = true)
+    val out = square.withHandle(5, Pt(140f, 40f)) as PolyShape
+    val (w, h) = box(out)
+    assertEquals(140f, w, 0.01f)
+    assertEquals(80f, h, 0.01f)
+  }
+
+  @Test
+  fun linesSnapOnlyToFortyFives() {
+    val near30 = ShapeRecognizer.snappedLine(Pt(0f, 0f), Pt.polar(100f, Math.toRadians(31.0).toFloat()))
+    assertEquals(31.0, Math.toDegrees((near30.b - near30.a).angle().toDouble()), 0.01)
+    val near45 = ShapeRecognizer.snappedLine(Pt(0f, 0f), Pt.polar(100f, Math.toRadians(41.0).toFloat()))
+    assertEquals(45.0, Math.toDegrees((near45.b - near45.a).angle().toDouble()), 0.01)
+  }
+
+  @Test
+  fun threeThicknessesAreKeptApart() {
+    val pen = PenSlot("a", PenType.FINELINER, 0, 2.5f)
+    val sizes = pen.presetSizes
+    assertEquals(3, sizes.size)
+    assertTrue(sizes[0] < sizes[1] && sizes[1] < sizes[2])
+    val thick = pen.pickSize(2)
+    assertEquals(sizes[2], thick.size, 0f)
+    val changed = thick.withSize(9f)
+    assertEquals(listOf(sizes[0], sizes[1], 9f), changed.presetSizes)
+    assertEquals(sizes[0], changed.pickSize(0).size, 0f)
+  }
+}

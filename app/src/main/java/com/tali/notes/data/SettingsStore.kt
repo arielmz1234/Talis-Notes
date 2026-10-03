@@ -30,6 +30,17 @@ val DEFAULT_COLORS =
     0xFF5AA9E6, // sky blue
   ).map { it.toInt() }
 
+/** The highlighter's own starting palette: bright, see-through-friendly tones. */
+val DEFAULT_HIGHLIGHTER_COLORS =
+  listOf(
+    0xFFFFD60A, // yellow
+    0xFFFF6FA8, // pink
+    0xFF5AA9E6, // sky blue
+    0xFF6EE07A, // green
+    0xFFFFA24D, // orange
+    0xFFB28DFF, // lilac
+  ).map { it.toInt() }
+
 @Serializable
 data class AppSettings(
   val pens: List<PenSlot> =
@@ -42,11 +53,15 @@ data class AppSettings(
     ),
   val activePen: String = "p1",
   val savedColors: List<Int> = DEFAULT_COLORS,
+  /** The highlighter's palette, kept apart from the pens' (same "first few in the toolbar" rule). */
+  val highlighterColors: List<Int> = DEFAULT_HIGHLIGHTER_COLORS,
   /** Which pen styles the eraser can erase. Missing entries mean yes. */
   val eraserAffects: Map<PenType, Boolean> = emptyMap(),
   /** Which pen styles the lasso can pick up. Missing entries mean yes. */
   val lassoAffects: Map<PenType, Boolean> = emptyMap(),
   val lassoSelectsImages: Boolean = true,
+  /** The lasso also picks up locked items (to move or unlock them). */
+  val lassoLocked: Boolean = false,
   val eraserMode: EraserMode = EraserMode.STROKE,
   val eraserSize: Float = 16f,
   val holdToShape: Boolean = true,
@@ -73,9 +88,9 @@ data class AppSettings(
   val pageGuides: Boolean = false,
   /** Smart undo and redo: a quick two-finger tap undoes, a three-finger tap redoes. */
   val smartUndo: Boolean = true,
-  /** How heavy the paper's lines, grid and dots are drawn: 1 is the standard weight, 0.5..3. */
+  /** How heavy the paper's lines, grid and dots are drawn: 1 is the standard weight, 0.5..5. */
   val paperLineWeight: Float = 1f,
-  /** The system navigation bar is hidden inside notebooks (swipe up to see it). */
+  /** The system bars (status and navigation) are hidden inside notebooks (swipe from an edge to see them). */
   val hideNavBar: Boolean = false,
   /** How many of her saved colours (the first ones, in her order) sit beside the pens in the toolbar. */
   val toolbarColors: Int = 3,
@@ -94,6 +109,9 @@ data class AppSettings(
   fun eraserHits(pen: PenType?) = pen != null && eraserAffects[pen] != false
 
   fun lassoHits(pen: PenType?) = if (pen == null) lassoSelectsImages else lassoAffects[pen] != false
+
+  /** The palette for [slot]: the highlighter has its own. */
+  fun paletteFor(slot: PenSlot): List<Int> = if (slot.type.isHighlighter) highlighterColors else savedColors
 
   val activeSlot: PenSlot
     get() = pens.firstOrNull { it.id == activePen } ?: pens.first()

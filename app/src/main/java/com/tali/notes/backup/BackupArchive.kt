@@ -130,6 +130,7 @@ object BackupArchive {
     store.update { s ->
       s.copy(
         savedColors = (s.savedColors + incoming.savedColors).distinct(),
+        highlighterColors = (s.highlighterColors + incoming.highlighterColors).distinct(),
         customShapes = s.customShapes + incoming.customShapes.filter { c -> s.customShapes.none { it.id == c.id } },
         customPapers = s.customPapers + incoming.customPapers.filter { c -> s.customPapers.none { it.id == c.id } },
       )

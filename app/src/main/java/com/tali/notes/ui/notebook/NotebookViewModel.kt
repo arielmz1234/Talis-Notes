@@ -238,16 +238,14 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   /** The active pen's line: solid, dotted or dashed. */
   fun setPenLine(line: LineStyle) = updateActivePen { it.copy(line = line) }
 
-  fun setPaperLineWeight(weight: Float) = store.update { it.copy(paperLineWeight = weight.coerceIn(0.5f, 3f)) }
+  fun setPaperLineWeight(weight: Float) = store.update { it.copy(paperLineWeight = weight.coerceIn(0.5f, 5f)) }
 
   fun setPenType(type: PenType) =
     updateActivePen { slot ->
       // Her thickness stays when she changes the pen type (only kept within what the new pen can do).
       val size = slot.size.coerceIn(type.minSize, type.maxSize)
-      val color = if (type.isHighlighter && !slot.type.isHighlighter) 0xFFFFD60A.toInt() else slot.color
-      // A highlighter and a pen keep different quick colours.
-      val quick = if (type.isHighlighter != slot.type.isHighlighter) emptyList() else slot.quick
-      slot.copy(type = type, size = size, color = color, quick = quick)
+      // ...and so does her colour.
+      slot.copy(type = type, size = size, sizes = slot.presetSizes.map { it.coerceIn(type.minSize, type.maxSize) })
     }
 
   fun addPen() =
@@ -264,12 +262,24 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       s.copy(pens = remaining, activePen = remaining.first().id)
     }
 
-  fun saveColor(color: Int) = store.update { s -> if (color in s.savedColors) s else s.copy(savedColors = s.savedColors + color) }
+  /** Edits the palette the active pen uses (the highlighter has its own). */
+  private fun updatePalette(transform: (List<Int>) -> List<Int>) =
+    store.update { s ->
+      if (s.activeSlot.type.isHighlighter) s.copy(highlighterColors = transform(s.highlighterColors)) else s.copy(savedColors = transform(s.savedColors))
+    }
 
-  fun removeColor(color: Int) = store.update { s -> s.copy(savedColors = s.savedColors - color) }
+  fun saveColor(color: Int) = updatePalette { if (color in it) it else it + color }
+
+  fun removeColor(color: Int) = updatePalette { it - color }
 
   /** Her colours in a new order (the toolbar shows the first few). */
-  fun reorderColors(order: List<Int>) = store.update { s -> if (order.toSet() == s.savedColors.toSet()) s.copy(savedColors = order) else s }
+  fun reorderColors(order: List<Int>) = updatePalette { if (order.toSet() == it.toSet()) order else it }
+
+  /** Switches the active pen to its [i]th thickness. */
+  fun pickPenSize(i: Int) = updateActivePen { it.pickSize(i) }
+
+  /** Sets the active pen's [i]th thickness. */
+  fun setPenPreset(i: Int, v: Float) = updateActivePen { it.setPreset(i, v.coerceIn(it.type.minSize, it.type.maxSize)) }
 
   fun setToolbarColors(n: Int) = store.update { it.copy(toolbarColors = n.coerceIn(0, 6)) }
 
@@ -278,6 +288,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun setLassoAffects(type: PenType, on: Boolean) = store.update { it.copy(lassoAffects = it.lassoAffects + (type to on)) }
 
   fun setLassoImages(on: Boolean) = store.update { it.copy(lassoSelectsImages = on) }
+
+  fun setLassoLocked(on: Boolean) = store.update { it.copy(lassoLocked = on) }
 
   fun setEraserMode(mode: EraserMode) = store.update { it.copy(eraserMode = mode) }
 

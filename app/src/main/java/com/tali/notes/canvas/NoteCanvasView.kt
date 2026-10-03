@@ -105,6 +105,8 @@ data class SelectionInfo(
   /** Thickness and line style of the first stroke or shape, or null when there are none. */
   val lineSize: Float? = null,
   val line: LineStyle? = null,
+  /** Everything picked up is locked (only possible when the lasso is set to pick up locked items). */
+  val locked: Boolean = false,
 )
 
 /**
@@ -1235,10 +1237,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.ROTATE_SELECTION -> {
         val start = (dragStart - rotatePivot).angle()
         var angle = (world(e, idx) - rotatePivot).angle() - start
-        // Snap to 15° steps (and straight) when close, so angles like 30° and 45° are exact.
-        val step = (PI / 12).toFloat()
-        val snapped = Math.round(angle / step) * step
-        if (abs(angle - snapped) < 0.06f) angle = snapped
+        // Snap to 45° steps when close (she asked for 45° rather than finer steps). A single line
+        // snaps by its own direction, so it lands level, upright or diagonal however it started.
+        val step = (PI / 4).toFloat()
+        val line = ((selection.singleOrNull() as? ShapeItem)?.geometry as? LineShape)
+        val base = line?.let { (it.b - it.a).angle() } ?: 0f
+        val snapped = Math.round((base + angle) / step) * step - base
+        if (abs(angle - snapped) < SNAP_ROTATE_RAD) angle = snapped
         rotateAngle = angle
         dragTransform = Affine.rotateAround(rotatePivot, angle)
         invalidate()
@@ -1491,6 +1496,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val laserDotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
   private fun startLaser(p: Pt) {
+    // Pointing again brings back whatever was still fading: it all stays lit together.
+    laserTrails.forEach { it.fadeAt = 0L }
     laserTrails += LaserTrail().apply { dots += p }
     laserDown = true
     laserTip = p
@@ -1645,11 +1652,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val lengthPx = Geo.pathLength(pts) * camera.scale
     if (lengthPx < 12f * density) {
       // A tap with the lasso picks up whatever is under it.
-      hitTest(end ?: pts.firstOrNull() ?: return, filter = settings::lassoHits)?.let { selectSingle(it) }
+      hitTest(end ?: pts.firstOrNull() ?: return, anyLock = settings.lassoLocked, filter = settings::lassoHits)?.let { selectSingle(it) }
       return
     }
     val area = Rect.around(pts) ?: return
-    val picked = d.all.filter { item -> !item.locked && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) }
+    val picked = d.all.filter { item -> (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) }
     setSelection(picked)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
@@ -1683,12 +1690,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * The item under [p]. Writing wins over pictures, since pictures are drawn underneath it; imported
    * PDF pages count only when [pages] is true, so tapping a slide doesn't pick up the whole slide.
    */
-  private fun hitTest(p: Pt, pages: Boolean = true, locked: Boolean = false, filter: (PenType?) -> Boolean): CanvasItem? {
+  private fun hitTest(p: Pt, pages: Boolean = true, locked: Boolean = false, anyLock: Boolean = false, filter: (PenType?) -> Boolean): CanvasItem? {
     val d = doc ?: return null
     val r = HIT_RADIUS_DP / camera.zoom
     val para = parallelogram(p, p, r)
     // Locked items can't be picked up (only found again to unlock them).
-    val near = d.intersecting(Rect(p.x - r, p.y - r, p.x + r, p.y + r)).asReversed().filter { it.locked == locked && filter(it.pen) }
+    val near = d.intersecting(Rect(p.x - r, p.y - r, p.x + r, p.y + r)).asReversed().filter { (anyLock || it.locked == locked) && filter(it.pen) }
     return near.firstOrNull { item -> item !is ImageItem && item !is TextItem && strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) } }
       ?: near.firstOrNull { item -> item is TextItem && item.bounds.contains(p) }
       ?: near.firstOrNull { item -> item is ImageItem && (pages || !item.pdfPage) && item.rect.contains(p) }
@@ -1740,6 +1747,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         color = selection.firstNotNullOfOrNull { (it as? InkItem)?.color ?: (it as? ShapeItem)?.color ?: (it as? TextItem)?.color },
         lineSize = selection.firstNotNullOfOrNull { (it as? InkItem)?.size ?: (it as? ShapeItem)?.size },
         line = selection.firstNotNullOfOrNull { (it as? InkItem)?.line ?: (it as? ShapeItem)?.line },
+        locked = selection.all { it.locked },
       )
     )
   }
@@ -2075,6 +2083,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun lockSelection() {
     val d = doc ?: return
     if (selection.isEmpty()) return
+    if (selection.all { it.locked }) {
+      // Picked up while locked (the lasso can be set to): the same button unlocks it.
+      val unlocked = selection.map { it.withLocked(false) }
+      d.commit(Change(selection, unlocked))
+      setSelection(unlocked)
+      host.onHint(if (unlocked.size == 1) "Unlocked" else "${unlocked.size} items unlocked")
+      return
+    }
     val locked = selection.map { it.withLocked(true) }
     d.commit(Change(selection, locked))
     clearSelection()
@@ -2228,7 +2244,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       fillAt(p)
       return
     }
-    val item = hitTest(p, pages = false) { true }
+    // A finger tap only picks something up with the lasso tool (she found taps picking things up by
+    // accident); elsewhere it just lets go of the selection. A pen tap on a shape still picks it up.
+    val item = if (tool == Tool.LASSO) hitTest(p, pages = false, anyLock = settings.lassoLocked, filter = settings::lassoHits) else null
     if (item == null) clearSelection() else selectSingle(item)
   }
 
@@ -2520,11 +2538,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val HANDLE_HIT_DP = 24f
     private const val BUBBLE_H = 24f
     /** How long the laser stays lit after it was last lifted, so several strokes can be drawn. */
-    private const val LASER_IDLE_MS = 700L
+    private const val LASER_IDLE_MS = 1000L
     /** How long the laser's strokes take to fade once it's been left. */
     private const val LASER_FADE_MS = 450L
     /** A straight highlighter line this close to level or upright snaps to it. */
     private const val STRAIGHT_SNAP_DEG = 4.0
+    /** How close a turn has to come to a 45° step to snap onto it (5°). */
+    private const val SNAP_ROTATE_RAD = 0.087f
     /** A pen touch shorter than this that doesn't move is a tap. */
     private const val PEN_TAP_MS = 250L
     private const val LONG_PRESS_MS = 480L

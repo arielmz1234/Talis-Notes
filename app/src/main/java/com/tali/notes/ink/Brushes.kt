@@ -117,12 +117,29 @@ object Brushes {
 
   private val lineFamilies = java.util.concurrent.ConcurrentHashMap<LineStyle, BrushFamily>()
 
-  /** The highlighter with a square tip: the stock one with its corners left sharp. */
+  /**
+   * The highlighter's two tips, built here rather than from the stock highlighter (a slanted chisel
+   * whose look barely changed with its corners squared off, so Round and Square looked the same):
+   * Round is a circle, so strokes end in round caps; Square is an upright square, so strokes have
+   * flat ends and sharp corners. Both discard self-overlap, so going over a word twice stays even.
+   */
   @OptIn(ExperimentalInkCustomBrushApi::class)
-  private val squareHighlighter: BrushFamily by lazy {
-    val stock = StockBrushes.highlighter(SelfOverlap.DISCARD)
-    runCatching { stock.copy(coats = stock.coats.map { it.copy(tip = it.tip.copy(cornerRounding = 0f)) }, clientBrushFamilyId = SQUARE_ID) }.getOrDefault(stock)
-  }
+  private fun highlighterFamily(cornerRounding: Float, id: String): BrushFamily =
+    runCatching {
+      BrushFamily(
+        coats = listOf(
+          BrushCoat(
+            BrushTip(scaleX = 1f, scaleY = 1f, cornerRounding = cornerRounding, behaviors = listOf(StockBrushes.predictionFadeOutBehavior)),
+            BrushPaint(emptyList(), emptyList(), SelfOverlap.DISCARD),
+          )
+        ),
+        clientBrushFamilyId = id,
+      )
+    }.getOrElse { StockBrushes.highlighter(SelfOverlap.DISCARD) }
+
+  private val roundHighlighter: BrushFamily by lazy { highlighterFamily(1f, "tali:highlighter-round") }
+
+  private val squareHighlighter: BrushFamily by lazy { highlighterFamily(0f, SQUARE_ID) }
 
   private const val SQUARE_ID = "tali:highlighter-square"
 
@@ -150,7 +167,7 @@ object Brushes {
       PenType.FOUNTAIN -> StockBrushes.pressurePen()
       PenType.PENCIL -> StockBrushes.pencilUnstable
       PenType.CALLIGRAPHY -> calligraphy
-      PenType.HIGHLIGHTER -> StockBrushes.highlighter(SelfOverlap.DISCARD)
+      PenType.HIGHLIGHTER -> roundHighlighter
       PenType.DASHED -> StockBrushes.dashedLine()
     }
 

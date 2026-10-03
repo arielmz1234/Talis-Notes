@@ -50,8 +50,9 @@ data class LineShape(val a: Pt, val b: Pt, val arrowStart: Boolean = false, val 
   override fun handles() = listOf(a, b)
 
   /**
-   * Moving an endpoint extends or shortens the line. Close to the original direction the drag is
-   * projected onto it, so the line keeps its exact angle while its length changes.
+   * Moving an endpoint extends or shortens the line. Very close to the original direction (2°) the
+   * drag is projected onto it, so the line keeps its exact angle while its length changes; beyond
+   * that it turns freely (and the canvas snaps it to every 45°).
    */
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
     val fixed = if (index == 0) b else a
@@ -59,7 +60,7 @@ data class LineShape(val a: Pt, val b: Pt, val arrowStart: Boolean = false, val 
     val dir = (moving - fixed).normalized()
     val v = p - fixed
     val cosAngle = if (v.length() < 1e-3f) 1f else dir.dot(v.normalized())
-    val target = if (cosAngle > cos(4.0 * PI / 180).toFloat()) fixed + dir * max(1f, v.dot(dir)) else p
+    val target = if (cosAngle > cos(2.0 * PI / 180).toFloat()) fixed + dir * max(1f, v.dot(dir)) else p
     return if (index == 0) copy(a = target) else copy(b = target)
   }
 
@@ -82,7 +83,59 @@ data class PolyShape(
   override fun transformed(m: Affine) = copy(points = points.map(m::apply), rotation = rotation + atan2(m.b, m.a))
 
   // A hand-drawn line has far too many points to give each a dot: it resizes from its corners instead.
-  override fun handles() = if (smooth) GroupShape(listOf(this)).handles() else points
+  // A rectangle (or square) also gets a dot in the middle of each side, to stretch it one way.
+  override fun handles() =
+    when {
+      smooth -> GroupShape(listOf(this)).handles()
+      isRect() -> points + points.indices.map { i -> (points[i] + points[(i + 1) % 4]) * 0.5f }
+      else -> points
+    }
+
+  /** A closed four-cornered shape whose corners sit on the corners of its box in its own frame. */
+  fun isRect(): Boolean {
+    if (!closed || points.size != 4) return false
+    val c = Geo.centroid(points)
+    val local = points.map { (it - c).rotated(-rotation) }
+    val w = local.maxOf { it.x } - local.minOf { it.x }
+    val h = local.maxOf { it.y } - local.minOf { it.y }
+    if (w < 1e-3f || h < 1e-3f) return false
+    return local.all { q -> abs(abs(q.x) - w / 2) < w * 0.02f && abs(abs(q.y) - h / 2) < h * 0.02f }
+  }
+
+  /**
+   * A side's middle dot moves that side only (the opposite one stays put), making the rectangle
+   * longer or shorter one way. Within [SQUARE_SNAP] of square it snaps to an exact square; a
+   * rectangle's corner dots snap the same way.
+   */
+  private fun withSide(side: Int, p: Pt): ShapeGeometry {
+    val c = Geo.centroid(points)
+    val theta = rotation
+    val local = points.map { (it - c).rotated(-theta) }
+    val target = (p - c).rotated(-theta)
+    val mid = (local[side] + local[(side + 1) % 4]) * 0.5f
+    val l = local.minOf { it.x }
+    val r = local.maxOf { it.x }
+    val t = local.minOf { it.y }
+    val b = local.maxOf { it.y }
+    val w = r - l
+    val h = b - t
+    val horizontal = abs(mid.x) / w > abs(mid.y) / h
+    val out =
+      if (horizontal) {
+        val anchor = if (mid.x > 0) l else r
+        var size = max(abs(target.x - anchor), w * MIN_SCALE)
+        if (abs(size - h) < h * SQUARE_SNAP) size = h
+        val sx = size / w
+        local.map { q -> Pt(anchor + (q.x - anchor) * sx, q.y) }
+      } else {
+        val anchor = if (mid.y > 0) t else b
+        var size = max(abs(target.y - anchor), h * MIN_SCALE)
+        if (abs(size - w) < w * SQUARE_SNAP) size = w
+        val sy = size / h
+        local.map { q -> Pt(q.x, anchor + (q.y - anchor) * sy) }
+      }
+    return copy(points = out.map { c + it.rotated(theta) })
+  }
 
   /**
    * A corner dot resizes the shape rather than bending it: it stretches from the opposite side
@@ -92,6 +145,7 @@ data class PolyShape(
    */
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
     if (smooth) return (GroupShape(listOf(this)).withHandle(index, p) as GroupShape).parts[0]
+    if (index >= points.size) return if (isRect()) withSide(index - points.size, p) else this
     if (points.size < 3) return copy(points = points.toMutableList().also { it[index] = p })
     val c = Geo.centroid(points)
     val theta = rotation
@@ -127,6 +181,16 @@ data class PolyShape(
       sx = s
       sy = s
     }
+    else if (points.size == 4 && ax != null && ay != null && isRect()) {
+      // A rectangle's corner: snaps to a square when it comes close.
+      val nw = w * sx
+      val nh = h * sy
+      if (abs(nw - nh) < max(nw, nh) * SQUARE_SNAP) {
+        val side = (nw + nh) / 2
+        sx = side / w
+        sy = side / h
+      }
+    }
     val axv = ax ?: (l + r) / 2
     val ayv = ay ?: (t + b) / 2
     val out = local.map { q -> c + Pt(axv + (q.x - axv) * sx, ayv + (q.y - ayv) * sy).rotated(theta) }
@@ -143,6 +207,8 @@ data class PolyShape(
 }
 
 private const val MIN_SCALE = 0.05f
+/** How close to square (as a share of the side) a rectangle being stretched snaps to a square. */
+private const val SQUARE_SNAP = 0.04f
 private const val MAX_SCALE = 40f
 
 @Serializable

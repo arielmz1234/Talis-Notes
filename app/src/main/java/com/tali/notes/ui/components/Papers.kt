@@ -256,8 +256,8 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
 @Composable
 private fun LineWeightRow(value: Float, onChange: (Float) -> Unit) {
   val c = Tali.colors
-  val choices = listOf(0.6f, 1f, 1.6f, 2.4f)
-  val names = listOf("Thin", "Standard", "Bold", "Bolder")
+  val choices = listOf(0.6f, 1f, 2f, 3.5f, 5f)
+  val names = listOf("Thin", "Normal", "Bold", "Bolder", "Heavy")
   Column(Modifier.padding(top = 10.dp)) {
     Text("Line thickness", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
     Spacer(Modifier.height(6.dp))

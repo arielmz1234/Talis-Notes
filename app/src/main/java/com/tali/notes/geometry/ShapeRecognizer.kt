@@ -123,23 +123,19 @@ object ShapeRecognizer {
   }
 
   /**
-   * Snaps near-horizontal, vertical and 45° lines exactly (within 8°), and other multiples of 15°
-   * such as 30° and 60° when close (within 4°), keeping the start point and length.
+   * Snaps lines to every 45° (level, upright and diagonal) when within [LINE_SNAP_DEG], keeping the
+   * start point and length; in between, the line goes exactly where it's drawn. (Finer 15° steps
+   * were dropped: she wanted only the 45° ones.)
    */
   fun snappedLine(a: Pt, b: Pt, arrowEnd: Boolean = false): LineShape {
     val v = b - a
     val angle = v.angle()
     val wide = round(angle / (45f * DEG)) * (45f * DEG)
-    val fine = round(angle / (15f * DEG)) * (15f * DEG)
-    val snapped =
-      when {
-        abs(angle - wide) < 8f * DEG -> wide
-        abs(angle - fine) < 4f * DEG -> fine
-        else -> null
-      }
-    val end = if (snapped != null) a + Pt.polar(v.length(), snapped) else b
+    val end = if (abs(angle - wide) < LINE_SNAP_DEG * DEG) a + Pt.polar(v.length(), wide) else b
     return LineShape(a, end, arrowEnd = arrowEnd)
   }
+
+  const val LINE_SNAP_DEG = 6f
 
   /**
    * One-stroke arrows: a shaft followed by one barb, or by a barb, a return to the tip and a second
