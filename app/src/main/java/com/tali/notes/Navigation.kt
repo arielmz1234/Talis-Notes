@@ -1,6 +1,10 @@
 package com.tali.notes
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -27,6 +31,10 @@ fun MainNavigation() {
     backStack = backStack,
     onBack = back,
     entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator(), rememberViewModelStoreNavEntryDecorator()),
+    // The fade between the library and a notebook: 420 ms, 40% quicker than the default 700.
+    transitionSpec = { fadeIn(tween(SCREEN_FADE_MS)) togetherWith fadeOut(tween(SCREEN_FADE_MS)) },
+    popTransitionSpec = { fadeIn(tween(SCREEN_FADE_MS)) togetherWith fadeOut(tween(SCREEN_FADE_MS)) },
+    predictivePopTransitionSpec = { fadeIn(tween(SCREEN_FADE_MS)) togetherWith fadeOut(tween(SCREEN_FADE_MS)) },
     entryProvider =
       entryProvider {
         entry<Library> { LibraryScreen(onOpen = { id -> backStack.add(Notebook(id)) }) }
@@ -34,3 +42,5 @@ fun MainNavigation() {
       },
   )
 }
+
+private const val SCREEN_FADE_MS = 420

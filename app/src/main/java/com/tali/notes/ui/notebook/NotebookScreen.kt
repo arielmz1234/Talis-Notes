@@ -550,7 +550,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
       if (narrow) {
         // Held upright: title and undo share the first line, the tools get a line of their own.
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
           Box(Modifier.weight(1f)) { titlePill() }
           Spacer(Modifier.width(12.dp))
           undoBar()
@@ -570,10 +570,15 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           val from = title.width + gap
           val to = (cons.maxWidth - corner.width - gap - toolbar.width).coerceAtLeast(from)
           val x = ((cons.maxWidth - toolbar.width) / 2).coerceIn(from, to)
-          layout(cons.maxWidth, maxOf(title.height, toolbar.height, corner.height)) {
-            title.place(0, 0)
-            toolbar.place(x, 0)
-            corner.place(cons.maxWidth - corner.width, 0)
+          // Everything sits on the main toolbar's middle line (it's the tallest bar), not along the
+          // top. Measured from the bar itself: the tools part grows downwards when a panel opens.
+          val mid = (MAIN_TOOLBAR_HEIGHT / 2).roundToPx()
+          val top = maxOf(0, title.height / 2 - mid, corner.height / 2 - mid)
+          val h = maxOf(top + toolbar.height, top + mid + title.height / 2, top + mid + corner.height / 2)
+          layout(cons.maxWidth, h) {
+            title.place(0, top + mid - title.height / 2)
+            toolbar.place(x, top)
+            corner.place(cons.maxWidth - corner.width, top + mid - corner.height / 2)
           }
         }
       }
@@ -1160,3 +1165,6 @@ private fun ToolbarPuffs(tick: Int, showing: Boolean, bars: Map<String, androidx
 private val DESK_LIGHT = Color(0xFFE9E4F2)
 private val DESK_DARK = Color(0xFF2A2338)
 private val DESK_DARK_PAPER = Color(0xFF0E0C13)
+
+/** The main toolbar's height ([MainToolbar]); the bars beside it centre on its middle. */
+val MAIN_TOOLBAR_HEIGHT = 60.dp
