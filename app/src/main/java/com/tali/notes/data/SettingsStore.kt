@@ -41,6 +41,10 @@ val DEFAULT_HIGHLIGHTER_COLORS =
     0xFFB28DFF, // lilac
   ).map { it.toInt() }
 
+/** Light or dark: following the tablet, or always one. */
+@Serializable
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 @Serializable
 data class AppSettings(
   val pens: List<PenSlot> =
@@ -98,6 +102,10 @@ data class AppSettings(
   val inkBetweenPages: Boolean = false,
   /** How many colours a pen shows beside the pens until she sets its own number (`PenSlot.toolbarColors`). */
   val toolbarColors: Int = 3,
+  /** Light, dark, or following the tablet. */
+  val themeMode: ThemeMode = ThemeMode.SYSTEM,
+  /** The minimal look: no cloud bumps on bars and cards, no clouds in the sky, the home screen moved up. */
+  val minimal: Boolean = false,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
 ) {

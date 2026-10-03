@@ -1,5 +1,6 @@
 package com.tali.notes.ui.library
 
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
@@ -174,6 +175,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   var renamingFolder by remember { mutableStateOf<Folder?>(null) }
   var deletingFolder by remember { mutableStateOf<Folder?>(null) }
   var backups by remember { mutableStateOf(false) }
+  var showSettings by remember { mutableStateOf(false) }
   val currentFolder = folders.firstOrNull { it.id == selected }
   val inTrash = selected == LibraryViewModel.TRASH
   // Picking several notebooks at once (to move, duplicate or delete them together).
@@ -190,8 +192,12 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   // One continuous sky across the top of the whole screen; the sidebar and notebooks sit below it.
   // Puffs of deleted notebooks and folders drift over everything here (sidebar, sky) without being cut off.
   com.tali.notes.ui.components.PuffLayerHost(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to c.background, 0.7f to c.background, 1f to c.sidebarEnd))) {
-  SkyBand(height = 360.dp)
-  SkyClouds(LocalConfiguration.current.screenWidthDp)
+  // The minimal look has no sky clouds, and everything sits higher up in their place.
+  val minimal = com.tali.notes.theme.LocalMinimal.current
+  if (!minimal) {
+    SkyBand(height = 360.dp)
+    SkyClouds(LocalConfiguration.current.screenWidthDp)
+  }
   Row(Modifier.fillMaxSize()) {
     Sidebar(
       folders = folders,
@@ -207,10 +213,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       fresh = freshFolders,
       onDeleteFolder = { deletingFolder = it },
       onBackup = { backups = true },
+      onSettings = { showSettings = true },
     )
     Box(Modifier.weight(1f).fillMaxHeight()) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 36.dp, end = 36.dp)) {
-      Spacer(Modifier.height(112.dp))
+      Spacer(Modifier.height(if (minimal) 36.dp else 112.dp))
       val heading: @Composable (Modifier) -> Unit = { mod ->
         Column(mod) {
           // Inside a folder within a folder: the way back up, one tap per level.
@@ -416,6 +423,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     }
   }
   if (backups) BackupDialog(onDismiss = { backups = false })
+  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onDismiss = { showSettings = false })
   trashAction?.let { nb ->
     DialogCard(onDismiss = { trashAction = null }, width = 480, dim = false) {
       Text("“${nb.title}”", style = MaterialTheme.typography.titleLarge, color = c.ink)
@@ -525,6 +533,7 @@ private fun Sidebar(
   onMoveFolder: (Folder) -> Unit,
   onDeleteFolder: (Folder) -> Unit,
   onBackup: () -> Unit,
+  onSettings: () -> Unit,
   vanishing: Set<String> = emptySet(),
   fresh: Set<String> = emptySet(),
 ) {
@@ -539,7 +548,7 @@ private fun Sidebar(
       .windowInsetsPadding(WindowInsets.safeDrawing)
       .padding(horizontal = 18.dp)
   ) {
-    Spacer(Modifier.height(120.dp))
+    Spacer(Modifier.height(if (com.tali.notes.theme.LocalMinimal.current) 44.dp else 120.dp))
     Wordmark(Modifier.padding(start = 8.dp))
     Spacer(Modifier.height(30.dp))
     NavRow(
@@ -639,6 +648,15 @@ private fun Sidebar(
         onClick = { onSelect(LibraryViewModel.TRASH) },
       )
       Spacer(Modifier.height(4.dp))
+    }
+    // Settings: theme and style.
+    Row(
+      Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Settings", onClick = onSettings).padding(horizontal = 10.dp, vertical = 10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(Icons.Outlined.Settings, null, tint = c.inkMuted, modifier = Modifier.size(18.dp))
+      Spacer(Modifier.width(10.dp))
+      Text("Settings", style = MaterialTheme.typography.labelLarge, color = c.inkMuted)
     }
     val context = LocalContext.current
     val drive by DriveBackup.status(context).collectAsState()

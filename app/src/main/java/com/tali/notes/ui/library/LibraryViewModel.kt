@@ -61,6 +61,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   /** The cover the next notebook gets unless she picks another. */
   fun nextCover(): Int = COVER_COLORS[allNotebooks.value.size % COVER_COLORS.size]
 
+  fun setThemeMode(mode: com.tali.notes.data.ThemeMode) = getApplication<Application>().talisApp.settings.update { it.copy(themeMode = mode) }
+
+  fun setMinimal(on: Boolean) = getApplication<Application>().talisApp.settings.update { it.copy(minimal = on) }
+
   fun addCustomPaper(paper: com.tali.notes.model.CustomPaper) = getApplication<Application>().talisApp.settings.update { it.copy(customPapers = it.customPapers + paper) }
 
   fun removeCustomPaper(paper: com.tali.notes.model.CustomPaper) =

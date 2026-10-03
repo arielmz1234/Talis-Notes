@@ -255,6 +255,8 @@ private const val REFORM_AFTER_MS = 4000L
  */
 @Composable
 fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, driftDp: Float = 10f, periodMs: Int = 9000, alpha: Float = 1f, burstable: Boolean = false) {
+  // The minimal look has no decorative clouds.
+  if (com.tali.notes.theme.LocalMinimal.current) return
   var x by remember { mutableFloatStateOf(0f) }
   LaunchedEffect(periodMs) {
     val start = withFrameMillis { it }

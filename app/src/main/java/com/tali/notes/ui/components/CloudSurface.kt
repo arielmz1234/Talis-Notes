@@ -75,6 +75,8 @@ fun Modifier.cloudSurface(radius: Dp = 22.dp, crown: CloudCrown = CloudCrown.NON
   val toneBelly = c.cloudBelly.toArgb()
   val edge = c.cloudEdge.toArgb()
   val shadow = c.cloudShadow.toArgb()
+  // The minimal look keeps the soft surface and shadow but drops the cloud bumps.
+  val crown = if (com.tali.notes.theme.LocalMinimal.current) CloudCrown.NONE else crown
   return drawWithCache {
     val d = density
     val w = size.width

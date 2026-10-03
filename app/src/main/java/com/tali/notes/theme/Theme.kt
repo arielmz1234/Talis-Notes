@@ -218,6 +218,9 @@ object Tali {
 @Composable
 fun TaliTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) = TaliColorsScope(if (darkTheme) Dark else Light, content)
 
+/** The minimal look (Settings → Style): no cloud bumps, no sky clouds. */
+val LocalMinimal = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 /** Runs [content] with the palette [c], Material's colours included (menus, text fields). */
 @Composable
 fun TaliColorsScope(c: TaliColors, content: @Composable () -> Unit) {

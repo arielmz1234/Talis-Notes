@@ -34,9 +34,10 @@ import org.robolectric.annotation.GraphicsMode
 class CloudSurfaceShotTest {
   @get:Rule val rule = createComposeRule()
 
-  private fun shot(name: String, dark: Boolean) {
+  private fun shot(name: String, dark: Boolean, minimal: Boolean = false) {
     rule.setContent {
       TaliTheme(darkTheme = dark) {
+       androidx.compose.runtime.CompositionLocalProvider(com.tali.notes.theme.LocalMinimal provides minimal) {
         Box(Modifier.testTag("stage").background(Tali.colors.background).padding(40.dp)) {
           Column {
             FloatingBar(Modifier.height(60.dp).width(420.dp), crown = CloudCrown.EDGE) { Spacer(Modifier.size(400.dp, 50.dp)) }
@@ -44,6 +45,7 @@ class CloudSurfaceShotTest {
             Box(Modifier.width(420.dp).cloudSurface(24.dp, shadowDepth = 12.dp).padding(28.dp)) { Text("New notebook", color = Tali.colors.ink) }
           }
         }
+       }
       }
     }
     rule.waitForIdle()
@@ -54,4 +56,6 @@ class CloudSurfaceShotTest {
   @Test fun light() = shot("light", false)
 
   @Test fun dark() = shot("dark", true)
+
+  @Test fun minimal() = shot("minimal", false, minimal = true)
 }
