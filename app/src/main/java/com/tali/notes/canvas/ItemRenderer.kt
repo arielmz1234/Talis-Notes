@@ -40,6 +40,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   /** Typed text laid out in its dark-paper colour, made the first time dark paper draws it. */
   private val darkText = java.util.WeakHashMap<TextItem, android.text.StaticLayout>()
 
+  /** Pictures being changed (a fill the eraser is rubbing out), by item id: drawn instead of their file. */
+  var swapped: Map<String, Bitmap> = emptyMap()
+
   /** For lighter PDFs: pictures bigger than this many pixels per world unit are scaled down first. */
   var imagePxPerDp: Float? = null
   private val reduced = HashMap<String, Bitmap>()
@@ -116,7 +119,8 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
       }
       is ImageItem -> {
         rectF.set(item.rect.left, item.rect.top, item.rect.right, item.rect.bottom)
-        val bmp = if (sync) images.loadNow(item.file) else images.peek(item.file)
+        val edited = swapped[item.id]
+        val bmp = edited ?: if (sync) images.loadNow(item.file) else images.peek(item.file)
         if (bmp != null) {
           // A mirrored fill is drawn flipped about its middle.
           val flip = item.flipX || item.flipY
@@ -124,7 +128,7 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
             canvas.save()
             canvas.scale(if (item.flipX) -1f else 1f, if (item.flipY) -1f else 1f, rectF.centerX(), rectF.centerY())
           }
-          canvas.drawBitmap(reduce(item.file, bmp, item.rect), null, rectF, imagePaint)
+          canvas.drawBitmap(if (edited != null) edited else reduce(item.file, bmp, item.rect), null, rectF, imagePaint)
           if (flip) canvas.restore()
         } else {
           if (!sync) images.request(item.file)

@@ -56,11 +56,27 @@ class ImageStore(private val dir: File) {
     return name
   }
 
+  /** Pictures handed to [saveSoon] still being written, so a load meanwhile finds them. */
+  private val writing = ConcurrentHashMap<String, Bitmap>()
+  private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "image-writer").apply { priority = Thread.NORM_PRIORITY - 1 } }
+
+  /** Like [save], but the PNG is written in the background (the name and the picture are usable at once). */
+  fun saveSoon(bitmap: Bitmap, prefix: String): String {
+    val name = prefix + java.util.UUID.randomUUID().toString().take(12) + ".png"
+    cache.put(name, bitmap)
+    writing[name] = bitmap
+    writer.execute {
+      runCatching { File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+      writing.remove(name)
+    }
+    return name
+  }
+
   /** Loads right away, for PDF export and previews. */
   fun loadNow(file: String): Bitmap? = cache.get(file) ?: decode(file)?.also { cache.put(file, it) }
 
   private fun decode(file: String): Bitmap? =
-    runCatching {
+    writing[file] ?: runCatching {
         val opts = BitmapFactory.Options().apply {
           // Photos and PDF pages have no transparency: half the memory, same look.
           inPreferredConfig = if (file.endsWith(".jpg")) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888

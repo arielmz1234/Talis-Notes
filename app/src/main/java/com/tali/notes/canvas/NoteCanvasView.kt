@@ -2,10 +2,12 @@ package com.tali.notes.canvas
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PointF
 import android.graphics.RectF
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
@@ -302,6 +304,18 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var erasePrev = Pt.ZERO
   private val erasedOriginals = LinkedHashMap<String, CanvasItem>()
   private val erasePieces = LinkedHashMap<String, InkItem>()
+  /** Fills the precise eraser is rubbing out, by id: an editable copy of each picture (saved on lift). */
+  private val fillEdits = LinkedHashMap<String, FillEdit>()
+
+  private class FillEdit(val item: ImageItem, val bmp: Bitmap) {
+    val canvas = Canvas(bmp)
+  }
+
+  private val fillRubber = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+  }
   /** For each piece the eraser has made, the item it came from (so a fill's outline can follow its pieces). */
   private val pieceRoot = HashMap<String, String>()
   private var eraserOverride = false
@@ -1694,6 +1708,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     lassoPoints.clear()
     erasedOriginals.clear()
     erasePieces.clear()
+    dropFillEdits()
     dragTransform = Affine.IDENTITY
     tiles.hidden = emptySet()
     if (selection.isNotEmpty()) setSelection(selection)
@@ -1949,6 +1964,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun startErase(p: Pt) {
     erasedOriginals.clear()
     erasePieces.clear()
+    dropFillEdits()
     erasePrev = p
     mode = Mode.ERASE
     eraseSegment(p, p)
@@ -1968,8 +1984,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val candidates = d.intersecting(region).filter { !it.locked && it.id !in erasedOriginals && (settings.eraserHits(it.pen) || isAreaFill(it)) } + erasePieces.values.filter { it.bounds.intersects(region) }
     for (item in candidates) {
       if (isAreaFill(item)) {
-        // A fill's colour goes as a whole when the eraser passes over it (its outline is erased apart).
-        if (erasesFill(item as ImageItem, a, b, radius)) erasedOriginals[item.id] = item
+        // A fill is erased apart from its outline: whole by the stroke eraser, rubbed out where it passes by the precise one.
+        val fill = item as ImageItem
+        if (settings.eraserMode == EraserMode.STROKE) {
+          if (erasesFill(fill, a, b, radius)) erasedOriginals[fill.id] = fill
+        } else {
+          rubFill(fill, a, b, radius)
+        }
         continue
       }
       if (!strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) }) continue
@@ -2007,6 +2028,57 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     tiles.hidden = erasedOriginals.keys.toSet()
   }
 
+  /** The precise eraser clears the part of [fill] it sweeps over (from [a] to [b], [radius] wide each side). */
+  private fun rubFill(fill: ImageItem, a: Pt, b: Pt, radius: Float) {
+    val edit = fillEdits[fill.id] ?: run {
+      if (!erasesFill(fill, a, b, radius)) return
+      val src = images.peek(fill.file) ?: return
+      FillEdit(fill, src.copy(Bitmap.Config.ARGB_8888, true) ?: return).also {
+        fillEdits[fill.id] = it
+        itemRenderer.swapped = fillEdits.mapValues { (_, e) -> e.bmp }
+      }
+    }
+    val r = fill.rect
+    val sx = edit.bmp.width / r.width
+    val sy = edit.bmp.height / r.height
+    fun px(p: Pt): PointF {
+      var x = (p.x - r.left) * sx
+      var y = (p.y - r.top) * sy
+      if (fill.flipX) x = edit.bmp.width - x
+      if (fill.flipY) y = edit.bmp.height - y
+      return PointF(x, y)
+    }
+    val pa = px(a)
+    val pb = px(b)
+    fillRubber.strokeWidth = 2f * radius * (sx + sy) / 2f
+    edit.canvas.drawLine(pa.x, pa.y, pb.x + 0.01f, pb.y, fillRubber)
+    tiles.invalidate((Rect.around(listOf(a, b)) ?: return).outset(radius + 2f))
+  }
+
+  /** Forgets fills being rubbed out without keeping the change. */
+  private fun dropFillEdits() {
+    if (fillEdits.isEmpty()) return
+    fillEdits.values.forEach { tiles.invalidate(it.item.rect) }
+    fillEdits.clear()
+    itemRenderer.swapped = emptyMap()
+  }
+
+  /** The fills rubbed out this stroke as they are now: an old picture → its new one, or null when nothing's left of it. */
+  private fun finishFillEdits(): Map<ImageItem, ImageItem?> {
+    val out = LinkedHashMap<ImageItem, ImageItem?>()
+    for (edit in fillEdits.values) {
+      val bmp = edit.bmp
+      val px = IntArray(bmp.width * bmp.height)
+      bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+      val f = edit.item
+      out[f] = if (px.none { (it ushr 24) > 0 }) null
+      else ImageItem(f.id, f.z, images.saveSoon(bmp, f.file.take(FILL_PREFIX.length + 9)), f.rect, f.pdfPage, f.front, f.locked, f.walls, f.flipX, f.flipY)
+    }
+    fillEdits.clear()
+    itemRenderer.swapped = emptyMap()
+    return out
+  }
+
   /** Whether the eraser, sweeping from [a] to [b] with [radius], passes over the coloured part of [fill]. */
   private fun erasesFill(fill: ImageItem, a: Pt, b: Pt, radius: Float): Boolean {
     val step = max(1f, radius / 2f)
@@ -2026,9 +2098,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun finishErase() {
     val d = doc ?: return
     // A fill whose outline was split keeps outlining the pieces that are left.
+    val rubbed = finishFillEdits()
+    rubbed.forEach { (old, now) -> if (now == null) erasedOriginals[old.id] = old }
     val gone = erasedOriginals.keys
-    val fills = d.all.filterIsInstance<ImageItem>().filter { f -> f.id !in gone && f.walls.any { it in gone } }
-    val regrouped = fills.map { f ->
+    val fills = d.all.filterIsInstance<ImageItem>().filter { f -> f.id !in gone && (f.walls.any { it in gone } || rubbed[f] != null) }
+    val regrouped = fills.map { old ->
+      val f = rubbed[old] ?: old
+      if (f.walls.none { it in gone }) return@map f
       val kept = f.walls.filterNot { it in gone }.toSet()
       val pieces = erasePieces.keys.filter { pieceRoot[it] in f.walls }.toSet()
       f.withWalls(kept + pieces)
