@@ -836,12 +836,8 @@ private fun EmptyLibrary(onCreate: () -> Unit) {
     DriftingCloud(Modifier.align(Alignment.BottomEnd).offset(y = (-4).dp), width = 110.dp, variant = 0, driftDp = 10f, periodMs = 12000, burstable = true)
     Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = 18.dp), size = 12.dp, color = Sky.S400)
     Box(Modifier.size(200.dp, 150.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Lilac.L50, Sky.S100)), alpha = if (c.isDark) 0.15f else 1f).padding(14.dp)) {
+      // Just the empty engineering page, ready to write on.
       PaperSwatch(PaperStyle.ENGINEERING, Modifier.fillMaxSize())
-      Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ShapeIcon(ShapeKind.PIN_SUPPORT, c.ink, size = 44.dp)
-        ShapeIcon(ShapeKind.POINT_LOAD, c.blue, size = 44.dp)
-        ShapeIcon(ShapeKind.ROLLER_SUPPORT, c.ink, size = 44.dp)
-      }
     }
     }
     Spacer(Modifier.height(20.dp))

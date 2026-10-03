@@ -555,7 +555,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           Spacer(Modifier.width(12.dp))
           undoBar()
         }
-        Spacer(Modifier.height(10.dp))
+        // A little more room between the two lines when the tablet is held upright.
+        Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) { tools() }
       } else {
         // The tools sit in the middle when there's room; when they grow (more colours) they shift
