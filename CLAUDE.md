@@ -160,6 +160,8 @@ In order, see `git log`:
 27. Lock (`CanvasItem.locked`, `withLocked`): stored in the saved data (ink pen column tag "LOCKED", a "locked" key in shape JSON, `locked` in the picture and text payloads), so no schema change. Locked items are skipped by `hitTest` (unless asked for), the lasso loop, the eraser and shape fill. Lock from the selection menu (`lockSelection`); unlock by holding a finger on it (`longPress`, `LONG_PRESS_MS`) or *Unlock all* in the ⋯ menu (`unlockAll`). All are undoable.
 28. Page delete asks first (`PagesOverview`, `confirming`). Thickness sliders use `StepSlider` (`ui/components/StepSlider.kt`: − and + in 0.1 steps, hold to repeat faster, `onChangeFinished` once per change). Changing a pen's type keeps its thickness (clamped to the new pen's range) instead of resetting to the type's default.
 
+29. Top bar: the eye ("Hide toolbars") moved to the far end of the undo bar, after ⋯ (order: Undo, Redo | ⋯, eye). Beside redo, Tali kept hiding the toolbars by accident; a slip now only opens the menu. *Hide navigation bar* in the ⋯ menu (`AppSettings.hideNavBar`, app-wide) hides the system navigation bar in every notebook (swipe up shows it for a moment), re-applied on resume, and shown again in the library.
+
 Working setup notes:
 - On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.
 - The `medium_tablet` AVD may need creating. Copy another AVD's `config.ini` with 1334×800 @160dpi, landscape.

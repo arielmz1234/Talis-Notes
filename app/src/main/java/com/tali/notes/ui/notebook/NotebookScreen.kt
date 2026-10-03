@@ -1,5 +1,6 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import com.tali.notes.model.LineStyle
@@ -168,6 +169,30 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   // The status bar sits over the paper, or over the desk around the pages: light icons when that's dark.
   val darkTop = darkPaper || (systemDark && vm.pageCount != null)
   val view = LocalView.current
+  // Her choice to hide the system navigation bar holds in every notebook; it comes back in the library.
+  val hideNavBar = vm.settings.collectAsState().value.hideNavBar
+  val navOwner = LocalLifecycleOwner.current
+  DisposableEffect(hideNavBar, navOwner) {
+    val window = (view.context as? android.app.Activity)?.window
+    val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+    val nav = androidx.core.view.WindowInsetsCompat.Type.navigationBars()
+    fun apply() {
+      if (hideNavBar) {
+        bars?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars?.hide(nav)
+      } else {
+        bars?.show(nav)
+      }
+    }
+    apply()
+    // Coming back to the app can bring the bar back; hide it again.
+    val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) apply() }
+    navOwner.lifecycle.addObserver(observer)
+    onDispose {
+      navOwner.lifecycle.removeObserver(observer)
+      bars?.show(nav)
+    }
+  }
   DisposableEffect(darkTop) {
     val window = (view.context as? android.app.Activity)?.window
     val bars = window?.let { WindowCompat.getInsetsController(it, view) }
@@ -463,10 +488,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             onUndo = { holder.view?.runSafely { undo() } },
             onRedo = { holder.view?.runSafely { redo() } },
           ) {
-            ToolButton(Icons.Outlined.VisibilityOff, "Hide toolbars") {
-              vm.panel = null
-              vm.focus = true
-            }
+            // The eye sits at the far end, past ⋯: right beside redo, a slip of the finger hid every
+            // toolbar; now a slip only opens the menu.
             MoreMenu(
               paged = paged,
               darkPaper = darkPaper,
@@ -504,7 +527,13 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onSmartUndo = vm::setSmartUndo,
               lockedCount = { holder.view?.lockedCount() ?: 0 },
               onUnlockAll = { holder.view?.runSafely { unlockAll() } },
+              hideNavBar = settings.hideNavBar,
+              onHideNavBar = vm::setHideNavBar,
             )
+            ToolButton(Icons.Outlined.VisibilityOff, "Hide toolbars") {
+              vm.panel = null
+              vm.focus = true
+            }
           }
         }
       }
@@ -688,6 +717,8 @@ private fun MoreMenu(
   onSmartUndo: (Boolean) -> Unit,
   lockedCount: () -> Int,
   onUnlockAll: () -> Unit,
+  hideNavBar: Boolean,
+  onHideNavBar: (Boolean) -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
@@ -782,6 +813,12 @@ private fun MoreMenu(
         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Undo, null) },
         trailingIcon = { if (smartUndo) Icon(Icons.Outlined.Check, null, tint = c.accent) },
         onClick = { onSmartUndo(!smartUndo) },
+      )
+      DropdownMenuItem(
+        text = { Column { Text("Hide navigation bar"); Text("More room to write; swipe up from the bottom to see it", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+        leadingIcon = { Icon(Icons.Outlined.Fullscreen, null) },
+        trailingIcon = { if (hideNavBar) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+        onClick = { onHideNavBar(!hideNavBar) },
       )
     }
   }

@@ -35,6 +35,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - Deleting a page asks first.
 - Undo and redo work with the buttons, or with *Smart undo and redo* (⋯ menu): a two-finger tap undoes, a three-finger tap redoes.
 - The full-screen button beside undo hides the toolbars, leaving the page and a small frosted button to bring them back. A puff of mist plays where the bars were; when a notebook opens, the bars just slide in.
+- *Hide navigation bar* (⋯ menu) hides Android's navigation bar in every notebook; swipe up from the bottom to see it for a moment.
 - Scrolling glides on after a flick.
 
 **Pages and paper**

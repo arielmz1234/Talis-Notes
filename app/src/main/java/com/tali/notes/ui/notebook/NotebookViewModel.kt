@@ -292,6 +292,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setSmartUndo(on: Boolean) = store.update { it.copy(smartUndo = on) }
 
+  fun setHideNavBar(on: Boolean) = store.update { it.copy(hideNavBar = on) }
+
 
 
   fun setPaper(style: PaperStyle) {

@@ -75,6 +75,8 @@ data class AppSettings(
   val smartUndo: Boolean = true,
   /** How heavy the paper's lines, grid and dots are drawn: 1 is the standard weight, 0.5..3. */
   val paperLineWeight: Float = 1f,
+  /** The system navigation bar is hidden inside notebooks (swipe up to see it). */
+  val hideNavBar: Boolean = false,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
 ) {
