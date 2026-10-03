@@ -154,6 +154,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.animation.core.CubicBezierEasing
@@ -1031,73 +1032,40 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
         ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more }
       }
       if (more) {
-        Column(Modifier.width(348.dp).weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-          Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(start = 10.dp, top = 6.dp))
-          // Style: colour for anything coloured, plus thickness and line for writing and shapes.
-          if (!sel.hasImage || sel.count > 1) {
-            Box(Modifier.offset(x = (-6).dp)) { SelectionStyle(sel, colors, onColor, onRestyle) }
-          }
-          Spacer(Modifier.height(4.dp))
-          SectionLabel("Arrange and more", Modifier.padding(start = 10.dp))
-          Spacer(Modifier.height(6.dp))
-          FlowRow(Modifier.padding(horizontal = 4.dp).padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            MenuTile(Icons.Outlined.FlipToFront, "To front") { onArrange(true) }
-            MenuTile(Icons.Outlined.FlipToBack, "To back") { onArrange(false) }
-            // Writing and shapes flip; pictures and text keep facing the right way.
-            MenuTile(com.tali.notes.ui.components.TaliIcons.MirrorHorizontal, "Left–right") { onMirror(true) }
-            MenuTile(com.tali.notes.ui.components.TaliIcons.MirrorVertical, "Upside down") { onMirror(false) }
-            // Locked things stay put: the lasso, taps and the eraser leave them alone.
-            if (sel.locked) MenuTile(Icons.Outlined.LockOpen, "Unlock", onClick = onLock) else MenuTile(Icons.Outlined.Lock, "Lock", onClick = onLock)
-            sel.textId?.let { id -> MenuTile(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
-            if (sel.hasDrawing) MenuTile(Icons.Outlined.AutoAwesome, "Save shape", onClick = onSaveShape)
-          }
+        // The rest of what the menu always had, as plain buttons, plus colour and thickness.
+        Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+          ToolButton(Icons.Outlined.FlipToFront, "Bring to front") { onArrange(true) }
+          ToolButton(Icons.Outlined.FlipToBack, "Send to back") { onArrange(false) }
+          // Writing and shapes flip; pictures and text keep facing the right way.
+          ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorHorizontal, "Mirror left to right") { onMirror(true) }
+          ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorVertical, "Mirror upside down") { onMirror(false) }
+          // Locked things stay put: the lasso, taps and the eraser leave them alone.
+          if (sel.locked) ToolButton(Icons.Outlined.LockOpen, "Unlock", onClick = onLock) else ToolButton(Icons.Outlined.Lock, "Lock in place", onClick = onLock)
+          sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
+          if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         }
+        if (!sel.hasImage || sel.count > 1) SelectionQuick(sel, colors, onColor, onRestyle)
       }
     }
   }
 }
 
-/** One labelled action in the selection menu's bigger card. */
+/** Colour dots in one row, and the thickness for writing and shapes: the opened selection menu's extras. */
 @Composable
-private fun MenuTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun SelectionQuick(sel: SelectionInfo, colors: List<Int>, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit) {
   val c = Tali.colors
-  Column(
-    Modifier.width(80.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
-    horizontalAlignment = Alignment.CenterHorizontally,
-  ) {
-    Box(Modifier.size(40.dp).clip(CircleShape).background(c.accentSoft), contentAlignment = Alignment.Center) {
-      Icon(icon, null, tint = c.ink, modifier = Modifier.size(22.dp))
-    }
-    Spacer(Modifier.height(4.dp))
-    Text(label, style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1)
-  }
-}
-
-/** The selection's style menu: its colour, and for writing and shapes, how thick and in what line. */
-@Composable
-private fun SelectionStyle(sel: SelectionInfo, colors: List<Int>, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit) {
-  val c = Tali.colors
-  Column(Modifier.width(336.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
-    SectionLabel("Colour")
-    Spacer(Modifier.height(6.dp))
+  Column(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp)) {
     val ring = rememberSlidingSelection()
-    FlowRow(Modifier.colorRing(ring, sel.color?.let { Color(it) }), maxItemsInEachRow = 8) {
+    Row(Modifier.horizontalScroll(rememberScrollState()).colorRing(ring, sel.color?.let { Color(it) }).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
       colors.forEach { col -> ColorDot(Color(col), selected = col == sel.color, size = 26.dp, selection = ring) { onColor(col) } }
     }
     val size = sel.lineSize ?: return@Column
-    Spacer(Modifier.height(12.dp))
-    SectionLabel("Thickness")
     // Follows the finger here and changes the writing once let go (one undo step).
     var value by remember(size) { mutableFloatStateOf(size) }
     Row(verticalAlignment = Alignment.CenterVertically) {
       StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
       Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
-    Spacer(Modifier.height(4.dp))
-    SectionLabel("Line")
-    Spacer(Modifier.height(8.dp))
-    LineStylePicker(sel.line ?: LineStyle.SOLID, { onRestyle(null, it) })
-    Spacer(Modifier.height(4.dp))
   }
 }
 
