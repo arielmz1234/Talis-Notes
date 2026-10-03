@@ -92,7 +92,13 @@ interface CanvasHost {
 
   /** The S Pen button was double-pressed (+1, next starred pen) or triple-pressed (-1, back). */
   fun onPenCycle(step: Int) = Unit
+
+  /** A hold on the page with something copied: offer to paste it there (null takes the offer away). */
+  fun onPasteOffer(offer: PasteOffer?) = Unit
 }
+
+/** Paste offered at [screenX], [screenY] (pixels in the canvas), which is [at] in the world. */
+data class PasteOffer(val screenX: Float, val screenY: Float, val at: Pt, val count: Int)
 
 /** A text block being typed: [id] is null for a new one. Positions and sizes are in world units. */
 data class TextEdit(val id: String?, val origin: Pt, val width: Float, val fontSize: Float, val color: Int, val text: String)
@@ -293,6 +299,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val strokePoints = ArrayList<Pt>()
   private var holdAnchor = Pt.ZERO
   private val holdRunnable = Runnable { onHold() }
+
+  /** A pen or finger held still on the page with something copied offers Paste there ([offerPaste]). */
+  private val pasteHold = Runnable { offerPaste() }
+  private var pasteHoldAt = Pt(0f, 0f)
   private var liveShape: ShapeItem? = null
 
   /** The shape as it snapped, and where the pen was then: keeping on moving resizes it from there. */
@@ -1363,6 +1373,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       mode = Mode.IGNORE
       return
     }
+    if (effective != Tool.ERASER && effective != Tool.LASER) armPasteHold(screen, p)
     when (effective) {
       Tool.PEN -> if (settings.activeSlot.straight) startStraight(p) else startInk(e, idx, p, d)
       Tool.LASER -> startLaser(p)
@@ -1416,6 +1427,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun drawMove(e: MotionEvent) {
     val idx = e.findPointerIndex(drawPointer)
     if (idx < 0) return
+    if (hypot(e.getX(idx) - pasteHoldAt.x, e.getY(idx) - pasteHoldAt.y) > touchSlop) removeCallbacks(pasteHold)
     when (mode) {
       Mode.INK -> {
         predictor.record(e)
@@ -1622,6 +1634,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc
     val idx = e.findPointerIndex(drawPointer)
     removeCallbacks(holdRunnable)
+    removeCallbacks(pasteHold)
     when (mode) {
       Mode.INK -> {
         val tapped = if (e.eventTime - e.downTime < PEN_TAP_MS) shapeTappedByPen() else null
@@ -1697,6 +1710,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun abortDrawing() {
     removeCallbacks(holdRunnable)
+    removeCallbacks(pasteHold)
     strokeId?.let { inProgress.cancelStroke(it, null) }
     strokeId = null
     liveShape = null
@@ -2347,21 +2361,62 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val n = selection.size
     Clipboard.items = selection
     deleteSelection()
-    host.onHint(if (n == 1) "Cut \u2014 paste it from \u22EF here or in any notebook" else "Cut $n items \u2014 paste them from \u22EF here or in any notebook")
+    host.onHint(if (n == 1) "Cut \u2014 hold anywhere to paste it" else "Cut $n items \u2014 hold anywhere to paste them")
   }
 
   fun copySelection() {
     if (selection.isEmpty()) return
     Clipboard.items = selection
-    host.onHint(if (selection.size == 1) "Copied \u2014 paste it from \u22EF in any notebook" else "Copied ${selection.size} items \u2014 paste them from \u22EF in any notebook")
+    host.onHint(if (selection.size == 1) "Copied \u2014 hold anywhere to paste it" else "Copied ${selection.size} items \u2014 hold anywhere to paste them")
   }
 
-  /** Pastes the clipboard in the middle of the screen, selected so it can be moved into place. */
-  fun paste() {
+  /** Starts waiting for a hold at [screen] ([p] in the world) to offer Paste, if something's copied and it isn't on a locked item. */
+  private fun armPasteHold(screen: Pt, p: Pt) {
+    removeCallbacks(pasteHold)
+    if (Clipboard.items.isEmpty()) return
+    if (hitTest(p, locked = true) { true }?.locked == true) return
+    pasteHoldAt = screen
+    postDelayed(pasteHold, PASTE_HOLD_MS)
+  }
+
+  /** The hold came: whatever the touch had started (a dot of ink, a lasso, a shape) is dropped, and Paste is offered. */
+  private fun offerPaste() {
+    if (Clipboard.items.isEmpty()) return
+    when (mode) {
+      Mode.FINGER_PENDING -> {
+        if (maxPointers != 1) return
+        longPressed = true
+      }
+      Mode.INK -> {
+        strokeId?.let {
+          inProgress.cancelStroke(it, null)
+          strokePens.remove(it)
+          strokeColors.remove(it)
+        }
+        strokeId = null
+        strokePoints.clear()
+        mode = Mode.IGNORE
+      }
+      Mode.LASSO, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.STRAIGHT -> {
+        lassoPoints.clear()
+        shapePreview = null
+        straightPreview = null
+        mode = Mode.IGNORE
+      }
+      else -> return
+    }
+    removeCallbacks(holdRunnable)
+    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    host.onPasteOffer(PasteOffer(pasteHoldAt.x, pasteHoldAt.y, camera.toWorld(pasteHoldAt.x, pasteHoldAt.y), Clipboard.items.size))
+    invalidate()
+  }
+
+  /** Pastes the clipboard centred on [at] (the middle of the screen if null), selected so it can be moved into place. */
+  fun paste(at: Pt? = null) {
     val d = doc ?: return
     val items = Clipboard.items
     val bounds = items.map { it.bounds }.reduceOrNull(Rect::union) ?: return
-    val c = camera.visibleWorld(width, height).center
+    val c = at ?: camera.visibleWorld(width, height).center
     val move = Affine.translate(c.x - bounds.center.x, c.y - bounds.center.y)
     val copies = copiesOf(items.sortedBy { it.z }, move, d)
     d.commit(Change(emptyList(), copies))
@@ -2770,7 +2825,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           postInvalidateOnAnimation()
         }
       }
+      if (holdTarget == null && fingertip(e)) armPasteHold(Pt(e.x, e.y), camera.toWorld(e.x, e.y))
     } else {
+      removeCallbacks(pasteHold)
       cancelHold()
       maxPointers = max(maxPointers, e.pointerCount)
       startPinch(e)
@@ -2947,6 +3004,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     when (mode) {
       Mode.FINGER_PENDING -> {
         if (hypot(e.x - fingerStart.x, e.y - fingerStart.y) > touchSlop) {
+          removeCallbacks(pasteHold)
           mode = Mode.PAN
           lastFocusX = e.x
           lastFocusY = e.y
@@ -2976,6 +3034,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun fingerUp(e: MotionEvent) {
     cancelHold()
+    removeCallbacks(pasteHold)
     val quick = SystemClock.uptimeMillis() - fingerDownTime < MULTI_TAP_MS
     when {
       e.actionMasked == MotionEvent.ACTION_POINTER_UP -> {
@@ -3391,6 +3450,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val SNAP_ROTATE_RAD = 0.087f
     /** A pen touch shorter than this that doesn't move is a tap. */
     private const val PEN_TAP_MS = 250L
+
+    /** How long a pen or finger stays still on the page before Paste is offered (after hold-to-shape's 450 ms, which needs a stroke). */
+    private const val PASTE_HOLD_MS = 600L
     /** How long a finger is held on a locked item to unlock it. */
     private const val LONG_PRESS_MS = 1500L
     /** The S Pen's side button, as different pens report it. */

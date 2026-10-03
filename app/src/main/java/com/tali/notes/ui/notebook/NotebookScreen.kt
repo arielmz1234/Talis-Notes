@@ -150,6 +150,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.outlined.Layers
@@ -229,6 +233,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   var renaming by remember { mutableStateOf(false) }
   var exporting by remember { mutableStateOf(false) }
   var savingShape by remember { mutableStateOf<ShapeGeometry?>(null) }
+  var pasteOffer by remember { mutableStateOf<com.tali.notes.canvas.PasteOffer?>(null) }
   var pendingPdf by remember { mutableStateOf<File?>(null) }
 
   val imagePicker =
@@ -319,6 +324,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                 override fun onHint(message: String) = vm.showHint(message)
 
                 override fun onPenCycle(step: Int) = vm.cyclePen(step)
+
+                override fun onPasteOffer(offer: com.tali.notes.canvas.PasteOffer?) {
+                  pasteOffer = offer
+                }
 
                 override fun onTip(id: String, message: String) = vm.tip(id, message)
 
@@ -544,8 +553,6 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onFingerDraws = vm::setFingerDraws,
               pageGuides = settings.pageGuides,
               onPageGuides = vm::setPageGuides,
-              pasteCount = Clipboard.items.size,
-              onPaste = { holder.view?.runSafely { paste() } },
               smartUndo = settings.smartUndo,
               onSmartUndo = vm::setSmartUndo,
               inkBetweenPages = settings.inkBetweenPages,
@@ -605,6 +612,13 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     }
     }
     ShowToolbarsButton(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
+
+    pasteOffer?.let { offer ->
+      PasteBubble(offer, onDismiss = { pasteOffer = null }) {
+        pasteOffer = null
+        holder.view?.runSafely { paste(offer.at) }
+      }
+    }
 
     vm.selection?.let { sel ->
       if (vm.panel == null) {
@@ -763,8 +777,6 @@ private fun MoreMenu(
   onFingerDraws: (Boolean?) -> Unit,
   pageGuides: Boolean,
   onPageGuides: (Boolean) -> Unit,
-  pasteCount: Int,
-  onPaste: () -> Unit,
   smartUndo: Boolean,
   onSmartUndo: (Boolean) -> Unit,
   inkBetweenPages: Boolean,
@@ -788,17 +800,6 @@ private fun MoreMenu(
           onClick = {
             open = false
             onUnlockAll()
-          },
-        )
-        if (pasteCount == 0) HorizontalDivider(color = c.line)
-      }
-      if (pasteCount > 0) {
-        DropdownMenuItem(
-          text = { Text(if (pasteCount == 1) "Paste" else "Paste $pasteCount items") },
-          leadingIcon = { Icon(Icons.Outlined.ContentPaste, null) },
-          onClick = {
-            open = false
-            onPaste()
           },
         )
         HorizontalDivider(color = c.line)
@@ -943,6 +944,45 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
   }
 }
 
+/**
+ * Paste, offered above where she held the pen or finger (below it near the top). A tap anywhere
+ * else takes it away.
+ */
+@Composable
+private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -> Unit, onPaste: () -> Unit) {
+  val c = Tali.colors
+  val density = LocalDensity.current
+  val shown = remember(offer) { Animatable(0f) }
+  LaunchedEffect(offer) { shown.animateTo(1f, tween(180, easing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f))) }
+  Box(Modifier.fillMaxSize().pointerInput(offer) { detectTapGestures(onPress = { onDismiss() }) }) {
+    Box(
+      Modifier.layout { measurable, constraints ->
+        val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val gap = with(density) { 18.dp.roundToPx() }
+        val edge = with(density) { 12.dp.roundToPx() }
+        val x = (offer.screenX.roundToInt() - p.width / 2).coerceIn(edge, (constraints.maxWidth - p.width - edge).coerceAtLeast(edge))
+        val above = offer.screenY.roundToInt() - p.height - gap
+        val y = if (above >= with(density) { 96.dp.roundToPx() }) above else offer.screenY.roundToInt() + gap
+        layout(constraints.maxWidth, constraints.maxHeight) { p.place(x, y) }
+      }
+        .graphicsLayer {
+          val t = shown.value
+          alpha = t
+          scaleX = 0.92f + 0.08f * t
+          scaleY = 0.92f + 0.08f * t
+          transformOrigin = TransformOrigin(0.5f, 1f)
+        }
+    ) {
+      FloatingBar(Modifier.height(48.dp)) {
+        Row(Modifier.fillMaxHeight().clip(RoundedCornerShape(18.dp)).clickable(onClick = onPaste).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+          Icon(Icons.Outlined.ContentPaste, null, tint = c.ink, modifier = Modifier.size(20.dp))
+          Text(if (offer.count == 1) "Paste" else "Paste ${offer.count} items", color = c.ink, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp, end = 2.dp))
+        }
+      }
+    }
+  }
+}
+
 @Composable
 private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit) {
   val c = Tali.colors
@@ -982,7 +1022,7 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
           }
         }
         ToolButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
-        ToolButton(Icons.Outlined.ContentCut, "Cut (paste it from ⋯ here or in any notebook)", onClick = onCut)
+        ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
         ToolButton(Icons.Outlined.ContentPasteGo, "Copy to another notebook", onClick = onCopy)
         ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
         // What's in front and what's behind: pictures can go over the writing or under it.
