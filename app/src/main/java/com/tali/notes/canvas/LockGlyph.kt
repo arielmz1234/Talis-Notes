@@ -13,7 +13,14 @@ object LockGlyph {
   private val lockPath = android.graphics.Path()
 
   /** A padlock centred at ([cx], [cy]); [open] 0 is shut, 1 is the shackle lifted and swung open. */
-  fun draw(canvas: Canvas, density: Float, dark: Boolean, cx: Float, cy: Float, alpha: Float, scale: Float, open: Float) {
+  private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+  }
+  private val ringOval = android.graphics.RectF()
+
+  /** [progress] 0..1 draws a ring round the chip filling clockwise (a hold to unlock); below 0, none. */
+  fun draw(canvas: Canvas, density: Float, dark: Boolean, cx: Float, cy: Float, alpha: Float, scale: Float, open: Float, progress: Float = -1f) {
     if (alpha <= 0.01f) return
     // A little larger than a toolbar icon, so the lock is easy to see happen.
     val d = density * 1.3f
@@ -24,6 +31,16 @@ object LockGlyph {
     lockChip.alpha = (235 * alpha).toInt()
     lockChip.setShadowLayer(8f * d, 0f, 2f * d, if (dark) 0x55000000 else 0x333B2A7A)
     canvas.drawCircle(0f, 0f, 21f * d, lockChip)
+    if (progress >= 0f) {
+      val r = 21f * d + 3f * density
+      ringOval.set(-r, -r, r, r)
+      ring.strokeWidth = 2.6f * density
+      ring.color = if (dark) 0xFFC8B4FF.toInt() else 0xFF7A4FD8.toInt()
+      ring.alpha = (50 * alpha).toInt()
+      canvas.drawOval(ringOval, ring)
+      ring.alpha = (255 * alpha).toInt()
+      canvas.drawArc(ringOval, -90f, 360f * progress.coerceIn(0f, 1f), false, ring)
+    }
     val ink = if (dark) 0xFFC8B4FF.toInt() else 0xFF7A4FD8.toInt()
     // The body.
     lockInk.style = Paint.Style.FILL

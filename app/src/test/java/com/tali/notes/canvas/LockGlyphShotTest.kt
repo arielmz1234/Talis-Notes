@@ -25,7 +25,7 @@ class LockGlyphShotTest {
       c.clipRect(0f, row * 60 * d, bmp.width.toFloat(), (row + 1) * 60 * d)
       c.drawColor(if (dark) 0xFF15121F.toInt() else 0xFFF6F2FF.toInt())
       c.restore()
-      opens.forEachIndexed { i, o -> LockGlyph.draw(c, d, dark, (i + 0.5f) * 60 * d, (row + 0.5f) * 60 * d, 1f, 1f, o) }
+      opens.forEachIndexed { i, o -> LockGlyph.draw(c, d, dark, (i + 0.5f) * 60 * d, (row + 0.5f) * 60 * d, 1f, 1f, o, if (o == 0f) 0.65f else -1f) }
     }
     val dir = File("build/lock-frames").apply { mkdirs() }
     bmp.compress(Bitmap.CompressFormat.PNG, 100, File(dir, "lock.png").outputStream())

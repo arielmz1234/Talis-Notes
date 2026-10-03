@@ -2424,7 +2424,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     d.commit(Change(group, unlocked))
     if (unlocked.size == 1) selectSingle(unlocked[0]) else setSelection(unlocked)
     // The padlock that was building up above her finger pops open and goes.
-    lockCue = LockCue(camera.toWorld(fingerStart.x, fingerStart.y - HOLD_LIFT_DP * density), locking = false, start = SystemClock.uptimeMillis() - CUE_SHACKLE_FROM, fromHold = true)
+    // The padlock that filled up over it now plays the same unlock as the menu's, from the snap on.
+    lockCue = LockCue(holdAt, locking = false, start = SystemClock.uptimeMillis() - CUE_APPEAR_MS, fromHold = true)
     postInvalidateOnAnimation()
     host.onHint("Unlocked \u2014 it can be picked up and erased again")
   }
@@ -2480,6 +2481,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       cancelHold()
       if (e.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER && fingertip(e) && SystemClock.uptimeMillis() - lastPenAt >= PEN_NEARBY_MS) {
         holdTarget = hitTest(camera.toWorld(e.x, e.y), locked = true) { true }
+        holdTarget?.let { target ->
+          // The padlock shows over the item, unless the finger is covering that spot: then just above it.
+          val centre = camera.toScreen(target.bounds.center)
+          val clear = HOLD_LIFT_DP * density
+          holdAt = if (centre.dist(Pt(e.x, e.y)) > clear) target.bounds.center else camera.toWorld(e.x, e.y - clear)
+        }
         if (holdTarget != null) {
           holdStart = SystemClock.uptimeMillis()
           postDelayed(longPress, LONG_PRESS_MS)
@@ -2505,7 +2512,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (holdTarget != null) {
       // Let go early: whatever of the padlock had appeared fades away quickly.
       val shown = holdProgress()
-      if (shown != null) holdFade = HoldFade(SystemClock.uptimeMillis(), shown.first, shown.second, Pt(fingerStart.x, fingerStart.y))
+      if (shown != null) holdFade = HoldFade(SystemClock.uptimeMillis(), shown.first, shown.second, holdAt)
       holdTarget = null
       invalidate()
     }
@@ -2559,7 +2566,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var lockCue: LockCue? = null
 
   /** A hold let go early: the padlock fades from how it looked. */
-  private class HoldFade(val start: Long, val alpha: Float, val open: Float, val screen: Pt)
+  private class HoldFade(val start: Long, val alpha: Float, val progress: Float, val at: Pt)
+
+  /** Where (world) the hold's padlock shows. */
+  private var holdAt = Pt.ZERO
 
   private var holdFade: HoldFade? = null
 
@@ -2571,30 +2581,30 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun easeOut(t: Float) = 1f - (1f - t.coerceIn(0f, 1f)).let { it * it * it }
 
-  /** While a finger is held on a locked item: the padlock's (alpha, shackle opening), or null before it shows. */
+  /** While a finger is held on a locked item: the padlock's (alpha, hold progress 0..1), or null before it shows. */
   private fun holdProgress(): Pair<Float, Float>? {
     if (holdTarget == null) return null
     val since = SystemClock.uptimeMillis() - holdStart - HOLD_RING_DELAY_MS
     if (since <= 0) return null
     val t = (since.toFloat() / (LONG_PRESS_MS - HOLD_RING_DELAY_MS)).coerceAtMost(1f)
-    // It fades in, then the shackle opens gradually with the hold, nearly all the way, and pops
-    // fully open when the hold is complete.
-    val eased = if (t < 0.5f) 2f * t * t else 1f - (-2f * t + 2f).let { it * it } / 2f
-    return easeOut(since / 200f) to HOLD_OPEN_MAX * eased
+    return easeOut(since / 200f) to t
   }
 
   private fun drawLockCues(canvas: Canvas) {
     val now = SystemClock.uptimeMillis()
     var animating = false
-    holdProgress()?.let { (alpha, open) ->
-      drawPadlock(canvas, fingerStart.x, fingerStart.y - HOLD_LIFT_DP * density, alpha, 0.9f + 0.1f * alpha, open)
+    // Holding: the closed padlock over the item, with a ring round its chip filling as she holds.
+    holdProgress()?.let { (alpha, t) ->
+      val sp = camera.toScreen(holdAt)
+      drawPadlock(canvas, sp.x, sp.y, alpha, 0.9f + 0.1f * alpha, 0f, t)
       animating = true
     }
     holdFade?.let { f ->
       val t = (now - f.start) / 120f
       if (t >= 1f) holdFade = null
       else {
-        drawPadlock(canvas, f.screen.x, f.screen.y - HOLD_LIFT_DP * density, f.alpha * (1f - t), 1f - 0.04f * t, f.open)
+        val sp = camera.toScreen(f.at)
+        drawPadlock(canvas, sp.x, sp.y, f.alpha * (1f - t), 1f - 0.04f * t, 0f, f.progress)
         animating = true
       }
     }
@@ -2607,8 +2617,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         // The shackle moves with a small overshoot, like a real lock snapping.
         val k = ((t - CUE_SHACKLE_FROM) / CUE_SHACKLE_MS).coerceIn(0f, 1f)
         val click = 1f + 2.2f * (k - 1f).let { it * it * it } + 1.2f * (k - 1f).let { it * it }
-        val start = if (cue.fromHold) HOLD_OPEN_MAX else 0f
-        val open = if (cue.locking) 1f - click else start + (1f - start) * click
+        val open = if (cue.locking) 1f - click else click
         // A slight pulse of the chip as it clicks.
         val pulseT = ((t - CUE_SHACKLE_FROM - CUE_SHACKLE_MS * 0.6f) / 200f).coerceIn(0f, 1f)
         val pulse = 0.06f * kotlin.math.sin(PI.toFloat() * pulseT)
@@ -2620,8 +2629,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (animating) postInvalidateOnAnimation()
   }
 
-  private fun drawPadlock(canvas: Canvas, cx: Float, cy: Float, alpha: Float, scale: Float, open: Float) =
-    LockGlyph.draw(canvas, density, darkPaper || deskIsDark(), cx, cy, alpha, scale, open)
+  private fun drawPadlock(canvas: Canvas, cx: Float, cy: Float, alpha: Float, scale: Float, open: Float, progress: Float = -1f) =
+    LockGlyph.draw(canvas, density, darkPaper || deskIsDark(), cx, cy, alpha, scale, open, progress)
 
   private fun startPinch(e: MotionEvent) {
     mode = Mode.PINCH
@@ -3109,9 +3118,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PEN_PRESS_GAP_MS = 320L
     /** The unlock padlock starts showing only after this, so a passing touch shows nothing. */
     private const val HOLD_RING_DELAY_MS = 500L
-    /** How far the shackle has opened just before a hold completes (then it pops open). */
-    private const val HOLD_OPEN_MAX = 0.8f
-    /** The hold's padlock sits this far above the fingertip, where the finger doesn't hide it. */
+    /** The lock cue's fade-in; a completed hold starts the cue just after it (the padlock is already showing). */
+    private const val CUE_APPEAR_MS = 200L
+    /** The hold's padlock shows over the item, or this far above the fingertip when the finger covers it. */
     private const val HOLD_LIFT_DP = 64f
     /** The lock cue's timeline (ms): in by 200, the shackle snaps from 260 to 560, it leaves from 1050, gone at 1300. */
     private const val CUE_SHACKLE_FROM = 260L
