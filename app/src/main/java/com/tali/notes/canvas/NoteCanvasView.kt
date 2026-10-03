@@ -642,15 +642,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       tiles.invalidateAll()
     }
     erasePieces.values.forEach { itemRenderer.draw(canvas, it, camera.worldToScreen) }
-    liveShape?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
+    if (mode == Mode.LIVE_SHAPE) updateLiveShape()
+    liveShape?.let { drawShapePreview(canvas, it) }
     straightPreview?.let { preview ->
       canvas.save()
       inkAreas(preview.stroke.brush.size / 2f, pageAt(straightStart))?.let { areas -> canvas.clipPath(areaPath(areas, null)) }
       itemRenderer.draw(canvas, preview, camera.worldToScreen)
       canvas.restore()
     }
-    liveEdit?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
-    shapePreview?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
+    liveEdit?.let { drawShapePreview(canvas, it) }
+    shapePreview?.let { drawShapePreview(canvas, it) }
     if (isDraggingSelection() && selection.isNotEmpty()) {
       canvas.save()
       canvas.concat(dragTransform.toMatrix())
@@ -1307,27 +1308,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         addInkPoint(world(e, idx))
       }
       Mode.LIVE_SHAPE -> {
-        val shape = liveShape ?: return
-        val g = shape.geometry
-        val pen = world(e, idx)
-        // While still holding, a snapped line follows the pen so its length and angle can be set.
-        if (g is LineShape && !g.arrowEnd) {
-          liveShape = shape.withGeometry(ShapeRecognizer.snappedLine(g.a, pen))
-          invalidate()
-        } else {
-          // Any other shape grows or shrinks with the pen, evenly around its middle (a circle's edge
-          // follows the pen tip). A small dead zone keeps hold-and-lift exactly as it snapped.
-          val base = liveBase ?: return
-          if (!liveFollowing && camera.toScreen(pen).dist(camera.toScreen(liveAnchor)) < touchSlop) return
-          liveFollowing = true
-          val bg = base.geometry
-          val c = if (bg is com.tali.notes.model.EllipseShape) bg.center else base.bounds.center
-          val from = liveAnchor.dist(c)
-          if (from < 1f) return
-          val k = (pen.dist(c) / from).coerceIn(0.15f, 8f)
-          liveShape = base.withGeometry(bg.transformed(Affine.scaleAround(c, k)))
-          invalidate()
-        }
+        // Only the latest pen position is kept; the shape follows it once per frame (in onDraw).
+        // The pen is still sending every sample at full speed from the stroke that snapped, and
+        // reshaping on each one made it trail behind.
+        livePen = world(e, idx)
+        invalidate()
       }
       Mode.STRAIGHT -> straightTo(world(e, idx))
       Mode.LASER -> {
@@ -1415,6 +1400,74 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
+  private var livePen: Pt? = null
+
+  /** The live shape after hold-to-shape, following the pen (see [livePen]). */
+  private fun updateLiveShape() {
+    val pen = livePen ?: return
+    livePen = null
+    val shape = liveShape ?: return
+    val g = shape.geometry
+    // While still holding, a snapped line follows the pen so its length and angle can be set.
+    if (g is LineShape && !g.arrowEnd) {
+      liveShape = shape.withGeometry(ShapeRecognizer.snappedLine(g.a, pen))
+      invalidate()
+    } else {
+      // Any other shape grows or shrinks with the pen, evenly around its middle (a circle's edge
+      // follows the pen tip). A small dead zone keeps hold-and-lift exactly as it snapped.
+      val base = liveBase ?: return
+      if (!liveFollowing && camera.toScreen(pen).dist(camera.toScreen(liveAnchor)) < touchSlop) return
+      liveFollowing = true
+      val bg = base.geometry
+      val c = if (bg is com.tali.notes.model.EllipseShape) bg.center else base.bounds.center
+      val from = liveAnchor.dist(c)
+      if (from < 1f) return
+      val k = (pen.dist(c) / from).coerceIn(0.15f, 8f)
+      liveShape = base.withGeometry(bg.transformed(Affine.scaleAround(c, k)))
+      invalidate()
+    }
+  }
+
+  private val previewPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+  }
+  private val previewFill = Paint(Paint.ANTI_ALIAS_FLAG)
+  private val previewPath = android.graphics.Path()
+
+  /**
+   * A shape that is still moving (after hold-to-shape, a dot being dragged, the shapes tool), drawn
+   * as plain lines in its colour, thickness and line style. Building its real Ink strokes every
+   * frame made it lag; they're built once it's let go.
+   */
+  private fun drawShapePreview(canvas: Canvas, item: ShapeItem) {
+    val paths = item.geometry.paths(item.size)
+    item.fill?.let { f ->
+      val outline = paths.firstOrNull()
+      if (outline != null && item.closed) {
+        previewPath.rewind()
+        outline.forEachIndexed { i, p -> if (i == 0) previewPath.moveTo(p.x, p.y) else previewPath.lineTo(p.x, p.y) }
+        previewPath.close()
+        previewFill.color = f
+        canvas.drawPath(previewPath, previewFill)
+      }
+    }
+    val color = if (darkPaper) Brushes.onDarkPaper(item.color) else item.color
+    previewPaint.color = Brushes.inkColor(item.pen, color)
+    previewPaint.strokeWidth = item.size
+    val pattern = item.line.pattern
+    previewPaint.pathEffect =
+      if (pattern.isEmpty()) null
+      else android.graphics.DashPathEffect(pattern.mapIndexed { i, v -> if (i % 2 == 0) maxOf((v - 1f) * item.size, 0.01f) else (v + 1f) * item.size }.toFloatArray(), 0f)
+    for (path in paths) {
+      if (path.size < 2) continue
+      previewPath.rewind()
+      path.forEachIndexed { i, p -> if (i == 0) previewPath.moveTo(p.x, p.y) else previewPath.lineTo(p.x, p.y) }
+      canvas.drawPath(previewPath, previewPaint)
+    }
+  }
+
   private fun snapToShape() {
     if (mode != Mode.INK) return
     val d = doc ?: return
@@ -1470,6 +1523,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
       }
       Mode.LIVE_SHAPE -> {
+        updateLiveShape()
         liveBase = null
         val shape = liveShape
         if (shape != null && d != null) {
