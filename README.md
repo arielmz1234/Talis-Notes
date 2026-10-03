@@ -27,10 +27,12 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - Tap typed text to select it, then move it, resize it from the corner (the text grows with it), recolour it, or tap *Edit text* to type in it again. It exports to PDF as real, sharp text.
 
 **Editing**
-- The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect.
+- The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect. On a fill, the stroke eraser takes the whole colour and the precise eraser rubs out just the part it passes over.
 - **Fill:** tap inside a shape to fill it with colour, or inside an area you drew around to fill it behind your writing (small gaps in the outline are bridged). It has its own colour, opacity, and "None" to take a fill away.
 - The lasso picks up anything it touches (circling the tip of a line takes the whole line). Pictures and writing can be brought to the front or sent to the back.
-- The lasso can move, resize and rotate a selection (with live angle and 15° steps), duplicate, copy to another notebook, delete, or save as a shape. *Style* changes the colour, and for writing and shapes the thickness and line style, after they're drawn.
+- The lasso (or *Free form*, which picks whatever the pen traces over) can move, resize and rotate a selection (with live angle and 15° steps). Its menu shows Copy, Cut, Paste, Duplicate and Delete; ⋯ adds a second row (to front, to back, mirror left–right or upside down, lock, edit text, save as shape) plus colour and thickness.
+- **Paste:** after copying or cutting, hold the pen or a finger still on the page and tap *Paste*; it lands where you held, in this notebook or any other.
+- A fill and the outline it was made in act as one item (move, copy, mirror, lock); only the eraser treats them apart.
 - **Lock:** the selection menu's lock keeps things in place; the lasso, taps and the eraser leave them alone. Hold a locked item with a finger to unlock it, or use *Unlock all* in the ⋯ menu.
 - Deleting a page asks first.
 - Undo and redo work with the buttons, or with *Smart undo and redo* (⋯ menu): a two-finger tap undoes, a three-finger tap redoes.
