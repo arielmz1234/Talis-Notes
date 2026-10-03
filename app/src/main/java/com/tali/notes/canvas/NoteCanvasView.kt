@@ -793,9 +793,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   /** Whether the fill picture [item] actually covers [p] (not just its box). */
-  private fun fillCovers(item: CanvasItem, p: Pt): Boolean {
+  private fun fillCovers(item: CanvasItem, p: Pt, unloaded: Boolean = true): Boolean {
     val img = item as ImageItem
-    val bmp = images.peek(img.file) ?: return true
+    val bmp = images.peek(img.file) ?: return unloaded
     var x = ((p.x - img.rect.left) / img.rect.width * bmp.width).toInt().coerceIn(0, bmp.width - 1)
     var y = ((p.y - img.rect.top) / img.rect.height * bmp.height).toInt().coerceIn(0, bmp.height - 1)
     if (img.flipX) x = bmp.width - 1 - x
@@ -1965,8 +1965,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val radius = settings.eraserSize / 2f / camera.zoom
     val region = (Rect.around(listOf(a, b)) ?: return).outset(radius + 2f)
     val para = parallelogram(a, b, radius)
-    val candidates = d.intersecting(region).filter { !it.locked && it.id !in erasedOriginals && settings.eraserHits(it.pen) } + erasePieces.values.filter { it.bounds.intersects(region) }
+    val candidates = d.intersecting(region).filter { !it.locked && it.id !in erasedOriginals && (settings.eraserHits(it.pen) || isAreaFill(it)) } + erasePieces.values.filter { it.bounds.intersects(region) }
     for (item in candidates) {
+      if (isAreaFill(item)) {
+        // A fill's colour goes as a whole when the eraser passes over it (its outline is erased apart).
+        if (erasesFill(item as ImageItem, a, b, radius)) erasedOriginals[item.id] = item
+        continue
+      }
       if (!strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) }) continue
       val isPiece = erasePieces.containsKey(item.id)
       if (settings.eraserMode == EraserMode.STROKE) {
@@ -2002,11 +2007,27 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     tiles.hidden = erasedOriginals.keys.toSet()
   }
 
+  /** Whether the eraser, sweeping from [a] to [b] with [radius], passes over the coloured part of [fill]. */
+  private fun erasesFill(fill: ImageItem, a: Pt, b: Pt, radius: Float): Boolean {
+    val step = max(1f, radius / 2f)
+    val n = (a.dist(b) / step).toInt() + 1
+    val r = radius * 0.7f
+    for (i in 0..n) {
+      val t = if (n == 0) 0f else i.toFloat() / n
+      val c = Pt(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+      for (o in listOf(Pt(0f, 0f), Pt(r, 0f), Pt(-r, 0f), Pt(0f, r), Pt(0f, -r))) {
+        val q = Pt(c.x + o.x, c.y + o.y)
+        if (fill.rect.contains(q) && fillCovers(fill, q, unloaded = false)) return true
+      }
+    }
+    return false
+  }
+
   private fun finishErase() {
     val d = doc ?: return
     // A fill whose outline was split keeps outlining the pieces that are left.
     val gone = erasedOriginals.keys
-    val fills = d.all.filterIsInstance<ImageItem>().filter { f -> f.walls.any { it in gone } }
+    val fills = d.all.filterIsInstance<ImageItem>().filter { f -> f.id !in gone && f.walls.any { it in gone } }
     val regrouped = fills.map { f ->
       val kept = f.walls.filterNot { it in gone }.toSet()
       val pieces = erasePieces.keys.filter { pieceRoot[it] in f.walls }.toSet()
