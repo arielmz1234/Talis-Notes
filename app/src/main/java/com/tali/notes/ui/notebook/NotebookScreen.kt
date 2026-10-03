@@ -424,7 +424,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
         .then(if (key.isEmpty()) Modifier else Modifier.onGloballyPositioned { recordBar(key, it) })
     }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp)) {
       // Back, the notebook's name, and undo/redo beside it: far from the eye at the other end, which
       // she kept pressing by accident when it sat next to redo.
       val titlePill: @Composable () -> Unit = {
@@ -588,7 +588,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
     }
     }
-    ShowToolbarsButton(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 18.dp, end = 22.dp)) { vm.focus = false }
+    ShowToolbarsButton(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
 
     vm.selection?.let { sel ->
       if (vm.panel == null) {

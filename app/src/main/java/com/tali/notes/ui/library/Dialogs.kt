@@ -1,5 +1,12 @@
 package com.tali.notes.ui.library
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,7 +72,10 @@ import com.tali.notes.ui.components.slidingOption
 @Composable
 fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, content: @Composable () -> Unit) {
   val c = Tali.colors
-  Dialog(onDismissRequest = onDismiss) {
+  // The dialog's window fills the screen and the card is laid out inside it. A wrap-content window
+  // had to be resized and re-centred by the system on every frame when the card's height animated
+  // (a section folding away), which stuttered; now that's just a layout pass.
+  Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
     if (!dim) {
       // No tint of its own: the card floats on its own shadow. (It asks for no dimming at all rather
       // than a dimming of 0: the system keeps one dim layer behind the top window that wants one,
@@ -73,11 +83,25 @@ fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, con
       val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
       androidx.compose.runtime.SideEffect { window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) }
     }
-    Column(
-      // The same soft cloud surface as the notebook panels, floating on a lilac shadow.
-      Modifier.width(width.dp).cloudSurface(24.dp, shadowDepth = 12.dp).padding(28.dp)
+    androidx.compose.foundation.layout.Box(
+      Modifier.fillMaxSize()
+        // A tap around the card closes it, as before.
+        .pointerInput(onDismiss) { detectTapGestures { onDismiss() } }
+        .windowInsetsPadding(WindowInsets.safeDrawing)
+        .padding(24.dp),
+      contentAlignment = Alignment.Center,
     ) {
-      content()
+      Column(
+        // The same soft cloud surface as the notebook panels, floating on a lilac shadow.
+        Modifier.widthIn(max = width.dp)
+          .fillMaxWidth()
+          // Taps on the card stay on the card.
+          .pointerInput(Unit) { detectTapGestures { } }
+          .cloudSurface(24.dp, shadowDepth = 12.dp)
+          .padding(28.dp)
+      ) {
+        content()
+      }
     }
   }
 }
@@ -195,7 +219,13 @@ fun NewNotebookDialog(
         color = c.inkMuted,
       )
       // Which way up the pages are, whichever way she holds the tablet.
-      androidx.compose.animation.AnimatedVisibility(paged) {
+      androidx.compose.animation.AnimatedVisibility(
+        paged,
+        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 60)) +
+          androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(240, easing = com.tali.notes.ui.components.EaseOutStrong), expandFrom = Alignment.Top),
+        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) +
+          androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(200, easing = com.tali.notes.ui.components.EaseOutStrong), shrinkTowards = Alignment.Top),
+      ) {
         Column {
           Spacer(Modifier.height(16.dp))
           SectionLabel("Orientation")

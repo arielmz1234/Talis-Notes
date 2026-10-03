@@ -144,7 +144,11 @@ fun MainToolbar(
       enter = fadeIn(tween(180)) + expandHorizontally(tween(220, easing = EaseOutStrong), expandFrom = Alignment.Start),
       exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160, easing = EaseOutStrong), shrinkTowards = Alignment.Start),
     ) {
-      QuickSizes(settings.activeSlot, onQuickSize, onSetSize)
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        // A short line keeps the colours and the thicknesses apart.
+        if (settings.toolbarColors > 0) Box(Modifier.padding(start = 6.dp, end = 2.dp).width(1.dp).height(20.dp).background(c.line))
+        QuickSizes(settings.activeSlot, onQuickSize, onSetSize)
+      }
     }
     Divider()
     // Eraser, lasso and shapes share one highlight that glides between them.

@@ -118,28 +118,31 @@ object Brushes {
   private val lineFamilies = java.util.concurrent.ConcurrentHashMap<LineStyle, BrushFamily>()
 
   /**
-   * The highlighter's two tips, built here rather than from the stock highlighter (a slanted chisel
-   * whose look barely changed with its corners squared off, so Round and Square looked the same):
-   * Round is a circle, so strokes end in round caps; Square is an upright square, so strokes have
-   * flat ends and sharp corners. Both discard self-overlap, so going over a word twice stays even.
+   * The highlighter's two tips. Round is built here: a circle, so strokes end in round caps (the
+   * stock highlighter's chisel looked the same whichever tip was chosen). Square is the stock
+   * slanted chisel with its corners left sharp: the owner liked its angled look. Both discard
+   * self-overlap, so going over a word twice stays even.
    */
   @OptIn(ExperimentalInkCustomBrushApi::class)
-  private fun highlighterFamily(cornerRounding: Float, id: String): BrushFamily =
+  private val roundHighlighter: BrushFamily by lazy {
     runCatching {
       BrushFamily(
         coats = listOf(
           BrushCoat(
-            BrushTip(scaleX = 1f, scaleY = 1f, cornerRounding = cornerRounding, behaviors = listOf(StockBrushes.predictionFadeOutBehavior)),
+            BrushTip(scaleX = 1f, scaleY = 1f, cornerRounding = 1f, behaviors = listOf(StockBrushes.predictionFadeOutBehavior)),
             BrushPaint(emptyList(), emptyList(), SelfOverlap.DISCARD),
           )
         ),
-        clientBrushFamilyId = id,
+        clientBrushFamilyId = "tali:highlighter-round",
       )
     }.getOrElse { StockBrushes.highlighter(SelfOverlap.DISCARD) }
+  }
 
-  private val roundHighlighter: BrushFamily by lazy { highlighterFamily(1f, "tali:highlighter-round") }
-
-  private val squareHighlighter: BrushFamily by lazy { highlighterFamily(0f, SQUARE_ID) }
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  private val squareHighlighter: BrushFamily by lazy {
+    val stock = StockBrushes.highlighter(SelfOverlap.DISCARD)
+    runCatching { stock.copy(coats = stock.coats.map { it.copy(tip = it.tip.copy(cornerRounding = 0f)) }, clientBrushFamilyId = SQUARE_ID) }.getOrDefault(stock)
+  }
 
   private const val SQUARE_ID = "tali:highlighter-square"
 

@@ -180,6 +180,9 @@ In order, see `git log`:
     - Rectangles and squares get a dot in the middle of each side (`PolyShape.isRect`, `withSide`) to stretch one way, snapping to a square within 4%; a rectangle's corner snaps to square too.
     - New notebooks and folders are suggested as "New notebook" / "New folder"; Done on the keyboard in the new-notebook card only hides the keyboard.
     - Paper swatches are clipped to their rounded corners (white leaked past them in dark mode: the "little white line").
+    - Highlighter tips after the owner tried them: Round is the built circle tip (he likes it); Square went back to the stock slanted chisel with sharp corners ("at an angle like before").
+    - A thin line separates the toolbar's quick colours from its three thicknesses. The notebook's toolbars sit 8 dp lower (top padding 20 dp; the show-toolbars eye 26 dp).
+34. Smooth size changes (3 Oct 2026): `cloudSurface` used to paint each size into a full-size bitmap with a software blur, so anything on it changing size (the new-notebook card folding away Orientation, the toolbar easing wider, panels) rebuilt a multi-megabyte blurred bitmap every frame and stuttered. It now draws the outline straight to the canvas with a GPU shadow layer (`Paint.setShadowLayer`), and the puffs join the outline in one `Path.op` union (about 3× faster than one per puff). `DialogCard`'s window fills the screen and centres the card itself (tap outside closes; `safeDrawing` keeps it above the keyboard), so an animating card isn't a system window resizing every frame. Keep both in mind for any new animation of a card's or bar's size. `CloudSurfaceShotTest` renders a bar and a card (Robolectric draws no shadow layer; check shadows on a device).
 
 Working setup notes:
 - On a fresh Windows PC the system JDK 17 works without Android Studio. Gradle downloads SDK platform 37 by itself once `local.properties` points at the SDK.
