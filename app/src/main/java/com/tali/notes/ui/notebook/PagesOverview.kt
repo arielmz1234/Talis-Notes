@@ -97,6 +97,8 @@ fun PagesOverview(
   // The last page peeked at, so it stays drawn while the peek fades away.
   var lastPeek by remember { mutableStateOf(0) }
   var removing by remember { mutableStateOf<Int?>(null) }
+  // Deleting a page asks first.
+  var confirming by remember { mutableStateOf<Int?>(null) }
   LaunchedEffect(removing) {
     val i = removing ?: return@LaunchedEffect
     kotlinx.coroutines.delay(com.tali.notes.ui.components.PUFF_LEAVE_MS.toLong())
@@ -151,11 +153,22 @@ fun PagesOverview(
         enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.86f),
         exit = fadeOut(tween(130)) + scaleOut(tween(130), targetScale = 0.92f),
       ) {
-        PagePeek(vm, items, lastPeek, version, single = count == 1, onClose = { peek = null }, onGo = { onGo(lastPeek) }) {
-          // The peek closes, then the page's tile lifts away before it's removed.
-          peek = null
-          removing = lastPeek
-        }
+        PagePeek(vm, items, lastPeek, version, single = count == 1, onClose = { peek = null }, onGo = { onGo(lastPeek) }) { confirming = lastPeek }
+      }
+    }
+    confirming?.let { i ->
+      val single = count == 1
+      com.tali.notes.ui.library.ConfirmDialog(
+        title = if (single) "Clear this page?" else "Delete page ${i + 1}?",
+        body = if (single) "Everything on it is removed. Undo brings it back." else "The page and everything on it go, and the pages after it move up. Undo brings it back.",
+        confirm = if (single) "Clear page" else "Delete page",
+        destructive = true,
+        onDismiss = { confirming = null },
+      ) {
+        // The peek closes, then the page's tile lifts away before it's removed.
+        confirming = null
+        peek = null
+        removing = i
       }
     }
   }

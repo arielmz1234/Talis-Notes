@@ -1,12 +1,13 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import com.tali.notes.model.LineStyle
 import com.tali.notes.ui.components.rememberSlidingSelection
 import com.tali.notes.ui.components.colorRing
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
+import com.tali.notes.ui.components.StepSlider
 import android.app.Application
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -501,6 +502,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onPaste = { holder.view?.runSafely { paste() } },
               smartUndo = settings.smartUndo,
               onSmartUndo = vm::setSmartUndo,
+              lockedCount = { holder.view?.lockedCount() ?: 0 },
+              onUnlockAll = { holder.view?.runSafely { unlockAll() } },
             )
           }
         }
@@ -548,6 +551,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
           onEditText = { id -> holder.view?.runSafely { editText(id) } },
           onArrange = { front -> holder.view?.runSafely { arrangeSelection(front) } },
+          onLock = { holder.view?.runSafely { lockSelection() } },
         )
       }
     }
@@ -682,12 +686,27 @@ private fun MoreMenu(
   onPaste: () -> Unit,
   smartUndo: Boolean,
   onSmartUndo: (Boolean) -> Unit,
+  lockedCount: () -> Int,
+  onUnlockAll: () -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
+  // Counted when the menu opens, so it's always current.
+  val locked = remember(open) { if (open) lockedCount() else 0 }
   Box {
     ToolButton(Icons.Outlined.MoreHoriz, "More") { open = true }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+      if (locked > 0) {
+        DropdownMenuItem(
+          text = { Column { Text("Unlock all"); Text(if (locked == 1) "1 locked item" else "$locked locked items", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+          leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
+          onClick = {
+            open = false
+            onUnlockAll()
+          },
+        )
+        if (pasteCount == 0) HorizontalDivider(color = c.line)
+      }
       if (pasteCount > 0) {
         DropdownMenuItem(
           text = { Text(if (pasteCount == 1) "Paste" else "Paste $pasteCount items") },
@@ -826,7 +845,7 @@ private fun HintPill(message: String?, onDone: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit) {
+private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   var picking by remember(sel.count) { mutableStateOf(false) }
@@ -883,6 +902,8 @@ private fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>
           }
         }
         sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
+        // Locked things stay put: the lasso, taps and the eraser leave them alone.
+        ToolButton(Icons.Outlined.Lock, "Lock in place", onClick = onLock)
         if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
         Text(if (sel.count == 1) "1 item" else "${sel.count} items", style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.padding(horizontal = 8.dp))
       }
@@ -907,14 +928,7 @@ private fun SelectionStyle(sel: SelectionInfo, colors: List<Int>, onColor: (Int)
     // Follows the finger here and changes the writing once let go (one undo step).
     var value by remember(size) { mutableFloatStateOf(size) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Slider(
-        value = value,
-        onValueChange = { value = it },
-        onValueChangeFinished = { if (value != size) onRestyle(value, null) },
-        valueRange = 0.8f..20f,
-        colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
-        modifier = Modifier.weight(1f),
-      )
+      StepSlider(value, 0.8f..20f, 0.1f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
       Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
     Spacer(Modifier.height(4.dp))

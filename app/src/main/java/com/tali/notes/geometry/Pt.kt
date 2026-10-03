@@ -181,6 +181,46 @@ object Geo {
     return out
   }
 
+  /**
+   * A smooth curve through an open polyline's points (Catmull-Rom), sampled about every [step]
+   * units, so a simplified hand-drawn line draws as the curve it was rather than as a chain of
+   * straight bits. Real corners (a turn sharper than [cornerDeg]) stay sharp.
+   */
+  fun smooth(points: List<Pt>, step: Float = 1.5f, cornerDeg: Float = 55f): List<Pt> {
+    if (points.size < 3) return points
+    val corner = Math.toRadians(cornerDeg.toDouble()).toFloat()
+    val out = ArrayList<Pt>(points.size * 4)
+    out.add(points[0])
+    // Runs between corners are smoothed on their own, so a curve never overshoots a corner.
+    var start = 0
+    for (i in 1 until points.size) {
+      val isCorner = i < points.size - 1 && kotlin.math.PI.toFloat() - interiorAngle(points[i - 1], points[i], points[i + 1]) > corner
+      if (isCorner || i == points.size - 1) {
+        val run = points.subList(start, i + 1)
+        for (j in 0 until run.size - 1) {
+          val p0 = run[maxOf(j - 1, 0)]
+          val p1 = run[j]
+          val p2 = run[j + 1]
+          val p3 = run[minOf(j + 2, run.size - 1)]
+          val n = kotlin.math.ceil(p1.dist(p2) / step).toInt().coerceIn(1, 32)
+          for (k in 1..n) {
+            val t = k.toFloat() / n
+            val t2 = t * t
+            val t3 = t2 * t
+            out.add(
+              Pt(
+                0.5f * (2 * p1.x + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+                0.5f * (2 * p1.y + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+              )
+            )
+          }
+        }
+        start = i
+      }
+    }
+    return out
+  }
+
   /** Ramer-Douglas-Peucker simplification of an open polyline. */
   fun simplify(points: List<Pt>, epsilon: Float): List<Pt> {
     if (points.size < 3) return points

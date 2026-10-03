@@ -60,10 +60,11 @@ class ShapeResizeTest {
   }
 
   @Test
-  fun triangleKeepsItsBaseFlat() {
-    val t = ShapeKind.TRIANGLE.create(Pt(0f, 0f), Pt(100f, 80f)) as PolyShape
-    val out = t.withHandle(1, Pt(150f, 120f)) as PolyShape // bottom-right corner
-    assertEquals(out.points[1].y, out.points[2].y, 0.05f)
+  fun triangleCornersMoveOneAtATime() {
+    val t = ShapeKind.TRIANGLE.create(Pt(0f, 0f), Pt(100f, 80f)) as com.tali.notes.model.TriangleShape
+    val out = t.withHandle(1, Pt(150f, 120f)) as com.tali.notes.model.TriangleShape // bottom-right corner
+    assertEquals(t.a, out.a)
+    assertEquals(t.c, out.c)
   }
 
   @Test

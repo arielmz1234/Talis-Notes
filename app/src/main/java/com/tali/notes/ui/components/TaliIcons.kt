@@ -43,6 +43,19 @@ object TaliIcons {
     )
   }
 
+  /** A laser pointer: a slim pen body aimed down-left, with a beam to a small dot that glows. */
+  val Laser: ImageVector by lazy {
+    outline(
+      "Laser",
+      "M20.2 3.8 L13.4 10.6",
+      "M21.4 5 L14.6 11.8 L12.2 9.4 L19 2.6 Z",
+      "M10.6 13.4 L7.4 16.6",
+      "M5.6 20.4 A1.9 1.9 0 1 1 5.6 16.6 A1.9 1.9 0 1 1 5.6 20.4 Z",
+      "M3 15.2 L2.2 14.4",
+      "M8.6 21 L9.4 21.8",
+    )
+  }
+
   val Pages: ImageVector by lazy {
     outline("Pages", "M6 3.5 H14.5 L18.5 7.5 V20.5 H6 Z", "M14.5 3.5 V7.5 H18.5", "M9 12 H15.5", "M9 15.5 H15.5")
   }

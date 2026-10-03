@@ -5,7 +5,9 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 ## What it does
 
 **Writing**
-- Five pen types: fineliner, fountain pen, pencil, calligraphy and highlighter. She can keep up to 8 pens, and her saved colours are shared by all of them.
+- Five pen types: fineliner, fountain pen, pencil, calligraphy and highlighter. She can keep up to 8 pens, and her saved colours are shared by all of them. Changing a pen's type keeps its thickness; sizes have − and + buttons for 0.1 steps (hold to repeat).
+- The highlighter draws straight lines by default (level or upright when within 4°), or freehand; its tip can be round or square. Both are set in its pen settings.
+- **Laser:** a pointer in the toolbar that leaves a glowing red trail which fades away; nothing is saved.
 - **Line styles:** any pen (not the highlighter) can draw Solid, Dotted, Long dash, Short dash, Dot and dash or Mixed dash, chosen in the pen settings. The pattern draws live under the pen, and shapes drawn with that pen use it too (arrow barbs stay solid).
 - **Quick colours:** three colour dots beside the pens switch the active pen's colour without opening its settings. They are that pen's three most recent colours; a new colour takes the place of the one used longest ago, so the dots don't jump around.
 - Low-latency inking (androidx.ink), with pressure.
@@ -14,6 +16,8 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - **My shapes:** lasso any drawing and tap *Save as shape*. Holding the pen at the end of a similar one-stroke drawing then snaps to it. Matching uses a point-cloud recognizer, `geometry/ShapeMatcher.kt`.
 - Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines.
 - Tap a shape (with a finger, a quick pen tap on its outline, or any tap with the Shapes tool) to get its dots and its menu; drag them with either, and the shape changes live. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length beside the line (not under the pen). Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
+- **Triangle:** one triangle whose corners each move on their own; a dragged corner settles on whole 5° angles and snaps to right angles and isosceles, showing each angle.
+- A shape stays selected right after it's drawn or adjusted, so it can be changed straight away (the pen still writes inside it).
 - **Part circle:** a closed slice of a circle, drawn from the centre outwards (the curve faces the way you drag). It starts as a half; its end dots make it any percent (snapping to quarters and 5% steps) and show "% · °" at the centre. Arc ends can be dragged round either way; going past a full turn starts again from nothing (361° is 1°), and the arc shows its angle.
 
 - Every one-of-many choice (segmented switches, tools, pen types, colours, papers, the library sidebar) has one highlight that glides and stretches to the new choice.
@@ -27,6 +31,8 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - **Fill:** tap inside a shape to fill it with colour, or inside an area you drew around to fill it behind your writing (small gaps in the outline are bridged). It has its own colour, opacity, and "None" to take a fill away.
 - The lasso picks up anything it touches (circling the tip of a line takes the whole line). Pictures and writing can be brought to the front or sent to the back.
 - The lasso can move, resize and rotate a selection (with live angle and 15° steps), duplicate, copy to another notebook, delete, or save as a shape. *Style* changes the colour, and for writing and shapes the thickness and line style, after they're drawn.
+- **Lock:** the selection menu's lock keeps things in place; the lasso, taps and the eraser leave them alone. Hold a locked item with a finger to unlock it, or use *Unlock all* in the ⋯ menu.
+- Deleting a page asks first.
 - Undo and redo work with the buttons, or with *Smart undo and redo* (⋯ menu): a two-finger tap undoes, a three-finger tap redoes.
 - The full-screen button beside undo hides the toolbars, leaving the page and a small frosted button to bring them back. A puff of mist plays where the bars were; when a notebook opens, the bars just slide in.
 - Scrolling glides on after a flick.

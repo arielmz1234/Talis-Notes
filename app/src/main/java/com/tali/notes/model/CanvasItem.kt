@@ -23,6 +23,12 @@ sealed class CanvasItem {
 
   /** The same item at another place in the stacking order (cheap: nothing is rebuilt). */
   abstract fun withZ(newZ: Long): CanvasItem
+
+  /** Locked in place: the lasso, taps and the eraser leave it alone until it's unlocked. */
+  abstract val locked: Boolean
+
+  /** The same item locked or unlocked (cheap: nothing is rebuilt). */
+  abstract fun withLocked(on: Boolean): CanvasItem
 }
 
 /**
@@ -38,6 +44,7 @@ private constructor(
   private val built: Lazy<Stroke>,
   knownBounds: Rect?,
   private val knownColor: Int?,
+  override val locked: Boolean = false,
 ) : CanvasItem() {
   constructor(id: String, z: Long, pen: PenType, stroke: Stroke) : this(id, z, pen, lazyOf(stroke), null, null)
 
@@ -57,12 +64,14 @@ private constructor(
   val darkStroke: Stroke by lazy { Brushes.forDarkPaper(stroke) }
 
   companion object {
-    fun deferred(id: String, z: Long, pen: PenType, bounds: Rect, color: Int, build: () -> Stroke) = InkItem(id, z, pen, lazy(build), bounds, color)
+    fun deferred(id: String, z: Long, pen: PenType, bounds: Rect, color: Int, locked: Boolean = false, build: () -> Stroke) = InkItem(id, z, pen, lazy(build), bounds, color, locked)
   }
 
   override fun transformed(m: Affine, newId: String, newZ: Long) = InkItem(newId, newZ, pen, StrokeFactory.transform(stroke, m))
 
-  override fun withZ(newZ: Long) = InkItem(id, newZ, pen, built, bounds, knownColor)
+  override fun withZ(newZ: Long) = InkItem(id, newZ, pen, built, bounds, knownColor, locked)
+
+  override fun withLocked(on: Boolean) = InkItem(id, z, pen, built, bounds, knownColor, on)
 
   fun recolored(color: Int) = InkItem(id, z, pen, stroke.copy(stroke.brush.copyWithColorIntArgb(Brushes.inkColor(pen, color))))
 
@@ -70,8 +79,12 @@ private constructor(
   fun restyled(size: Float = this.size, line: LineStyle = this.line): InkItem {
     // The old dashed pen's strokes become fineliner strokes drawn in the chosen line.
     val p = if (pen == PenType.DASHED) PenType.FINELINER else pen
-    return InkItem(id, z, p, stroke.copy(Brushes.brush(p, color, size, line)))
+    return InkItem(id, z, p, stroke.copy(Brushes.brush(p, color, size, line, square)))
   }
+
+  /** Drawn with a square-tipped highlighter. */
+  val square: Boolean
+    get() = Brushes.isSquare(stroke.brush)
 
   /** How thick the stroke is drawn. */
   val size: Float
@@ -97,10 +110,11 @@ class ShapeItem(
   sharedStrokes: Lazy<List<Stroke>>? = null,
   /** How its lines are drawn: solid, dotted or dashed (arrow barbs and tiny details stay solid). */
   val line: LineStyle = LineStyle.SOLID,
+  override val locked: Boolean = false,
 ) : CanvasItem() {
   /** Whether this shape encloses an area that can be filled. */
   val closed: Boolean
-    get() = geometry.let { it is EllipseShape || it is SectorShape || (it is PolyShape && it.closed) }
+    get() = geometry.let { it is EllipseShape || it is SectorShape || it is TriangleShape || (it is PolyShape && it.closed) }
 
   /** The outline enclosing its area, for filling and for telling whether a point is inside. */
   val outline: List<com.tali.notes.geometry.Pt>
@@ -122,7 +136,9 @@ class ShapeItem(
   override fun transformed(m: Affine, newId: String, newZ: Long) =
     ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m), fill = fill, line = line)
 
-  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill, built, line)
+  override fun withZ(newZ: Long) = ShapeItem(id, newZ, pen, color, size, geometry, bounds, fill, built, line, locked)
+
+  override fun withLocked(on: Boolean) = ShapeItem(id, z, pen, color, size, geometry, bounds, fill, built, line, on)
 
   fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g, fill = fill, line = line)
 
@@ -150,13 +166,16 @@ class ImageItem(
    * default, and every older picture) keeps it behind all writing, like paper.
    */
   val front: Boolean = false,
+  override val locked: Boolean = false,
 ) : CanvasItem() {
   override val bounds: Rect = rect
   override val pen: PenType? = null
 
-  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front)
+  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front, locked)
 
-  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on)
+  override fun withLocked(on: Boolean) = ImageItem(id, z, file, rect, pdfPage, front, on)
+
+  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on, locked)
 
   override fun transformed(m: Affine, newId: String, newZ: Long): ImageItem {
     val a = m.apply(Pt(rect.left, rect.top))
@@ -177,6 +196,7 @@ class TextItem(
   val width: Float,
   val fontSize: Float,
   val color: Int,
+  override val locked: Boolean = false,
 ) : CanvasItem() {
   override val pen: PenType? = null
 
@@ -200,7 +220,9 @@ class TextItem(
     return TextItem(newId, newZ, text, m.apply(origin), (width * s).coerceAtLeast(40f), (fontSize * s).coerceIn(6f, 400f), color)
   }
 
-  override fun withZ(newZ: Long) = TextItem(id, newZ, text, origin, width, fontSize, color)
+  override fun withZ(newZ: Long) = TextItem(id, newZ, text, origin, width, fontSize, color, locked)
+
+  override fun withLocked(on: Boolean) = TextItem(id, z, text, origin, width, fontSize, color, on)
 
   fun recolored(c: Int) = TextItem(id, z, text, origin, width, fontSize, c)
 

@@ -172,6 +172,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         Tool.SHAPE -> PanelKind.SHAPES
         Tool.PEN -> PanelKind.PEN
         Tool.FILL -> PanelKind.FILL
+        // The laser has nothing to set.
+        Tool.LASER -> null
       }
     if (tool == t || t == Tool.SHAPE) {
       panel = if (panel == panelFor) null else panelFor
@@ -240,7 +242,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setPenType(type: PenType) =
     updateActivePen { slot ->
-      val size = if (slot.type == type) slot.size else type.defaultSize
+      // Her thickness stays when she changes the pen type (only kept within what the new pen can do).
+      val size = slot.size.coerceIn(type.minSize, type.maxSize)
       val color = if (type.isHighlighter && !slot.type.isHighlighter) 0xFFFFD60A.toInt() else slot.color
       // A highlighter and a pen keep different quick colours.
       val quick = if (type.isHighlighter != slot.type.isHighlighter) emptyList() else slot.quick

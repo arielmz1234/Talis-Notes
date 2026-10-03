@@ -15,6 +15,7 @@ import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.widget.OverScroller
 import android.widget.FrameLayout
+import androidx.core.view.doOnAttach
 import androidx.core.view.doOnLayout
 import androidx.ink.authoring.InProgressStrokeId
 import androidx.ink.authoring.InProgressStrokesFinishedListener
@@ -54,8 +55,10 @@ import com.tali.notes.model.ShapeKind
 import com.tali.notes.model.SectorShape
 import com.tali.notes.model.Tool
 import com.tali.notes.model.TextItem
+import com.tali.notes.model.TriangleShape
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.abs
 import kotlin.math.PI
 import com.tali.notes.geometry.Lasso
@@ -143,7 +146,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       if (field != value) {
         field = value
         clearSelection()
-        hoverPoint = null
         invalidate()
       }
     }
@@ -250,6 +252,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** The pen came down off the pages of a paged notebook: nothing to draw there. */
     IGNORE,
+
+    /** A highlighter drawing a straight line from where it landed. */
+    STRAIGHT,
+
+    /** The laser pointer's trail. */
+    LASER,
   }
 
   private var mode = Mode.NONE
@@ -295,6 +303,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   // Editable shape with handles
   private var activeShapeId: String? = null
+
+  /** The selection is a shape that picked itself up when drawn: the pen writes inside it. */
+  private var softSelection = false
   private var handleIndex = -1
   private var handleGrab = Pt(0f, 0f)
   private var liveEdit: ShapeItem? = null
@@ -316,7 +327,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var tapStartFocus = Pt.ZERO
   private var tapStartSpan = 0f
 
-  private var hoverPoint: Pt? = null
 
   // ---- Paints ----
 
@@ -358,6 +368,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     inProgress.rendererFactory = { Brushes.renderer() }
     tiles.boundsOf = { id -> doc?.get(id)?.bounds }
     isFocusable = true
+    // Ink sets up its front-buffered drawing surface on the first stroke unless asked earlier,
+    // which made the first stroke on a page lag or only appear once the pen lifted.
+    doOnAttach { inProgress.eagerInit() }
+  }
+
+  /**
+   * Builds a tiny stroke with each of her pens in the background, so the first real stroke doesn't
+   * pay for loading Ink's native code and making the brush (a fresh notebook has no strokes to
+   * have done it already).
+   */
+  private fun warmPens() {
+    val pens = settings.pens
+    Thread({ pens.forEach { runCatching { StrokeFactory.previewStroke(Brushes.brush(it.type, it.color, it.size, it.lineStyle), 40f, 20f) } } }, "warm-pens").apply {
+      priority = Thread.MIN_PRIORITY
+      start()
+    }
   }
 
   // ---- Document wiring ----
@@ -380,6 +406,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     host.onZoomChanged(camera.zoom)
     invalidate()
+    post { warmPens() }
   }
 
   fun detach() {
@@ -602,6 +629,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     erasePieces.values.forEach { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     liveShape?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
+    straightPreview?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     liveEdit?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     shapePreview?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     if (isDraggingSelection() && selection.isNotEmpty()) {
@@ -617,6 +645,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawShapeHandles(canvas)
     drawMeasure(canvas)
     drawEraserCursor(canvas)
+    drawLaser(canvas)
   }
 
   private fun drawLasso(canvas: Canvas) {
@@ -647,7 +676,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     val colour = settings.fillArgb
     // 1. The topmost closed shape the tap is inside.
-    val shape = d.all.toList().asReversed().firstOrNull { it is ShapeItem && it.closed && it.bounds.contains(p) && Geo.pointInPolygon(p, it.outline) } as ShapeItem?
+    val shape = d.all.toList().asReversed().firstOrNull { it is ShapeItem && !it.locked && it.closed && it.bounds.contains(p) && Geo.pointInPolygon(p, it.outline) } as ShapeItem?
     if (shape != null) {
       if (shape.fill == colour) return
       d.commit(Change(listOf(shape), listOf(shape.filled(colour))))
@@ -848,6 +877,18 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
       }
       is ArcShape -> drawBubble(canvas, "${g.degrees}°", camera.toScreen(g.center))
+      is TriangleShape -> {
+        // Each corner's angle, just inside the corner, while it's being drawn or reshaped.
+        if (mode != Mode.HANDLE_DRAG && mode != Mode.SHAPE_CREATE && mode != Mode.LIVE_SHAPE) return
+        val corners = g.points.map { camera.toScreen(it) }
+        val mid = Pt(corners.sumOf { it.x.toDouble() }.toFloat() / 3f, corners.sumOf { it.y.toDouble() }.toFloat() / 3f)
+        g.angles.forEachIndexed { i, a ->
+          val v = mid - corners[i]
+          val reach = min(v.length() * 0.55f, 46f * density)
+          val at = corners[i] + v.normalized() * reach
+          drawBubble(canvas, "${Math.round(a)}°", at)
+        }
+      }
       is SectorShape -> {
         val label = "${Math.round(g.fraction * 100)}%  ·  ${Math.round(g.fraction * 360)}°"
         val c = camera.toScreen(g.center)
@@ -896,9 +937,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun drawEraserCursor(canvas: Canvas) {
-    val showing = mode == Mode.ERASE || (hoverPoint != null && (tool == Tool.ERASER || eraserOverride))
-    if (!showing) return
-    val p = if (mode == Mode.ERASE) erasePrev else hoverPoint ?: return
+    // Only while erasing: after the pen lifts it keeps hovering for a moment, and a circle that
+    // followed the hover looked like an eraser mark left behind on the page.
+    if (mode != Mode.ERASE) return
+    val p = erasePrev
     val s = camera.toScreen(p)
     val r = settings.eraserSize / 2f * density
     canvas.drawCircle(s.x, s.y, r, eraserFill)
@@ -1006,16 +1048,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     when (e.actionMasked) {
       MotionEvent.ACTION_HOVER_ENTER,
       MotionEvent.ACTION_HOVER_MOVE -> {
-        hoverPoint = camera.toWorld(e.x, e.y)
         eraserOverride = e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
-        if (tool == Tool.ERASER || eraserOverride) invalidate()
         return true
       }
-      MotionEvent.ACTION_HOVER_EXIT -> {
-        hoverPoint = null
-        invalidate()
-        return true
-      }
+      MotionEvent.ACTION_HOVER_EXIT -> return true
       MotionEvent.ACTION_SCROLL -> {
         val v = e.getAxisValue(MotionEvent.AXIS_VSCROLL)
         val h = e.getAxisValue(MotionEvent.AXIS_HSCROLL)
@@ -1074,7 +1110,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         return
       }
       val nearCorner = hypot(screen.x - r.right, screen.y - r.bottom) < HANDLE_HIT_DP * density
-      if (nearCorner || r.contains(screen.x, screen.y)) {
+      // A shape that picked itself up after being drawn doesn't take the pen inside it: she may be
+      // writing in the box she just drew. A finger still moves it.
+      val writesThrough = softSelection && !drawIsFinger && !nearCorner
+      if (!writesThrough && (nearCorner || r.contains(screen.x, screen.y))) {
         dragStart = p
         dragTransform = Affine.IDENTITY
         tiles.hidden = selection.map { it.id }.toSet()
@@ -1093,7 +1132,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       return
     }
     when (effective) {
-      Tool.PEN -> startInk(e, idx, p, d)
+      Tool.PEN -> if (settings.activeSlot.straight) startStraight(p) else startInk(e, idx, p, d)
+      Tool.LASER -> startLaser(p)
       Tool.ERASER -> {
         requestUnbufferedDispatch(e)
         startErase(p)
@@ -1116,7 +1156,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // anything that rebuilds a shape per sample would flood the main thread and stop it drawing.
     requestUnbufferedDispatch(e)
     val slot = settings.activeSlot
-    val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle)
+    val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
     predictor.record(e)
     val id = inProgress.startStroke(e, e.getPointerId(idx), brush, camera.screenToWorld)
     strokeId = id
@@ -1168,6 +1208,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           liveShape = base.withGeometry(bg.transformed(Affine.scaleAround(c, k)))
           invalidate()
         }
+      }
+      Mode.STRAIGHT -> straightTo(world(e, idx))
+      Mode.LASER -> {
+        for (h in 0 until e.historySize) laserTo(camera.toWorld(e.getHistoricalX(idx, h), e.getHistoricalY(idx, h)))
+        laserTo(world(e, idx))
       }
       Mode.ERASE -> {
         for (h in 0 until e.historySize) eraseTo(camera.toWorld(e.getHistoricalX(idx, h), e.getHistoricalY(idx, h)))
@@ -1298,13 +1343,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val shape = liveShape
         if (shape != null && d != null) {
           d.commit(Change(emptyList(), listOf(shape)))
-          // No handles yet: the next line often starts right at this one's end, and should draw,
-          // not grab it. Tapping the shape (or the lasso) brings up its dots.
-          host.onTip("shape-dots", "Tap a shape with your finger to adjust its ends")
+          // Picked up straight away, so it can be adjusted right after drawing.
+          selectShape(shape, soft = true)
         }
         liveShape = null
       }
       Mode.ERASE -> finishErase()
+      Mode.STRAIGHT -> finishStraight()
+      Mode.LASER -> {
+        laserDown = false
+        invalidate()
+      }
       Mode.LASSO -> finishLasso(if (idx >= 0) world(e, idx) else null)
       Mode.MOVE_SELECTION,
       Mode.SCALE_SELECTION,
@@ -1315,7 +1364,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (edited != null && original != null && d != null) d.commit(Change(listOf(original), listOf(edited)))
         liveEdit = null
         tiles.hidden = emptySet()
-        if (selection.size == 1) setSelection(listOfNotNull(d?.get(selection[0].id)))
+        // It stays selected after being adjusted, ready for the next change.
+        (edited?.let { d?.get(it.id) } as? ShapeItem)?.let { shape ->
+          val soft = softSelection || selection.isEmpty()
+          setSelection(listOf(shape))
+          activeShapeId = shape.id
+          softSelection = soft
+        }
       }
       Mode.FILL_TAP -> {
         val at = if (idx >= 0) world(e, idx) else shapeStart
@@ -1328,11 +1383,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           val preview = shapePreview ?: buildShape(shapeStart - Pt(60f, 40f), shapeStart + Pt(60f, 40f))
           val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry, line = preview.line)
           d.commit(Change(emptyList(), listOf(shape)))
-          // A part circle shows its dots straight away, so its amount can be set right after drawing it.
-          if (shape.geometry is SectorShape) {
-            activeShapeId = shape.id
-            host.onTip("part-circle", "Drag an end dot to choose how much of a circle: it shows the %")
-          }
+          // Picked up straight away, so it can be adjusted right after drawing.
+          selectShape(shape, soft = true)
+          if (shape.geometry is SectorShape) host.onTip("part-circle", "Drag an end dot to choose how much of a circle: it shows the %")
         }
         shapePreview = null
       }
@@ -1351,6 +1404,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     liveBase = null
     liveEdit = null
     shapePreview = null
+    straightPreview = null
+    laserDown = false
     lassoPoints.clear()
     erasedOriginals.clear()
     erasePieces.clear()
@@ -1360,6 +1415,122 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     mode = Mode.NONE
     drawPointer = -1
     invalidate()
+  }
+
+  // ---- Straight highlighter ----
+
+  private var straightStart = Pt.ZERO
+  private var straightPreview: InkItem? = null
+
+  private fun startStraight(p: Pt) {
+    straightStart = p
+    straightTo(p)
+    mode = Mode.STRAIGHT
+  }
+
+  /** The line from where the pen landed to [p], level or upright when it's within a few degrees. */
+  private fun straightTo(p: Pt) {
+    val slot = settings.activeSlot
+    var end = p
+    val v = p - straightStart
+    if (v.length() > 0.5f) {
+      val a = Math.toDegrees(kotlin.math.atan2(v.y, v.x).toDouble())
+      val off = ((a % 90.0) + 90.0) % 90.0
+      if (off < STRAIGHT_SNAP_DEG || off > 90.0 - STRAIGHT_SNAP_DEG) {
+        val axis = Math.round(a / 90.0) * 90.0
+        val r = Math.toRadians(axis).toFloat()
+        end = straightStart + Pt(kotlin.math.cos(r), kotlin.math.sin(r)) * v.length()
+      }
+    }
+    // A tap leaves a short mark, as the freehand highlighter does.
+    if (end.dist(straightStart) < 0.1f) end = straightStart + Pt(0.1f, 0f)
+    val color = if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color
+    val brush = Brushes.brush(slot.type, color, slot.size, LineStyle.SOLID, slot.square)
+    straightPreview = InkItem("straight", Long.MAX_VALUE, slot.type, StrokeFactory.strokeAlong(listOf(straightStart, end), brush))
+    invalidate()
+  }
+
+  private fun finishStraight() {
+    val d = doc
+    val preview = straightPreview
+    straightPreview = null
+    if (d == null || preview == null) return
+    val slot = settings.activeSlot
+    // Stored in the real colour; dark paper only changes how it's shown.
+    val stroke = preview.stroke.let { st -> st.copy(st.brush.copyWithColorIntArgb(Brushes.inkColor(slot.type, slot.color))) }
+    d.commit(Change(emptyList(), listOf(InkItem(d.newId(), d.nextZ(), slot.type, stroke))))
+  }
+
+  // ---- Laser ----
+
+  private class LaserDot(val p: Pt, val t: Long)
+
+  /** Each stroke of the laser, newest last; dots fade out by age. */
+  private val laserTrails = ArrayList<ArrayList<LaserDot>>()
+  private var laserDown = false
+  private var laserTip = Pt.ZERO
+  private val laserGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    color = 0xFFFF3B4E.toInt()
+  }
+  private val laserCore = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+  }
+  private val laserDotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+  private fun startLaser(p: Pt) {
+    laserTrails += arrayListOf(LaserDot(p, SystemClock.uptimeMillis()))
+    laserDown = true
+    laserTip = p
+    mode = Mode.LASER
+    invalidate()
+  }
+
+  private fun laserTo(p: Pt) {
+    laserTrails.lastOrNull()?.add(LaserDot(p, SystemClock.uptimeMillis()))
+    laserTip = p
+    invalidate()
+  }
+
+  /**
+   * The laser: a red glow with a bright core that thins and fades along its length, so the trail
+   * shrinks back toward the pen and disappears soon after she lifts it. Nothing is saved.
+   */
+  private fun drawLaser(canvas: Canvas) {
+    val now = SystemClock.uptimeMillis()
+    laserTrails.forEach { trail -> trail.removeAll { now - it.t > LASER_LIFE_MS } }
+    laserTrails.removeAll { it.isEmpty() && !(laserDown && it === laserTrails.lastOrNull()) }
+    if (laserTrails.isEmpty() && !laserDown) return
+    for (trail in laserTrails) {
+      for (i in 1 until trail.size) {
+        val a = trail[i - 1]
+        val b = trail[i]
+        val life = 1f - (now - b.t).toFloat() / LASER_LIFE_MS
+        if (life <= 0f) continue
+        val sa = camera.toScreen(a.p)
+        val sb = camera.toScreen(b.p)
+        laserGlow.strokeWidth = (5f + 7f * life) * density
+        laserGlow.alpha = (70 * life).toInt()
+        canvas.drawLine(sa.x, sa.y, sb.x, sb.y, laserGlow)
+        laserCore.strokeWidth = (1.5f + 2f * life) * density
+        laserCore.color = 0xFFFF6B78.toInt()
+        laserCore.alpha = (255 * life).toInt()
+        canvas.drawLine(sa.x, sa.y, sb.x, sb.y, laserCore)
+      }
+    }
+    if (laserDown) {
+      // The pointer itself: a glowing red dot with a white-hot middle.
+      val s = camera.toScreen(laserTip)
+      laserDotPaint.color = 0x55FF3B4E
+      canvas.drawCircle(s.x, s.y, 11f * density, laserDotPaint)
+      laserDotPaint.color = 0xFFFF3B4E.toInt()
+      canvas.drawCircle(s.x, s.y, 5f * density, laserDotPaint)
+      laserDotPaint.color = 0xFFFFE4E6.toInt()
+      canvas.drawCircle(s.x, s.y, 2.2f * density, laserDotPaint)
+    }
+    postInvalidateOnAnimation()
   }
 
   // ---- Eraser ----
@@ -1383,7 +1554,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val radius = settings.eraserSize / 2f / camera.zoom
     val region = (Rect.around(listOf(a, b)) ?: return).outset(radius + 2f)
     val para = parallelogram(a, b, radius)
-    val candidates = d.intersecting(region).filter { it.id !in erasedOriginals && settings.eraserHits(it.pen) } + erasePieces.values.filter { it.bounds.intersects(region) }
+    val candidates = d.intersecting(region).filter { !it.locked && it.id !in erasedOriginals && settings.eraserHits(it.pen) } + erasePieces.values.filter { it.bounds.intersects(region) }
     for (item in candidates) {
       if (!strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) }) continue
       val isPiece = erasePieces.containsKey(item.id)
@@ -1457,7 +1628,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       return
     }
     val area = Rect.around(pts) ?: return
-    val picked = d.all.filter { item -> settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) }
+    val picked = d.all.filter { item -> !item.locked && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) }
     setSelection(picked)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
@@ -1491,11 +1662,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * The item under [p]. Writing wins over pictures, since pictures are drawn underneath it; imported
    * PDF pages count only when [pages] is true, so tapping a slide doesn't pick up the whole slide.
    */
-  private fun hitTest(p: Pt, pages: Boolean = true, filter: (PenType?) -> Boolean): CanvasItem? {
+  private fun hitTest(p: Pt, pages: Boolean = true, locked: Boolean = false, filter: (PenType?) -> Boolean): CanvasItem? {
     val d = doc ?: return null
     val r = HIT_RADIUS_DP / camera.zoom
     val para = parallelogram(p, p, r)
-    val near = d.intersecting(Rect(p.x - r, p.y - r, p.x + r, p.y + r)).asReversed().filter { filter(it.pen) }
+    // Locked items can't be picked up (only found again to unlock them).
+    val near = d.intersecting(Rect(p.x - r, p.y - r, p.x + r, p.y + r)).asReversed().filter { it.locked == locked && filter(it.pen) }
     return near.firstOrNull { item -> item !is ImageItem && item !is TextItem && strokesOf(item).any { para.intersects(it.shape, AffineTransform.IDENTITY) } }
       ?: near.firstOrNull { item -> item is TextItem && item.bounds.contains(p) }
       ?: near.firstOrNull { item -> item is ImageItem && (pages || !item.pdfPage) && item.rect.contains(p) }
@@ -1509,8 +1681,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     return hitTest(strokePoints.first(), pages = false) { true } as? ShapeItem
   }
 
-  private fun selectShape(shape: ShapeItem) {
+  private fun selectShape(shape: ShapeItem, soft: Boolean = false) {
     selectSingle(shape)
+    softSelection = soft
     host.onTip("shape-tap", "Drag a dot to reshape it · the menu changes its colour, thickness and line")
   }
 
@@ -1521,6 +1694,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun setSelection(items: List<CanvasItem>) {
+    if (items.map { it.id } != selection.map { it.id }) softSelection = false
     selection = items
     selectionBounds = items.map { it.bounds }.reduceOrNull(Rect::union)
     publishSelection()
@@ -1554,6 +1728,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     selection = emptyList()
     selectionBounds = null
     activeShapeId = null
+    softSelection = false
     if (had) host.onSelectionChanged(null)
     invalidate()
   }
@@ -1860,6 +2035,43 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     postOnAnimation(flingStep)
   }
 
+  private var longPressed = false
+
+  /** A finger held still on a locked item unlocks it. */
+  private val longPress = Runnable {
+    if (mode != Mode.FINGER_PENDING || maxPointers != 1) return@Runnable
+    val d = doc ?: return@Runnable
+    val item = hitTest(camera.toWorld(fingerStart.x, fingerStart.y), locked = true) { true } ?: return@Runnable
+    longPressed = true
+    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+    val unlocked = item.withLocked(false)
+    d.commit(Change(listOf(item), listOf(unlocked)))
+    selectSingle(unlocked)
+    host.onHint("Unlocked \u2014 it can be picked up and erased again")
+  }
+
+  /** Locks the selection in place: the lasso, taps and the eraser leave it alone. */
+  fun lockSelection() {
+    val d = doc ?: return
+    if (selection.isEmpty()) return
+    val locked = selection.map { it.withLocked(true) }
+    d.commit(Change(selection, locked))
+    clearSelection()
+    host.onHint(if (locked.size == 1) "Locked \u2014 hold it with a finger to unlock" else "${locked.size} items locked \u2014 hold one with a finger to unlock it")
+  }
+
+  /** How many things in this notebook are locked. */
+  fun lockedCount(): Int = doc?.all?.count { it.locked } ?: 0
+
+  /** Unlocks everything in the notebook (one undo step). */
+  fun unlockAll() {
+    val d = doc ?: return
+    val locked = d.all.filter { it.locked }
+    if (locked.isEmpty()) return
+    d.commit(Change(locked, locked.map { it.withLocked(false) }))
+    host.onHint(if (locked.size == 1) "1 item unlocked" else "${locked.size} items unlocked")
+  }
+
   private fun fingerDown(e: MotionEvent) {
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
@@ -1872,7 +2084,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       fingerDownTime = SystemClock.uptimeMillis()
       maxPointers = 1
       multiTapMoved = false
+      longPressed = false
       mode = Mode.FINGER_PENDING
+      removeCallbacks(longPress)
+      postDelayed(longPress, LONG_PRESS_MS)
     } else {
       maxPointers = max(maxPointers, e.pointerCount)
       startPinch(e)
@@ -1956,6 +2171,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
         return
       }
+      longPressed -> Unit
       mode == Mode.FINGER_PENDING && maxPointers == 1 -> tapAt(camera.toWorld(e.x, e.y))
       maxPointers == 2 && quick && !multiTapMoved && settings.smartUndo -> undo()
       maxPointers == 3 && quick && !multiTapMoved && settings.smartUndo -> redo()
@@ -2239,7 +2455,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   companion object {
     private val DRAW_MODES =
-      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE)
+      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE, Mode.STRAIGHT, Mode.LASER)
     private const val HOLD_TOLERANCE_DP = 7f
 
     /** PDF points per world unit (dp), matching the PDF export so pages keep their real size. */
@@ -2271,8 +2487,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val FILL_BRIDGE = 3f
     private const val HANDLE_HIT_DP = 24f
     private const val BUBBLE_H = 24f
+    /** How long each bit of the laser trail glows before it's gone. */
+    private const val LASER_LIFE_MS = 650L
+    /** A straight highlighter line this close to level or upright snaps to it. */
+    private const val STRAIGHT_SNAP_DEG = 4.0
     /** A pen touch shorter than this that doesn't move is a tap. */
     private const val PEN_TAP_MS = 250L
+    private const val LONG_PRESS_MS = 480L
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L
   }

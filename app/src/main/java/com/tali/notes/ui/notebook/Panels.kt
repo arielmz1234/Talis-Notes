@@ -62,6 +62,7 @@ import com.tali.notes.model.ShapeGroup
 import com.tali.notes.model.ShapeKind
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.ColorDot
+import com.tali.notes.ui.components.StepSlider
 import com.tali.notes.ui.components.PenGlyph
 import com.tali.notes.ui.components.GeometryIcon
 import com.tali.notes.ui.components.QuietButton
@@ -136,18 +137,29 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(10.dp))
     Text(slot.type.label, style = MaterialTheme.typography.titleMedium, color = c.ink)
     Spacer(Modifier.height(10.dp))
-    StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle)
+    StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle, slot.square, slot.straight)
     Spacer(Modifier.height(12.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
-      TaliSlider(slot.size, slot.type.minSize..slot.type.maxSize, { v -> vm.updateActivePen { it.copy(size = v) } }, Modifier.weight(1f))
-      Text(String.format("%.1f", slot.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+      StepSlider(slot.size, slot.type.minSize..slot.type.maxSize, 0.1f, { v -> vm.updateActivePen { it.copy(size = v) } }, Modifier.weight(1f))
+      Text(String.format(java.util.Locale.US, "%.1f", slot.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
     if (slot.type.takesLineStyle) {
       Spacer(Modifier.height(10.dp))
       SectionLabel("Line")
       Spacer(Modifier.height(8.dp))
       LineStylePicker(slot.lineStyle, vm::setPenLine)
+    }
+    if (slot.type.isHighlighter) {
+      // The highlighter's own choices, in the same gliding switches as everywhere else.
+      Spacer(Modifier.height(12.dp))
+      SectionLabel("Draws")
+      Spacer(Modifier.height(8.dp))
+      Segmented(listOf(true, false), slot.straight, { if (it) "Straight lines" else "Freehand" }, { straight -> vm.updateActivePen { it.copy(freehand = !straight) } }, Modifier.fillMaxWidth())
+      Spacer(Modifier.height(12.dp))
+      SectionLabel("Tip")
+      Spacer(Modifier.height(8.dp))
+      Segmented(listOf(false, true), slot.square, { if (it) "Square" else "Round" }, { square -> vm.updateActivePen { it.copy(squareTip = square) } }, Modifier.fillMaxWidth())
     }
     Spacer(Modifier.height(10.dp))
     SectionLabel("Colours")
@@ -200,12 +212,18 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
 
 /** Draws a sample stroke with the real Ink brush, so size and style changes show exactly as they'll look. */
 @Composable
-fun StrokePreview(type: PenType, color: Int, size: Float, line: LineStyle = LineStyle.SOLID) {
+fun StrokePreview(type: PenType, color: Int, size: Float, line: LineStyle = LineStyle.SOLID, square: Boolean = false, straight: Boolean = false) {
   val c = Tali.colors
   val renderer = remember { Brushes.renderer() }
   val w = 392f
   val h = 70f
-  val stroke = remember(type, color, size, line) { StrokeFactory.previewStroke(Brushes.brush(type, color, size, line), w, h) }
+  val stroke =
+    remember(type, color, size, line, square, straight) {
+      val brush = Brushes.brush(type, color, size, line, square)
+      // A straight-line highlighter shows a straight stroke across the middle.
+      if (straight) StrokeFactory.strokeAlong(listOf(com.tali.notes.geometry.Pt(w * 0.12f, h / 2), com.tali.notes.geometry.Pt(w * 0.88f, h / 2)), brush)
+      else StrokeFactory.previewStroke(brush, w, h)
+    }
   Canvas(Modifier.fillMaxWidth().height(h.dp).clip(RoundedCornerShape(14.dp)).background(c.paper).border(1.dp, c.line, RoundedCornerShape(14.dp))) {
     drawIntoCanvas { canvas ->
       val nc = canvas.nativeCanvas
@@ -227,7 +245,7 @@ fun EraserPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(14.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
-      TaliSlider(settings.eraserSize, 6f..64f, vm::setEraserSize, Modifier.weight(1f))
+      StepSlider(settings.eraserSize, 6f..64f, 1f, vm::setEraserSize, Modifier.weight(1f))
       Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size((settings.eraserSize.coerceAtMost(40f)).dp)) {
           drawCircle(c.sunken)

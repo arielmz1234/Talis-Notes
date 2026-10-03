@@ -4,6 +4,7 @@ import com.tali.notes.model.CustomShape
 import com.tali.notes.model.EllipseShape
 import com.tali.notes.model.LineShape
 import com.tali.notes.model.PolyShape
+import com.tali.notes.model.TriangleShape
 import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.model.regularPolygon
 import com.tali.notes.model.star
@@ -64,8 +65,13 @@ object ShapeRecognizer {
     val length = Geo.pathLength(points)
 
     val closedAt = closingIndex(points, diag, length)
-    return if (closedAt >= 0) recognizeClosed(points.subList(0, closedAt + 1), diag) else recognizeOpen(points, diag, length)
+    val shape = if (closedAt >= 0) recognizeClosed(points.subList(0, closedAt + 1), diag) else recognizeOpen(points, diag, length)
+    return asTriangle(shape)
   }
+
+  /** A three-cornered closed shape becomes a [TriangleShape], whose corners move one at a time. */
+  fun asTriangle(g: ShapeGeometry?): ShapeGeometry? =
+    if (g is PolyShape && g.closed && g.points.size == 3) TriangleShape(g.points[0], g.points[1], g.points[2]) else g
 
   private fun dedupe(points: List<Pt>): List<Pt> {
     val out = ArrayList<Pt>(points.size)

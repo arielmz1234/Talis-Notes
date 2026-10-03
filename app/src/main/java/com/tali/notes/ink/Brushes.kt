@@ -117,9 +117,22 @@ object Brushes {
 
   private val lineFamilies = java.util.concurrent.ConcurrentHashMap<LineStyle, BrushFamily>()
 
-  /** The brush family for a pen drawing [style]; falls back to the stock dashed line if Ink won't take it. */
-  fun family(type: PenType, style: LineStyle): BrushFamily =
-    if (style == LineStyle.SOLID || !type.takesLineStyle) family(type)
+  /** The highlighter with a square tip: the stock one with its corners left sharp. */
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  private val squareHighlighter: BrushFamily by lazy {
+    val stock = StockBrushes.highlighter(SelfOverlap.DISCARD)
+    runCatching { stock.copy(coats = stock.coats.map { it.copy(tip = it.tip.copy(cornerRounding = 0f)) }, clientBrushFamilyId = SQUARE_ID) }.getOrDefault(stock)
+  }
+
+  private const val SQUARE_ID = "tali:highlighter-square"
+
+  /** Whether a stroke was drawn with the square-tipped highlighter. */
+  fun isSquare(brush: Brush) = brush.family.clientBrushFamilyId == SQUARE_ID
+
+  /** The brush family for a pen drawing [style] (and a highlighter's [square] tip); falls back to the stock dashed line if Ink won't take a style. */
+  fun family(type: PenType, style: LineStyle, square: Boolean = false): BrushFamily =
+    if (type.isHighlighter && square) squareHighlighter
+    else if (style == LineStyle.SOLID || !type.takesLineStyle) family(type)
     else lineFamilies.getOrPut(style) { runCatching { lineFamily(style) }.getOrElse { StockBrushes.dashedLine() } }
 
   /** The line style a stroke was written with. */
@@ -151,7 +164,8 @@ object Brushes {
   fun inkColor(type: PenType, color: Int): Int =
     if (type.isHighlighter) (color and 0x00FFFFFF) or (HIGHLIGHTER_ALPHA shl 24) else color or (0xFF shl 24)
 
-  fun brush(type: PenType, color: Int, size: Float, style: LineStyle = LineStyle.SOLID): Brush = Brush.createWithColorIntArgb(family(type, style), inkColor(type, color), size, EPSILON)
+  fun brush(type: PenType, color: Int, size: Float, style: LineStyle = LineStyle.SOLID, square: Boolean = false): Brush =
+    Brush.createWithColorIntArgb(family(type, style, square), inkColor(type, color), size, EPSILON)
 
   fun shapeBrush(type: PenType, color: Int, size: Float): Brush =
     Brush.createWithColorIntArgb(shapeFamily(type), inkColor(type, color), size, EPSILON)

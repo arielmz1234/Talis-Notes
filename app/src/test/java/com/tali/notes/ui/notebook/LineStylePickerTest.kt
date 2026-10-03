@@ -78,4 +78,22 @@ class LineStylePickerTest {
     show(dark = true)
     save("dark-long-dash")
   }
+
+  @Test
+  fun highlighterChoicesAndFineSteps() {
+    rule.setContent {
+      TaliTheme(darkTheme = false) {
+        Box(Modifier.testTag("stage").background(Tali.colors.surface).padding(16.dp).width(392.dp)) {
+          Column {
+            com.tali.notes.ui.components.StepSlider(2.4f, 0.8f..12f, 0.1f, {})
+            com.tali.notes.ui.components.Segmented(listOf(true, false), true, { if (it) "Straight lines" else "Freehand" }, {}, Modifier.padding(top = 12.dp))
+            com.tali.notes.ui.components.Segmented(listOf(false, true), true, { if (it) "Square" else "Round" }, {}, Modifier.padding(top = 12.dp))
+            androidx.compose.material3.Icon(com.tali.notes.ui.components.TaliIcons.Laser, null, Modifier.padding(top = 12.dp).width(44.dp), tint = Tali.colors.ink)
+          }
+        }
+      }
+    }
+    rule.waitForIdle()
+    save("highlighter-and-steps")
+  }
 }

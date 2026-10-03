@@ -3,6 +3,7 @@ package com.tali.notes.geometry
 import com.tali.notes.model.EllipseShape
 import com.tali.notes.model.LineShape
 import com.tali.notes.model.PolyShape
+import com.tali.notes.model.TriangleShape
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -106,12 +107,12 @@ class ShapeRecognizerTest {
   @Test
   fun triangleIsRecognized() {
     val shape = ShapeRecognizer.recognize(wobbly(Pt(100f, 0f), Pt(220f, 180f), Pt(-10f, 175f), Pt(100f, 0f)))
-    assertTrue("got $shape", shape is PolyShape && shape.points.size == 3)
+    assertTrue("got $shape", shape is TriangleShape)
   }
 
   @Test
   fun rightTriangleGetsExactRightAngle() {
-    val t = (ShapeRecognizer.recognize(wobbly(Pt(0f, 0f), Pt(4f, 200f), Pt(260f, 196f), Pt(0f, 0f))) as PolyShape).points
+    val t = (ShapeRecognizer.recognize(wobbly(Pt(0f, 0f), Pt(4f, 200f), Pt(260f, 196f), Pt(0f, 0f))) as TriangleShape).points
     val hasRight = t.indices.any { i -> abs(Geo.interiorAngle(t[(i + 2) % 3], t[i], t[(i + 1) % 3]) - PI / 2) < 0.01 }
     assertTrue("angles off: $t", hasRight)
   }
@@ -131,7 +132,7 @@ class ShapeRecognizerTest {
   @Test
   fun lopsidedTriangleBecomesLevelIsosceles() {
     // Apex a little off centre and the base 6° off level.
-    val t = (ShapeRecognizer.recognize(wobbly(Pt(110f, 0f), Pt(210f, 190f), Pt(10f, 170f), Pt(110f, 0f))) as PolyShape).points
+    val t = (ShapeRecognizer.recognize(wobbly(Pt(110f, 0f), Pt(210f, 190f), Pt(10f, 170f), Pt(110f, 0f))) as TriangleShape).points
     val sides = t.indices.map { t[it].dist(t[(it + 1) % 3]) }.sorted()
     assertTrue("no two equal sides: $sides", abs(sides[0] - sides[1]) < 0.5f || abs(sides[1] - sides[2]) < 0.5f)
     assertTrue("no level edge: $t", t.indices.any { abs(t[it].y - t[(it + 1) % 3].y) < 0.5f })

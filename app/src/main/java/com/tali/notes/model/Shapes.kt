@@ -74,12 +74,15 @@ data class PolyShape(
   val closed: Boolean,
   /** How far it has been turned (with the lasso) since it was drawn, so resizing follows its own sides. */
   val rotation: Float = 0f,
+  /** A hand-drawn line (from a saved shape): drawn as a smooth curve through its points, not straight bits. */
+  val smooth: Boolean = false,
 ) : ShapeGeometry {
-  override fun paths(penSize: Float) = listOf(if (closed) points + points.first() else points)
+  override fun paths(penSize: Float) = listOf(if (closed) points + points.first() else if (smooth) Geo.smooth(points) else points)
 
   override fun transformed(m: Affine) = copy(points = points.map(m::apply), rotation = rotation + atan2(m.b, m.a))
 
-  override fun handles() = points
+  // A hand-drawn line has far too many points to give each a dot: it resizes from its corners instead.
+  override fun handles() = if (smooth) GroupShape(listOf(this)).handles() else points
 
   /**
    * A corner dot resizes the shape rather than bending it: it stretches from the opposite side
@@ -88,6 +91,7 @@ data class PolyShape(
    * top makes it taller). It never collapses or turns inside out.
    */
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    if (smooth) return (GroupShape(listOf(this)).withHandle(index, p) as GroupShape).parts[0]
     if (points.size < 3) return copy(points = points.toMutableList().also { it[index] = p })
     val c = Geo.centroid(points)
     val theta = rotation
@@ -272,6 +276,79 @@ data class SectorShape(val center: Pt, val radius: Float, val start: Float, val 
   }
 }
 
+/**
+ * A triangle whose corners move one at a time. A dragged corner settles where all three angles
+ * are whole multiples of 5°, and is drawn to the tidy cases nearby: a right angle at any corner,
+ * or two equal angles (isosceles, and so equilateral at 60°).
+ */
+@Serializable
+@SerialName("triangle")
+data class TriangleShape(val a: Pt, val b: Pt, val c: Pt) : ShapeGeometry {
+  val points: List<Pt>
+    get() = listOf(a, b, c)
+
+  /** The angles at [a], [b] and [c], in degrees. */
+  val angles: List<Float>
+    get() = listOf(deg(Geo.interiorAngle(c, a, b)), deg(Geo.interiorAngle(a, b, c)), deg(Geo.interiorAngle(b, c, a)))
+
+  override fun paths(penSize: Float) = listOf(listOf(a, b, c, a))
+
+  override fun transformed(m: Affine) = TriangleShape(m.apply(a), m.apply(b), m.apply(c))
+
+  override fun handles() = points
+
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    val q = snapCorner(points[(index + 1) % 3], points[(index + 2) % 3], p)
+    return when (index) {
+      0 -> copy(a = q)
+      1 -> copy(b = q)
+      else -> copy(c = q)
+    }
+  }
+
+  companion object {
+    private fun deg(r: Float) = Math.toDegrees(r.toDouble()).toFloat()
+
+    private fun round5(x: Float) = Math.round(x / 5f) * 5f
+
+    /** How close (in degrees) the tidy cases pull. */
+    private const val PULL = 4f
+
+    /**
+     * Where the corner dragged to [p] settles, with the other two corners at [fa] and [fb]: the
+     * angles at those corners are snapped (to a right angle, to make two angles equal, or to the
+     * nearest 5°), and the corner goes where the two snapped sides meet, on the side it was dragged.
+     */
+    fun snapCorner(fa: Pt, fb: Pt, p: Pt): Pt {
+      val base = fb - fa
+      val len = base.length()
+      val side = base.cross(p - fa)
+      if (len < 1f || abs(side) < 1e-3f) return p
+      val ra = deg(Geo.interiorAngle(fb, fa, p))
+      val rb = deg(Geo.interiorAngle(fa, fb, p))
+      val rp = 180f - ra - rb
+      if (ra < 1f || rb < 1f || rp < 1f) return p
+      var sa: Float
+      var sb: Float
+      when {
+        abs(ra - 90f) < PULL -> { sa = 90f; sb = round5(rb) }
+        abs(rb - 90f) < PULL -> { sb = 90f; sa = round5(ra) }
+        abs(rp - 90f) < PULL -> { sa = round5(ra); sb = 90f - sa }
+        abs(ra - rb) < PULL -> { sa = round5((ra + rb) / 2f); sb = sa }
+        abs(rb - rp) < PULL -> { sb = round5((rb + rp) / 2f); sa = 180f - 2f * sb }
+        abs(ra - rp) < PULL -> { sa = round5((ra + rp) / 2f); sb = 180f - 2f * sa }
+        else -> { sa = round5(ra); sb = round5(rb) }
+      }
+      if (sa < 1f || sb < 1f || sa + sb > 179f) return p
+      val toA = Math.toRadians(sa.toDouble()).toFloat()
+      val toB = Math.toRadians(sb.toDouble()).toFloat()
+      val reach = len * sin(toB) / sin(toA + toB)
+      val dir = base.normalized().rotated(if (side > 0f) toA else -toA)
+      return fa + dir * reach
+    }
+  }
+}
+
 /** Several parts that move and scale together, used for engineering symbols. */
 @Serializable
 @SerialName("group")
@@ -330,7 +407,6 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
   ARC("Arc", ShapeGroup.BASIC),
   PART_CIRCLE("Part circle", ShapeGroup.BASIC),
   TRIANGLE("Triangle", ShapeGroup.BASIC),
-  RIGHT_TRIANGLE("Right triangle", ShapeGroup.BASIC),
   SQUARE("Square", ShapeGroup.BASIC),
   RECTANGLE("Rectangle", ShapeGroup.BASIC),
   DIAMOND("Diamond", ShapeGroup.BASIC),
@@ -367,8 +443,8 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       ARC -> ArcShape(c, side / 2f, PI.toFloat(), PI.toFloat())
       // From the centre outwards, a half to start with; its end dots change the amount.
       PART_CIRCLE -> SectorShape.of(p0, p1, 0.5f)
-      TRIANGLE -> PolyShape(listOf(Pt(c.x, t), Pt(r, t + h), Pt(l, t + h)), true)
-      RIGHT_TRIANGLE -> PolyShape(listOf(Pt(l, t), Pt(l, t + h), Pt(r, t + h)), true)
+      // One triangle: each corner moves on its own and snaps to tidy angles.
+      TRIANGLE -> TriangleShape(Pt(c.x, t), Pt(r, t + h), Pt(l, t + h))
       SQUARE -> PolyShape(listOf(Pt(l, t), Pt(l + side, t), Pt(l + side, t + side), Pt(l, t + side)), true)
       RECTANGLE -> PolyShape(listOf(Pt(l, t), Pt(r, t), Pt(r, b), Pt(l, b)), true)
       DIAMOND -> PolyShape(listOf(Pt(c.x, t), Pt(r, c.y), Pt(c.x, b), Pt(l, c.y)), true)

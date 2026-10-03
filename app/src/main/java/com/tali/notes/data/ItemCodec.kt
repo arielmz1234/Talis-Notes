@@ -26,6 +26,8 @@ import kotlinx.serialization.json.int
 /** Converts canvas items to storage rows and back. Ink keeps its raw pen samples, so nothing is lost. */
 object ItemCodec {
   const val KIND_INK = 0
+  private const val SQUARE = "SQUARE"
+  private const val LOCKED = "LOCKED"
   const val KIND_SHAPE = 1
   const val KIND_IMAGE = 2
   const val KIND_TEXT = 3
@@ -35,33 +37,36 @@ object ItemCodec {
     classDiscriminator = "type"
   }
 
-  @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false, val front: Boolean = false)
+  @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false, val front: Boolean = false, val locked: Boolean = false)
 
-  @Serializable private class TextPayload(val text: String, val x: Float, val y: Float, val width: Float)
+  @Serializable private class TextPayload(val text: String, val x: Float, val y: Float, val width: Float, val locked: Boolean = false)
 
   fun encode(item: CanvasItem): ItemRow {
     val b = item.bounds
     return when (item) {
       is InkItem -> {
         val bytes = ByteArrayOutputStream().also { item.stroke.inputs.encode(it) }.toByteArray()
-        // A dotted or dashed stroke is stored as "PEN/STYLE" in the pen column.
-        val pen = item.line.let { if (it == LineStyle.SOLID) item.pen.name else item.pen.name + "/" + it.name }
+        // A dotted or dashed stroke is stored as "PEN/STYLE" in the pen column, a square-tipped
+        // highlighter as "HIGHLIGHTER/SQUARE".
+        val tags = listOfNotNull(item.line.takeIf { it != LineStyle.SOLID }?.name, SQUARE.takeIf { item.square }, LOCKED.takeIf { item.locked })
+        val pen = (listOf(item.pen.name) + tags).joinToString("/")
         ItemRow(item.id, item.z, KIND_INK, pen, item.color, item.stroke.brush.size, bytes, b.left, b.top, b.right, b.bottom)
       }
       is ShapeItem -> {
         // The geometry, plus "fill" when it's filled and "line" when dotted or dashed (older versions ignore extra keys).
         var obj = json.encodeToJsonElement(ShapeGeometry.serializer(), item.geometry)
         item.fill?.let { f -> obj = kotlinx.serialization.json.JsonObject(obj.jsonObject + ("fill" to kotlinx.serialization.json.JsonPrimitive(f))) }
+        if (item.locked) obj = kotlinx.serialization.json.JsonObject(obj.jsonObject + ("locked" to kotlinx.serialization.json.JsonPrimitive(true)))
         if (item.line != LineStyle.SOLID) obj = kotlinx.serialization.json.JsonObject(obj.jsonObject + ("line" to kotlinx.serialization.json.JsonPrimitive(item.line.name)))
         val bytes = obj.toString().encodeToByteArray()
         ItemRow(item.id, item.z, KIND_SHAPE, item.pen.name, item.color, item.size, bytes, b.left, b.top, b.right, b.bottom)
       }
       is ImageItem -> {
-        val bytes = json.encodeToString(ImagePayload.serializer(), ImagePayload(item.file, item.rect, item.pdfPage, item.front)).encodeToByteArray()
+        val bytes = json.encodeToString(ImagePayload.serializer(), ImagePayload(item.file, item.rect, item.pdfPage, item.front, item.locked)).encodeToByteArray()
         ItemRow(item.id, item.z, KIND_IMAGE, null, 0, 0f, bytes, b.left, b.top, b.right, b.bottom)
       }
       is TextItem -> {
-        val bytes = json.encodeToString(TextPayload.serializer(), TextPayload(item.text, item.origin.x, item.origin.y, item.width)).encodeToByteArray()
+        val bytes = json.encodeToString(TextPayload.serializer(), TextPayload(item.text, item.origin.x, item.origin.y, item.width, item.locked)).encodeToByteArray()
         ItemRow(item.id, item.z, KIND_TEXT, null, item.color, item.fontSize, bytes, b.left, b.top, b.right, b.bottom)
       }
     }
@@ -72,30 +77,34 @@ object ItemCodec {
     runCatching {
         when (row.kind) {
           KIND_INK -> {
-            val pen = PenType.valueOf(row.pen!!.substringBefore('/'))
-            val line = row.pen.substringAfter('/', "").let { name -> LineStyle.entries.firstOrNull { it.name == name } ?: LineStyle.SOLID }
+            val parts = row.pen!!.split('/')
+            val pen = PenType.valueOf(parts[0])
+            val line = LineStyle.entries.firstOrNull { it.name in parts } ?: LineStyle.SOLID
+            val square = SQUARE in parts
             // Built on first use; see InkItem.
-            InkItem.deferred(row.id, row.z, pen, Rect(row.l, row.t, row.r, row.b), row.color) {
-              val brush = Brushes.brush(pen, row.color, row.size, line)
+            InkItem.deferred(row.id, row.z, pen, Rect(row.l, row.t, row.r, row.b), row.color, locked = LOCKED in parts) {
+              val brush = Brushes.brush(pen, row.color, row.size, line, square)
               // A damaged stroke becomes an empty one rather than breaking every redraw.
               runCatching { Stroke(brush, StrokeInputBatch.decode(ByteArrayInputStream(row.payload))) }.getOrElse { Stroke(brush, MutableStrokeInputBatch()) }
             }
           }
           KIND_SHAPE -> {
             val text = row.payload.decodeToString()
-            val geometry = json.decodeFromString(ShapeGeometry.serializer(), text)
+            // Triangles saved before they had their own shape get movable corners too.
+            val geometry = com.tali.notes.geometry.ShapeRecognizer.asTriangle(json.decodeFromString(ShapeGeometry.serializer(), text))!!
             val extra = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
             val fill = runCatching { extra?.get("fill")?.jsonPrimitive?.int }.getOrNull()
             val line = runCatching { LineStyle.valueOf(extra?.get("line")!!.jsonPrimitive.content) }.getOrDefault(LineStyle.SOLID)
-            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry, Rect(row.l, row.t, row.r, row.b), fill, line = line)
+            val locked = runCatching { extra?.get("locked")?.jsonPrimitive?.content == "true" }.getOrDefault(false)
+            ShapeItem(row.id, row.z, PenType.valueOf(row.pen!!), row.color, row.size, geometry, Rect(row.l, row.t, row.r, row.b), fill, line = line, locked = locked)
           }
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())
-            ImageItem(row.id, row.z, p.file, p.rect, p.pdfPage, p.front)
+            ImageItem(row.id, row.z, p.file, p.rect, p.pdfPage, p.front, p.locked)
           }
           KIND_TEXT -> {
             val p = json.decodeFromString(TextPayload.serializer(), row.payload.decodeToString())
-            TextItem(row.id, row.z, p.text, com.tali.notes.geometry.Pt(p.x, p.y), p.width, row.size, row.color)
+            TextItem(row.id, row.z, p.text, com.tali.notes.geometry.Pt(p.x, p.y), p.width, row.size, row.color, p.locked)
           }
           else -> null
         }

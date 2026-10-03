@@ -34,4 +34,13 @@ class ShapeFillTest {
     assertEquals(LineStyle.DOT_DASH, (ItemCodec.decode(ItemCodec.encode(item)) as ShapeItem).line)
     assertEquals(LineStyle.SOLID, (ItemCodec.decode(ItemCodec.encode(ShapeItem("s", 3, PenType.FINELINER, 0, 2f, circle, box))) as ShapeItem).line)
   }
+
+  @Test
+  fun lockSurvivesSaving() {
+    val shape = ShapeItem("s", 3, PenType.FINELINER, 0, 2f, circle, box).withLocked(true)
+    assertEquals(true, ItemCodec.decode(ItemCodec.encode(shape))!!.locked)
+    val picture = com.tali.notes.model.ImageItem("i", 4, "a.png", box).withLocked(true)
+    assertEquals(true, ItemCodec.decode(ItemCodec.encode(picture))!!.locked)
+    assertEquals(false, ItemCodec.decode(ItemCodec.encode(ShapeItem("s", 3, PenType.FINELINER, 0, 2f, circle, box)))!!.locked)
+  }
 }

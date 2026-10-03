@@ -49,8 +49,14 @@ data class CustomShape(val id: String, val name: String, val geometry: ShapeGeom
     return placed(b, s, Pt((p0.x + p1.x) / 2f, (p0.y + p1.y) / 2f))
   }
 
+  /**
+   * The geometry as it's drawn: lines that came from her ink are smooth curves. (Shapes saved
+   * before that drew as straight bits between their points and looked choppy; they get it too.)
+   */
+  private val drawn: ShapeGeometry by lazy { smoothInk(geometry) }
+
   private fun placed(b: Rect, s: Float, center: Pt): ShapeGeometry =
-    geometry.transformed(Affine(a = s, d = s, tx = center.x - b.center.x * s, ty = center.y - b.center.y * s))
+    drawn.transformed(Affine(a = s, d = s, tx = center.x - b.center.x * s, ty = center.y - b.center.y * s))
 
   private fun abs(v: Float) = kotlin.math.abs(v)
 
@@ -74,8 +80,9 @@ data class CustomShape(val id: String, val name: String, val geometry: ShapeGeom
         when (item) {
           is ShapeItem -> parts += item.geometry
           is InkItem -> {
-            val pts = Geo.simplify(StrokeFactory.points(item.stroke), max(0.6f, diag * 0.004f))
-            if (pts.size >= 2) parts += PolyShape(pts, closed = false)
+            // Lightly simplified (fine enough to keep the curve), then drawn smooth through the points.
+            val pts = Geo.simplify(StrokeFactory.points(item.stroke), max(0.25f, diag * 0.0015f))
+            if (pts.size >= 2) parts += PolyShape(pts, closed = false, smooth = true)
           }
           is ImageItem, is TextItem -> Unit
         }
@@ -84,6 +91,14 @@ data class CustomShape(val id: String, val name: String, val geometry: ShapeGeom
       val g = if (parts.size == 1) parts[0] else GroupShape(parts)
       return normalized(g)
     }
+
+    /** Open lines (from ink) drawn as smooth curves, inside groups too. */
+    fun smoothInk(g: ShapeGeometry): ShapeGeometry =
+      when (g) {
+        is PolyShape -> if (!g.closed && !g.smooth && g.points.size > 2) g.copy(smooth = true) else g
+        is GroupShape -> g.copy(parts = g.parts.map(::smoothInk))
+        else -> g
+      }
 
     fun normalized(g: ShapeGeometry): ShapeGeometry? {
       val box = Rect.around(g.paths(REFERENCE_PEN).flatten()) ?: return null

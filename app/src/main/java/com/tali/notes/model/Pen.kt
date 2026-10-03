@@ -59,7 +59,19 @@ data class PenSlot(
   val line: LineStyle = LineStyle.SOLID,
   val quick: List<Int> = emptyList(),
   val recent: List<Int> = emptyList(),
+  /** A highlighter with a square tip instead of a round one. */
+  val squareTip: Boolean = false,
+  /** A highlighter that follows the hand instead of drawing straight lines. */
+  val freehand: Boolean = false,
 ) {
+  /** Draws straight lines from where the pen lands to where it is (the highlighter's default). */
+  val straight: Boolean
+    get() = type.isHighlighter && !freehand
+
+  /** Whether the tip is square (only a highlighter has the choice). */
+  val square: Boolean
+    get() = type.isHighlighter && squareTip
+
   /** The line it actually draws: a highlighter is always solid. */
   val lineStyle: LineStyle
     get() = if (type.takesLineStyle) line else LineStyle.SOLID
@@ -131,4 +143,7 @@ enum class Tool {
 
   /** Fills a closed shape, or an area her writing encloses, with colour. */
   FILL,
+
+  /** Points at things with a glowing trail that fades away; nothing is kept. */
+  LASER,
 }
