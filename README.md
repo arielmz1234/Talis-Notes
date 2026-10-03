@@ -16,7 +16,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - **My shapes:** lasso any drawing and tap *Save as shape*. Holding the pen at the end of a similar one-stroke drawing then snaps to it. Matching uses a point-cloud recognizer, `geometry/ShapeMatcher.kt`.
 - Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines.
 - Tap a shape (with a finger, a quick pen tap on its outline, or any tap with the Shapes tool) to get its dots and its menu; drag them with either, and the shape changes live. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length beside the line (not under the pen). Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
-- **Triangle:** one triangle whose corners each move on their own; a dragged corner settles on whole 5° angles and snaps to right angles and isosceles, showing each angle.
+- **Triangle:** one triangle whose corners each move on their own; a dragged corner moves a degree at a time and locks on to right angles, isosceles and the usual angles (30°, 45°, 60°… and lightly every 5°), showing each angle.
 - A shape stays selected right after it's drawn or adjusted, so it can be changed straight away (the pen still writes inside it).
 - **Part circle:** a closed slice of a circle, drawn from the centre outwards (the curve faces the way you drag). It starts as a half; its end dots make it any percent (snapping to quarters and 5% steps) and show "% · °" at the centre. Arc ends can be dragged round either way; going past a full turn starts again from nothing (361° is 1°), and the arc shows its angle.
 

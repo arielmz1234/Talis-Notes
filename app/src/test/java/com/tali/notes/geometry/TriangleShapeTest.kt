@@ -5,6 +5,7 @@ import com.tali.notes.model.TriangleShape
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class TriangleShapeTest {
   private val t = TriangleShape(Pt(0f, 0f), Pt(200f, 0f), Pt(100f, -150f))
@@ -20,12 +21,29 @@ class TriangleShapeTest {
   }
 
   @Test
-  fun anglesLandOnWholeFiveDegrees() {
+  fun itMovesAWholeDegreeAtATime() {
     for (x in listOf(30f, 70f, 123f, 151f)) {
       val g = t.withHandle(2, Pt(x, -113f)) as TriangleShape
-      g.angles.forEach { a -> assertEquals("angle $a from x=$x", 0f, (a % 5f).let { minOf(it, 5f - it) }, 0.05f) }
+      g.angles.forEach { a -> assertEquals("angle $a from x=$x", 0f, abs(a - Math.round(a)), 0.05f) }
       assertEquals(180, anglesOf(g).sum())
     }
+  }
+
+  @Test
+  fun anglesLockOnToTheUsualOnes() {
+    assertEquals(45f, TriangleShape.lockAngle(43.2f))
+    assertEquals(30f, TriangleShape.lockAngle(31.9f))
+    assertEquals(40f, TriangleShape.lockAngle(40.7f))
+    // Between them it just moves by whole degrees.
+    assertEquals(37f, TriangleShape.lockAngle(37.3f))
+    assertEquals(52f, TriangleShape.lockAngle(51.8f))
+  }
+
+  @Test
+  fun nearbyPositionsGiveDifferentTriangles() {
+    // Small moves still change it: it isn't stuck to a coarse grid.
+    val seen = (0 until 12).map { k -> anglesOf(t.withHandle(2, Pt(140f + k * 2f, -120f)) as TriangleShape) }.toSet()
+    assertTrue("only ${seen.size} different triangles", seen.size >= 6)
   }
 
   @Test

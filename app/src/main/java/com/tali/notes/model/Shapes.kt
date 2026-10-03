@@ -277,9 +277,10 @@ data class SectorShape(val center: Pt, val radius: Float, val start: Float, val 
 }
 
 /**
- * A triangle whose corners move one at a time. A dragged corner settles where all three angles
- * are whole multiples of 5°, and is drawn to the tidy cases nearby: a right angle at any corner,
- * or two equal angles (isosceles, and so equilateral at 60°).
+ * A triangle whose corners move one at a time. A dragged corner moves in whole degrees and locks
+ * on to the angles people use, the way a line locks to its angles: a right angle at any corner,
+ * two equal angles (isosceles, and equilateral at 60°), the 15° family (30°, 45°, 60°...) and,
+ * more lightly, every 5°.
  */
 @Serializable
 @SerialName("triangle")
@@ -309,15 +310,25 @@ data class TriangleShape(val a: Pt, val b: Pt, val c: Pt) : ShapeGeometry {
   companion object {
     private fun deg(r: Float) = Math.toDegrees(r.toDouble()).toFloat()
 
-    private fun round5(x: Float) = Math.round(x / 5f) * 5f
+    /** How close (in degrees) a right angle or two equal angles pull. */
+    private const val PULL = 3f
 
-    /** How close (in degrees) the tidy cases pull. */
-    private const val PULL = 4f
+    /**
+     * One angle, locked to the nearest 15° within 2.5°, else to the nearest 5° within 1°, else
+     * to the whole degree, so it moves a degree at a time between the angles it locks on to.
+     */
+    fun lockAngle(x: Float): Float {
+      val fifteen = Math.round(x / 15f) * 15f
+      if (abs(x - fifteen) < 2.5f) return fifteen
+      val five = Math.round(x / 5f) * 5f
+      if (abs(x - five) < 1f) return five
+      return Math.round(x).toFloat()
+    }
 
     /**
      * Where the corner dragged to [p] settles, with the other two corners at [fa] and [fb]: the
-     * angles at those corners are snapped (to a right angle, to make two angles equal, or to the
-     * nearest 5°), and the corner goes where the two snapped sides meet, on the side it was dragged.
+     * angles at those corners are locked (to a right angle, to make two angles equal, or with
+     * [lockAngle]), and the corner goes where the two sides meet, on the side it was dragged.
      */
     fun snapCorner(fa: Pt, fb: Pt, p: Pt): Pt {
       val base = fb - fa
@@ -331,13 +342,13 @@ data class TriangleShape(val a: Pt, val b: Pt, val c: Pt) : ShapeGeometry {
       var sa: Float
       var sb: Float
       when {
-        abs(ra - 90f) < PULL -> { sa = 90f; sb = round5(rb) }
-        abs(rb - 90f) < PULL -> { sb = 90f; sa = round5(ra) }
-        abs(rp - 90f) < PULL -> { sa = round5(ra); sb = 90f - sa }
-        abs(ra - rb) < PULL -> { sa = round5((ra + rb) / 2f); sb = sa }
-        abs(rb - rp) < PULL -> { sb = round5((rb + rp) / 2f); sa = 180f - 2f * sb }
-        abs(ra - rp) < PULL -> { sa = round5((ra + rp) / 2f); sb = 180f - 2f * sa }
-        else -> { sa = round5(ra); sb = round5(rb) }
+        abs(ra - 90f) < PULL -> { sa = 90f; sb = lockAngle(rb) }
+        abs(rb - 90f) < PULL -> { sb = 90f; sa = lockAngle(ra) }
+        abs(rp - 90f) < PULL -> { sa = lockAngle(ra); sb = 90f - sa }
+        abs(ra - rb) < PULL -> { sa = lockAngle((ra + rb) / 2f); sb = sa }
+        abs(rb - rp) < PULL -> { sb = lockAngle((rb + rp) / 2f); sa = 180f - 2f * sb }
+        abs(ra - rp) < PULL -> { sa = lockAngle((ra + rp) / 2f); sb = 180f - 2f * sa }
+        else -> { sa = lockAngle(ra); sb = lockAngle(rb) }
       }
       if (sa < 1f || sb < 1f || sa + sb > 179f) return p
       val toA = Math.toRadians(sa.toDouble()).toFloat()
