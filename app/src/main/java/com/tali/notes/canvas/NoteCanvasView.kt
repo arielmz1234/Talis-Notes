@@ -1350,10 +1350,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       Mode.ERASE -> finishErase()
       Mode.STRAIGHT -> finishStraight()
-      Mode.LASER -> {
-        laserDown = false
-        invalidate()
-      }
+      Mode.LASER -> endLaser()
       Mode.LASSO -> finishLasso(if (idx >= 0) world(e, idx) else null)
       Mode.MOVE_SELECTION,
       Mode.SCALE_SELECTION,
@@ -1405,7 +1402,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     liveEdit = null
     shapePreview = null
     straightPreview = null
-    laserDown = false
+    endLaser()
     lassoPoints.clear()
     erasedOriginals.clear()
     erasePieces.clear()
@@ -1463,25 +1460,32 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   // ---- Laser ----
 
-  private class LaserDot(val p: Pt, val t: Long)
+  /** One stroke of the laser. It glows fully while drawn; [endedAt] is when the pen lifted (0 while drawing). */
+  private class LaserTrail {
+    val dots = ArrayList<Pt>()
+    var endedAt = 0L
+  }
 
-  /** Each stroke of the laser, newest last; dots fade out by age. */
-  private val laserTrails = ArrayList<ArrayList<LaserDot>>()
+  private val laserTrails = ArrayList<LaserTrail>()
   private var laserDown = false
   private var laserTip = Pt.ZERO
+  private val laserPath = android.graphics.Path()
   private val laserGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     style = Paint.Style.STROKE
     strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
     color = 0xFFFF3B4E.toInt()
   }
   private val laserCore = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     style = Paint.Style.STROKE
     strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+    color = 0xFFFF6B78.toInt()
   }
   private val laserDotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
   private fun startLaser(p: Pt) {
-    laserTrails += arrayListOf(LaserDot(p, SystemClock.uptimeMillis()))
+    laserTrails += LaserTrail().apply { dots += p }
     laserDown = true
     laserTip = p
     mode = Mode.LASER
@@ -1489,36 +1493,41 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun laserTo(p: Pt) {
-    laserTrails.lastOrNull()?.add(LaserDot(p, SystemClock.uptimeMillis()))
+    laserTrails.lastOrNull()?.dots?.add(p)
     laserTip = p
     invalidate()
   }
 
+  private fun endLaser() {
+    laserDown = false
+    laserTrails.lastOrNull()?.takeIf { it.endedAt == 0L }?.endedAt = SystemClock.uptimeMillis()
+    invalidate()
+  }
+
   /**
-   * The laser: a red glow with a bright core that thins and fades along its length, so the trail
-   * shrinks back toward the pen and disappears soon after she lifts it. Nothing is saved.
+   * The laser: a red glow with a bright core. The stroke being drawn stays fully lit; once the pen
+   * lifts, the whole stroke fades and thins away together. Nothing is saved.
    */
   private fun drawLaser(canvas: Canvas) {
     val now = SystemClock.uptimeMillis()
-    laserTrails.forEach { trail -> trail.removeAll { now - it.t > LASER_LIFE_MS } }
-    laserTrails.removeAll { it.isEmpty() && !(laserDown && it === laserTrails.lastOrNull()) }
+    laserTrails.removeAll { it.endedAt != 0L && now - it.endedAt > LASER_FADE_MS }
     if (laserTrails.isEmpty() && !laserDown) return
     for (trail in laserTrails) {
-      for (i in 1 until trail.size) {
-        val a = trail[i - 1]
-        val b = trail[i]
-        val life = 1f - (now - b.t).toFloat() / LASER_LIFE_MS
-        if (life <= 0f) continue
-        val sa = camera.toScreen(a.p)
-        val sb = camera.toScreen(b.p)
-        laserGlow.strokeWidth = (5f + 7f * life) * density
-        laserGlow.alpha = (70 * life).toInt()
-        canvas.drawLine(sa.x, sa.y, sb.x, sb.y, laserGlow)
-        laserCore.strokeWidth = (1.5f + 2f * life) * density
-        laserCore.color = 0xFFFF6B78.toInt()
-        laserCore.alpha = (255 * life).toInt()
-        canvas.drawLine(sa.x, sa.y, sb.x, sb.y, laserCore)
+      // Ease out: it dims quickly at first, then lingers faintly for a moment.
+      val t = if (trail.endedAt == 0L) 0f else ((now - trail.endedAt).toFloat() / LASER_FADE_MS).coerceIn(0f, 1f)
+      val life = 1f - t * (2f - t)
+      if (life <= 0f || trail.dots.size < 2) continue
+      laserPath.rewind()
+      trail.dots.forEachIndexed { i, d ->
+        val sp = camera.toScreen(d)
+        if (i == 0) laserPath.moveTo(sp.x, sp.y) else laserPath.lineTo(sp.x, sp.y)
       }
+      laserGlow.strokeWidth = (8f + 4f * life) * density
+      laserGlow.alpha = (70 * life).toInt()
+      canvas.drawPath(laserPath, laserGlow)
+      laserCore.strokeWidth = (2.2f + 1.3f * life) * density
+      laserCore.alpha = (255 * life).toInt()
+      canvas.drawPath(laserPath, laserCore)
     }
     if (laserDown) {
       // The pointer itself: a glowing red dot with a white-hot middle.
@@ -1530,7 +1539,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       laserDotPaint.color = 0xFFFFE4E6.toInt()
       canvas.drawCircle(s.x, s.y, 2.2f * density, laserDotPaint)
     }
-    postInvalidateOnAnimation()
+    // Keep drawing frames only while a stroke is fading; while drawing, the pen's moves redraw.
+    if (laserTrails.any { it.endedAt != 0L }) postInvalidateOnAnimation()
   }
 
   // ---- Eraser ----
@@ -2487,8 +2497,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val FILL_BRIDGE = 3f
     private const val HANDLE_HIT_DP = 24f
     private const val BUBBLE_H = 24f
-    /** How long each bit of the laser trail glows before it's gone. */
-    private const val LASER_LIFE_MS = 650L
+    /** How long a laser stroke takes to fade once the pen lifts. */
+    private const val LASER_FADE_MS = 600L
     /** A straight highlighter line this close to level or upright snaps to it. */
     private const val STRAIGHT_SNAP_DEG = 4.0
     /** A pen touch shorter than this that doesn't move is a tap. */
