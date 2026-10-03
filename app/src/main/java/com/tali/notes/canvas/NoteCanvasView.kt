@@ -651,6 +651,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawMeasure(canvas)
     drawEraserCursor(canvas)
     drawLaser(canvas)
+    drawHoldRing(canvas)
   }
 
   private fun drawLasso(canvas: Canvas) {
@@ -996,6 +997,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun handleTouch(e: MotionEvent) {
+    if ((0 until e.pointerCount).any { isStylus(e.getToolType(it)) }) {
+      lastPenAt = SystemClock.uptimeMillis()
+      cancelHold()
+    }
     // Any new touch catches a gliding page, like putting a finger on a moving list.
     if (e.actionMasked == MotionEvent.ACTION_DOWN) stopFling()
     when (e.actionMasked) {
@@ -1043,6 +1048,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
       }
       MotionEvent.ACTION_CANCEL -> {
+        // The system's own palm rejection cancels touches it decides were a palm.
+        cancelHold()
         if (isDrawingMode()) abortDrawing()
         mode = Mode.NONE
       }
@@ -1053,6 +1060,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     when (e.actionMasked) {
       MotionEvent.ACTION_HOVER_ENTER,
       MotionEvent.ACTION_HOVER_MOVE -> {
+        if (isStylus(e.getToolType(0))) {
+          lastPenAt = SystemClock.uptimeMillis()
+          cancelHold()
+        }
         eraserOverride = e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
         return true
       }
@@ -2066,11 +2077,28 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private var longPressed = false
 
-  /** A finger held still on a locked item unlocks it. */
+  /** The locked item a finger is being held on (to unlock it), or null. */
+  private var holdTarget: CanvasItem? = null
+  private var holdStart = 0L
+
+  /** When the S Pen last touched or hovered: a hand resting while she writes mustn't unlock anything. */
+  private var lastPenAt = 0L
+
+  /**
+   * A finger held still on a locked item for [LONG_PRESS_MS] unlocks it. Guarded against a resting
+   * palm or a stray touch: it must be a single fingertip-sized touch (a palm's contact is much
+   * larger), with no pen nearby in the last moment, that doesn't move or grow and isn't joined by
+   * another finger; any of those calls it off.
+   */
   private val longPress = Runnable {
-    if (mode != Mode.FINGER_PENDING || maxPointers != 1) return@Runnable
+    val target = holdTarget
+    holdTarget = null
+    invalidate()
+    if (mode != Mode.FINGER_PENDING || maxPointers != 1 || target == null) return@Runnable
+    if (SystemClock.uptimeMillis() - lastPenAt < PEN_NEARBY_MS) return@Runnable
     val d = doc ?: return@Runnable
     val item = hitTest(camera.toWorld(fingerStart.x, fingerStart.y), locked = true) { true } ?: return@Runnable
+    if (item.id != target.id) return@Runnable
     longPressed = true
     performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
     val unlocked = item.withLocked(false)
@@ -2094,7 +2122,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val locked = selection.map { it.withLocked(true) }
     d.commit(Change(selection, locked))
     clearSelection()
-    host.onHint(if (locked.size == 1) "Locked \u2014 hold it with a finger to unlock" else "${locked.size} items locked \u2014 hold one with a finger to unlock it")
+    host.onHint(if (locked.size == 1) "Locked \u2014 hold it to unlock" else "${locked.size} items locked \u2014 hold one to unlock it")
   }
 
   /** How many things in this notebook are locked. */
@@ -2125,12 +2153,62 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       multiTapMoved = false
       longPressed = false
       mode = Mode.FINGER_PENDING
-      removeCallbacks(longPress)
-      postDelayed(longPress, LONG_PRESS_MS)
+      cancelHold()
+      if (e.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER && fingertip(e) && SystemClock.uptimeMillis() - lastPenAt >= PEN_NEARBY_MS) {
+        holdTarget = hitTest(camera.toWorld(e.x, e.y), locked = true) { true }
+        if (holdTarget != null) {
+          holdStart = SystemClock.uptimeMillis()
+          postDelayed(longPress, LONG_PRESS_MS)
+          postInvalidateOnAnimation()
+        }
+      }
     } else {
+      cancelHold()
       maxPointers = max(maxPointers, e.pointerCount)
       startPinch(e)
     }
+  }
+
+  /** Whether every touch in [e] is fingertip-sized; a palm or the side of a hand is much larger. */
+  private fun fingertip(e: MotionEvent): Boolean {
+    val limit = PALM_MM * resources.displayMetrics.xdpi / 25.4f
+    // Some screens report no contact size (0): then only the other checks apply.
+    return (0 until e.pointerCount).all { e.getTouchMajor(it) <= limit }
+  }
+
+  private fun cancelHold() {
+    removeCallbacks(longPress)
+    if (holdTarget != null) {
+      holdTarget = null
+      invalidate()
+    }
+  }
+
+  private val holdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+  }
+  private val holdOval = RectF()
+
+  /**
+   * While a finger is held on a locked item, a ring fills around it, so she can see the hold is
+   * working. It only appears after a moment, so a passing touch shows nothing.
+   */
+  private fun drawHoldRing(canvas: Canvas) {
+    if (holdTarget == null) return
+    val t = (SystemClock.uptimeMillis() - holdStart - HOLD_RING_DELAY_MS).toFloat() / (LONG_PRESS_MS - HOLD_RING_DELAY_MS)
+    if (t > 0f) {
+      val r = 30f * density
+      holdOval.set(fingerStart.x - r, fingerStart.y - r, fingerStart.x + r, fingerStart.y + r)
+      val fade = (t * 4f).coerceAtMost(1f)
+      holdPaint.strokeWidth = 4f * density
+      holdPaint.color = 0xFF9B6BF2.toInt()
+      holdPaint.alpha = (60 * fade).toInt()
+      canvas.drawOval(holdOval, holdPaint)
+      holdPaint.alpha = (255 * fade).toInt()
+      canvas.drawArc(holdOval, -90f, 360f * t.coerceAtMost(1f), false, holdPaint)
+    }
+    postInvalidateOnAnimation()
   }
 
   private fun startPinch(e: MotionEvent) {
@@ -2166,6 +2244,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun fingerMove(e: MotionEvent) {
     velocity?.addMovement(e)
+    // A hold to unlock must stay put and stay fingertip-sized (a palm rolling down grows).
+    if (holdTarget != null && (hypot(e.x - fingerStart.x, e.y - fingerStart.y) > touchSlop / 2 || !fingertip(e) || e.pointerCount > 1)) cancelHold()
     when (mode) {
       Mode.FINGER_PENDING -> {
         if (hypot(e.x - fingerStart.x, e.y - fingerStart.y) > touchSlop) {
@@ -2197,6 +2277,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun fingerUp(e: MotionEvent) {
+    cancelHold()
     val quick = SystemClock.uptimeMillis() - fingerDownTime < MULTI_TAP_MS
     when {
       e.actionMasked == MotionEvent.ACTION_POINTER_UP -> {
@@ -2547,7 +2628,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val SNAP_ROTATE_RAD = 0.087f
     /** A pen touch shorter than this that doesn't move is a tap. */
     private const val PEN_TAP_MS = 250L
-    private const val LONG_PRESS_MS = 480L
+    /** How long a finger is held on a locked item to unlock it. */
+    private const val LONG_PRESS_MS = 1500L
+    /** The unlock ring starts filling only after this, so a passing touch shows nothing. */
+    private const val HOLD_RING_DELAY_MS = 300L
+    /** A touch wider than this (mm) is a palm or the side of a hand, not a fingertip. */
+    private const val PALM_MM = 14f
+    /** No unlocking while the S Pen touched or hovered this recently: her hand is resting to write. */
+    private const val PEN_NEARBY_MS = 1500L
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L
   }
