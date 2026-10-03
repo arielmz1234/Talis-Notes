@@ -26,6 +26,26 @@ object TaliIcons {
       }
       .build()
 
+  /** Short round dashes along an ellipse, as path data: a dotted loop drawn with the icon's stroke. */
+  private fun dottedEllipse(cx: Float, cy: Float, rx: Float, ry: Float, dashes: Int, start: Float = 0f): String = buildString {
+    val step = (2 * Math.PI / dashes).toFloat()
+    for (i in 0 until dashes) {
+      val t0 = start + i * step
+      val pts = (0..2).map { k -> t0 + step * 0.42f * k / 2f }.map { t -> (cx + rx * kotlin.math.cos(t)) to (cy + ry * kotlin.math.sin(t)) }
+      append("M${pts[0].first} ${pts[0].second} L${pts[1].first} ${pts[1].second} L${pts[2].first} ${pts[2].second} ")
+    }
+  }
+
+  /** The lasso (loop) selection: the lasso drawn dotted, with its tail. */
+  val LassoDotted: ImageVector by lazy {
+    outline("Lasso", dottedEllipse(12f, 9.3f, 8.2f, 5.5f, 12), "M8.2 14.2 C6.9 15.4 7.2 17.1 8.8 17.5 C10.2 17.9 10.4 19.2 9.4 20.4")
+  }
+
+  /** Free-form selection (trace over or touch things): a dotted circle. */
+  val FreeSelect: ImageVector by lazy {
+    outline("Free form", dottedEllipse(12f, 12f, 8.4f, 8.4f, 12, 0.13f))
+  }
+
   val Eraser: ImageVector by lazy {
     outline(
       "Eraser",

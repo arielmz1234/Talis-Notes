@@ -424,8 +424,16 @@ private val NO_FILL = Color(0x00FF00FF)
 fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
   PanelColumn(340) {
-    PanelTitle("Lasso")
-    Text("Circle anything to move, resize, recolour or copy it. Tap a single item with the lasso to pick just that one.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    PanelTitle("Select")
+    // The classic lasso loop, or free form: trace over or touch things (circling still works).
+    Segmented(listOf(false, true), settings.lassoFree, { if (it) "Free form" else "Lasso" }, vm::setLassoFree, Modifier.fillMaxWidth())
+    Spacer(Modifier.height(10.dp))
+    Text(
+      if (settings.lassoFree) "Trace over or touch anything to pick it up, or circle a group. Then move, resize, recolour or copy it."
+      else "Circle anything to move, resize, recolour or copy it. Tap a single item with the lasso to pick just that one.",
+      style = MaterialTheme.typography.bodyMedium,
+      color = c.inkMuted,
+    )
     Spacer(Modifier.height(14.dp))
     SectionLabel("Picks up")
     Spacer(Modifier.height(4.dp))

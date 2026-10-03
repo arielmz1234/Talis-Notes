@@ -46,4 +46,38 @@ object Lasso {
     fun on(p: Pt, q: Pt, r: Pt) = minOf(p.x, q.x) <= r.x && r.x <= maxOf(p.x, q.x) && minOf(p.y, q.y) <= r.y && r.y <= maxOf(p.y, q.y)
     return (d1 == 0f && on(c, d, a)) || (d2 == 0f && on(c, d, b)) || (d3 == 0f && on(a, b, c)) || (d4 == 0f && on(a, b, d))
   }
+
+  /**
+   * Free-form selecting: whether a pen [path] passes within [r] of the drawing [points] (a stroke
+   * or a shape's outline), so tracing over or touching something picks it up.
+   */
+  fun nearPath(points: List<Pt>, path: List<Pt>, r: Float): Boolean {
+    if (points.isEmpty() || path.isEmpty()) return false
+    val a = if (points.size == 1) listOf(points[0], points[0]) else points
+    val b = if (path.size == 1) listOf(path[0], path[0]) else path
+    for (i in 0 until a.size - 1) for (j in 0 until b.size - 1) {
+      if (segmentDistance(a[i], a[i + 1], b[j], b[j + 1]) <= r) return true
+    }
+    return false
+  }
+
+  /** Free-form selecting: whether a pen [path] passes within [r] of the rectangle [rect] (a picture or text). */
+  fun nearRect(rect: Rect, path: List<Pt>, r: Float): Boolean {
+    val grown = Rect(rect.left - r, rect.top - r, rect.right + r, rect.bottom + r)
+    if (path.any { grown.contains(it) }) return true
+    val corners = listOf(Pt(grown.left, grown.top), Pt(grown.right, grown.top), Pt(grown.right, grown.bottom), Pt(grown.left, grown.bottom))
+    for (j in 0 until path.size - 1) for (k in 0..3) if (segmentsCross(path[j], path[j + 1], corners[k], corners[(k + 1) % 4])) return true
+    return false
+  }
+
+  private fun pointSegment(p: Pt, a: Pt, b: Pt): Float {
+    val ab = b - a
+    val len = ab.dot(ab)
+    if (len < 1e-9f) return p.dist(a)
+    val t = ((p - a).dot(ab) / len).coerceIn(0f, 1f)
+    return p.dist(a + ab * t)
+  }
+
+  private fun segmentDistance(a: Pt, b: Pt, c: Pt, d: Pt): Float =
+    if (segmentsCross(a, b, c, d)) 0f else minOf(minOf(pointSegment(a, c, d), pointSegment(b, c, d)), minOf(pointSegment(c, a, b), pointSegment(d, a, b)))
 }

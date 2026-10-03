@@ -329,6 +329,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setLassoLocked(on: Boolean) = store.update { it.copy(lassoLocked = on) }
 
+  fun setLassoFree(on: Boolean) = store.update { it.copy(lassoFree = on) }
+
   fun setEraserMode(mode: EraserMode) = store.update { it.copy(eraserMode = mode) }
 
   fun setEraserSize(size: Float) = store.update { it.copy(eraserSize = size) }

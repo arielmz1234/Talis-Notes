@@ -60,6 +60,8 @@ data class AppSettings(
   /** Which pen styles the lasso can pick up. Missing entries mean yes. */
   val lassoAffects: Map<PenType, Boolean> = emptyMap(),
   val lassoSelectsImages: Boolean = true,
+  /** Free-form selecting: whatever the lasso tool's path passes over or touches is picked (circling still works). Off, it's the classic lasso loop. */
+  val lassoFree: Boolean = false,
   /** The lasso also picks up locked items (to move or unlock them). */
   val lassoLocked: Boolean = false,
   val eraserMode: EraserMode = EraserMode.STROKE,

@@ -676,6 +676,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val s = camera.toScreen(p)
       if (i == 0) lassoPath.moveTo(s.x, s.y) else lassoPath.lineTo(s.x, s.y)
     }
+    // Free form is a dotted trail of where she traced (closing up only once it comes round);
+    // the lasso is its closed, softly filled loop.
+    if (settings.lassoFree && !loopCloses(lassoPoints)) {
+      canvas.drawPath(lassoPath, lassoPaint)
+      return
+    }
     lassoPath.close()
     canvas.drawPath(lassoPath, lassoFill)
     canvas.drawPath(lassoPath, lassoPaint)
@@ -1990,11 +1996,35 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       return
     }
     val area = Rect.around(pts) ?: return
-    val picked = withFills(d.all.filter { item -> (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, pts) })
+    val free = settings.lassoFree
+    // Free form: whatever the path passes over or touches, plus everything in a loop if it closes.
+    val reach = FREE_SELECT_DP * density / camera.scale
+    val loop = !free || loopCloses(pts)
+    val near = Rect(area.left - reach, area.top - reach, area.right + reach, area.bottom + reach)
+    val picked = withFills(d.all.filter { item ->
+      (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(near) &&
+        ((loop && item.bounds.intersects(area) && lassoTouches(item, pts)) || (free && touchedBy(item, pts, reach)))
+    })
     setSelection(picked)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
   }
+
+  /** Whether a free-form path comes back round near where it started (it then picks up what's inside too). */
+  private fun loopCloses(pts: List<Pt>): Boolean {
+    if (pts.size < 8) return false
+    val gap = camera.toScreen(pts.first()).dist(camera.toScreen(pts.last()))
+    return gap < LOOP_CLOSE_DP * density && Geo.pathLength(pts) * camera.scale > 3 * LOOP_CLOSE_DP * density
+  }
+
+  /** Free form: whether the traced [path] passes over or within [r] of [item]. A slide (PDF page) isn't picked by tracing over it. */
+  private fun touchedBy(item: CanvasItem, path: List<Pt>, r: Float): Boolean =
+    when (item) {
+      is InkItem -> Lasso.nearPath(StrokeFactory.points(item.stroke), path, r)
+      is ShapeItem -> item.geometry.paths(item.size).any { Lasso.nearPath(it, path, r) }
+      is ImageItem -> !item.pdfPage && Lasso.nearRect(item.rect, path, r)
+      is TextItem -> Lasso.nearRect(item.bounds, path, r)
+    }
 
   /**
    * Whether the lasso loop [poly] picks up [item]: anything it touches (see [Lasso]). Imported PDF
@@ -3151,6 +3181,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val LASER_FADE_MS = 450L
     /** A straight highlighter line this close to level or upright snaps to it. */
     private const val STRAIGHT_SNAP_DEG = 4.0
+    /** Free-form selecting picks up anything the path passes within this distance of (dp on screen). */
+    private const val FREE_SELECT_DP = 10f
+    /** A free-form path ending within this distance of its start (dp on screen) closes into a loop. */
+    private const val LOOP_CLOSE_DP = 40f
     /** How far (dp, each way) the resize chip sits out from the selection's padded corner. */
     private const val RESIZE_CHIP_OFFSET_DP = 14f
     /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */
