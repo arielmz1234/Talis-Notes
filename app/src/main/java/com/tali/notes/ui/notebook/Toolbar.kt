@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -161,48 +164,108 @@ fun MainToolbar(
       Tool.LASER -> "Laser"
       else -> null
     }
-    Row(Modifier.slidingHighlight(tools, toolKey, SolidColor(c.blueSoft), 14.dp), verticalAlignment = Alignment.CenterVertically) {
-      ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true, selection = tools) { onTool(Tool.ERASER) }
-      ToolButton(TaliIcons.Lasso, "Lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
-      ToolButton(Icons.Outlined.FormatColorFill, "Fill", selected = tool == Tool.FILL, blue = true, selection = tools) { onTool(Tool.FILL) }
-      ToolButton(TaliIcons.Laser, "Laser", selected = tool == Tool.LASER, blue = true, selection = tools) { onTool(Tool.LASER) }
-      // While the shape tool is on, its button shows which shape it will draw.
-      Box(
-        Modifier.slidingOption(tools, "Shapes").size(44.dp).clip(RoundedCornerShape(14.dp))
-          .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = "Shapes") { onTool(Tool.SHAPE) },
-        contentAlignment = Alignment.Center,
-      ) {
-        when {
-          tool != Tool.SHAPE -> Icon(Icons.Outlined.Category, "Shapes", tint = c.ink, modifier = Modifier.size(22.dp))
-          customShape != null -> GeometryIcon(customShape.geometry, c.blue, size = 26.dp)
-          else -> ShapeIcon(shapeKind, c.blue, size = 26.dp)
+    val items: List<Pair<String, @Composable () -> Unit>> = listOf(
+      "Eraser" to { ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true, selection = tools) { onTool(Tool.ERASER) } },
+      "Lasso" to { ToolButton(TaliIcons.Lasso, "Lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) } },
+      "Fill" to { ToolButton(Icons.Outlined.FormatColorFill, "Fill", selected = tool == Tool.FILL, blue = true, selection = tools) { onTool(Tool.FILL) } },
+      "Laser" to { ToolButton(TaliIcons.Laser, "Laser", selected = tool == Tool.LASER, blue = true, selection = tools) { onTool(Tool.LASER) } },
+      "Shapes" to {
+        // While the shape tool is on, its button shows which shape it will draw.
+        Box(
+          Modifier.slidingOption(tools, "Shapes").size(44.dp).clip(RoundedCornerShape(14.dp))
+            .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = "Shapes") { onTool(Tool.SHAPE) },
+          contentAlignment = Alignment.Center,
+        ) {
+          when {
+            tool != Tool.SHAPE -> Icon(Icons.Outlined.Category, "Shapes", tint = c.ink, modifier = Modifier.size(22.dp))
+            customShape != null -> GeometryIcon(customShape.geometry, c.blue, size = 26.dp)
+            else -> ShapeIcon(shapeKind, c.blue, size = 26.dp)
+          }
+        }
+      },
+      "Insert" to {
+        Box {
+          var inserting by remember { mutableStateOf(false) }
+          ToolButton(Icons.Outlined.AddPhotoAlternate, "Insert") { inserting = true }
+          DropdownMenu(expanded = inserting, onDismissRequest = { inserting = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+            DropdownMenuItem(
+              text = { Column { Text("Picture"); Text("From your photos or files", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              leadingIcon = { Icon(Icons.Outlined.Image, null, tint = c.blue) },
+              onClick = { inserting = false; onImage() },
+            )
+            DropdownMenuItem(
+              text = { Column { Text("Take a photo"); Text("The board, a textbook page, a sketch", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              leadingIcon = { Icon(Icons.Outlined.PhotoCamera, null, tint = c.blue) },
+              onClick = { inserting = false; onCamera() },
+            )
+            DropdownMenuItem(
+              text = { Column { Text("PDF pages"); Text("Lecture slides or a problem sheet to write on", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null, tint = c.blue) },
+              onClick = { inserting = false; onPdf() },
+            )
+          }
+        }
+      },
+      // Typing: a text block where the next line would go.
+      "Keyboard" to { ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard) },
+    )
+    ToolStrip(items, toolKey, tools)
+  }
+}
+
+/**
+ * The tools after the pens. When they all fit (almost always) they simply sit in a row. Only
+ * when the bar runs out of room (held upright with many pens and colours) they're split into
+ * pages with an arrow at the end, and the arrow slides to the next page, so nothing is cut off.
+ */
+@Composable
+private fun ToolStrip(items: List<Pair<String, @Composable () -> Unit>>, selectedKey: String?, selection: com.tali.notes.ui.components.SlidingSelection) {
+  val c = Tali.colors
+  androidx.compose.foundation.layout.BoxWithConstraints {
+    val item = 44.dp
+    val arrow = 30.dp
+    if (maxWidth >= item * items.size + 2.dp) {
+      Row(Modifier.slidingHighlight(selection, selectedKey, SolidColor(c.blueSoft), 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        items.forEach { (key, content) -> androidx.compose.runtime.key(key) { content() } }
+        Spacer(Modifier.width(2.dp))
+      }
+      return@BoxWithConstraints
+    }
+    val per = ((maxWidth - arrow) / item).toInt().coerceIn(1, items.size)
+    val pages = items.chunked(per)
+    var page by remember { mutableStateOf(0) }
+    if (page >= pages.size) page = pages.size - 1
+    // A tool chosen elsewhere (from a panel, say) brings its page into view.
+    LaunchedEffect(selectedKey, pages.size) {
+      val at = pages.indexOfFirst { p -> p.any { it.first == selectedKey } }
+      if (at >= 0) page = at
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      androidx.compose.animation.AnimatedContent(
+        targetState = page,
+        transitionSpec = {
+          val forward = targetState > initialState
+          (androidx.compose.animation.slideInHorizontally(tween(240, easing = EaseOutStrong)) { w -> if (forward) w / 2 else -w / 2 } + fadeIn(tween(160, delayMillis = 40)))
+            .togetherWith(androidx.compose.animation.slideOutHorizontally(tween(200, easing = EaseOutStrong)) { w -> if (forward) -w / 2 else w / 2 } + fadeOut(tween(120)))
+            .using(androidx.compose.animation.SizeTransform(clip = true))
+        },
+        label = "toolPage",
+      ) { p ->
+        Row(Modifier.slidingHighlight(selection, selectedKey, SolidColor(c.blueSoft), 14.dp), verticalAlignment = Alignment.CenterVertically) {
+          pages[p].forEach { (key, content) -> androidx.compose.runtime.key(key) { content() } }
         }
       }
-    }
-    Box {
-      var inserting by remember { mutableStateOf(false) }
-      ToolButton(Icons.Outlined.AddPhotoAlternate, "Insert") { inserting = true }
-      DropdownMenu(expanded = inserting, onDismissRequest = { inserting = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-        DropdownMenuItem(
-          text = { Column { Text("Picture"); Text("From your photos or files", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-          leadingIcon = { Icon(Icons.Outlined.Image, null, tint = c.blue) },
-          onClick = { inserting = false; onImage() },
-        )
-        DropdownMenuItem(
-          text = { Column { Text("Take a photo"); Text("The board, a textbook page, a sketch", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-          leadingIcon = { Icon(Icons.Outlined.PhotoCamera, null, tint = c.blue) },
-          onClick = { inserting = false; onCamera() },
-        )
-        DropdownMenuItem(
-          text = { Column { Text("PDF pages"); Text("Lecture slides or a problem sheet to write on", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-          leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null, tint = c.blue) },
-          onClick = { inserting = false; onPdf() },
-        )
+      // The arrow turns round on the last page, pointing back to the first.
+      val last = page == pages.size - 1
+      val turn by animateFloatAsState(if (last) 180f else 0f, tween(220, easing = EaseOutStrong), label = "toolArrow")
+      Box(
+        Modifier.size(arrow, 44.dp).clip(RoundedCornerShape(10.dp))
+          .clickable(onClickLabel = if (last) "First tools" else "More tools", role = Role.Button) { page = if (last) 0 else page + 1 },
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, if (last) "First tools" else "More tools", tint = c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
       }
     }
-    // Typing: a text block where the next line would go.
-    ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard)
-    Spacer(Modifier.width(2.dp))
   }
 }
 
