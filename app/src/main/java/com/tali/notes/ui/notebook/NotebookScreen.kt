@@ -666,6 +666,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         holder.view?.runSafely { goToPage(index) }
       },
       onAdd = { holder.view?.runSafely { insertPageAfter((vm.pageCount ?: 1) - 1) } },
+      onRearrange = { order, message ->
+        holder.view?.runSafely { rearrangePages(order) }
+        vm.showHint(message)
+      },
       onMove = { from, to ->
         holder.view?.runSafely { movePage(from, to) }
         vm.showHint("Page ${from + 1} moved to ${to + 1}")

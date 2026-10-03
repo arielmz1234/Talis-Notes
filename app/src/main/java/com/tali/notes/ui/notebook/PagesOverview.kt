@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -98,6 +101,7 @@ fun PagesOverview(
   onAdd: () -> Unit,
   onMove: (from: Int, to: Int) -> Unit,
   onDelete: (Int) -> Unit,
+  onRearrange: (order: List<Int>, message: String) -> Unit,
 ) = androidx.compose.runtime.CompositionLocalProvider(LocalPageAspect provides vm.pageLayout.aspect) {
   val c = Tali.colors
   var peek by remember { mutableStateOf<Int?>(null) }
@@ -106,6 +110,20 @@ fun PagesOverview(
   var removing by remember { mutableStateOf<Int?>(null) }
   // Deleting a page asks first.
   var confirming by remember { mutableStateOf<Int?>(null) }
+  // Picking several pages (to duplicate or delete them together); null when not picking.
+  var picked by remember { mutableStateOf<Set<Int>?>(null) }
+  var deletingPicked by remember { mutableStateOf(false) }
+  // Pages puffing away together after a multi-delete, then the new order to lay them out in.
+  var vanishing by remember { mutableStateOf(emptySet<Int>()) }
+  var pendingOrder by remember { mutableStateOf<Pair<List<Int>, String>?>(null) }
+  LaunchedEffect(pendingOrder) {
+    val (order, message) = pendingOrder ?: return@LaunchedEffect
+    kotlinx.coroutines.delay(com.tali.notes.ui.components.PUFF_LEAVE_MS.toLong())
+    onRearrange(order, message)
+    vanishing = emptySet()
+    pendingOrder = null
+  }
+  LaunchedEffect(count) { picked = null }
   LaunchedEffect(removing) {
     val i = removing ?: return@LaunchedEffect
     kotlinx.coroutines.delay(com.tali.notes.ui.components.PUFF_LEAVE_MS.toLong())
@@ -177,7 +195,7 @@ fun PagesOverview(
       order = (0 until count).toList()
     }
   }
-  Dialog(onDismissRequest = { if (peek != null) peek = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+  Dialog(onDismissRequest = { if (peek != null) peek = null else if (picked != null) picked = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     com.tali.notes.ui.components.KeepFullScreen()
     // A deleted page's puff drifts out over the panel's edge freely instead of being cut off by the grid.
     com.tali.notes.ui.components.PuffLayerHost(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss), contentAlignment = Alignment.Center) {
@@ -192,12 +210,42 @@ fun PagesOverview(
           Column(Modifier.weight(1f)) {
             Text("Pages", style = MaterialTheme.typography.titleLarge, color = c.ink)
             Text(
-              (if (count == 1) "1 page" else "$count pages") + " · tap a page to look closer, hold and drag to move it",
+              if (picked != null) "Tap pages to pick them"
+              else (if (count == 1) "1 page" else "$count pages") + " · tap a page to look closer, hold and drag to move it",
               style = MaterialTheme.typography.bodyMedium,
               color = c.inkMuted,
             )
           }
-          QuietButton("Done", onClick = onDismiss)
+          androidx.compose.animation.AnimatedContent(
+            targetState = picked != null,
+            transitionSpec = { (fadeIn(tween(180, delayMillis = 60)) + androidx.compose.animation.slideInVertically(tween(220, easing = com.tali.notes.ui.components.EaseOutStrong)) { it / 3 }).togetherWith(fadeOut(tween(120))) },
+            label = "pagesActions",
+          ) { picking ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              if (picking) {
+                val chosen = picked.orEmpty()
+                Text(if (chosen.size == 1) "1 selected" else "${chosen.size} selected", style = MaterialTheme.typography.titleMedium, color = c.ink)
+                Spacer(Modifier.width(12.dp))
+                QuietButton(if (chosen.size == count) "Select none" else "Select all") { picked = if (chosen.size == count) emptySet() else (0 until count).toSet() }
+                Spacer(Modifier.width(10.dp))
+                Row(Modifier.clip(RoundedCornerShape(16.dp)).background(c.sunken.copy(alpha = 0.7f)).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                  com.tali.notes.ui.components.ToolButton(Icons.Outlined.ContentCopy, "Duplicate", enabled = chosen.isNotEmpty()) {
+                    onRearrange(com.tali.notes.canvas.Pages.withCopies(count, chosen), if (chosen.size == 1) "Page duplicated" else "${chosen.size} pages duplicated")
+                    picked = null
+                  }
+                  com.tali.notes.ui.components.ToolButton(Icons.Outlined.DeleteOutline, "Delete", enabled = chosen.isNotEmpty()) { deletingPicked = true }
+                }
+                Spacer(Modifier.width(10.dp))
+                PrimaryButton("Done") { picked = null }
+              } else {
+                if (count > 1) {
+                  QuietButton("Select") { picked = emptySet() }
+                  Spacer(Modifier.width(8.dp))
+                }
+                QuietButton("Done", onClick = onDismiss)
+              }
+            }
+          }
         }
         Spacer(Modifier.height(18.dp))
         LazyVerticalGrid(
@@ -212,17 +260,22 @@ fun PagesOverview(
           items(order, key = { it }) { i ->
             val lifted = dragging == i
             val pos = order.indexOf(i)
+            val chosen = picked
             PageTile(
               vm, items, i, version,
               number = pos + 1,
               selected = pos == current,
-              leaving = i == removing,
+              leaving = i == removing || i in vanishing,
+              picking = chosen != null,
+              picked = chosen?.contains(i) == true,
               lifted = lifted,
               cached = thumbs[i],
               onPicture = { thumbs[i] = it },
               modifier = (if (lifted) Modifier.zIndex(2f).graphicsLayer { translationX = dragOffset.x; translationY = dragOffset.y }
                 else Modifier.animateItem(placementSpec = if (settling) null else spring(dampingRatio = 0.85f, stiffness = 500f, visibilityThreshold = androidx.compose.ui.unit.IntOffset.VisibilityThreshold)))
-                .pointerInput(i, count) {
+                .pointerInput(i, count, chosen != null) {
+                  // While picking, holding doesn't pick a page up to move it.
+                  if (chosen != null) return@pointerInput
                   detectDragGesturesAfterLongPress(
                     onDragStart = { dragging = i; dragOffset = androidx.compose.ui.geometry.Offset.Zero },
                     onDrag = { change, delta -> change.consume(); dragBy(delta) },
@@ -231,8 +284,11 @@ fun PagesOverview(
                   )
                 },
             ) {
-              lastPeek = i
-              peek = i
+              if (chosen != null) picked = (if (i in chosen) chosen - i else chosen + i)
+              else {
+                lastPeek = i
+                peek = i
+              }
             }
           }
           item(key = "add") { Box(Modifier.animateItem()) { AddPageTile(onAdd) } }
@@ -244,6 +300,23 @@ fun PagesOverview(
         exit = fadeOut(tween(130)) + scaleOut(tween(130), targetScale = 0.92f),
       ) {
         PagePeek(vm, items, lastPeek, version, single = count == 1, onClose = { peek = null }, onGo = { onGo(lastPeek) }) { confirming = lastPeek }
+      }
+    }
+    if (deletingPicked) {
+      val gone = picked.orEmpty()
+      val all = gone.size == count
+      com.tali.notes.ui.library.ConfirmDialog(
+        title = if (all) "Clear every page?" else if (gone.size == 1) "Delete 1 page?" else "Delete ${gone.size} pages?",
+        body = if (all) "Everything on them is removed and one empty page stays. Undo brings it back." else "They go with everything on them, and the pages after move up. Undo brings them back.",
+        confirm = if (all) "Clear pages" else "Delete",
+        destructive = true,
+        onDismiss = { deletingPicked = false },
+      ) {
+        deletingPicked = false
+        picked = null
+        // The pages lift away in a puff together, then go.
+        vanishing = gone
+        pendingOrder = com.tali.notes.canvas.Pages.withoutPages(count, gone) to (if (all) "Pages cleared \u2014 undo brings them back" else if (gone.size == 1) "Page deleted \u2014 undo brings it back" else "${gone.size} pages deleted \u2014 undo brings them back")
       }
     }
     confirming?.let { i ->
@@ -284,6 +357,8 @@ private fun PageTile(
   number: Int,
   selected: Boolean,
   leaving: Boolean,
+  picking: Boolean = false,
+  picked: Boolean = false,
   lifted: Boolean,
   cached: ImageBitmap?,
   onPicture: (ImageBitmap) -> Unit,
@@ -307,10 +382,25 @@ private fun PageTile(
         .shadow((if (selected) 10.dp else 5.dp) + 14.dp * lift, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6))
         .clip(shape)
         .background(Color.White)
-        .border(if (selected) 2.5.dp else 1.dp, if (selected) c.accent else c.line, shape)
-        .clickable(onClickLabel = "Look at page $number", onClick = onClick)
+        .border(if (selected || picked) 2.5.dp else 1.dp, if (selected || picked) c.accent else c.line, shape)
+        .clickable(onClickLabel = if (picking) "Pick page $number" else "Look at page $number", onClick = onClick)
     ) {
       if (image != null) Image(image, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+      // While picking, a check circle in the corner: filled when picked.
+      androidx.compose.animation.AnimatedVisibility(
+        picking,
+        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+        enter = fadeIn(tween(160)) + scaleIn(tween(200, easing = com.tali.notes.ui.components.EaseOutStrong), initialScale = 0.7f),
+        exit = fadeOut(tween(110)) + scaleOut(tween(110), targetScale = 0.85f),
+      ) {
+        val fill by androidx.compose.animation.animateColorAsState(if (picked) c.accent else Color.White.copy(alpha = 0.9f), tween(150), label = "pagePick")
+        Box(
+          Modifier.size(26.dp).shadow(3.dp, CircleShape).clip(CircleShape).background(fill).border(1.5.dp, if (picked) c.accent else c.inkFaint, CircleShape),
+          contentAlignment = Alignment.Center,
+        ) {
+          if (picked) Icon(Icons.Outlined.Check, "Picked", tint = Color.White, modifier = Modifier.size(16.dp))
+        }
+      }
     }
     Spacer(Modifier.height(8.dp))
     Text(

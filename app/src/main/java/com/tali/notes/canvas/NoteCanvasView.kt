@@ -2913,6 +2913,35 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (before.isNotEmpty()) d.commit(Change(before, after))
   }
 
+  /**
+   * Lays the pages out again as [order] (old page numbers, top to bottom): a page left out is
+   * deleted with everything on it, a page listed again is copied (its writing too). One undo step.
+   * With nothing left, one empty page stays.
+   */
+  fun rearrangePages(order: List<Int>) {
+    val d = doc ?: return
+    val n = pageCount ?: return
+    val pitch = pageLayout.pitch
+    val byPage = d.all.groupBy { floor(it.bounds.center.y / pitch).toInt().coerceIn(0, n - 1) }
+    val before = ArrayList<CanvasItem>()
+    val after = ArrayList<CanvasItem>()
+    val placed = HashSet<Int>()
+    order.forEachIndexed { j, p ->
+      val shift = Affine.translate(0f, (j - p) * pitch)
+      val items = byPage[p].orEmpty()
+      if (placed.add(p)) {
+        if (j != p) items.forEach { before += it; after += it.transformed(shift) }
+      } else {
+        items.forEach { after += it.transformed(shift, d.newId(), d.nextZ()) }
+      }
+    }
+    (0 until n).filterNot { it in placed }.forEach { p -> before += byPage[p].orEmpty() }
+    clearSelection()
+    setPages(order.size.coerceAtLeast(1))
+    if (before.isNotEmpty() || after.isNotEmpty()) d.commit(Change(before, after))
+    goToPage(currentPage().coerceAtMost(order.size.coerceAtLeast(1) - 1))
+  }
+
   fun deletePage(index: Int) {
     val d = doc ?: return
     val n = pageCount ?: return

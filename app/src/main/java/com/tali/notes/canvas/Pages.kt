@@ -36,6 +36,12 @@ class Pages private constructor(val landscape: Boolean) {
   fun needed(content: Rect?): Int = if (content == null) 1 else (indexAt(content.bottom) + 1).coerceAtLeast(1)
 
   companion object {
+    /** The pages left after deleting [gone] (by index) from [count]: the order to lay them out in. */
+    fun withoutPages(count: Int, gone: Set<Int>): List<Int> = (0 until count).filterNot { it in gone }
+
+    /** Every page, each one in [copied] followed straight after by its copy. */
+    fun withCopies(count: Int, copied: Set<Int>): List<Int> = (0 until count).flatMap { if (it in copied) listOf(it, it) else listOf(it) }
+
     /** Where page [p] ends up when page [from] is moved to position [to] (the ones between shift one place). */
     fun movedIndex(p: Int, from: Int, to: Int): Int =
       when {
