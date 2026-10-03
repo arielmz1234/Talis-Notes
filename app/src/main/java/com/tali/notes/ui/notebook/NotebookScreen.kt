@@ -670,10 +670,6 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         holder.view?.runSafely { rearrangePages(order) }
         vm.showHint(message)
       },
-      onMove = { from, to ->
-        holder.view?.runSafely { movePage(from, to) }
-        vm.showHint("Page ${from + 1} moved to ${to + 1}")
-      },
       onDelete = { index ->
         holder.view?.runSafely { deletePage(index) }
         vm.showHint("Page ${index + 1} deleted \u2014 undo brings the writing back")

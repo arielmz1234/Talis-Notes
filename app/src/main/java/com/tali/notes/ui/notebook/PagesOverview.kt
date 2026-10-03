@@ -99,7 +99,6 @@ fun PagesOverview(
   onDismiss: () -> Unit,
   onGo: (Int) -> Unit,
   onAdd: () -> Unit,
-  onMove: (from: Int, to: Int) -> Unit,
   onDelete: (Int) -> Unit,
   onRearrange: (order: List<Int>, message: String) -> Unit,
 ) = androidx.compose.runtime.CompositionLocalProvider(LocalPageAspect provides vm.pageLayout.aspect) {
@@ -135,10 +134,16 @@ fun PagesOverview(
   val grid = rememberLazyGridState()
   LaunchedEffect(Unit) { grid.scrollToItem(current.coerceIn(0, count - 1)) }
   // Hold a page (finger or pen) and drag it to a new place: the others make way as it passes, and
-  // it moves for real when let go. `order` is the pages as shown, by their real index.
+  // it moves for real when let go (picked pages in an unbroken run move together). `order` is the
+  // pages as shown, by their real index.
   var order by remember(count, version) { mutableStateOf((0 until count).toList()) }
+  // The page held (its real index), and the pages carried with it: just it, or a picked unbroken
+  // run of pages, which move together.
   var dragging by remember { mutableStateOf<Int?>(null) }
-  var dragOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+  var carried by remember { mutableStateOf(emptyList<Int>()) }
+  // Where the held tile should be drawn (its top-left in the grid's view): it follows the finger,
+  // whatever slot the tile has moved to in the meantime, and through scrolling.
+  var dragPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
   // Each page's latest picture, so after a move the tiles keep showing the right page while
   // their new pictures are made (instead of flashing blank).
   val thumbs = remember(count) { androidx.compose.runtime.mutableStateMapOf<Int, ImageBitmap>() }
@@ -147,52 +152,65 @@ fun PagesOverview(
   LaunchedEffect(version) { settling = false }
   val edgePx = with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
   fun itemInfo(key: Any) = grid.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }
+  /** How far the carried tiles are drawn from their slots: the held tile's drawn place minus its slot. */
+  fun lift(): androidx.compose.ui.geometry.Offset {
+    val me = itemInfo(dragging ?: return androidx.compose.ui.geometry.Offset.Zero) ?: return androidx.compose.ui.geometry.Offset.Zero
+    return dragPos - androidx.compose.ui.geometry.Offset(me.offset.x.toFloat(), me.offset.y.toFloat())
+  }
+  /** Picked pages that sit together with no gap (and include [page]), else just [page]. */
+  fun runWith(page: Int): List<Int> {
+    val chosen = picked ?: return listOf(page)
+    if (page !in chosen) return listOf(page)
+    val sorted = chosen.sorted()
+    return if (sorted.last() - sorted.first() == sorted.size - 1) sorted else listOf(page)
+  }
+  fun startDrag(page: Int) {
+    val me = itemInfo(page) ?: return
+    dragging = page
+    carried = runWith(page)
+    dragPos = androidx.compose.ui.geometry.Offset(me.offset.x.toFloat(), me.offset.y.toFloat())
+  }
   fun dragBy(delta: androidx.compose.ui.geometry.Offset) {
     val key = dragging ?: return
-    dragOffset += delta
+    dragPos += delta
     val me = itemInfo(key) ?: return
-    val centre = androidx.compose.ui.geometry.Offset(me.offset.x + dragOffset.x + me.size.width / 2f, me.offset.y + dragOffset.y + me.size.height / 2f)
+    val centre = androidx.compose.ui.geometry.Offset(dragPos.x + me.size.width / 2f, dragPos.y + me.size.height / 2f)
     val target = grid.layoutInfo.visibleItemsInfo.firstOrNull { info ->
-      info.key is Int && info.key != key &&
+      info.key is Int && info.key !in carried &&
         centre.x >= info.offset.x && centre.x <= info.offset.x + info.size.width &&
         centre.y >= info.offset.y && centre.y <= info.offset.y + info.size.height
     }
     if (target != null) {
-      val from = order.indexOf(key)
-      val to = order.indexOf(target.key as Int)
-      if (from >= 0 && to >= 0) {
-        order = order.toMutableList().apply { add(to, removeAt(from)) }
-        // The tile now sits where the target was: keep it under the finger.
-        dragOffset += androidx.compose.ui.geometry.Offset((me.offset.x - target.offset.x).toFloat(), (me.offset.y - target.offset.y).toFloat())
-      }
+      // The carried pages move as one block to where the target is.
+      val t = target.key as Int
+      val from = order.indexOf(carried.first())
+      val rest = order.filterNot { it in carried }
+      val at = rest.indexOf(t).let { if (order.indexOf(t) > from) it + 1 else it }
+      order = rest.toMutableList().apply { addAll(at.coerceIn(0, rest.size), carried) }
     }
     // Near the top or bottom edge, the grid scrolls along.
     val view = grid.layoutInfo.viewportSize.height
-    val edge = edgePx
-    val y = me.offset.y + dragOffset.y + me.size.height / 2f
+    val y = dragPos.y + me.size.height / 2f
     val scroll = when {
-      y < edge -> -(edge - y) * 0.25f
-      y > view - edge -> (y - (view - edge)) * 0.25f
+      y < edgePx -> -(edgePx - y) * 0.25f
+      y > view - edgePx -> (y - (view - edgePx)) * 0.25f
       else -> 0f
     }
-    if (scroll != 0f) {
-      val moved = grid.dispatchRawDelta(scroll)
-      dragOffset += androidx.compose.ui.geometry.Offset(0f, moved)
-    }
+    if (scroll != 0f) grid.dispatchRawDelta(scroll)
   }
   fun drop() {
-    val key = dragging ?: return
+    val held = dragging ?: return
+    val block = carried
     dragging = null
-    dragOffset = androidx.compose.ui.geometry.Offset.Zero
-    val to = order.indexOf(key)
-    if (to >= 0 && to != key) {
+    carried = emptyList()
+    if (order != (0 until count).toList()) {
       // The pictures follow their pages to their new places.
       val moved = order.mapIndexed { pos, page -> pos to thumbs[page] }
       moved.forEach { (pos, img) -> if (img != null) thumbs[pos] = img else thumbs.remove(pos) }
       settling = true
-      onMove(key, to)
-    } else {
-      order = (0 until count).toList()
+      val pages = order.toList()
+      picked = null
+      onRearrange(pages, if (block.size > 1) "${block.size} pages moved" else "Page ${held + 1} moved to ${pages.indexOf(held) + 1}")
     }
   }
   Dialog(onDismissRequest = { if (peek != null) peek = null else if (picked != null) picked = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -258,7 +276,7 @@ fun PagesOverview(
           modifier = Modifier.weight(1f),
         ) {
           items(order, key = { it }) { i ->
-            val lifted = dragging == i
+            val lifted = i in carried
             val pos = order.indexOf(i)
             val chosen = picked
             PageTile(
@@ -271,13 +289,13 @@ fun PagesOverview(
               lifted = lifted,
               cached = thumbs[i],
               onPicture = { thumbs[i] = it },
-              modifier = (if (lifted) Modifier.zIndex(2f).graphicsLayer { translationX = dragOffset.x; translationY = dragOffset.y }
+              modifier = (if (i in carried) Modifier.zIndex(if (lifted) 3f else 2f).graphicsLayer { val l = lift(); translationX = l.x; translationY = l.y }
                 else Modifier.animateItem(placementSpec = if (settling) null else spring(dampingRatio = 0.85f, stiffness = 500f, visibilityThreshold = androidx.compose.ui.unit.IntOffset.VisibilityThreshold)))
-                .pointerInput(i, count, chosen != null) {
-                  // While picking, holding doesn't pick a page up to move it.
-                  if (chosen != null) return@pointerInput
+                .pointerInput(i, count, chosen) {
+                  // While picking, only a picked page can be held, and it brings its unbroken run along.
+                  if (chosen != null && i !in chosen) return@pointerInput
                   detectDragGesturesAfterLongPress(
-                    onDragStart = { dragging = i; dragOffset = androidx.compose.ui.geometry.Offset.Zero },
+                    onDragStart = { startDrag(i) },
                     onDrag = { change, delta -> change.consume(); dragBy(delta) },
                     onDragEnd = { drop() },
                     onDragCancel = { drop() },
