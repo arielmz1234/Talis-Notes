@@ -1,5 +1,9 @@
 package com.tali.notes.ui.library
 
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.togetherWith
 import android.app.Application
 import android.content.Intent
 import androidx.compose.animation.core.animateFloatAsState
@@ -172,6 +176,12 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   var backups by remember { mutableStateOf(false) }
   val currentFolder = folders.firstOrNull { it.id == selected }
   val inTrash = selected == LibraryViewModel.TRASH
+  // Picking several notebooks at once (to move, duplicate or delete them together).
+  var picked by remember { mutableStateOf<Set<String>?>(null) }
+  var deletingPicked by remember { mutableStateOf(false) }
+  // Changing folder or opening Recently deleted ends picking (and so does unticking the last one).
+  LaunchedEffect(selected) { picked = null }
+  androidx.activity.compose.BackHandler(enabled = picked != null) { picked = null }
   // Leave Recently deleted once it's empty.
   LaunchedEffect(inTrash, trash.isEmpty()) { if (inTrash && trash.isEmpty()) vm.selectedFolder.value = null }
   val context = LocalContext.current
@@ -228,10 +238,38 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         }
       }
       val actions: @Composable (Modifier) -> Unit = { mod ->
-        SearchField(query, onChange = { vm.query.value = it }, modifier = mod)
-        Spacer(Modifier.width(12.dp))
-        if (inTrash) QuietButton("Empty", color = c.danger) { emptyingTrash = true }
-        else PrimaryButton("New notebook", Icons.Outlined.Add) { creating = true }
+        androidx.compose.animation.AnimatedContent(
+          targetState = picked != null,
+          transitionSpec = { (fadeIn(tween(180, delayMillis = 60)) + androidx.compose.animation.slideInVertically(tween(220, easing = com.tali.notes.ui.components.EaseOutStrong)) { it / 3 }).togetherWith(fadeOut(tween(120))) },
+          label = "libraryActions",
+        ) { picking ->
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            if (picking) {
+              val chosen = picked.orEmpty()
+              PickBar(
+                count = chosen.size,
+                allPicked = notebooks.isNotEmpty() && notebooks.all { it.id in chosen },
+                folders = folders,
+                onAll = { picked = if (notebooks.all { it.id in chosen }) emptySet() else notebooks.map { it.id }.toSet() },
+                onMove = { folder -> chosen.forEach { vm.moveToFolder(it, folder) }; picked = null },
+                onDuplicate = { chosen.forEach { vm.duplicate(it) }; picked = null },
+                onDelete = { deletingPicked = true },
+                onDone = { picked = null },
+              )
+            } else {
+              SearchField(query, onChange = { vm.query.value = it }, modifier = mod)
+              Spacer(Modifier.width(12.dp))
+              if (inTrash) QuietButton("Empty", color = c.danger) { emptyingTrash = true }
+              else {
+                if (notebooks.isNotEmpty()) {
+                  QuietButton("Select") { picked = emptySet() }
+                  Spacer(Modifier.width(8.dp))
+                }
+                PrimaryButton("New notebook", Icons.Outlined.Add) { creating = true }
+              }
+            }
+          }
+        }
       }
       // Held upright there isn't room for all of it on one line: the search and button go underneath.
       if (LocalConfiguration.current.screenWidthDp < 1000) {
@@ -305,10 +343,14 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             }
             items(notebooks, key = { it.id }) { nb ->
               PuffBox(leaving = nb.id in vanishing, appearing = false) {
+              val chosen = picked
               NotebookCard(
                 nb,
                 folders = folders,
                 thumbnail = vm.thumbnailFile(nb.id),
+                picking = chosen != null,
+                picked = chosen?.contains(nb.id) == true,
+                onPick = { picked = (picked ?: emptySet()).let { if (nb.id in it) it - nb.id else it + nb.id }.takeIf { it.isNotEmpty() } },
                 onOpen = { if (inTrash) trashAction = nb else onOpen(nb.id) },
                 onRename = { renaming = nb },
                 onDuplicate = { vm.duplicate(nb.id) },
@@ -345,6 +387,20 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     RenameDialog(nb.title, onDismiss = { renaming = null }) {
       vm.rename(nb.id, it)
       renaming = null
+    }
+  }
+  if (deletingPicked) {
+    val ids = picked.orEmpty()
+    ConfirmDialog(
+      title = if (ids.size == 1) "Delete 1 notebook?" else "Delete ${ids.size} notebooks?",
+      body = "They move to Recently deleted, where you can bring them back for ${NotesRepository.TRASH_DAYS} days.",
+      confirm = "Delete",
+      destructive = true,
+      onDismiss = { deletingPicked = false },
+    ) {
+      deletingPicked = false
+      picked = null
+      ids.forEach { id -> vanish(id) { vm.delete(id) } }
     }
   }
   deleting?.let { nb ->
@@ -745,6 +801,9 @@ private fun NotebookCard(
   nb: NotebookMeta,
   folders: List<Folder>,
   thumbnail: java.io.File,
+  picking: Boolean = false,
+  picked: Boolean = false,
+  onPick: () -> Unit = {},
   onOpen: () -> Unit,
   onRename: () -> Unit,
   onDuplicate: () -> Unit,
@@ -758,18 +817,27 @@ private fun NotebookCard(
   var moving by remember { mutableStateOf(false) }
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
-  val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
+  // A picked notebook sits a little lower, as if pressed in, with an accent outline.
+  val scale by animateFloatAsState(if (pressed) 0.97f else if (picked) 0.955f else 1f, label = "press")
   val image = rememberThumbnail(thumbnail, nb.thumbVersion)
   val shape = RoundedCornerShape(18.dp)
+  val edge by androidx.compose.animation.animateColorAsState(if (picked) c.accent else c.line, tween(160), label = "pickEdge")
 
-  Column(Modifier.scale(scale).combinedClickable(interactionSource = interaction, indication = null, onClick = onOpen, onLongClick = { if (inTrash) onOpen() else menu = true })) {
+  Column(
+    Modifier.scale(scale).combinedClickable(
+      interactionSource = interaction,
+      indication = null,
+      onClick = if (picking) onPick else onOpen,
+      onLongClick = { if (picking) onPick() else if (inTrash) onOpen() else menu = true },
+    )
+  ) {
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(1.32f)
         .shadow(12.dp, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6))
         .clip(shape)
         .background(c.paper)
-        .border(1.dp, c.line, shape)
+        .border(if (picked) 2.5.dp else 1.dp, edge, shape)
     ) {
       if (image != null) {
         Image(image, contentDescription = null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter, modifier = Modifier.fillMaxSize())
@@ -785,8 +853,24 @@ private fun NotebookCard(
           y += 11.dp.toPx()
         }
       }
+      // While picking, a check circle in the corner: filled when picked.
+      androidx.compose.animation.AnimatedVisibility(
+        picking,
+        modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+        enter = fadeIn(tween(160)) + androidx.compose.animation.scaleIn(tween(200, easing = com.tali.notes.ui.components.EaseOutStrong), initialScale = 0.7f),
+        exit = fadeOut(tween(110)) + androidx.compose.animation.scaleOut(tween(110), targetScale = 0.85f),
+      ) {
+        val fill by androidx.compose.animation.animateColorAsState(if (picked) c.accent else Color.White.copy(alpha = 0.85f), tween(150), label = "pickFill")
+        Box(
+          Modifier.size(28.dp).shadow(3.dp, CircleShape).clip(CircleShape).background(fill).border(1.5.dp, if (picked) c.accent else c.inkFaint, CircleShape),
+          contentAlignment = Alignment.Center,
+        ) {
+          if (picked) Icon(Icons.Outlined.Check, "Picked", tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+      }
       DropdownMenu(expanded = menu, onDismissRequest = { menu = false; moving = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
         if (!moving) {
+          DropdownMenuItem(text = { Text("Select") }, leadingIcon = { Icon(Icons.Outlined.CheckCircle, null) }, onClick = { menu = false; onPick() })
           DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
           DropdownMenuItem(text = { Text("Duplicate") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; onDuplicate() })
           DropdownMenuItem(
@@ -1051,5 +1135,49 @@ private fun MoveTarget(label: String, icon: ImageVector, tint: Color, depth: Int
     Spacer(Modifier.width(12.dp))
     Text(label, style = MaterialTheme.typography.titleSmall, color = if (current) c.inkFaint else c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     if (current) Text("Here now", style = MaterialTheme.typography.labelMedium, color = c.inkFaint)
+  }
+}
+
+/**
+ * In place of the search and New notebook while picking: how many are picked, then Select all,
+ * Move to folder, Duplicate, Delete and Done.
+ */
+@Composable
+private fun PickBar(
+  count: Int,
+  allPicked: Boolean,
+  folders: List<Folder>,
+  onAll: () -> Unit,
+  onMove: (String?) -> Unit,
+  onDuplicate: () -> Unit,
+  onDelete: () -> Unit,
+  onDone: () -> Unit,
+) {
+  val c = Tali.colors
+  var moving by remember { mutableStateOf(false) }
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    Text(if (count == 1) "1 selected" else "$count selected", style = MaterialTheme.typography.titleMedium, color = c.ink)
+    Spacer(Modifier.width(12.dp))
+    QuietButton(if (allPicked) "Select none" else "Select all", onClick = onAll)
+    Spacer(Modifier.width(4.dp))
+    Box {
+      com.tali.notes.ui.components.ToolButton(Icons.AutoMirrored.Outlined.DriveFileMove, "Move to folder", enabled = count > 0) { moving = true }
+      DropdownMenu(expanded = moving, onDismissRequest = { moving = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+        Text("Move to", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        DropdownMenuItem(text = { Text("No folder") }, leadingIcon = { Icon(Icons.Outlined.AutoStories, null, tint = c.inkMuted) }, onClick = { moving = false; onMove(null) })
+        folderTree(folders).forEach { (f, depth) ->
+          DropdownMenuItem(
+            text = { Text(f.name) },
+            leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = Color(f.color)) },
+            onClick = { moving = false; onMove(f.id) },
+            modifier = Modifier.padding(start = (depth * 18).dp),
+          )
+        }
+      }
+    }
+    com.tali.notes.ui.components.ToolButton(Icons.Outlined.ContentCopy, "Duplicate", enabled = count > 0, onClick = onDuplicate)
+    com.tali.notes.ui.components.ToolButton(Icons.Outlined.DeleteOutline, "Delete", enabled = count > 0, onClick = onDelete)
+    Spacer(Modifier.width(8.dp))
+    PrimaryButton("Done", onClick = onDone)
   }
 }

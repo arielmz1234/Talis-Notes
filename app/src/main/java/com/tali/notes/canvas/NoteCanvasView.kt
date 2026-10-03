@@ -1551,7 +1551,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    */
   private fun edgeVelocity(p: Pt): Pt {
     val zone = EDGE_ZONE_DP * density
-    val top = max(zone, (topClearance - 36f) * density)
+    val top = max(zone, (topClearance + 20f) * density)
     fun push(dist: Float, z: Float): Float = ((z - dist) / z).coerceIn(0f, 1f).let { it * it }
     val max = EDGE_MAX_DP_S * density
     val vx = (push(width - dragScreen.x, zone) - push(dragScreen.x, zone)) * max
@@ -3003,8 +3003,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** A straight highlighter line this close to level or upright snaps to it. */
     private const val STRAIGHT_SNAP_DEG = 4.0
     /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */
-    private const val EDGE_ZONE_DP = 56f
-    private const val EDGE_DWELL_MS = 250L
+    private const val EDGE_ZONE_DP = 100f
+    private const val EDGE_DWELL_MS = 120L
     /** The fastest edge scroll, deep in the zone (dp per second); it eases up from nothing. */
     private const val EDGE_MAX_DP_S = 900f
     /** How close a turn has to come to a 45° step to snap onto it (5°). */
