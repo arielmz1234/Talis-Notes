@@ -63,8 +63,8 @@ internal val EaseOutStrong = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
 private val EaseInOutSoft = CubicBezierEasing(0.45f, 0f, 0.55f, 1f)
 
 /** How long an element takes to go, and how long its mist lasts. Callers wait [PUFF_LEAVE_MS] before removing it. */
-const val ELEMENT_LEAVE_MS = 200
-const val PUFF_LEAVE_MS = 520
+const val ELEMENT_LEAVE_MS = 240
+const val PUFF_LEAVE_MS = 700
 private const val ELEMENT_ARRIVE_MS = 260
 private const val PUFF_ARRIVE_MS = 520
 
@@ -76,12 +76,13 @@ private const val PUFF_ARRIVE_MS = 520
 @Composable
 fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Float = 1f) {
   val c = Tali.colors
-  // Light: white wisps, the lower ones a touch lilac like the clouds' bellies. Dark: pale, thin mist.
-  val top = if (c.isDark) lerp(lerp(c.cloudTop, DUSK_LILAC, 0.4f), Color.White, 0.45f) else Color.White
+  // Light: a faintly lilac cloud, deeper towards its belly, so it reads against a white page or card
+  // (pure white mist there was all but invisible). Dark: pale, thin mist.
+  val top = if (c.isDark) lerp(lerp(c.cloudTop, DUSK_LILAC, 0.4f), Color.White, 0.45f) else lerp(Color.White, c.cloudBelly, 0.28f)
   // One even tone in the dark: varied tints there read as blotches.
-  val low = if (c.isDark) top else lerp(Color.White, c.cloudBelly, 0.7f)
-  val belly = lerp(c.cloudBelly, c.accent, 0.22f)
-  val peak = (if (c.isDark) 0.26f else 0.95f) * strength
+  val low = if (c.isDark) top else lerp(Color.White, c.cloudBelly, 0.85f)
+  val belly = lerp(c.cloudBelly, c.accent, 0.38f)
+  val peak = (if (c.isDark) 0.38f else 1f) * strength
   Spacer(
     modifier
       .outset(OVERFLOW)
@@ -111,8 +112,8 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
             val local = ((t - p.delay) / (1f - p.delay)).coerceIn(0f, 1f)
             if (local <= 0f) continue
             val go = EaseOutStrong.transform(local)
-            // Thick at once, then thinning out evenly.
-            val a = peak * p.weight * EaseOutStrong.transform((local / 0.14f).coerceAtMost(1f)) * (1f - EaseInOutSoft.transform(local))
+            // Thick at once, holding for a moment so the cloud is seen, then thinning out evenly.
+            val a = peak * p.weight * EaseOutStrong.transform((local / 0.12f).coerceAtMost(1f)) * (1f - EaseInOutSoft.transform(((local - 0.18f) / 0.82f).coerceIn(0f, 1f)))
             if (a <= 0.004f) continue
             val x = cx + p.x * swell + p.dx * go
             val y = cy + p.y * swell + p.dy * go + lift + if (pass == 0) p.r * 0.3f else 0f
@@ -124,7 +125,7 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
               srcSize = src,
               dstOffset = IntOffset((x - r).roundToInt(), (y - r).roundToInt()),
               dstSize = IntSize(d, d),
-              alpha = (if (pass == 0) a * 0.4f else a).coerceAtMost(1f),
+              alpha = (if (pass == 0) a * 0.7f else a).coerceAtMost(1f),
               colorFilter = if (pass == 0) shade else tints[p.tone],
             )
           }
@@ -161,11 +162,12 @@ fun PuffBox(leaving: Boolean, appearing: Boolean, modifier: Modifier = Modifier,
   Box(modifier.zIndex(if (leaving) 1f else 0f)) {
     Box(
       Modifier.layerWithRoom(LAYER_ROOM) {
-        // Out: shrink a hair, fade and blur into the mist. In: the same, backwards.
+        // Out: lift a little and shrink into the mist as it fades and blurs. In: the same, backwards.
         val gone = maxOf(leave, 1f - arrive.value)
-        val s = 1f - 0.04f * gone
+        val s = 1f - 0.07f * gone
         scaleX = s
         scaleY = s
+        translationY = -10.dp.toPx() * leave
         alpha = 1f - gone
         renderEffect =
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && gone > 0.02f && gone < 0.98f) {
