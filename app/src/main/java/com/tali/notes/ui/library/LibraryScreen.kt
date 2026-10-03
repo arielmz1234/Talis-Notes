@@ -178,7 +178,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   var crashReport by remember { mutableStateOf(CrashLog.pendingReport(context)) }
 
   // One continuous sky across the top of the whole screen; the sidebar and notebooks sit below it.
-  Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to c.background, 0.7f to c.background, 1f to c.sidebarEnd))) {
+  // Puffs of deleted notebooks and folders drift over everything here (sidebar, sky) without being cut off.
+  com.tali.notes.ui.components.PuffLayerHost(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to c.background, 0.7f to c.background, 1f to c.sidebarEnd))) {
   SkyBand(height = 360.dp)
   SkyClouds(LocalConfiguration.current.screenWidthDp)
   Row(Modifier.fillMaxSize()) {

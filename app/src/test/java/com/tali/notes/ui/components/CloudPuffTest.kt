@@ -17,6 +17,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -31,6 +32,7 @@ import com.tali.notes.theme.Tali
 import com.tali.notes.theme.TaliTheme
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -148,5 +150,35 @@ class CloudPuffTest {
     rule.mainClock.advanceTimeBy(6000)
     val back = shot()
     assertEquals("cloud back", before.getPixel(before.width / 2, before.height / 2), back.getPixel(back.width / 2, back.height / 2))
+  }
+
+  @Test
+  fun deletionMistIsNotCutOffByItsList() {
+    rule.mainClock.autoAdvance = false
+    val bg = Color(0xFFF4EEFF)
+    rule.setContent {
+      TaliTheme(darkTheme = false) {
+        PuffLayerHost(Modifier.testTag("stage").size(400.dp, 400.dp).background(bg)) {
+          // Like the pages grid: a list that clips to its own bounds, a card at its top edge.
+          Box(Modifier.padding(top = 160.dp, start = 100.dp).size(200.dp, 200.dp).clipToBounds()) {
+            PuffBox(leaving = leaving, appearing = false) {
+              Box(Modifier.size(200.dp, 120.dp).background(Color.White))
+            }
+          }
+        }
+      }
+    }
+    rule.mainClock.advanceTimeBy(500)
+    leaving = true
+    Snapshot.sendApplyNotifications()
+    record("unclipped", 30)
+    // Mid-puff, the mist has risen above the list's top edge, where the list would have cut it off.
+    rule.mainClock.advanceTimeBy(0)
+    val mid = rule.onNodeWithTag("stage").captureToImage().asAndroidBitmap()
+    val above = (0 until 150).count { y -> mid.getPixel(200, y) != bg.toArgb() }
+    assertTrue("no mist above the list ($above px)", above > 10)
+    rule.mainClock.advanceTimeBy(1200)
+    val after = rule.onNodeWithTag("stage").captureToImage().asAndroidBitmap()
+    assertEquals(bg.toArgb(), after.getPixel(200, 120))
   }
 }

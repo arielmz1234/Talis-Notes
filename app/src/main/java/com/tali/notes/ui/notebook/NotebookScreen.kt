@@ -1108,7 +1108,7 @@ private fun ToolbarPuffs(tick: Int, showing: Boolean, bars: Map<String, androidx
     spots = bars.values.toList()
     playing = true
     p.snapTo(0f)
-    p.animateTo(1f, tween(com.tali.notes.ui.components.PUFF_LEAVE_MS, easing = androidx.compose.animation.core.LinearEasing))
+    p.animateTo(1f, tween(com.tali.notes.ui.components.SUBTLE_PUFF_MS, easing = androidx.compose.animation.core.LinearEasing))
     playing = false
   }
   if (!playing) return

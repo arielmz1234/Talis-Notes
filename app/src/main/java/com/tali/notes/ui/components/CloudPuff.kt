@@ -11,6 +11,19 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.Constraints
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
@@ -62,8 +75,15 @@ import kotlinx.coroutines.launch
 internal val EaseOutStrong = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
 private val EaseInOutSoft = CubicBezierEasing(0.45f, 0f, 0.55f, 1f)
 
-/** How long an element takes to go, and how long its mist lasts. Callers wait [PUFF_LEAVE_MS] before removing it. */
-const val ELEMENT_LEAVE_MS = 240
+/** How long an element takes to go, and how long a subtle puff lasts (the toolbars, sky clouds). */
+const val ELEMENT_LEAVE_MS = 200
+const val SUBTLE_PUFF_MS = 520
+
+/**
+ * Deleting a card, row or page: the element takes a little longer to go and its fuller mist lasts
+ * longer, so it's noticed. Callers wait [PUFF_LEAVE_MS] before removing it.
+ */
+private const val DELETE_LEAVE_MS = 240
 const val PUFF_LEAVE_MS = 700
 private const val ELEMENT_ARRIVE_MS = 260
 private const val PUFF_ARRIVE_MS = 520
@@ -72,17 +92,23 @@ private const val PUFF_ARRIVE_MS = 520
  * A puff of mist over this area that dissipates as [progress] goes from 0 to 1. [strength] scales
  * how dense it is at its thickest (a lighter puff for things arriving). The mist may spill a little
  * past the area, as clouds do. Progress is read while drawing, so playing it never recomposes.
+ *
+ * Subtle by default (white wisps with a hint of lilac: the toolbars and sky clouds, which the owner
+ * likes quiet). [vivid] is for deleting things: a faintly lilac cloud with a deeper belly that
+ * holds its density a moment longer, so it reads against white cards and pages.
  */
 @Composable
-fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Float = 1f) {
+fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Float = 1f, vivid: Boolean = false) {
   val c = Tali.colors
-  // Light: a faintly lilac cloud, deeper towards its belly, so it reads against a white page or card
-  // (pure white mist there was all but invisible). Dark: pale, thin mist.
-  val top = if (c.isDark) lerp(lerp(c.cloudTop, DUSK_LILAC, 0.4f), Color.White, 0.45f) else lerp(Color.White, c.cloudBelly, 0.28f)
+  // Light: white (or for [vivid], faintly lilac) wisps, the lower ones lilac like the clouds' bellies.
+  // Dark: pale, thin mist.
+  val top = if (c.isDark) lerp(lerp(c.cloudTop, DUSK_LILAC, 0.4f), Color.White, 0.45f) else if (vivid) lerp(Color.White, c.cloudBelly, 0.28f) else Color.White
   // One even tone in the dark: varied tints there read as blotches.
-  val low = if (c.isDark) top else lerp(Color.White, c.cloudBelly, 0.85f)
-  val belly = lerp(c.cloudBelly, c.accent, 0.38f)
-  val peak = (if (c.isDark) 0.38f else 1f) * strength
+  val low = if (c.isDark) top else lerp(Color.White, c.cloudBelly, if (vivid) 0.85f else 0.7f)
+  val belly = lerp(c.cloudBelly, c.accent, if (vivid) 0.38f else 0.22f)
+  val peak = (if (c.isDark) (if (vivid) 0.38f else 0.26f) else if (vivid) 1f else 0.95f) * strength
+  val hold = if (vivid) 0.18f else 0f
+  val underside = if (vivid) 0.7f else 0.4f
   Spacer(
     modifier
       .outset(OVERFLOW)
@@ -113,7 +139,7 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
             if (local <= 0f) continue
             val go = EaseOutStrong.transform(local)
             // Thick at once, holding for a moment so the cloud is seen, then thinning out evenly.
-            val a = peak * p.weight * EaseOutStrong.transform((local / 0.12f).coerceAtMost(1f)) * (1f - EaseInOutSoft.transform(((local - 0.18f) / 0.82f).coerceIn(0f, 1f)))
+            val a = peak * p.weight * EaseOutStrong.transform((local / 0.12f).coerceAtMost(1f)) * (1f - EaseInOutSoft.transform(((local - hold) / (1f - hold)).coerceIn(0f, 1f)))
             if (a <= 0.004f) continue
             val x = cx + p.x * swell + p.dx * go
             val y = cy + p.y * swell + p.dy * go + lift + if (pass == 0) p.r * 0.3f else 0f
@@ -125,7 +151,7 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
               srcSize = src,
               dstOffset = IntOffset((x - r).roundToInt(), (y - r).roundToInt()),
               dstSize = IntSize(d, d),
-              alpha = (if (pass == 0) a * 0.7f else a).coerceAtMost(1f),
+              alpha = (if (pass == 0) a * underside else a).coerceAtMost(1f),
               colorFilter = if (pass == 0) shade else tints[p.tone],
             )
           }
@@ -141,9 +167,13 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
  */
 @Composable
 fun PuffBox(leaving: Boolean, appearing: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-  val leave by animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) ELEMENT_LEAVE_MS else 0, easing = EaseOutStrong), label = "leave")
+  val leave by animateFloatAsState(if (leaving) 1f else 0f, tween(if (leaving) DELETE_LEAVE_MS else 0, easing = EaseOutStrong), label = "leave")
   val arrive = remember { Animatable(if (appearing) 0f else 1f) }
   val puff = remember { Animatable(1f) }
+  val layer = LocalPuffLayer.current
+  // Where it is, for handing its mist to the layer above the screen.
+  val where = remember { arrayOfNulls<LayoutCoordinates>(1) }
+  var handedOff by remember { mutableStateOf(false) }
   LaunchedEffect(appearing) {
     if (!appearing) return@LaunchedEffect
     arrive.snapTo(0f)
@@ -155,11 +185,17 @@ fun PuffBox(leaving: Boolean, appearing: Boolean, modifier: Modifier = Modifier,
   }
   LaunchedEffect(leaving) {
     if (!leaving) return@LaunchedEffect
+    // Drawn above the whole screen when there's a layer for it, so the mist drifts freely over the
+    // sidebar, the header or the dialog's edge instead of being cut off by the list it was in.
+    if (layer != null && layer.play(where[0])) {
+      handedOff = true
+      return@LaunchedEffect
+    }
     puff.snapTo(0f)
     puff.animateTo(1f, tween(PUFF_LEAVE_MS, easing = LinearEasing))
   }
   // While it leaves it sits above its neighbours, so the mist drifting over them isn't cut off.
-  Box(modifier.zIndex(if (leaving) 1f else 0f)) {
+  Box(modifier.zIndex(if (leaving) 1f else 0f).onGloballyPositioned { where[0] = it }) {
     Box(
       Modifier.layerWithRoom(LAYER_ROOM) {
         // Out: lift a little and shrink into the mist as it fades and blurs. In: the same, backwards.
@@ -179,7 +215,61 @@ fun PuffBox(leaving: Boolean, appearing: Boolean, modifier: Modifier = Modifier,
     ) {
       content()
     }
-    CloudPuff({ puff.value }, Modifier.matchParentSize(), strength = if (appearing && !leaving) 0.55f else 1f)
+    if (!handedOff) CloudPuff({ puff.value }, Modifier.matchParentSize(), strength = if (appearing && !leaving) 0.55f else 1f, vivid = leaving)
+  }
+}
+
+/**
+ * Plays the mist of things being deleted above everything inside a [PuffLayerHost], so it's never
+ * cut off by the list, grid or panel the thing was in.
+ */
+class PuffLayer internal constructor(private val scope: CoroutineScope) {
+  internal var host: LayoutCoordinates? = null
+  internal val puffs = mutableStateListOf<Puff>()
+
+  internal class Puff(val rect: androidx.compose.ui.geometry.Rect) {
+    val progress = Animatable(0f)
+  }
+
+  /** Starts a deletion puff over [from]'s area; false when it can't (then the caller plays its own). */
+  fun play(from: LayoutCoordinates?): Boolean {
+    val h = host ?: return false
+    if (from == null || !h.isAttached || !from.isAttached) return false
+    val puff = Puff(h.localBoundingBoxOf(from, clipBounds = false))
+    puffs += puff
+    scope.launch {
+      try {
+        puff.progress.animateTo(1f, tween(PUFF_LEAVE_MS, easing = LinearEasing))
+      } finally {
+        puffs -= puff
+      }
+    }
+    return true
+  }
+}
+
+val LocalPuffLayer = staticCompositionLocalOf<PuffLayer?> { null }
+
+/** A box whose deletion puffs ([PuffBox]) are drawn over all of its content, unclipped. */
+@Composable
+fun PuffLayerHost(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: @Composable BoxScope.() -> Unit) {
+  val scope = rememberCoroutineScope()
+  val layer = remember(scope) { PuffLayer(scope) }
+  Box(modifier.onGloballyPositioned { layer.host = it }, contentAlignment = contentAlignment) {
+    CompositionLocalProvider(LocalPuffLayer provides layer) { this@Box.content() }
+    layer.puffs.forEach { p ->
+      key(p) {
+        CloudPuff(
+          { p.progress.value },
+          Modifier.layout { measurable, _ ->
+            val placeable = measurable.measure(Constraints.fixed(p.rect.width.roundToInt().coerceAtLeast(1), p.rect.height.roundToInt().coerceAtLeast(1)))
+            // Takes no room of its own; just drawn where the deleted thing was.
+            layout(0, 0) { placeable.place(p.rect.left.roundToInt(), p.rect.top.roundToInt()) }
+          },
+          vivid = true,
+        )
+      }
+    }
   }
 }
 

@@ -110,7 +110,8 @@ fun PagesOverview(
   val grid = rememberLazyGridState()
   LaunchedEffect(Unit) { grid.scrollToItem(current.coerceIn(0, count - 1)) }
   Dialog(onDismissRequest = { if (peek != null) peek = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-    Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss), contentAlignment = Alignment.Center) {
+    // A deleted page's puff drifts out over the panel's edge freely instead of being cut off by the grid.
+    com.tali.notes.ui.components.PuffLayerHost(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss), contentAlignment = Alignment.Center) {
       Column(
         Modifier.fillMaxWidth(0.86f)
           .fillMaxHeight(0.88f)
