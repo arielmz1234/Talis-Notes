@@ -344,6 +344,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setHideNavBar(on: Boolean) = store.update { it.copy(hideNavBar = on) }
 
+  fun setInkBetweenPages(on: Boolean) = store.update { it.copy(inkBetweenPages = on) }
+
 
 
   fun setPaper(style: PaperStyle) {

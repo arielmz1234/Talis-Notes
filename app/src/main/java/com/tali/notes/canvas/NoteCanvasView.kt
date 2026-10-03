@@ -491,13 +491,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (d != null) {
       try {
         val added =
-          strokes.map { (id, s) ->
+          strokes.flatMap { (id, s) ->
             val pen = strokePens.remove(id) ?: PenType.FINELINER
             // On dark paper the live stroke used the light version of the colour; store the real one.
             val real = strokeColors.remove(id)?.let { Brushes.inkColor(pen, it) }
-            InkItem(d.newId(), d.nextZ(), pen, if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s)
+            val stroke = if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s
+            // On A4 pages, writing that ran off the page is cut at its edge.
+            clipToPages(stroke).map { InkItem(d.newId(), d.nextZ(), pen, it) }
           }
-        d.commit(Change(emptyList(), added))
+        if (added.isNotEmpty()) d.commit(Change(emptyList(), added))
       } catch (t: Throwable) {
         com.tali.notes.CrashLog.recovered(context, t)
       }
@@ -638,7 +640,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     erasePieces.values.forEach { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     liveShape?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
-    straightPreview?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
+    straightPreview?.let { preview ->
+      canvas.save()
+      inkAreas(preview.stroke.brush.size / 2f)?.let { areas -> canvas.clipPath(areaPath(areas, null)) }
+      itemRenderer.draw(canvas, preview, camera.worldToScreen)
+      canvas.restore()
+    }
     liveEdit?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     shapePreview?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     if (isDraggingSelection() && selection.isNotEmpty()) {
@@ -1164,7 +1171,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     val effective = if (eraserOverride) Tool.ERASER else tool
     val n = pageCount
-    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE || effective == Tool.FILL) && !pageLayout.contains(n, p.x, p.y)) {
+    val onPaper = if (effective == Tool.PEN) inkAreas(0f)?.any { it.contains(p) } ?: true else n == null || pageLayout.contains(n, p.x, p.y)
+    if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE || effective == Tool.FILL) && !onPaper) {
       mode = Mode.IGNORE
       return
     }
@@ -1195,6 +1203,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val slot = settings.activeSlot
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
     predictor.record(e)
+    // Ink running off the page is hidden as it's drawn, so what she sees is what's kept.
+    inProgress.maskPath = inkAreas(slot.size / 2f)?.let { areas ->
+      android.graphics.Path().apply {
+        addRect(0f, 0f, width.toFloat(), height.toFloat(), android.graphics.Path.Direction.CW)
+        op(areaPath(areas, camera.worldToScreen), android.graphics.Path.Op.DIFFERENCE)
+      }
+    }
     val id = inProgress.startStroke(e, e.getPointerId(idx), brush, camera.screenToWorld)
     strokeId = id
     strokePens[id] = slot.type
@@ -1264,6 +1279,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.MOVE_SELECTION -> {
         val p = world(e, idx)
         dragTransform = Affine.translate(p.x - dragStart.x, p.y - dragStart.y)
+        dragScreen = Pt(e.getX(idx), e.getY(idx))
+        if (!edgeScrolling) {
+          edgeScrolling = true
+          edgeSince = 0L
+          edgeFrameAt = 0L
+          postOnAnimation(edgeStep)
+        }
         invalidate()
       }
       Mode.ROTATE_SELECTION -> {
@@ -1495,7 +1517,159 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val slot = settings.activeSlot
     // Stored in the real colour; dark paper only changes how it's shown.
     val stroke = preview.stroke.let { st -> st.copy(st.brush.copyWithColorIntArgb(Brushes.inkColor(slot.type, slot.color))) }
-    d.commit(Change(emptyList(), listOf(InkItem(d.newId(), d.nextZ(), slot.type, stroke))))
+    val pieces = clipToPages(stroke).map { InkItem(d.newId(), d.nextZ(), slot.type, it) }
+    if (pieces.isNotEmpty()) d.commit(Change(emptyList(), pieces))
+  }
+
+  // ---- Scrolling while carrying something to an edge ----
+
+  private var dragScreen = Pt.ZERO
+  private var edgeScrolling = false
+  private var edgeSince = 0L
+  private var edgeFrameAt = 0L
+
+  /**
+   * How fast to scroll (screen px per second, in the direction to look) with the carried item at
+   * [p]: nothing outside the edge zones, then a gentle ramp the deeper into the zone it goes.
+   */
+  private fun edgeVelocity(p: Pt): Pt {
+    val zone = EDGE_ZONE_DP * density
+    val top = max(zone, (topClearance - 36f) * density)
+    fun push(dist: Float, z: Float): Float = ((z - dist) / z).coerceIn(0f, 1f).let { it * it }
+    val max = EDGE_MAX_DP_S * density
+    val vx = (push(width - dragScreen.x, zone) - push(dragScreen.x, zone)) * max
+    val vy = (push(height - dragScreen.y, zone) - push(dragScreen.y, top)) * max
+    return Pt(vx, vy)
+  }
+
+  /** Each frame while an item is carried: after a short pause in an edge zone, the page scrolls along. */
+  private val edgeStep: Runnable = object : Runnable {
+    override fun run() {
+      if (mode != Mode.MOVE_SELECTION) {
+        edgeScrolling = false
+        return
+      }
+      val now = SystemClock.uptimeMillis()
+      val v = edgeVelocity(dragScreen)
+      if (v.x == 0f && v.y == 0f) {
+        edgeSince = 0L
+      } else {
+        if (edgeSince == 0L) edgeSince = now
+        // Passing an edge on the way somewhere doesn't scroll; resting there does.
+        if (now - edgeSince >= EDGE_DWELL_MS && edgeFrameAt != 0L) {
+          val dt = ((now - edgeFrameAt).coerceAtMost(32L)) / 1000f
+          camera.pan(-v.x * dt, -v.y * dt)
+          afterCameraMove()
+          // The item stays under the finger or pen while the page moves beneath it.
+          val p = camera.toWorld(dragScreen.x, dragScreen.y)
+          dragTransform = Affine.translate(p.x - dragStart.x, p.y - dragStart.y)
+          invalidate()
+        }
+      }
+      edgeFrameAt = now
+      postOnAnimation(this)
+    }
+  }
+
+  // ---- Keeping ink on the pages ----
+
+  /**
+   * Where ink may go on A4 pages, inset by [inset] (half the pen's width, so the stroke's rounded
+   * end stops at the edge): each page, or with *Write between pages* on, the whole column of pages
+   * including the gaps. Never past the sides. Null on an endless canvas.
+   */
+  private fun inkAreas(inset: Float): List<Rect>? {
+    val n = pageCount ?: return null
+    val ix = min(inset, pageLayout.width / 4f)
+    val iy = min(inset, pageLayout.height / 4f)
+    return if (settings.inkBetweenPages) {
+      listOf(Rect(ix, iy, pageLayout.width - ix, pageLayout.rect(n - 1).bottom - iy))
+    } else {
+      (0 until n).map { i -> pageLayout.rect(i).let { r -> Rect(r.left + ix, r.top + iy, r.right - ix, r.bottom - iy) } }
+    }
+  }
+
+  /** [areas] as one path, in world units, or on screen through [toScreen]. */
+  private fun areaPath(areas: List<Rect>, toScreen: android.graphics.Matrix?): android.graphics.Path =
+    android.graphics.Path().apply {
+      areas.forEach { addRect(it.left, it.top, it.right, it.bottom, android.graphics.Path.Direction.CW) }
+      if (toScreen != null) transform(toScreen)
+    }
+
+  /**
+   * [stroke] cut to the pages (see [inkAreas]): whole if it stayed on, else the pieces that are on,
+   * each ending exactly where it left (pressure, tilt and timing carried over).
+   */
+  private fun clipToPages(stroke: Stroke): List<Stroke> {
+    val areas = inkAreas(stroke.brush.size / 2f) ?: return listOf(stroke)
+    val inputs = stroke.inputs
+    val n = inputs.size
+    if (n == 0) return emptyList()
+    val samples = List(n) { inputs.get(it) }
+    val runs = com.tali.notes.geometry.PageClip.runs(samples.map { Pt(it.x, it.y) }, areas)
+    if (runs.size == 1 && runs[0].start == 0f && runs[0].end >= n - 1f) return listOf(stroke)
+    return runs.mapNotNull { run ->
+      val at = ArrayList<Float>()
+      at += run.start
+      var k = kotlin.math.floor(run.start).toInt() + 1
+      while (k < run.end) {
+        at += k.toFloat()
+        k++
+      }
+      if (run.end > run.start) at += run.end
+      val batch = androidx.ink.strokes.MutableStrokeInputBatch()
+      val t0 = sampleAt(samples, run.start).elapsedTimeMillis
+      runCatching {
+        for (s in at) {
+          val q = sampleAt(samples, s)
+          batch.add(q.toolType, q.x, q.y, q.elapsedTimeMillis - t0, q.strokeUnitLengthCm, q.pressure, q.tiltRadians, q.orientationRadians)
+        }
+        Stroke(stroke.brush, batch)
+      }.getOrNull()
+    }
+  }
+
+  /** The pen sample at [s] along [samples] (point i, then t of the way to the next), blended. */
+  private fun sampleAt(samples: List<androidx.ink.strokes.StrokeInput>, s: Float): androidx.ink.strokes.StrokeInput {
+    val i = kotlin.math.floor(s).toInt().coerceIn(0, samples.size - 1)
+    val t = s - i
+    val a = samples[i]
+    if (t < 1e-4f || i >= samples.size - 1) return a
+    val b = samples[i + 1]
+    fun mix(x: Float, y: Float) = x + (y - x) * t
+    return androidx.ink.strokes.StrokeInput.create(
+      mix(a.x, b.x),
+      mix(a.y, b.y),
+      a.elapsedTimeMillis + ((b.elapsedTimeMillis - a.elapsedTimeMillis) * t).toLong(),
+      a.toolType,
+      a.strokeUnitLengthCm,
+      if (a.hasPressure && b.hasPressure) mix(a.pressure, b.pressure) else a.pressure,
+      if (a.hasTilt && b.hasTilt) mix(a.tiltRadians, b.tiltRadians) else a.tiltRadians,
+      if (a.hasOrientation && b.hasOrientation) mix(a.orientationRadians, b.orientationRadians) else a.orientationRadians,
+    )
+  }
+
+  /**
+   * On A4 pages, pictures stay on a page: moved off (to the side or into a gap), the selection is
+   * nudged so its pictures sit in the nearest place on the page they overlap most (or the closest
+   * one). Writing picked up with them moves the same way, so nothing comes apart.
+   */
+  private fun pageNudge(items: List<CanvasItem>): Affine? {
+    val n = pageCount ?: return null
+    val pics = items.filterIsInstance<ImageItem>().filterNot { isAreaFill(it) }
+    if (pics.isEmpty()) return null
+    val u = pics.map { it.rect }.reduce(Rect::union)
+    fun overlap(r: Rect) = max(0f, min(r.right, u.right) - max(r.left, u.left)) * max(0f, min(r.bottom, u.bottom) - max(r.top, u.top))
+    val page = (0 until n).map { pageLayout.rect(it) }.maxWith(compareBy<Rect> { overlap(it) }.thenBy { -it.center.dist(u.center) })
+    fun fit(lo: Float, hi: Float, a: Float, b: Float): Float =
+      if (b - a >= hi - lo) lo - a else when {
+        a < lo -> lo - a
+        b > hi -> hi - b
+        else -> 0f
+      }
+    val dx = fit(page.left, page.right, u.left, u.right)
+    val dy = fit(page.top, page.bottom, u.top, u.bottom)
+    return if (dx == 0f && dy == 0f) null else Affine.translate(dx, dy)
   }
 
   // ---- Laser ----
@@ -1847,7 +2021,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       publishSelection()
       return
     }
-    val moved = selection.map { it.transformed(t) }
+    var moved = selection.map { it.transformed(t) }
+    // Pictures land back on a page (in the same undo step).
+    pageNudge(moved)?.let { nudge -> moved = moved.map { it.transformed(nudge) } }
     d.commit(Change(selection, moved))
     setSelection(moved)
     if (moved.size == 1 && moved[0] is ShapeItem) activeShapeId = moved[0].id
@@ -1963,7 +2139,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val h = bitmap.height * s
     val c = view.center
     images.put(file, bitmap)
-    val item = ImageItem(d.newId(), d.nextZ(), file, Rect(c.x - w / 2, c.y - h / 2, c.x + w / 2, c.y + h / 2))
+    val placed = ImageItem(d.newId(), d.nextZ(), file, Rect(c.x - w / 2, c.y - h / 2, c.x + w / 2, c.y + h / 2))
+    // On A4 pages it lands on the page in view, not half in a gap.
+    val item = pageNudge(listOf(placed))?.let { placed.transformed(it) } ?: placed
     d.commit(Change(emptyList(), listOf(item)))
     // Selected right away so it can be dragged and resized into place.
     selectSingle(item)
@@ -2799,6 +2977,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val LASER_FADE_MS = 450L
     /** A straight highlighter line this close to level or upright snaps to it. */
     private const val STRAIGHT_SNAP_DEG = 4.0
+    /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */
+    private const val EDGE_ZONE_DP = 56f
+    private const val EDGE_DWELL_MS = 250L
+    /** The fastest edge scroll, deep in the zone (dp per second); it eases up from nothing. */
+    private const val EDGE_MAX_DP_S = 900f
     /** How close a turn has to come to a 45° step to snap onto it (5°). */
     private const val SNAP_ROTATE_RAD = 0.087f
     /** A pen touch shorter than this that doesn't move is a tap. */

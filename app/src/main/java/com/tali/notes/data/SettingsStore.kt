@@ -92,6 +92,8 @@ data class AppSettings(
   val paperLineWeight: Float = 1f,
   /** The system bars (status and navigation) are hidden inside notebooks (swipe from an edge to see them). */
   val hideNavBar: Boolean = false,
+  /** On A4 pages, one stroke may carry on across the gap between pages (the gap isn't exported). Off, ink stops at each page's edge. */
+  val inkBetweenPages: Boolean = false,
   /** How many of her saved colours (the first ones, in her order) sit beside the pens in the toolbar. */
   val toolbarColors: Int = 3,
   /** One-time tips she has already seen. */

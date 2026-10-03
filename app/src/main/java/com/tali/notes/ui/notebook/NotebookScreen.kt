@@ -2,6 +2,7 @@ package com.tali.notes.ui.notebook
 
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.VerticalAlignCenter
 import androidx.compose.material.icons.outlined.LockOpen
 import com.tali.notes.model.LineStyle
 import com.tali.notes.ui.components.rememberSlidingSelection
@@ -542,6 +543,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onPaste = { holder.view?.runSafely { paste() } },
               smartUndo = settings.smartUndo,
               onSmartUndo = vm::setSmartUndo,
+              inkBetweenPages = settings.inkBetweenPages,
+              onInkBetweenPages = vm::setInkBetweenPages,
               lockedCount = { holder.view?.lockedCount() ?: 0 },
               onUnlockAll = { holder.view?.runSafely { unlockAll() } },
               hideNavBar = settings.hideNavBar,
@@ -757,6 +760,8 @@ private fun MoreMenu(
   onPaste: () -> Unit,
   smartUndo: Boolean,
   onSmartUndo: (Boolean) -> Unit,
+  inkBetweenPages: Boolean,
+  onInkBetweenPages: (Boolean) -> Unit,
   lockedCount: () -> Int,
   onUnlockAll: () -> Unit,
   hideNavBar: Boolean,
@@ -856,6 +861,14 @@ private fun MoreMenu(
         trailingIcon = { if (smartUndo) Icon(Icons.Outlined.Check, null, tint = c.accent) },
         onClick = { onSmartUndo(!smartUndo) },
       )
+      if (paged) {
+        DropdownMenuItem(
+          text = { Column { Text("Write between pages"); Text("A stroke can carry on across the gap; the gap isn't exported", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+          leadingIcon = { Icon(Icons.Outlined.VerticalAlignCenter, null) },
+          trailingIcon = { if (inkBetweenPages) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+          onClick = { onInkBetweenPages(!inkBetweenPages) },
+        )
+      }
       DropdownMenuItem(
         text = { Column { Text("Full screen"); Text("Hides the clock bar and navigation bar; swipe from the edge to see them", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
         leadingIcon = { Icon(Icons.Outlined.Fullscreen, null) },
