@@ -138,15 +138,18 @@ data class PolyShape(
   }
 
   /**
-   * A corner dot resizes the shape rather than bending it: it stretches from the opposite side
-   * within the shape's own frame (so a turned rectangle stays a rectangle), evenly for squares,
-   * regular polygons and stars, and only one way for a dot in the middle of a side (a diamond's
-   * top makes it taller). It never collapses or turns inside out.
+   * A rectangle's corner dot resizes it rather than bending it: it stretches from the opposite
+   * corner within the shape's own frame (so a turned rectangle stays a rectangle), evenly for a
+   * square, and never collapses or turns inside out. Every other polygon's dots move their own
+   * corners.
    */
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
     if (smooth) return (GroupShape(listOf(this)).withHandle(index, p) as GroupShape).parts[0]
     if (index >= points.size) return if (isRect()) withSide(index - points.size, p) else this
-    if (points.size < 3) return copy(points = points.toMutableList().also { it[index] = p })
+    // Anything but a rectangle or square (a pentagon, a star, a polygon recognised from her
+    // drawing): each dot moves its own corner, so its joints can be shaped freely. (The lasso's
+    // corner handle still resizes the whole shape.)
+    if (points.size < 3 || !isRect()) return copy(points = points.toMutableList().also { it[index] = p })
     val c = Geo.centroid(points)
     val theta = rotation
     val local = points.map { (it - c).rotated(-theta) }

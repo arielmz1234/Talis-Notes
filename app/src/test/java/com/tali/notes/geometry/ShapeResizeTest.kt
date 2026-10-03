@@ -50,13 +50,11 @@ class ShapeResizeTest {
   }
 
   @Test
-  fun diamondTopMakesItTallerOnly() {
+  fun diamondCornerMovesOnItsOwn() {
     val d = ShapeKind.DIAMOND.create(Pt(0f, 0f), Pt(100f, 60f)) as PolyShape
-    val out = d.withHandle(0, Pt(50f, -60f)) as PolyShape // top dot pulled up by 60
-    val width = out.points.maxOf { it.x } - out.points.minOf { it.x }
-    val height = out.points.maxOf { it.y } - out.points.minOf { it.y }
-    assertEquals(100f, width, 0.05f)
-    assertEquals(120f, height, 0.05f)
+    val out = d.withHandle(0, Pt(70f, -60f)) as PolyShape
+    assertTrue(out.points[0].near(Pt(70f, -60f)))
+    for (i in 1 until d.points.size) assertTrue(out.points[i].near(d.points[i]))
   }
 
   @Test
@@ -83,13 +81,12 @@ class ShapeResizeTest {
   }
 
   @Test
-  fun starResizesEvenly() {
+  fun starPointMovesOnItsOwn() {
     val s = ShapeKind.STAR.create(Pt(0f, 0f), Pt(100f, 100f)) as PolyShape
-    val out = s.withHandle(0, s.points[0] + Pt(0f, -50f)) as PolyShape
-    val ratio = (out.points[0].dist(out.points[5])) / (s.points[0].dist(s.points[5]))
-    val ratio2 = (out.points[2].dist(out.points[7])) / (s.points[2].dist(s.points[7]))
-    assertEquals(ratio, ratio2, 1e-3f)
-    assertTrue(ratio > 1.1f)
+    val target = s.points[0] + Pt(10f, -50f)
+    val out = s.withHandle(0, target) as PolyShape
+    assertTrue(out.points[0].near(target))
+    for (i in 1 until s.points.size) assertTrue(out.points[i].near(s.points[i]))
     assertTrue(abs(PI) > 0)
   }
 }

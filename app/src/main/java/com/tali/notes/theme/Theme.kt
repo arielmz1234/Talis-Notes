@@ -255,5 +255,14 @@ fun TaliColorsScope(c: TaliColors, content: @Composable () -> Unit) {
         error = c.danger,
       )
     }
-  CompositionLocalProvider(LocalTaliColors provides c) { MaterialTheme(colorScheme = scheme, typography = TaliTypography, content = content) }
+  CompositionLocalProvider(LocalTaliColors provides c) { MaterialTheme(colorScheme = scheme, typography = TaliTypography) {
+      // No hover highlight: with the S Pen hovering it lit rows up, and after pressing an item and
+      // moving the pen away the highlight could stay behind. Pressing still shows.
+      CompositionLocalProvider(
+        androidx.compose.material3.LocalRippleConfiguration provides androidx.compose.material3.RippleConfiguration(
+          rippleAlpha = androidx.compose.material.ripple.RippleAlpha(draggedAlpha = 0.16f, focusedAlpha = 0.1f, hoveredAlpha = 0f, pressedAlpha = 0.12f)
+        ),
+        content = content,
+      )
+    } }
 }
