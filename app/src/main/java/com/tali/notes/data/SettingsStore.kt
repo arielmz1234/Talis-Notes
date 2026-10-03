@@ -100,9 +100,18 @@ data class AppSettings(
   val seenTips: Set<String> = emptySet(),
 ) {
   /** The old Dashed pen became a fineliner drawing short dashes, now that any pen can dash. */
-  fun migrated(): AppSettings =
-    if (pens.none { it.type == PenType.DASHED }) this
-    else copy(pens = pens.map { if (it.type == PenType.DASHED) it.copy(type = PenType.FINELINER, line = LineStyle.SHORT_DASH) else it })
+  fun migrated(): AppSettings {
+    var s = this
+    if (s.pens.any { it.type == PenType.DASHED }) {
+      s = s.copy(pens = s.pens.map { if (it.type == PenType.DASHED) it.copy(type = PenType.FINELINER, line = LineStyle.SHORT_DASH) else it })
+    }
+    // Every pen needs its own id (a change to one pen, like a star, must not reach the others).
+    if (s.pens.map { it.id }.toSet().size != s.pens.size) {
+      val seen = HashSet<String>()
+      s = s.copy(pens = s.pens.mapIndexed { i, p -> if (seen.add(p.id)) p else p.copy(id = p.id + "-" + i).also { seen.add(it.id) } })
+    }
+    return s
+  }
 
   /** The fill colour with its opacity applied, or null when the fill tool takes fills away. */
   val fillArgb: Int?

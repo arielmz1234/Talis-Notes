@@ -275,6 +275,11 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   /** Her colours in a new order (the toolbar shows the first few). */
   fun reorderColors(order: List<Int>) = updatePalette { if (order.toSet() == it.toSet()) order else it }
 
+  /** Whether this tablet has a pen (the star and the S Pen button cycle are only offered then). */
+  val hasStylus: Boolean by lazy {
+    android.view.InputDevice.getDeviceIds().any { id -> android.view.InputDevice.getDevice(id)?.supportsSource(android.view.InputDevice.SOURCE_STYLUS) == true }
+  }
+
   /** Stars or unstars the active pen for cycling with the S Pen button. */
   fun toggleStar() {
     val on = !settings.value.activeSlot.starred

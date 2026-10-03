@@ -432,6 +432,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   override fun onDetachedFromWindow() {
+    if (PenEvents.listener === penListener) PenEvents.listener = null
     super.onDetachedFromWindow()
     cameraAnimator?.cancel()
     stopFling()
@@ -1073,12 +1074,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
-  override fun dispatchGenericMotionEvent(e: MotionEvent): Boolean {
+  /** Pen hover and button events, from the activity (see [PenEvents]). */
+  private fun penHover(e: MotionEvent) {
     when (e.actionMasked) {
       MotionEvent.ACTION_BUTTON_PRESS,
       MotionEvent.ACTION_BUTTON_RELEASE -> {
         if (isStylus(e.getToolType(0)) && e.actionButton and PEN_BUTTONS != 0) penButton(e.actionMasked == MotionEvent.ACTION_BUTTON_PRESS)
-        return true
       }
       MotionEvent.ACTION_HOVER_ENTER,
       MotionEvent.ACTION_HOVER_MOVE -> {
@@ -1089,13 +1090,29 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           penButton(e.buttonState and PEN_BUTTONS != 0)
         }
         eraserOverride = e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
-        return true
       }
       MotionEvent.ACTION_HOVER_EXIT -> {
         // Pulled away with the button down: not a press.
         penButtonDown = false
-        return true
       }
+    }
+  }
+
+  private val penListener: (MotionEvent) -> Unit = { e -> penHover(e) }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    PenEvents.listener = penListener
+  }
+
+  override fun dispatchGenericMotionEvent(e: MotionEvent): Boolean {
+    when (e.actionMasked) {
+      // Hover and button events arrive through the activity (penHover); only claim them here.
+      MotionEvent.ACTION_BUTTON_PRESS,
+      MotionEvent.ACTION_BUTTON_RELEASE,
+      MotionEvent.ACTION_HOVER_ENTER,
+      MotionEvent.ACTION_HOVER_MOVE,
+      MotionEvent.ACTION_HOVER_EXIT -> return true
       MotionEvent.ACTION_SCROLL -> {
         val v = e.getAxisValue(MotionEvent.AXIS_VSCROLL)
         val h = e.getAxisValue(MotionEvent.AXIS_HSCROLL)
@@ -2502,9 +2519,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (holdTarget == null) return null
     val since = SystemClock.uptimeMillis() - holdStart - HOLD_RING_DELAY_MS
     if (since <= 0) return null
-    val t = since.toFloat() / (LONG_PRESS_MS - HOLD_RING_DELAY_MS)
-    // It fades in, then the shackle slowly lifts as if under tension, ready to pop open.
-    return easeOut(since / 160f) to 0.3f * t.coerceAtMost(1f)
+    val t = (since.toFloat() / (LONG_PRESS_MS - HOLD_RING_DELAY_MS)).coerceAtMost(1f)
+    // It fades in, then the shackle opens gradually with the hold, nearly all the way, and pops
+    // fully open when the hold is complete.
+    val eased = if (t < 0.5f) 2f * t * t else 1f - (-2f * t + 2f).let { it * it } / 2f
+    return easeOut(since / 200f) to HOLD_OPEN_MAX * eased
   }
 
   private fun drawLockCues(canvas: Canvas) {
@@ -2526,12 +2545,18 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val t = (now - cue.start).toFloat()
       if (t >= CUE_TOTAL) lockCue = null
       else {
-        val appear = if (cue.fromHold) 1f else easeOut(t / 160f)
+        val appear = if (cue.fromHold) 1f else easeOut(t / 200f)
         val leave = easeOut((t - CUE_LEAVE_FROM) / (CUE_TOTAL - CUE_LEAVE_FROM))
-        val click = easeOut((t - CUE_SHACKLE_FROM) / 180f)
-        val open = if (cue.locking) 1f - click else (if (cue.fromHold) 0.3f else 0f) + (if (cue.fromHold) 0.7f else 1f) * click
+        // The shackle moves with a small overshoot, like a real lock snapping.
+        val k = ((t - CUE_SHACKLE_FROM) / CUE_SHACKLE_MS).coerceIn(0f, 1f)
+        val click = 1f + 2.2f * (k - 1f).let { it * it * it } + 1.2f * (k - 1f).let { it * it }
+        val start = if (cue.fromHold) HOLD_OPEN_MAX else 0f
+        val open = if (cue.locking) 1f - click else start + (1f - start) * click
+        // A slight pulse of the chip as it clicks.
+        val pulseT = ((t - CUE_SHACKLE_FROM - CUE_SHACKLE_MS * 0.6f) / 200f).coerceIn(0f, 1f)
+        val pulse = 0.06f * kotlin.math.sin(PI.toFloat() * pulseT)
         val sp = camera.toScreen(cue.at)
-        drawPadlock(canvas, sp.x, sp.y - 4f * density * leave, appear * (1f - leave), (0.9f + 0.1f * appear) - 0.04f * leave, open)
+        drawPadlock(canvas, sp.x, sp.y - 6f * density * leave, appear * (1f - leave), (0.9f + 0.1f * appear) + pulse - 0.05f * leave, open)
         animating = true
       }
     }
@@ -2995,13 +3020,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** How long to wait after a press for another before acting on the count. */
     private const val PEN_PRESS_GAP_MS = 320L
     /** The unlock padlock starts showing only after this, so a passing touch shows nothing. */
-    private const val HOLD_RING_DELAY_MS = 300L
+    private const val HOLD_RING_DELAY_MS = 500L
+    /** How far the shackle has opened just before a hold completes (then it pops open). */
+    private const val HOLD_OPEN_MAX = 0.8f
     /** The hold's padlock sits this far above the fingertip, where the finger doesn't hide it. */
     private const val HOLD_LIFT_DP = 64f
-    /** The lock cue's timeline (ms): the shackle moves from 120, it leaves from 560, gone at 720. */
-    private const val CUE_SHACKLE_FROM = 120L
-    private const val CUE_LEAVE_FROM = 560f
-    private const val CUE_TOTAL = 720f
+    /** The lock cue's timeline (ms): in by 200, the shackle snaps from 260 to 560, it leaves from 1050, gone at 1300. */
+    private const val CUE_SHACKLE_FROM = 260L
+    private const val CUE_SHACKLE_MS = 300f
+    private const val CUE_LEAVE_FROM = 1050f
+    private const val CUE_TOTAL = 1300f
     /** A touch wider than this (mm) is a palm or the side of a hand, not a fingertip. */
     private const val PALM_MM = 14f
     /** No unlocking while the S Pen touched or hovered this recently: her hand is resting to write. */

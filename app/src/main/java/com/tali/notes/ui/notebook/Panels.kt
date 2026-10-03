@@ -1,5 +1,7 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.ui.graphics.Brush
+import android.content.res.Resources
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.filled.Star
@@ -100,8 +102,35 @@ import androidx.compose.ui.geometry.Offset
 private fun PanelColumn(width: Int, content: @Composable () -> Unit) {
   // Never taller than the space under the toolbar, so the whole panel stays on screen.
   val maxHeight = (LocalConfiguration.current.screenHeightDp - 190).coerceIn(280, 640)
-  Column(Modifier.width(width.dp).heightIn(max = maxHeight.dp).verticalScroll(rememberScrollState())) { content() }
+  val scroll = rememberScrollState()
+  val c = Tali.colors
+  // When there's more below, the first couple of times a panel opens (each time the app starts) it
+  // peeks down a little and settles back, so she knows it scrolls. No popup.
+  LaunchedEffect(Unit) {
+    kotlinx.coroutines.delay(320)
+    if (scroll.maxValue > 0 && panelPeeks < 2) {
+      panelPeeks++
+      val peek = minOf(scroll.maxValue, (36 * Resources.getSystem().displayMetrics.density).toInt())
+      scroll.animateScrollTo(peek, tween(260, easing = com.tali.notes.ui.components.EaseOutStrong))
+      scroll.animateScrollTo(0, spring(dampingRatio = 0.8f, stiffness = 320f))
+    }
+  }
+  Box(Modifier.width(width.dp).heightIn(max = maxHeight.dp)) {
+    Column(Modifier.verticalScroll(scroll)) { content() }
+    // A soft fade at the bottom while there's more to scroll to.
+    val more by androidx.compose.animation.core.animateFloatAsState(if (scroll.canScrollForward) 1f else 0f, tween(180), label = "panelMore")
+    if (more > 0f) {
+      Box(
+        Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(28.dp)
+          .graphicsLayer { alpha = more }
+          .background(Brush.verticalGradient(listOf(c.cloudBelly.copy(alpha = 0f), c.cloudBelly)))
+      )
+    }
+  }
 }
+
+/** How many times a panel has peeked to show it scrolls, since the app started. */
+private var panelPeeks = 0
 
 @Composable
 private fun PanelTitle(text: String) {
@@ -146,7 +175,8 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.height(10.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(slot.type.label, style = MaterialTheme.typography.titleMedium, color = c.ink, modifier = Modifier.weight(1f))
-      StarToggle(slot.starred, vm::toggleStar)
+      // Only with a pen that has a button to press.
+      if (vm.hasStylus) StarToggle(slot.starred, vm::toggleStar)
     }
     Spacer(Modifier.height(10.dp))
     StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle, slot.square, slot.straight)

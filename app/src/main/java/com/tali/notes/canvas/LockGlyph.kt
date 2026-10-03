@@ -15,7 +15,8 @@ object LockGlyph {
   /** A padlock centred at ([cx], [cy]); [open] 0 is shut, 1 is the shackle lifted and swung open. */
   fun draw(canvas: Canvas, density: Float, dark: Boolean, cx: Float, cy: Float, alpha: Float, scale: Float, open: Float) {
     if (alpha <= 0.01f) return
-    val d = density
+    // A little larger than a toolbar icon, so the lock is easy to see happen.
+    val d = density * 1.3f
     canvas.save()
     canvas.translate(cx, cy)
     canvas.scale(scale, scale)

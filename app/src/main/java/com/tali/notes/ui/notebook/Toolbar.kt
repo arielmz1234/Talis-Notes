@@ -1,5 +1,6 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -114,6 +115,15 @@ fun MainToolbar(
         ) {
           // On dark paper the pens show the colour they really write in there.
           PenGlyph(slot.type, Color(if (darkPaper) com.tali.notes.ink.Brushes.onDarkPaper(slot.color) else slot.color), Modifier.offset(y = lift), line = slot.lineStyle)
+          // A starred pen (in the S Pen button's cycle) wears a small gold star beside its tip.
+          if (slot.starred) {
+            Icon(
+              androidx.compose.material.icons.Icons.Filled.Star,
+              "Starred",
+              tint = Color(0xFFF5B83D),
+              modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = lift + 1.dp).size(10.dp),
+            )
+          }
         }
       }
     }
