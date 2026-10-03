@@ -574,11 +574,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * a new page" at first; a plus and "Release to add a page" once letting go would add one.
    */
   private fun drawPullIndicator(canvas: Canvas, n: Int) {
-    val pull = pullDp()
-    if (pull < 24f) return
+    // Only while her fingers are pulling, and only past the little room that's always left under
+    // the last page: resting at the bottom (or zoomed out with space to spare) shows nothing.
+    if (!pulling) return
+    val pull = effectivePull()
+    if (pull < REST_DP + 6f) return
     val lastBottom = camera.toScreen(Pt(0f, lastPageBottom(n))).y
     val ready = pull >= ADD_PULL_DP
-    val alpha = ((pull - 24f) / 40f).coerceIn(0f, 1f)
+    val alpha = ((pull - REST_DP - 6f) / 40f).coerceIn(0f, 1f)
     val tone = if (darkPaper || deskIsDark()) 0xFFC9C3D6.toInt() else 0xFF77718A.toInt()
     val color = (tone and 0x00FFFFFF) or ((alpha * 255).toInt() shl 24)
     val cx = width / 2f
@@ -2098,6 +2101,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       // Only a pull that starts at the end of the notebook can open space for a new page; a
       // fast scroll down just stops there.
       pulling = pageCount != null && pullDp() >= REST_DP - 4f
+      // Whatever already showed below the last page (zoomed out, it can be a lot) isn't a pull.
+      pullOffset = if (pulling) max(0f, pullDp() - REST_DP) else 0f
       fingerStart = Pt(e.x, e.y)
       fingerDownTime = SystemClock.uptimeMillis()
       maxPointers = 1
@@ -2196,11 +2201,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     if (mode == Mode.PAN || mode == Mode.PINCH) {
       settleCamera()
+      val wasPulling = pulling
       pulling = false
+      // The add-page sign goes as soon as her fingers lift.
+      if (wasPulling) invalidate()
       // Pulled past the last page: add one or spring back. Otherwise a one-finger flick keeps gliding.
       // One finger or two both glide, unless the fingers were zooming.
       val zoomed = kotlin.math.abs(camera.zoom - zoomAtDown) > zoomAtDown * 0.04f
-      if (!finishPull() && maxPointers <= 2 && !zoomed) {
+      if (!(wasPulling && finishPull()) && maxPointers <= 2 && !zoomed) {
         velocity?.let { v ->
           v.addMovement(e)
           v.computeCurrentVelocity(1000, ViewConfiguration.get(context).scaledMaximumFlingVelocity.toFloat())
@@ -2304,11 +2312,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    */
   private fun resisted(dy: Float): Float {
     if (pageCount == null || dy >= 0f) return dy
-    return if (pullDp() > REST_DP) dy * PULL_RESISTANCE else dy
+    return if (effectivePull() > REST_DP) dy * PULL_RESISTANCE else dy
   }
 
   /** Fingers are on the page and started at its end (so it may be pulled past the last page). */
   private var pulling = false
+
+  /** How much showed below the last page already when the pull began (not part of the pull). */
+  private var pullOffset = 0f
+
+  /** How far she has pulled past the last page, counting the room always left there. */
+  private fun effectivePull() = pullDp() - pullOffset
 
   private fun lastPageBottom(n: Int) = (n - 1) * pageLayout.pitch + pageLayout.height
 
@@ -2324,7 +2338,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    */
   private fun finishPull(): Boolean {
     val n = pageCount ?: return false
-    val pull = pullDp()
+    val pull = effectivePull()
     if (pull <= REST_DP + 1f) return false
     if (pull >= ADD_PULL_DP) {
       setPages(n + 1)

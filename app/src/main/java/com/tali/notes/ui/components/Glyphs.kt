@@ -188,9 +188,9 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
       PaperStyle.BLANK -> Unit
       PaperStyle.DOTS -> {
         var y = step
-        while (y < size.height) {
+        while (y < size.height - step * 0.5f) {
           var x = step
-          while (x < size.width) {
+          while (x < size.width - step * 0.5f) {
             drawCircle(line, 1.4.dp.toPx(), Offset(x, y))
             x += step
           }
@@ -246,14 +246,16 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
 }
 
 private fun DrawScope.grid(step: Float, color: Color, width: Float, both: Boolean) {
+  // Stops half a step short of the edge: adding up the steps drifts, and a line landed right on the
+  // swatch's edge (a stray bright line in dark mode).
   var y = step
-  while (y < size.height) {
+  while (y < size.height - step * 0.5f) {
     drawLine(color, Offset(0f, y), Offset(size.width, y), width * density)
     y += step
   }
   if (both) {
     var x = step
-    while (x < size.width) {
+    while (x < size.width - step * 0.5f) {
       drawLine(color, Offset(x, 0f), Offset(x, size.height), width * density)
       x += step
     }

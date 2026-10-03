@@ -74,6 +74,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.SolidColor
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -248,20 +249,19 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
   return state.value
 }
 
-/** How heavy the paper's lines, grid and dots are, from half to three times the standard weight. */
+/**
+ * How heavy the paper's lines, grid and dots are, as four named choices. (A bare slider here read
+ * as a stray white line under the papers.)
+ */
 @Composable
 private fun LineWeightRow(value: Float, onChange: (Float) -> Unit) {
   val c = Tali.colors
-  Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-    SectionLabel("Lines", Modifier.width(52.dp))
-    Slider(
-      value = value,
-      onValueChange = { onChange(((it * 4).roundToInt() / 4f).coerceIn(0.5f, 3f)) },
-      valueRange = 0.5f..3f,
-      colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
-      modifier = Modifier.weight(1f),
-    )
-    Text(if (value == 1f) "Standard" else String.format(java.util.Locale.US, "%.2f", value).trimEnd('0').trimEnd('.') + "×", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(68.dp).padding(start = 8.dp))
+  val choices = listOf(0.6f, 1f, 1.6f, 2.4f)
+  val names = listOf("Thin", "Standard", "Bold", "Bolder")
+  Column(Modifier.padding(top = 10.dp)) {
+    Text("Line thickness", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
+    Spacer(Modifier.height(6.dp))
+    Segmented(choices, choices.minBy { abs(it - value) }, { names[choices.indexOf(it)] }, onChange, Modifier.fillMaxWidth())
   }
 }
 
