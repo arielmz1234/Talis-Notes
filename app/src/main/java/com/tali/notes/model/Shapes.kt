@@ -92,6 +92,14 @@ data class PolyShape(
       else -> points
     }
 
+  /** A rectangle with equal sides (a square). */
+  fun isSquare(): Boolean {
+    if (!isRect()) return false
+    val a = points[0].dist(points[1])
+    val b = points[1].dist(points[2])
+    return abs(a - b) < max(a, b) * 0.005f
+  }
+
   /** A closed four-cornered shape whose corners sit on the corners of its box in its own frame. */
   fun isRect(): Boolean {
     if (!closed || points.size != 4) return false
@@ -157,7 +165,18 @@ private const val SQUARE_SNAP = 0.04f
 
 @Serializable
 @SerialName("ellipse")
-data class EllipseShape(val center: Pt, val rx: Float, val ry: Float, val rotation: Float = 0f) : ShapeGeometry {
+data class EllipseShape(
+  val center: Pt,
+  val rx: Float,
+  val ry: Float,
+  val rotation: Float = 0f,
+  /** Drawn with the Ellipse tool: keeps its dots (to stretch it) even while it's perfectly round. */
+  val stretchable: Boolean = false,
+) : ShapeGeometry {
+  /** Perfectly round (a circle). */
+  val round: Boolean
+    get() = abs(rx - ry) < max(rx, ry) * 0.01f
+
   override fun paths(penSize: Float): List<List<Pt>> {
     val n = (max(rx, ry) / 3f).toInt().coerceIn(48, 180)
     return listOf(List(n + 1) { i -> point(TAU * i / n) })
@@ -173,13 +192,20 @@ data class EllipseShape(val center: Pt, val rx: Float, val ry: Float, val rotati
   }
 
   // A circle's dots could only resize it (the resize chip does that); an ellipse's change its shape.
-  override fun handles() = if (abs(rx - ry) < max(rx, ry) * 0.01f) emptyList() else listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
+  override fun handles() = if (round && !stretchable) emptyList() else listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
 
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
-    // A circle stays a circle: any dot sets the radius.
-    if (abs(rx - ry) < max(rx, ry) * 0.01f) return copy(rx = max(2f, p.dist(center)), ry = max(2f, p.dist(center)))
+    // A circle (from the Circle tool) stays a circle: any dot sets the radius.
+    if (round && !stretchable) return copy(rx = max(2f, p.dist(center)), ry = max(2f, p.dist(center)))
+    // An ellipse's dot stretches it one way, snapping round into a circle when close.
     val local = (p - center).rotated(-rotation)
-    return if (index % 2 == 0) copy(rx = max(2f, abs(local.x))) else copy(ry = max(2f, abs(local.y)))
+    return if (index % 2 == 0) {
+      val r = max(2f, abs(local.x)).let { if (abs(it - ry) < ry * SQUARE_SNAP) ry else it }
+      copy(rx = r)
+    } else {
+      val r = max(2f, abs(local.y)).let { if (abs(it - rx) < rx * SQUARE_SNAP) rx else it }
+      copy(ry = r)
+    }
   }
 }
 
@@ -448,6 +474,11 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
   MOMENT("Moment", ShapeGroup.ENGINEERING),
   DIMENSION("Dimension", ShapeGroup.ENGINEERING);
 
+  companion object {
+    /** The shapes in the panel. Square is kept only so older choices still load: the rectangle snaps to a square. */
+    val offered = entries.filter { it != SQUARE }
+  }
+
   /** Builds this shape to fill the box dragged from [p0] to [p1]. */
   fun create(p0: Pt, p1: Pt): ShapeGeometry {
     val l = min(p0.x, p1.x)
@@ -464,14 +495,22 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       DOUBLE_ARROW -> LineShape(p0, p1, arrowStart = true, arrowEnd = true)
       DIMENSION -> dimension(p0, p1)
       CIRCLE -> EllipseShape(p0, p0.dist(p1), p0.dist(p1))
-      ELLIPSE -> EllipseShape(c, w / 2f, h / 2f)
+      // An ellipse can be stretched by its dots, and snaps round into a circle when close.
+      ELLIPSE -> EllipseShape(c, w / 2f, h / 2f, stretchable = true).let { e -> if (abs(e.rx - e.ry) < max(e.rx, e.ry) * SQUARE_SNAP) e.copy(rx = max(e.rx, e.ry), ry = max(e.rx, e.ry)) else e }
       ARC -> ArcShape(c, side / 2f, PI.toFloat(), PI.toFloat())
       // From the centre outwards, a half to start with; its end dots change the amount.
       PART_CIRCLE -> SectorShape.of(p0, p1, 0.5f)
       // One triangle: each corner moves on its own and snaps to tidy angles.
       TRIANGLE -> TriangleShape(Pt(c.x, t), Pt(r, t + h), Pt(l, t + h))
       SQUARE -> PolyShape(listOf(Pt(l, t), Pt(l + side, t), Pt(l + side, t + side), Pt(l, t + side)), true)
-      RECTANGLE -> PolyShape(listOf(Pt(l, t), Pt(r, t), Pt(r, b), Pt(l, b)), true)
+      // One rectangle tool: it snaps to an exact square when close (the Square tile went).
+      RECTANGLE ->
+        if (abs(w - h) < max(w, h) * SQUARE_SNAP) {
+          val sx = if (p1.x >= p0.x) 1f else -1f
+          val sy = if (p1.y >= p0.y) 1f else -1f
+          val q = Pt(p0.x + sx * side, p0.y + sy * side)
+          PolyShape(listOf(Pt(min(p0.x, q.x), min(p0.y, q.y)), Pt(max(p0.x, q.x), min(p0.y, q.y)), Pt(max(p0.x, q.x), max(p0.y, q.y)), Pt(min(p0.x, q.x), max(p0.y, q.y))), true)
+        } else PolyShape(listOf(Pt(l, t), Pt(r, t), Pt(r, b), Pt(l, b)), true)
       DIAMOND -> PolyShape(listOf(Pt(c.x, t), Pt(r, c.y), Pt(c.x, b), Pt(l, c.y)), true)
       PARALLELOGRAM -> PolyShape(listOf(Pt(l + w * 0.25f, t), Pt(r, t), Pt(r - w * 0.25f, b), Pt(l, b)), true)
       TRAPEZOID -> PolyShape(listOf(Pt(l + w * 0.22f, t), Pt(r - w * 0.22f, t), Pt(r, b), Pt(l, b)), true)

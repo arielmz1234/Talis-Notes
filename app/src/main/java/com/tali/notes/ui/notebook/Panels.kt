@@ -466,7 +466,7 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
       SectionLabel(group.label)
       Spacer(Modifier.height(8.dp))
       FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ShapeKind.entries.filter { it.group == group }.forEach { kind ->
+        ShapeKind.offered.filter { it.group == group }.forEach { kind ->
           val on = kind == current && vm.customShapeId == null && vm.tool == com.tali.notes.model.Tool.SHAPE
           ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
         }

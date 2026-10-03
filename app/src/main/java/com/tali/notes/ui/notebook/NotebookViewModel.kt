@@ -79,7 +79,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   var selection by mutableStateOf<SelectionInfo?>(null)
   var zoom by mutableStateOf(1f)
-  var shapeKind by mutableStateOf(runCatching { ShapeKind.valueOf(store.settings.value.lastShape) }.getOrDefault(ShapeKind.LINE))
+  var shapeKind by mutableStateOf(runCatching { ShapeKind.valueOf(store.settings.value.lastShape) }.getOrDefault(ShapeKind.LINE).let { if (it == ShapeKind.SQUARE) ShapeKind.RECTANGLE else it })
     private set
 
   /** The saved shape the shape tool draws, if she picked one of hers. */

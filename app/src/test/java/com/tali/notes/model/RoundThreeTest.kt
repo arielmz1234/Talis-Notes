@@ -70,4 +70,22 @@ class RoundThreeTest {
     assertEquals(listOf(sizes[0], sizes[1], 9f), changed.presetSizes)
     assertEquals(sizes[0], changed.pickSize(0).size, 0f)
   }
+
+  @Test
+  fun rectangleToolSnapsToASquare() {
+    val g = ShapeKind.RECTANGLE.create(Pt(0f, 0f), Pt(100f, 97f)) as PolyShape
+    assertTrue(g.isSquare())
+    assertTrue(!(ShapeKind.RECTANGLE.create(Pt(0f, 0f), Pt(100f, 70f)) as PolyShape).isSquare())
+    assertTrue(ShapeKind.SQUARE !in ShapeKind.offered)
+  }
+
+  @Test
+  fun ellipseSnapsRoundAndKeepsItsDots() {
+    val e = ShapeKind.ELLIPSE.create(Pt(0f, 0f), Pt(100f, 60f)) as EllipseShape
+    val round = e.withHandle(1, Pt(50f, 30f - 49f)) as EllipseShape // pull the top dot almost to a circle
+    assertTrue(round.round)
+    assertEquals(4, round.handles().size)
+    val out = round.withHandle(0, Pt(130f, 30f)) as EllipseShape
+    assertTrue(!out.round)
+  }
 }

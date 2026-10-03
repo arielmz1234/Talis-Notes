@@ -664,9 +664,42 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawSelection(canvas)
     drawShapeHandles(canvas)
     drawMeasure(canvas)
+    drawSquareHint(canvas)
     drawEraserCursor(canvas)
     drawLaser(canvas)
     drawLockCues(canvas)
+  }
+
+  private val squareHintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+  }
+
+  /**
+   * While a rectangle is drawn or stretched and it's exactly square, or an ellipse is exactly round,
+   * a dotted diagonal shows across it (corner to corner, or a diameter at 45°), so she can see it
+   * locked on.
+   */
+  private fun drawSquareHint(canvas: Canvas) {
+    val g = when (mode) {
+      Mode.HANDLE_DRAG -> liveEdit?.geometry
+      Mode.SHAPE_CREATE -> shapePreview?.geometry
+      Mode.LIVE_SHAPE -> liveShape?.geometry
+      else -> null
+    } ?: return
+    val (a, b) = when {
+      g is com.tali.notes.model.PolyShape && g.isSquare() -> g.points[0] to g.points[2]
+      g is com.tali.notes.model.EllipseShape && g.round && g.rx > 4f -> g.point((0.75f * PI).toFloat()) to g.point((1.75f * PI).toFloat())
+      else -> return
+    }
+    val sa = camera.toScreen(a)
+    val sb = camera.toScreen(b)
+    squareHintPaint.color = accentColor
+    squareHintPaint.alpha = 200
+    squareHintPaint.pathEffect = DashPathEffect(floatArrayOf(0.1f, 6f * density), 0f)
+    // Round dots: tiny dashes with round caps.
+    squareHintPaint.strokeWidth = 2.4f * density
+    canvas.drawLine(sa.x, sa.y, sb.x, sb.y, squareHintPaint)
   }
 
   private fun drawLasso(canvas: Canvas) {
