@@ -13,13 +13,14 @@ class RoundThreeTest {
 
   @Test
   fun rectangleHasSideDots() {
-    assertEquals(8, rect.handles().size)
-    assertEquals(Pt(100f, 30f), rect.handles()[5])
+    // Only the side dots: its corners only resized it, which is the resize chip's job now.
+    assertEquals(4, rect.handles().size)
+    assertEquals(Pt(100f, 30f), rect.handles()[1])
   }
 
   @Test
   fun sideDotStretchesOneWayOnly() {
-    val out = rect.withHandle(5, Pt(150f, 10f)) as PolyShape
+    val out = rect.withHandle(1, Pt(150f, 10f)) as PolyShape
     val (w, h) = box(out)
     assertEquals(150f, w, 0.01f)
     assertEquals(60f, h, 0.01f)
@@ -28,7 +29,7 @@ class RoundThreeTest {
 
   @Test
   fun sideDotSnapsToSquare() {
-    val out = rect.withHandle(6, Pt(50f, 98f)) as PolyShape
+    val out = rect.withHandle(2, Pt(50f, 98f)) as PolyShape
     val (w, h) = box(out)
     assertEquals(w, h, 0.01f)
   }
@@ -36,10 +37,17 @@ class RoundThreeTest {
   @Test
   fun squareCanBecomeARectangle() {
     val square = PolyShape(listOf(Pt(0f, 0f), Pt(80f, 0f), Pt(80f, 80f), Pt(0f, 80f)), closed = true)
-    val out = square.withHandle(5, Pt(140f, 40f)) as PolyShape
+    val out = square.withHandle(1, Pt(140f, 40f)) as PolyShape
     val (w, h) = box(out)
     assertEquals(140f, w, 0.01f)
     assertEquals(80f, h, 0.01f)
+  }
+
+  @Test
+  fun circlesAndHandDrawnLinesHaveNoDots() {
+    assertTrue(EllipseShape(Pt(0f, 0f), 40f, 40f).handles().isEmpty())
+    assertEquals(4, EllipseShape(Pt(0f, 0f), 60f, 40f).handles().size)
+    assertTrue(PolyShape(listOf(Pt(0f, 0f), Pt(10f, 5f), Pt(20f, 0f)), closed = false, smooth = true).handles().isEmpty())
   }
 
   @Test

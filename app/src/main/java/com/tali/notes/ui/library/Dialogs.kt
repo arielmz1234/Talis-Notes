@@ -83,6 +83,7 @@ fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, con
       val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
       androidx.compose.runtime.SideEffect { window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) }
     }
+    com.tali.notes.ui.components.KeepFullScreen()
     androidx.compose.foundation.layout.Box(
       Modifier.fillMaxSize()
         // A tap around the card closes it, as before.

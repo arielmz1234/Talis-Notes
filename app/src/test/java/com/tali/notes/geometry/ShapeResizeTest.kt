@@ -22,31 +22,20 @@ class ShapeResizeTest {
     }
 
   @Test
-  fun rectangleCornerStretchesFromTheOppositeCorner() {
+  fun rectangleSideStretchesOneWay() {
     val r = ShapeKind.RECTANGLE.create(Pt(0f, 0f), Pt(200f, 100f)) as PolyShape
-    // Drag the bottom-right corner out to (300, 150).
-    val out = r.withHandle(2, Pt(300f, 150f)) as PolyShape
+    val right = r.handles().indexOfFirst { it.near(Pt(200f, 50f)) }
+    val out = r.withHandle(right, Pt(260f, 70f)) as PolyShape
     assertTrue(isRectangle(out.points))
-    assertTrue(out.points[0].near(Pt(0f, 0f)))
-    assertTrue(out.points[2].near(Pt(300f, 150f)))
+    assertEquals(260f, out.points.maxOf { it.x }, 0.05f)
+    assertEquals(100f, out.points.maxOf { it.y } - out.points.minOf { it.y }, 0.05f)
   }
 
   @Test
-  fun turnedRectangleStaysARectangle() {
-    val r = (ShapeKind.RECTANGLE.create(Pt(0f, 0f), Pt(200f, 100f)) as PolyShape).transformed(Affine.rotateAround(Pt(100f, 50f), 0.6f)) as PolyShape
-    val out = r.withHandle(2, r.points[2] + Pt(40f, 25f)) as PolyShape
+  fun turnedRectangleSideKeepsItARectangle() {
+    val r = (ShapeKind.RECTANGLE.create(Pt(0f, 0f), Pt(200f, 100f)) as PolyShape).transformed(com.tali.notes.geometry.Affine.rotateAround(Pt(100f, 50f), 0.5f)) as PolyShape
+    val out = r.withHandle(1, r.handles()[1] + Pt(30f, 15f)) as PolyShape
     assertTrue(isRectangle(out.points))
-    assertTrue("opposite corner stays", out.points[0].near(r.points[0], 0.1f))
-  }
-
-  @Test
-  fun squareStaysSquare() {
-    val s = ShapeKind.SQUARE.create(Pt(0f, 0f), Pt(100f, 100f)) as PolyShape
-    val out = s.withHandle(2, Pt(180f, 150f)) as PolyShape
-    assertTrue(isRectangle(out.points))
-    val w = out.points[0].dist(out.points[1])
-    val h = out.points[1].dist(out.points[2])
-    assertEquals(w, h, 0.05f)
   }
 
   @Test
@@ -63,21 +52,6 @@ class ShapeResizeTest {
     val out = t.withHandle(1, Pt(150f, 120f)) as com.tali.notes.model.TriangleShape // bottom-right corner
     assertEquals(t.a, out.a)
     assertEquals(t.c, out.c)
-  }
-
-  @Test
-  fun neverTurnsInsideOut() {
-    val r = ShapeKind.RECTANGLE.create(Pt(0f, 0f), Pt(200f, 100f)) as PolyShape
-    val out = r.withHandle(2, Pt(-300f, -300f)) as PolyShape // dragged past the opposite corner
-    assertTrue(out.points.all { it.x >= -1e-3f && it.y >= -1e-3f })
-  }
-
-  @Test
-  fun circleStaysACircle() {
-    val c = EllipseShape(Pt(0f, 0f), 50f, 50f)
-    val out = c.withHandle(0, Pt(80f, 10f)) as EllipseShape
-    assertEquals(out.rx, out.ry, 1e-3f)
-    assertTrue(out.rx > 79f)
   }
 
   @Test

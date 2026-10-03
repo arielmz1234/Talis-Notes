@@ -202,7 +202,10 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
     onDispose { bars?.isAppearanceLightStatusBars = !systemDark }
   }
   TaliColorsScope(notebookColors(systemDark, darkPaper)) {
-    NotebookContent(vm, systemDark, onBack)
+    // Dialogs opened from here keep full screen when it's on.
+    androidx.compose.runtime.CompositionLocalProvider(com.tali.notes.ui.components.LocalFullScreen provides hideNavBar) {
+      NotebookContent(vm, systemDark, onBack)
+    }
   }
 }
 

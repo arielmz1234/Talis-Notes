@@ -82,12 +82,13 @@ data class PolyShape(
 
   override fun transformed(m: Affine) = copy(points = points.map(m::apply), rotation = rotation + atan2(m.b, m.a))
 
-  // A hand-drawn line has far too many points to give each a dot: it resizes from its corners instead.
-  // A rectangle (or square) also gets a dot in the middle of each side, to stretch it one way.
+  // Dots only where they change the shape (the resize chip resizes it): a rectangle's in the middle
+  // of each side, to stretch it one way; every other polygon's at its corners. A hand-drawn line
+  // has none (it could only be resized).
   override fun handles() =
     when {
-      smooth -> GroupShape(listOf(this)).handles()
-      isRect() -> points + points.indices.map { i -> (points[i] + points[(i + 1) % 4]) * 0.5f }
+      smooth -> emptyList()
+      isRect() -> points.indices.map { i -> (points[i] + points[(i + 1) % 4]) * 0.5f }
       else -> points
     }
 
@@ -104,8 +105,7 @@ data class PolyShape(
 
   /**
    * A side's middle dot moves that side only (the opposite one stays put), making the rectangle
-   * longer or shorter one way. Within [SQUARE_SNAP] of square it snaps to an exact square; a
-   * rectangle's corner dots snap the same way.
+   * longer or shorter one way. Within [SQUARE_SNAP] of square it snaps to an exact square.
    */
   private fun withSide(side: Int, p: Pt): ShapeGeometry {
     val c = Geo.centroid(points)
@@ -138,81 +138,22 @@ data class PolyShape(
   }
 
   /**
-   * A rectangle's corner dot resizes it rather than bending it: it stretches from the opposite
-   * corner within the shape's own frame (so a turned rectangle stays a rectangle), evenly for a
-   * square, and never collapses or turns inside out. Every other polygon's dots move their own
-   * corners.
+   * A rectangle's dots sit in the middle of its sides and stretch it one way ([withSide]); every
+   * other polygon's dots move their own corners. (Resizing the whole shape is the resize chip's job.)
    */
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
-    if (smooth) return (GroupShape(listOf(this)).withHandle(index, p) as GroupShape).parts[0]
-    if (index >= points.size) return if (isRect()) withSide(index - points.size, p) else this
+    if (smooth) return this
+    if (isRect()) return withSide(index, p)
     // Anything but a rectangle or square (a pentagon, a star, a polygon recognised from her
-    // drawing): each dot moves its own corner, so its joints can be shaped freely. (The lasso's
-    // corner handle still resizes the whole shape.)
-    if (points.size < 3 || !isRect()) return copy(points = points.toMutableList().also { it[index] = p })
-    val c = Geo.centroid(points)
-    val theta = rotation
-    val local = points.map { (it - c).rotated(-theta) }
-    val target = (p - c).rotated(-theta)
-    val v = local[index]
-    val l = local.minOf { it.x }
-    val r = local.maxOf { it.x }
-    val t = local.minOf { it.y }
-    val b = local.maxOf { it.y }
-    val w = max(r - l, 1e-3f)
-    val h = max(b - t, 1e-3f)
-    // Which sides this dot pulls: a dot near an edge of the box pulls that edge; a middle one doesn't.
-    val ax: Float? = when {
-      v.x > l + w * 0.75f -> l
-      v.x < l + w * 0.25f -> r
-      else -> null
-    }
-    val ay: Float? = when {
-      v.y > t + h * 0.75f -> t
-      v.y < t + h * 0.25f -> b
-      else -> null
-    }
-    fun factor(anchor: Float?, from: Float, to: Float): Float =
-      if (anchor == null || abs(from - anchor) < 1e-3f) 1f else ((to - anchor) / (from - anchor)).coerceIn(MIN_SCALE, MAX_SCALE)
-    var sx = factor(ax, v.x, target.x)
-    var sy = factor(ay, v.y, target.y)
-    if (isEven()) {
-      // Keep its proportions: follow the drag along the line from the anchor through the dot.
-      val anchor = Pt(ax ?: (l + r) / 2, ay ?: (t + b) / 2)
-      val d = v - anchor
-      val s = if (d.length() < 1e-3f) 1f else ((target - anchor).dot(d) / d.dot(d)).coerceIn(MIN_SCALE, MAX_SCALE)
-      sx = s
-      sy = s
-    }
-    else if (points.size == 4 && ax != null && ay != null && isRect()) {
-      // A rectangle's corner: snaps to a square when it comes close.
-      val nw = w * sx
-      val nh = h * sy
-      if (abs(nw - nh) < max(nw, nh) * SQUARE_SNAP) {
-        val side = (nw + nh) / 2
-        sx = side / w
-        sy = side / h
-      }
-    }
-    val axv = ax ?: (l + r) / 2
-    val ayv = ay ?: (t + b) / 2
-    val out = local.map { q -> c + Pt(axv + (q.x - axv) * sx, ayv + (q.y - ayv) * sy).rotated(theta) }
-    return copy(points = out)
-  }
-
-  /** Squares, regular polygons and stars resize evenly; anything else may stretch. */
-  private fun isEven(): Boolean {
-    if (points.size >= 5) return true
-    val c = Geo.centroid(points)
-    val d = points.map { it.dist(c) }
-    return d.max() - d.min() < d.max() * 0.04f && points.size == 4
+    // drawing): each dot moves its own corner, so its joints can be shaped freely. (The resize
+    // chip resizes the whole shape.)
+    return copy(points = points.toMutableList().also { it[index] = p })
   }
 }
 
 private const val MIN_SCALE = 0.05f
 /** How close to square (as a share of the side) a rectangle being stretched snaps to a square. */
 private const val SQUARE_SNAP = 0.04f
-private const val MAX_SCALE = 40f
 
 @Serializable
 @SerialName("ellipse")
@@ -231,7 +172,8 @@ data class EllipseShape(val center: Pt, val rx: Float, val ry: Float, val rotati
     return copy(center = m.apply(center), rx = rx * s, ry = ry * s, rotation = rotation + rot)
   }
 
-  override fun handles() = listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
+  // A circle's dots could only resize it (the resize chip does that); an ellipse's change its shape.
+  override fun handles() = if (abs(rx - ry) < max(rx, ry) * 0.01f) emptyList() else listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
 
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
     // A circle stays a circle: any dot sets the radius.
@@ -439,14 +381,17 @@ data class GroupShape(val parts: List<ShapeGeometry>) : ShapeGeometry {
 
   private fun box() = Rect.around(parts.flatMap { it.paths(1f).flatten() })!!
 
-  override fun handles(): List<Pt> {
+  private fun corners(): List<Pt> {
     val r = box()
     return listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom))
   }
 
-  /** Corner handles scale the group uniformly around the opposite corner. */
+  // Its corner dots only resized it, and the resize chip does that now: no dots of its own.
+  override fun handles(): List<Pt> = emptyList()
+
+  /** Scales the group uniformly around the corner opposite corner [index]. */
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
-    val h = handles()
+    val h = corners()
     val anchor = h[(index + 2) % 4]
     val old = h[index]
     val oldDiag = old.dist(anchor)

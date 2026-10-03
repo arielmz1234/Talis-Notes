@@ -792,7 +792,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val sb = selectionBounds ?: return false
     val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
     if (canRotateSelection() && rotateHandle(r).dist(screen) < hit) return true
-    return hypot(screen.x - r.right, screen.y - r.bottom) < hit || r.contains(screen.x, screen.y)
+    return resizeChip(r).dist(screen) < hit || r.contains(screen.x, screen.y)
   }
 
   private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem || it is TextItem }
@@ -813,9 +813,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun drawSelection(canvas: Canvas) {
     val b = selectionBounds ?: return
     val pad = 8f * density
-    if (activeShapeId != null && selection.size == 1 && mode != Mode.ROTATE_SELECTION) {
-      // The shape's own handles are enough; just add the rotate handle.
-      drawRotateHandle(canvas, screenRect(b, Affine.IDENTITY).apply { inset(-pad, -pad) })
+    if (activeShapeId != null && selection.size == 1 && mode != Mode.ROTATE_SELECTION && mode != Mode.SCALE_SELECTION) {
+      // The shape's own dots move its corners; add the rotate handle and the resize chip.
+      val r = screenRect(b, Affine.IDENTITY).apply { inset(-pad, -pad) }
+      drawRotateHandle(canvas, r)
+      if (mode != Mode.HANDLE_DRAG) drawResizeChip(canvas, resizeChip(r))
       return
     }
     if (mode == Mode.ROTATE_SELECTION) {
@@ -827,7 +829,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Snap to the pixel grid so all four dashed edges look equally crisp.
     r.set(Math.round(r.left) + 0.5f, Math.round(r.top) + 0.5f, Math.round(r.right) + 0.5f, Math.round(r.bottom) + 0.5f)
     canvas.drawRoundRect(r, 6f * density, 6f * density, selectionPaint)
-    drawHandle(canvas, r.right, r.bottom, 7f)
+    drawResizeChip(canvas, resizeChip(r))
     drawRotateHandle(canvas, r)
   }
 
@@ -949,6 +951,37 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val s = camera.toScreen(p)
       drawHandle(canvas, s.x, s.y, 6.5f)
     }
+  }
+
+  /** The resize chip sits just off the selection's bottom-right corner, clear of a shape's own corner dot. */
+  private fun resizeChip(r: RectF) = Pt(r.right + RESIZE_CHIP_OFFSET_DP * density, r.bottom + RESIZE_CHIP_OFFSET_DP * density)
+
+  private val resizeArrow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+  }
+  private val resizePath = android.graphics.Path()
+
+  /** A round chip with a diagonal two-way arrow, like an enlarge icon: drag it to resize. */
+  private fun drawResizeChip(canvas: Canvas, at: Pt) {
+    val d = density
+    canvas.drawCircle(at.x, at.y, 13f * d, handleFill)
+    canvas.drawCircle(at.x, at.y, 13f * d, handleStroke)
+    resizeArrow.color = handleStroke.color
+    resizeArrow.strokeWidth = 1.8f * d
+    val a = 4.6f * d
+    val h = 3.2f * d
+    resizePath.rewind()
+    resizePath.moveTo(at.x - a, at.y - a)
+    resizePath.lineTo(at.x + a, at.y + a)
+    resizePath.moveTo(at.x - a + h, at.y - a)
+    resizePath.lineTo(at.x - a, at.y - a)
+    resizePath.lineTo(at.x - a, at.y - a + h)
+    resizePath.moveTo(at.x + a - h, at.y + a)
+    resizePath.lineTo(at.x + a, at.y + a)
+    resizePath.lineTo(at.x + a, at.y + a - h)
+    canvas.drawPath(resizePath, resizeArrow)
   }
 
   private fun drawHandle(canvas: Canvas, x: Float, y: Float, radiusDp: Float) {
@@ -1141,7 +1174,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val screen = Pt(e.getX(idx), e.getY(idx))
     eraserOverride = e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
 
-    // 1. Handles of the shape being edited win over everything.
+    // 0. The resize chip wins over everything (it sits clear of the shape's own dots).
+    selectionBounds?.let { sb ->
+      if (eraserOverride) return@let
+      val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
+      if (resizeChip(r).dist(screen) < HANDLE_HIT_DP * density) {
+        dragStart = p
+        dragTransform = Affine.IDENTITY
+        tiles.hidden = selection.map { it.id }.toSet()
+        mode = Mode.SCALE_SELECTION
+        host.onSelectionChanged(null)
+        invalidate()
+        return
+      }
+    }
+
+    // 1. Handles of the shape being edited win over everything else.
     currentActiveShape()?.let { shape ->
       // The nearest dot, so on a small shape the one she aimed at wins.
       val handles = shape.geometry.handles()
@@ -1172,7 +1220,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         invalidate()
         return
       }
-      val nearCorner = hypot(screen.x - r.right, screen.y - r.bottom) < HANDLE_HIT_DP * density
+      val nearCorner = resizeChip(r).dist(screen) < HANDLE_HIT_DP * density
       // A shape that picked itself up after being drawn doesn't take the pen inside it: she may be
       // writing in the box she just drew. A finger still moves it.
       val writesThrough = softSelection && !drawIsFinger && !nearCorner
@@ -3011,6 +3059,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val LASER_FADE_MS = 450L
     /** A straight highlighter line this close to level or upright snaps to it. */
     private const val STRAIGHT_SNAP_DEG = 4.0
+    /** How far (dp, each way) the resize chip sits out from the selection's padded corner. */
+    private const val RESIZE_CHIP_OFFSET_DP = 14f
     /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */
     private const val EDGE_ZONE_DP = 100f
     private const val EDGE_DWELL_MS = 120L
