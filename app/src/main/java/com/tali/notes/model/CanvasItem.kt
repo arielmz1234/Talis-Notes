@@ -173,20 +173,24 @@ class ImageItem(
    */
   val front: Boolean = false,
   override val locked: Boolean = false,
+  /** For an area fill: the strokes and shapes outlining it (recorded when it was made), which move with it. */
+  val walls: Set<String> = emptySet(),
 ) : CanvasItem() {
   override val bounds: Rect = rect
   override val pen: PenType? = null
 
-  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front, locked)
+  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front, locked, walls)
 
-  override fun withLocked(on: Boolean) = ImageItem(id, z, file, rect, pdfPage, front, on)
+  override fun withLocked(on: Boolean) = ImageItem(id, z, file, rect, pdfPage, front, on, walls)
 
-  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on, locked)
+  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on, locked, walls)
 
   override fun transformed(m: Affine, newId: String, newZ: Long): ImageItem {
     val a = m.apply(Pt(rect.left, rect.top))
     val b = m.apply(Pt(rect.right, rect.bottom))
-    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage, front)
+    // Moved (same id) it keeps its lock and outline; a copy starts fresh.
+    val same = newId == id
+    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage, front, if (same) locked else false, if (same) walls else emptySet())
   }
 }
 

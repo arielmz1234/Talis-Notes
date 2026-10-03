@@ -783,8 +783,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           host.onHint(if (walls.isEmpty()) "Draw around an area first, or tap inside a shape" else "That area isn't closed. Close the gap and try again")
           return@post
         }
-        val (file, rect) = made
-        val item = ImageItem(dd.newId(), dd.nextZ(), file, rect)
+        val (file, rect, outline) = made
+        val item = ImageItem(dd.newId(), dd.nextZ(), file, rect, walls = outline)
         dd.commit(Change(oldFills.filter { dd[it.id] != null }, listOf(item)))
       }
     }
@@ -803,7 +803,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * Draws the writing in [window] into a mask, finds the area around [p] it encloses and returns a
    * picture of that area in [colour] (saved, with its place in the world), or null if it isn't closed.
    */
-  private fun fillPicture(p: Pt, window: Rect, walls: List<CanvasItem>, colour: Int): Pair<String, Rect>? {
+  private fun fillPicture(p: Pt, window: Rect, walls: List<CanvasItem>, colour: Int): Triple<String, Rect, Set<String>>? {
     val k = minOf(1f, FILL_PIXELS / maxOf(window.width, window.height))
     val w = (window.width * k).toInt().coerceAtLeast(8)
     val h = (window.height * k).toInt().coerceAtLeast(8)
@@ -838,7 +838,53 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val bmp = android.graphics.Bitmap.createBitmap(out, bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
     // The colour goes in the name, in case a fill ever needs to be recognised by colour.
     val file = images.save(bmp, FILL_PREFIX + "%08x-".format(colour))
-    return file to Rect(window.left + x0 / k, window.top + y0 / k, window.left + (x1 + 1) / k, window.top + (y1 + 1) / k)
+    val outline = outlineOf(walls, filled, w, h, window, k)
+    return Triple(file, Rect(window.left + x0 / k, window.top + y0 / k, window.left + (x1 + 1) / k, window.top + (y1 + 1) / k), outline)
+  }
+
+  /**
+   * Which of [walls] outline the filled area: along much of its length (a quarter or more), there is
+   * fill just to one side of it and not the other. Writing inside the area has fill on both sides,
+   * and a stroke or shape that only touches or crosses the edge borders it just briefly; neither is
+   * part of the outline, so neither moves with the fill.
+   */
+  private fun outlineOf(walls: List<CanvasItem>, filled: BooleanArray, w: Int, h: Int, window: Rect, k: Float): Set<String> {
+    fun on(x: Float, y: Float): Boolean {
+      val px = ((x - window.left) * k).toInt()
+      val py = ((y - window.top) * k).toInt()
+      return px in 0 until w && py in 0 until h && filled[py * w + px]
+    }
+    val step = 3f / k
+    val out = HashSet<String>()
+    for (item in walls) {
+      val (paths, size) = when (item) {
+        is InkItem -> listOf(StrokeFactory.points(item.stroke)) to item.size
+        is ShapeItem -> item.geometry.paths(item.size) to item.size
+        else -> continue
+      }
+      // Probe just past the line's own width and the gap bridging, on either side.
+      val reach = size / 2f + FILL_BRIDGE + 2.5f / k
+      var samples = 0
+      var oneSided = 0
+      for (path in paths) for (i in 0 until path.size - 1) {
+        val a = path[i]
+        val b = path[i + 1]
+        val len = a.dist(b)
+        if (len < 1e-3f) continue
+        val n = Pt(-(b.y - a.y) / len, (b.x - a.x) / len)
+        var t = 0f
+        while (t < len) {
+          val q = a + (b - a) * (t / len)
+          val left = on(q.x + n.x * reach, q.y + n.y * reach)
+          val right = on(q.x - n.x * reach, q.y - n.y * reach)
+          samples++
+          if (left != right) oneSided++
+          t += step
+        }
+      }
+      if (samples > 0 && oneSided >= 4 && oneSided >= samples / 4) out += item.id
+    }
+    return out
   }
 
   /** Whether a touch at [screen] lands on the active shape's dots or on the selection (to move, resize or turn it). */
@@ -2083,22 +2129,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /**
    * A fill and the drawing around it move as one: adds to [items] every area fill outlined by
    * something in it, and every outline stroke of any fill in it (so a box drawn in four strokes
-   * comes along whole). An outline is anything reaching the fill's edge; writing inside the filled
-   * area isn't. Only the eraser still treats them apart, so she can erase just a fill or a line.
+   * comes along whole). The outline is recorded when the fill is made (`outlineOf`); writing inside
+   * the filled area, or anything just touching it, isn't part of it. Only the eraser still treats them apart, so she can erase just a fill or a line.
    */
   private fun withFills(items: List<CanvasItem>, locked: Boolean = settings.lassoLocked): List<CanvasItem> {
     val d = doc ?: return items
-    val fills = d.all.filterIsInstance<ImageItem>().filter { isAreaFill(it) && (!it.locked || locked) }
+    // Only fills that know their outline (recorded when they were made) group with it.
+    val fills = d.all.filterIsInstance<ImageItem>().filter { isAreaFill(it) && it.walls.isNotEmpty() && (!it.locked || locked) }
     if (fills.isEmpty() || items.isEmpty()) return items
-    val margin = 3f
-    fun walls(f: ImageItem): List<CanvasItem> {
-      val inner = Rect(f.rect.left + margin, f.rect.top + margin, f.rect.right - margin, f.rect.bottom - margin)
-      val outer = Rect(f.rect.left - margin, f.rect.top - margin, f.rect.right + margin, f.rect.bottom + margin)
-      return d.intersecting(outer).filter { w ->
-        w !is ImageItem && w !is TextItem && (!w.locked || locked) &&
-          !(w.bounds.left > inner.left && w.bounds.top > inner.top && w.bounds.right < inner.right && w.bounds.bottom < inner.bottom)
-      }
-    }
+    fun walls(f: ImageItem): List<CanvasItem> = f.walls.mapNotNull { d[it] }.filter { !it.locked || locked }
     val group = LinkedHashMap<String, CanvasItem>()
     items.forEach { group[it.id] = it }
     var changed = true
@@ -2106,10 +2145,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     while (changed && rounds++ < 4) {
       changed = false
       for (f in fills) {
-        val w = walls(f)
-        if (f.id in group || w.any { it.id in group }) {
+        if (f.id in group || f.walls.any { it in group }) {
           if (group.put(f.id, f) == null) changed = true
-          w.forEach { if (group.put(it.id, it) == null) changed = true }
+          walls(f).forEach { if (group.put(it.id, it) == null) changed = true }
         }
       }
     }
