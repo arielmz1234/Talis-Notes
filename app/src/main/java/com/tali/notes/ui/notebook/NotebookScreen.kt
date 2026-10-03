@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.outlined.LineWeight
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.DropdownMenu
@@ -999,6 +1000,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
   var more by remember(sel.count) { mutableStateOf(false) }
   // Under ⋯: the palette button opens just the colours, the thickness button just the thickness.
   var extra by remember(sel.count) { mutableStateOf<SelectionExtra?>(null) }
+  // Width of the folded buttons (copy to ⋯): the menu is placed by it, so opening grows only to the right.
+  var foldedWidth by remember { mutableIntStateOf(0) }
   Box(
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val gap = with(density) { 14.dp.roundToPx() }
@@ -1007,7 +1010,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
       val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxHeight = (constraints.maxHeight - topLimit - gap).coerceAtLeast(0)))
       val bottomLimit = constraints.maxHeight - p.height - gap
       val cx = sel.screenRect.centerX().roundToInt()
-      val x = (cx - p.width / 2).coerceIn(gap, (constraints.maxWidth - p.width - gap).coerceAtLeast(gap))
+      val folded = if (foldedWidth > 0) foldedWidth + with(density) { 12.dp.roundToPx() } else p.width
+      val x = (cx - folded / 2).coerceIn(gap, (constraints.maxWidth - p.width - gap).coerceAtLeast(gap))
       val above = sel.screenRect.top.roundToInt() - p.height - gap
       // Leave room for the rotate handle hanging under the selection.
       val below = sel.screenRect.bottom.roundToInt() + gap + if (sel.rotatable) with(density) { 48.dp.roundToPx() } else 0
@@ -1027,13 +1031,15 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
     ) {
       // One row: ⋯ adds the rest straight after itself (scrolls sideways only if the screen is too narrow).
       Row(Modifier.height(44.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-        ToolButton(Icons.Outlined.ContentCopy, "Copy (hold anywhere to paste it, here or in any notebook)", onClick = onCopy)
-        ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
-        if (pasteCount > 0) ToolButton(Icons.Outlined.ContentPaste, if (pasteCount == 1) "Paste" else "Paste $pasteCount items", onClick = onPaste)
-        ToolButton(Icons.Outlined.LibraryAdd, "Duplicate", onClick = onDuplicate)
-        ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
-        Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
-        ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more; extra = null }
+        Row(Modifier.onSizeChanged { foldedWidth = it.width }, verticalAlignment = Alignment.CenterVertically) {
+          ToolButton(Icons.Outlined.ContentCopy, "Copy (hold anywhere to paste it, here or in any notebook)", onClick = onCopy)
+          ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
+          if (pasteCount > 0) ToolButton(Icons.Outlined.ContentPaste, if (pasteCount == 1) "Paste" else "Paste $pasteCount items", onClick = onPaste)
+          ToolButton(Icons.Outlined.LibraryAdd, "Duplicate", onClick = onDuplicate)
+          ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
+          Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
+          ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more; extra = null }
+        }
         if (more) {
           // The rest of what the menu always had, as plain buttons; colour and thickness each open their own row.
           if (!sel.hasImage || sel.count > 1) {
@@ -1056,7 +1062,7 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
       if (more) {
         when (extra) {
           SelectionExtra.COLOUR -> SelectionColours(sel, colors, onColor)
-          SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, onRestyle) }
+          SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, sel.line, onRestyle) }
           null -> {}
         }
       }
@@ -1075,15 +1081,18 @@ private fun SelectionColours(sel: SelectionInfo, colors: List<Int>, onColor: (In
   }
 }
 
-/** The thickness of selected writing and shapes, opened from the thickness button. */
+/** The thickness and line style of selected writing and shapes, opened from the thickness button. */
 @Composable
-private fun SelectionThickness(size: Float, onRestyle: (Float?, LineStyle?) -> Unit) {
+private fun SelectionThickness(size: Float, line: LineStyle?, onRestyle: (Float?, LineStyle?) -> Unit) {
   val c = Tali.colors
   // Follows the finger here and changes the writing once let go (one undo step).
   var value by remember(size) { mutableFloatStateOf(size) }
-  Row(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-    StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
-    Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+  Column(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
+      Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+    }
+    CompactLineStylePicker(line ?: LineStyle.SOLID, { onRestyle(null, it) }, Modifier.padding(top = 2.dp))
   }
 }
 

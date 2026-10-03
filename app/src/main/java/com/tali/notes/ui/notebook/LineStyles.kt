@@ -94,3 +94,28 @@ fun pathEffect(style: LineStyle, w: Float): PathEffect? {
   val intervals = style.pattern.mapIndexed { i, v -> if (i % 2 == 0) maxOf((v - 1f) * w, 0.01f) else (v + 1f) * w }
   return PathEffect.dashPathEffect(intervals.toFloatArray())
 }
+
+/**
+ * The six line styles in one short row, each a small straight stroke with no label: the selection
+ * menu's compact version of [LineStylePicker], with the same gliding highlight.
+ */
+@Composable
+fun CompactLineStylePicker(selected: LineStyle, onPick: (LineStyle) -> Unit, modifier: Modifier = Modifier) {
+  val c = Tali.colors
+  val glide = rememberSlidingSelection()
+  Row(modifier.slidingHighlight(glide, selected, SolidColor(c.accentSoft), 10.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    LineStyle.entries.forEach { style ->
+      val ink by animateColorAsState(if (style == selected) c.accent else c.ink, tween(220), label = "lineInk")
+      Canvas(
+        Modifier.slidingOption(glide, style)
+          .size(44.dp, 30.dp)
+          .clip(RoundedCornerShape(10.dp))
+          .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = style.label) { onPick(style) }
+      ) {
+        val w = 2.dp.toPx()
+        val y = size.height / 2
+        drawLine(ink, androidx.compose.ui.geometry.Offset(size.width * 0.18f, y), androidx.compose.ui.geometry.Offset(size.width * 0.82f, y), w, StrokeCap.Round, pathEffect(style, w))
+      }
+    }
+  }
+}

@@ -34,7 +34,7 @@ import org.robolectric.annotation.GraphicsMode
 class SelectionMenuShotTest {
   @get:Rule val rule = createComposeRule()
 
-  private fun shot(name: String, dark: Boolean, open: Boolean) {
+  private fun shot(name: String, dark: Boolean, open: Boolean, then: String? = null) {
     val sel = SelectionInfo(RectF(450f, 520f, 650f, 640f), count = 3, hasShape = true, hasImage = false, color = 0xFF1F5FD1.toInt(), lineSize = 2.5f, line = LineStyle.SOLID)
     rule.setContent {
       TaliTheme(darkTheme = dark) {
@@ -44,6 +44,7 @@ class SelectionMenuShotTest {
       }
     }
     if (open) rule.onNodeWithContentDescription("More options").performClick()
+    then?.let { rule.onNodeWithContentDescription(it).performClick() }
     rule.waitForIdle()
     val dir = File("build/selection-menu").apply { mkdirs() }
     rule.onNodeWithTag("stage").captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, File(dir, "$name.png").outputStream())
@@ -54,4 +55,10 @@ class SelectionMenuShotTest {
   @Test fun opened() = shot("opened", dark = false, open = true)
 
   @Test fun openedDark() = shot("opened-dark", dark = true, open = true)
+
+  @Test fun colours() = shot("colours", dark = false, open = true, then = "Colour")
+
+  @Test fun thickness() = shot("thickness", dark = false, open = true, then = "Thickness")
+
+  @Test fun thicknessDark() = shot("thickness-dark", dark = true, open = true, then = "Thickness")
 }
