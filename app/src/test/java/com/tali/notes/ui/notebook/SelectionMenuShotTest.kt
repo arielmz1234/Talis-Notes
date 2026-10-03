@@ -34,12 +34,12 @@ import org.robolectric.annotation.GraphicsMode
 class SelectionMenuShotTest {
   @get:Rule val rule = createComposeRule()
 
-  private fun shot(name: String, dark: Boolean, open: Boolean, then: String? = null) {
+  private fun shot(name: String, dark: Boolean, open: Boolean, then: String? = null, w: Int = 1100, h: Int = 800) {
     val sel = SelectionInfo(RectF(450f, 520f, 650f, 640f), count = 3, hasShape = true, hasImage = false, color = 0xFF1F5FD1.toInt(), lineSize = 2.5f, line = LineStyle.SOLID)
     rule.setContent {
       TaliTheme(darkTheme = dark) {
-        Box(Modifier.testTag("stage").size(1100.dp, 800.dp).background(Tali.colors.paper)) {
-          SelectionMenu(sel, narrow = false, colors = AppSettings().savedColors, pasteCount = 2, onPaste = {}, onDelete = {}, onDuplicate = {}, onCopy = {}, onCut = {}, onColor = {}, onRestyle = { _, _ -> }, onSaveShape = {}, onEditText = {}, onArrange = {}, onLock = {}, onMirror = {})
+        Box(Modifier.testTag("stage").size(w.dp, h.dp).background(Tali.colors.paper)) {
+          SelectionMenu(sel, narrow = w < 900, colors = AppSettings().savedColors, pasteCount = 2, onPaste = {}, onDelete = {}, onDuplicate = {}, onCopy = {}, onCut = {}, onColor = {}, onRestyle = { _, _ -> }, onSaveShape = {}, onEditText = {}, onArrange = {}, onLock = {}, onMirror = {})
         }
       }
     }
@@ -59,6 +59,12 @@ class SelectionMenuShotTest {
   @Test fun colours() = shot("colours", dark = false, open = true, then = "Colour")
 
   @Test fun thickness() = shot("thickness", dark = false, open = true, then = "Thickness")
+
+  @Config(qualifiers = "w800dp-h1280dp-mdpi")
+  @Test fun upright() = shot("upright-thickness", dark = false, open = true, then = "Thickness", w = 800, h = 1280)
+
+  @Config(qualifiers = "w800dp-h1280dp-mdpi")
+  @Test fun uprightColours() = shot("upright-colours", dark = false, open = true, then = "Colour", w = 800, h = 1280)
 
   @Test fun thicknessDark() = shot("thickness-dark", dark = true, open = true, then = "Thickness")
 }

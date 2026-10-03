@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.FitScreen
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.outlined.LineWeight
 import androidx.compose.material.icons.outlined.TouchApp
@@ -1002,6 +1003,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
   var extra by remember(sel.count) { mutableStateOf<SelectionExtra?>(null) }
   // Width of the folded buttons (copy to ⋯): the menu is placed by it, so opening grows only to the right.
   var foldedWidth by remember { mutableIntStateOf(0) }
+  // Width of the whole button row: the colours and thickness under it spread across exactly that.
+  var rowWidth by remember { mutableIntStateOf(0) }
   Box(
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val gap = with(density) { 14.dp.roundToPx() }
@@ -1030,7 +1033,7 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
         .padding(horizontal = 6.dp, vertical = 4.dp)
     ) {
       // One row: ⋯ adds the rest straight after itself (scrolls sideways only if the screen is too narrow).
-      Row(Modifier.height(44.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+      Row(Modifier.height(44.dp).onSizeChanged { rowWidth = it.width }.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.onSizeChanged { foldedWidth = it.width }, verticalAlignment = Alignment.CenterVertically) {
           ToolButton(Icons.Outlined.ContentCopy, "Copy (hold anywhere to paste it, here or in any notebook)", onClick = onCopy)
           ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
@@ -1061,8 +1064,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
       }
       if (more) {
         when (extra) {
-          SelectionExtra.COLOUR -> SelectionColours(sel, colors, onColor)
-          SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, sel.line, onRestyle) }
+          SelectionExtra.COLOUR -> SelectionColours(sel, colors, with(density) { rowWidth.toDp() }, onColor)
+          SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, sel.line, with(density) { rowWidth.toDp() }, onRestyle) }
           null -> {}
         }
       }
@@ -1072,27 +1075,46 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
 
 private enum class SelectionExtra { COLOUR, THICKNESS }
 
-/** The selection's colour as one row of dots, opened from the palette button. */
+/** The selection's colour, opened from the palette button: the dots spread evenly across the menu's [width], wrapping only when they don't fit. */
 @Composable
-private fun SelectionColours(sel: SelectionInfo, colors: List<Int>, onColor: (Int) -> Unit) {
+private fun SelectionColours(sel: SelectionInfo, colors: List<Int>, width: Dp, onColor: (Int) -> Unit) {
   val ring = rememberSlidingSelection()
-  Row(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp).horizontalScroll(rememberScrollState()).colorRing(ring, sel.color?.let { Color(it) }).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-    colors.forEach { col -> ColorDot(Color(col), selected = col == sel.color, size = 26.dp, selection = ring) { onColor(col) } }
+  val perRow = (width.value / 38f).toInt().coerceIn(1, colors.size.coerceAtLeast(1))
+  Column(Modifier.width(width).padding(bottom = 4.dp).colorRing(ring, sel.color?.let { Color(it) })) {
+    colors.chunked(perRow).forEach { row ->
+      Row(Modifier.fillMaxWidth()) {
+        row.forEach { col -> Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ColorDot(Color(col), selected = col == sel.color, size = 28.dp, selection = ring) { onColor(col) } } }
+        // Keep the columns lined up on a shorter last row.
+        repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+      }
+    }
   }
 }
 
-/** The thickness and line style of selected writing and shapes, opened from the thickness button. */
+/** Thickness and line style of selected writing and shapes, opened from the thickness button: side by side when the menu is wide enough, else one above the other. */
 @Composable
-private fun SelectionThickness(size: Float, line: LineStyle?, onRestyle: (Float?, LineStyle?) -> Unit) {
+private fun SelectionThickness(size: Float, line: LineStyle?, width: Dp, onRestyle: (Float?, LineStyle?) -> Unit) {
   val c = Tali.colors
   // Follows the finger here and changes the writing once let go (one undo step).
   var value by remember(size) { mutableFloatStateOf(size) }
-  Column(Modifier.width(300.dp).padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp)) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+  val slider = @Composable { modifier: Modifier ->
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
       StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
       Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
-    CompactLineStylePicker(line ?: LineStyle.SOLID, { onRestyle(null, it) }, Modifier.padding(top = 2.dp))
+  }
+  val styles = @Composable { modifier: Modifier -> CompactLineStylePicker(line ?: LineStyle.SOLID, { onRestyle(null, it) }, modifier) }
+  if (width >= 500.dp) {
+    Row(Modifier.width(width).padding(start = 4.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+      slider(Modifier.weight(1f))
+      Spacer(Modifier.width(8.dp))
+      styles(Modifier.weight(1f))
+    }
+  } else {
+    Column(Modifier.width(width).padding(start = 4.dp, bottom = 6.dp)) {
+      slider(Modifier.fillMaxWidth())
+      styles(Modifier.fillMaxWidth().padding(top = 2.dp))
+    }
   }
 }
 
