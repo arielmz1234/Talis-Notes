@@ -273,6 +273,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // Ink
   private var strokeId: InProgressStrokeId? = null
   private val strokePens = HashMap<InProgressStrokeId, PenType>()
+  /** The page each stroke started on: with Write between pages off, it stays on that page. */
+  private val strokeStartPages = HashMap<InProgressStrokeId, Int>()
 
   /** The pen colour each stroke really has (on dark paper the stroke is drawn live in its light version). */
   private val strokeColors = HashMap<InProgressStrokeId, Int>()
@@ -498,7 +500,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
             val real = strokeColors.remove(id)?.let { Brushes.inkColor(pen, it) }
             val stroke = if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s
             // On A4 pages, writing that ran off the page is cut at its edge.
-            clipToPages(stroke).map { InkItem(d.newId(), d.nextZ(), pen, it) }
+            clipToPages(stroke, strokeStartPages.remove(id)).map { InkItem(d.newId(), d.nextZ(), pen, it) }
           }
         if (added.isNotEmpty()) d.commit(Change(emptyList(), added))
       } catch (t: Throwable) {
@@ -643,7 +645,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     liveShape?.let { itemRenderer.draw(canvas, it, camera.worldToScreen) }
     straightPreview?.let { preview ->
       canvas.save()
-      inkAreas(preview.stroke.brush.size / 2f)?.let { areas -> canvas.clipPath(areaPath(areas, null)) }
+      inkAreas(preview.stroke.brush.size / 2f, pageAt(straightStart))?.let { areas -> canvas.clipPath(areaPath(areas, null)) }
       itemRenderer.draw(canvas, preview, camera.worldToScreen)
       canvas.restore()
     }
@@ -1221,7 +1223,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
     predictor.record(e)
     // Ink running off the page is hidden as it's drawn, so what she sees is what's kept.
-    inProgress.maskPath = inkAreas(slot.size / 2f)?.let { areas ->
+    inProgress.maskPath = inkAreas(slot.size / 2f, pageAt(p))?.let { areas ->
       android.graphics.Path().apply {
         addRect(0f, 0f, width.toFloat(), height.toFloat(), android.graphics.Path.Direction.CW)
         op(areaPath(areas, camera.worldToScreen), android.graphics.Path.Op.DIFFERENCE)
@@ -1230,6 +1232,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val id = inProgress.startStroke(e, e.getPointerId(idx), brush, camera.screenToWorld)
     strokeId = id
     strokePens[id] = slot.type
+    pageAt(p)?.let { strokeStartPages[id] = it }
     if (darkPaper) strokeColors[id] = slot.color
     strokePoints.clear()
     strokePoints += p
@@ -1408,6 +1411,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           strokeId?.let {
             inProgress.cancelStroke(it, e)
             strokePens.remove(it)
+            strokeStartPages.remove(it)
             strokeColors.remove(it)
           }
           strokeId = null
@@ -1534,7 +1538,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val slot = settings.activeSlot
     // Stored in the real colour; dark paper only changes how it's shown.
     val stroke = preview.stroke.let { st -> st.copy(st.brush.copyWithColorIntArgb(Brushes.inkColor(slot.type, slot.color))) }
-    val pieces = clipToPages(stroke).map { InkItem(d.newId(), d.nextZ(), slot.type, it) }
+    val pieces = clipToPages(stroke, pageAt(straightStart)).map { InkItem(d.newId(), d.nextZ(), slot.type, it) }
     if (pieces.isNotEmpty()) d.commit(Change(emptyList(), pieces))
   }
 
@@ -1595,16 +1599,21 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * end stops at the edge): each page, or with *Write between pages* on, the whole column of pages
    * including the gaps. Never past the sides. Null on an endless canvas.
    */
-  private fun inkAreas(inset: Float): List<Rect>? {
+  private fun inkAreas(inset: Float, startPage: Int? = null): List<Rect>? {
     val n = pageCount ?: return null
     val ix = min(inset, pageLayout.width / 4f)
     val iy = min(inset, pageLayout.height / 4f)
-    return if (settings.inkBetweenPages) {
-      listOf(Rect(ix, iy, pageLayout.width - ix, pageLayout.rect(n - 1).bottom - iy))
-    } else {
-      (0 until n).map { i -> pageLayout.rect(i).let { r -> Rect(r.left + ix, r.top + iy, r.right - ix, r.bottom - iy) } }
+    fun page(i: Int) = pageLayout.rect(i).let { r -> Rect(r.left + ix, r.top + iy, r.right - ix, r.bottom - iy) }
+    return when {
+      settings.inkBetweenPages -> listOf(Rect(ix, iy, pageLayout.width - ix, pageLayout.rect(n - 1).bottom - iy))
+      // Off: a stroke stays on the page it started on; crossing onto another page doesn't count.
+      startPage != null -> listOf(page(startPage.coerceIn(0, n - 1)))
+      else -> (0 until n).map(::page)
     }
   }
+
+  /** The page under [p] (the gap below a page counts as that page). */
+  private fun pageAt(p: Pt): Int? = pageCount?.let { n -> pageLayout.indexAt(p.y).coerceIn(0, n - 1) }
 
   /** [areas] as one path, in world units, or on screen through [toScreen]. */
   private fun areaPath(areas: List<Rect>, toScreen: android.graphics.Matrix?): android.graphics.Path =
@@ -1617,8 +1626,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * [stroke] cut to the pages (see [inkAreas]): whole if it stayed on, else the pieces that are on,
    * each ending exactly where it left (pressure, tilt and timing carried over).
    */
-  private fun clipToPages(stroke: Stroke): List<Stroke> {
-    val areas = inkAreas(stroke.brush.size / 2f) ?: return listOf(stroke)
+  private fun clipToPages(stroke: Stroke, startPage: Int?): List<Stroke> {
+    val areas = inkAreas(stroke.brush.size / 2f, startPage) ?: return listOf(stroke)
     val inputs = stroke.inputs
     val n = inputs.size
     if (n == 0) return emptyList()
