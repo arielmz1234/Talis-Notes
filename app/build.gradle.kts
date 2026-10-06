@@ -43,6 +43,14 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
     }
+    // For the owner's own tablet: as fast as a release (R8, not debuggable), but signed with the
+    // debug key, so it installs over his debug build and keeps his notes. Debug builds run Compose
+    // several times slower, which made animations look choppy that are smooth for Tali.
+    create("preview") {
+      initWith(getByName("release"))
+      signingConfig = signingConfigs.getByName("debug")
+      matchingFallbacks += listOf("release")
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17

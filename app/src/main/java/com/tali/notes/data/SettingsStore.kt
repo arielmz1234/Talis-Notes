@@ -107,6 +107,8 @@ data class AppSettings(
   val minimal: Boolean = false,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
+  /** Notebooks she opened, newest first (the notebook's quick-open list). */
+  val recentNotebooks: List<String> = emptyList(),
 ) {
   /** The old Dashed pen became a fineliner drawing short dashes, now that any pen can dash. */
   fun migrated(): AppSettings {

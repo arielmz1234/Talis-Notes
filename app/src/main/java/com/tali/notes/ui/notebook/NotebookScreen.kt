@@ -3,6 +3,7 @@ package com.tali.notes.ui.notebook
 import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.VerticalAlignCenter
 import androidx.compose.material.icons.outlined.LockOpen
@@ -176,7 +177,7 @@ private class CanvasHolder {
 }
 
 @Composable
-fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
+fun NotebookScreen(notebookId: String, onBack: () -> Unit, onSwitch: (String) -> Unit = {}) {
   val app = LocalContext.current.applicationContext as Application
   val vm: NotebookViewModel = viewModel(key = notebookId) { NotebookViewModel(app, notebookId) }
   val meta by vm.meta.collectAsState()
@@ -219,13 +220,13 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit) {
   TaliColorsScope(notebookColors(systemDark, darkPaper)) {
     // Dialogs opened from here keep full screen when it's on.
     androidx.compose.runtime.CompositionLocalProvider(com.tali.notes.ui.components.LocalFullScreen provides hideNavBar) {
-      NotebookContent(vm, systemDark, onBack)
+      NotebookContent(vm, systemDark, onBack, onSwitch)
     }
   }
 }
 
 @Composable
-private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: () -> Unit) {
+private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: () -> Unit, onSwitch: (String) -> Unit) {
   val context = LocalContext.current
   val settings by vm.settings.collectAsState()
   val meta by vm.meta.collectAsState()
@@ -451,19 +452,23 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         .then(if (key.isEmpty()) Modifier else Modifier.onGloballyPositioned { recordBar(key, it) })
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp)) {
-      // Back, the notebook's name, and undo/redo beside it: far from the eye at the other end, which
-      // she kept pressing by accident when it sat next to redo.
+      // Back, quick open (her recent notebooks), and undo/redo: far from the eye at the other end,
+      // which she kept pressing by accident when it sat next to redo.
+      val recent by vm.recent.collectAsState()
       val titlePill: @Composable () -> Unit = {
         Box(Modifier.bar("title", 0)) {
           TitlePill(
-            meta?.title ?: "",
             onBack = onBack,
-            onRename = { renaming = true },
             canUndo = vm.canUndo,
             canRedo = vm.canRedo,
             onUndo = { holder.view?.runSafely { undo() } },
             onRedo = { holder.view?.runSafely { redo() } },
-          )
+          ) {
+            QuickOpen(recent, vm::thumbnailFile) { id ->
+              vm.panel = null
+              onSwitch(id)
+            }
+          }
         }
       }
       val tools: @Composable () -> Unit = {
@@ -524,8 +529,11 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
       val undoBar: @Composable () -> Unit = {
-        Box(Modifier.bar("undo", 2)) {
-          // The eye, then ⋯ always in the top-right corner.
+        // The notebook's name (it shortens first when space is short), then the eye, then ⋯ always
+        // in the top-right corner.
+        Row(Modifier.bar("undo", 2), verticalAlignment = Alignment.CenterVertically) {
+          NamePill(meta?.title ?: "", Modifier.weight(1f, fill = false)) { renaming = true }
+          Spacer(Modifier.width(10.dp))
           FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
             ToolButton(Icons.Outlined.VisibilityOff, "Hide toolbars") {
               vm.panel = null
@@ -577,9 +585,9 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       if (narrow) {
         // Held upright: title and undo share the first line, the tools get a line of their own.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-          Box(Modifier.weight(1f)) { titlePill() }
+          titlePill()
           Spacer(Modifier.width(12.dp))
-          undoBar()
+          Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { undoBar() }
         }
         // A little more room between the two lines when the tablet is held upright.
         Spacer(Modifier.height(18.dp))
@@ -591,9 +599,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         androidx.compose.ui.layout.Layout(content = { titlePill(); tools(); undoBar() }, modifier = Modifier.fillMaxWidth()) { parts, cons ->
           val gap = 12.dp.roundToPx()
           val loose = cons.copy(minWidth = 0, minHeight = 0)
-          val corner = parts[2].measure(loose)
+          val title = parts[0].measure(loose)
           val toolbar = parts[1].measure(loose)
-          val title = parts[0].measure(loose.copy(maxWidth = (cons.maxWidth - corner.width - toolbar.width - 2 * gap).coerceAtLeast(0)))
+          // The name in the corner gives way when space is short.
+          val corner = parts[2].measure(loose.copy(maxWidth = (cons.maxWidth - title.width - toolbar.width - 2 * gap).coerceAtLeast(0)))
           val from = title.width + gap
           val to = (cons.maxWidth - corner.width - gap - toolbar.width).coerceAtLeast(from)
           val x = ((cons.maxWidth - toolbar.width) / 2).coerceIn(from, to)
@@ -747,29 +756,94 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 }
 
 @Composable
-private fun TitlePill(title: String, onBack: () -> Unit, onRename: () -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit) {
-  val c = Tali.colors
-  // Back on a little cloud of its own; the name beside it, with a pencil to rename.
+private fun TitlePill(onBack: () -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, quickOpen: @Composable () -> Unit) {
+  // Back on a little cloud of its own, quick open on another, then undo and redo.
   Row(verticalAlignment = Alignment.CenterVertically) {
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE) {
       ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back to notebooks", onClick = onBack)
     }
     Spacer(Modifier.width(10.dp))
-    // The name gives way first when space is short.
-    FloatingBar(Modifier.weight(1f, fill = false).height(44.dp), crown = CloudCrown.NONE) {
-      Row(
-        Modifier.weight(1f, fill = false).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Rename", onClick = onRename).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 200.dp))
-        Spacer(Modifier.width(8.dp))
-        Icon(Icons.Outlined.Edit, "Rename", tint = c.inkFaint, modifier = Modifier.size(16.dp))
-      }
-    }
+    quickOpen()
     Spacer(Modifier.width(10.dp))
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
       ToolButton(Icons.AutoMirrored.Outlined.Undo, "Undo", enabled = canUndo, onClick = onUndo)
       ToolButton(Icons.AutoMirrored.Outlined.Redo, "Redo", enabled = canRedo, onClick = onRedo)
+    }
+  }
+}
+
+/** The notebook's name, with a pencil to rename it. */
+@Composable
+private fun NamePill(title: String, modifier: Modifier = Modifier, onRename: () -> Unit) {
+  val c = Tali.colors
+  FloatingBar(modifier.height(44.dp), crown = CloudCrown.NONE) {
+    Row(
+      Modifier.weight(1f, fill = false).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Rename", onClick = onRename).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 200.dp))
+      Spacer(Modifier.width(8.dp))
+      Icon(Icons.Outlined.Edit, "Rename", tint = c.inkFaint, modifier = Modifier.size(16.dp))
+    }
+  }
+}
+
+/**
+ * Quick open: her recent notebooks in a drop-down, one tap to switch. The rows drift down into
+ * place and fade in one after another (strong ease-out, 30 ms apart), so the list pours out of the
+ * button. Copied writing stays copied across notebooks, so she can hold to paste in the next one.
+ */
+@Composable
+private fun QuickOpen(recent: List<com.tali.notes.data.NotebookMeta>, thumbnail: (String) -> java.io.File, onOpen: (String) -> Unit) {
+  val c = Tali.colors
+  var open by remember { mutableStateOf(false) }
+  Box {
+    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE) {
+      ToolButton(Icons.Outlined.History, "Recent notebooks", selected = open) { open = true }
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
+      Text("Recent notebooks", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp))
+      if (recent.isEmpty()) {
+        Text(
+          "Notebooks you open show up here, a tap away.",
+          style = MaterialTheme.typography.bodySmall,
+          color = c.inkMuted,
+          modifier = Modifier.widthIn(max = 260.dp).padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+        )
+      }
+      recent.forEachIndexed { i, nb ->
+        val shown = remember { Animatable(0f) }
+        LaunchedEffect(Unit) {
+          delay(minOf(i, 6) * 30L)
+          shown.animateTo(1f, tween(240, easing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)))
+        }
+        Row(
+          Modifier
+            .graphicsLayer {
+              alpha = shown.value
+              translationY = (1f - shown.value) * -10.dp.toPx()
+            }
+            .widthIn(min = 260.dp, max = 340.dp)
+            .clickable(onClickLabel = "Open ${nb.title}") {
+              open = false
+              onOpen(nb.id)
+            }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          val thumb = com.tali.notes.ui.components.rememberThumbnail(thumbnail(nb.id), nb.thumbVersion)
+          Box(Modifier.size(width = 52.dp, height = 38.dp).clip(RoundedCornerShape(7.dp)).background(Color(nb.cover).copy(alpha = 0.25f)).border(1.dp, c.line, RoundedCornerShape(7.dp))) {
+            if (thumb != null) androidx.compose.foundation.Image(thumb, null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            // Its cover colour down the spine, like on the shelf.
+            Box(Modifier.fillMaxHeight().width(4.dp).background(Color(nb.cover)))
+          }
+          Spacer(Modifier.width(12.dp))
+          Column(Modifier.weight(1f, fill = false)) {
+            Text(nb.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Edited ${com.tali.notes.ui.components.relativeTime(nb.updated)}", style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1)
+          }
+        }
+      }
     }
   }
 }

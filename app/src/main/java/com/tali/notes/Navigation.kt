@@ -38,7 +38,14 @@ fun MainNavigation() {
     entryProvider =
       entryProvider {
         entry<Library> { LibraryScreen(onOpen = { id -> backStack.add(Notebook(id)) }) }
-        entry<Notebook> { key -> NotebookScreen(notebookId = key.id, onBack = { if (backStack.lastOrNull() == key) back() }) }
+        entry<Notebook> { key ->
+          NotebookScreen(
+            notebookId = key.id,
+            onBack = { if (backStack.lastOrNull() == key) back() },
+            // Quick open: this notebook gives way to the other one, so Back still goes to the library.
+            onSwitch = { id -> if (backStack.lastOrNull() == key && id != key.id) backStack[backStack.lastIndex] = Notebook(id) },
+          )
+        }
       },
   )
 }

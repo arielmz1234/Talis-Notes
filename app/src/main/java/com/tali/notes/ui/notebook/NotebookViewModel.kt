@@ -54,6 +54,9 @@ enum class PanelKind {
   FILL,
 }
 
+/** How many notebooks quick open lists. */
+const val RECENT_MAX = 8
+
 class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewModel(app) {
   private val repo = app.talisApp.repository
   private val store = app.talisApp.settings
@@ -107,7 +110,20 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   var pageCount by mutableStateOf(meta.value?.pages)
     private set
 
+  /** The notebooks she opened before this one, newest first, for quick open (up to [RECENT_MAX]). */
+  val recent: StateFlow<List<NotebookMeta>> =
+    kotlinx.coroutines.flow.combine(store.settings, repo.notebooks) { s, list ->
+      val byId = list.associateBy { it.id }
+      val opened = s.recentNotebooks.filter { it != notebookId }.mapNotNull { byId[it] }
+      // Until she has opened enough, the most recently edited ones fill the list (it's newest first).
+      (opened + list.filter { it.id != notebookId && it !in opened }).take(RECENT_MAX)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+  fun thumbnailFile(id: String): File = repo.thumbnailFile(id)
+
   init {
+    // This one goes to the top of the recent list.
+    store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_MAX + 4)) }
     viewModelScope.launch {
       val m = meta.value ?: repo.notebooks.value.firstOrNull { it.id == notebookId }
       initialViewport = m?.viewport
