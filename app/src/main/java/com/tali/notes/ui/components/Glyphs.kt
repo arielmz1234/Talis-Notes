@@ -137,6 +137,8 @@ fun ShapeIcon(kind: ShapeKind, color: Color, modifier: Modifier = Modifier, size
         kind == ShapeKind.CIRCLE -> kind.create(Pt(s / 2, s / 2), Pt(s - m, s / 2))
         // Three quarters of a circle reads at a glance as "part of a circle".
         kind == ShapeKind.PART_CIRCLE -> com.tali.notes.model.SectorShape.of(Pt(s / 2, s / 2), Pt(s - m, s / 2), 0.75f)
+        // Wide and low, so it doesn't read as the circle.
+        kind == ShapeKind.ELLIPSE -> kind.create(Pt(m * 0.5f, s * 0.3f), Pt(s - m * 0.5f, s * 0.7f))
         kind.dragIsSegment -> kind.create(Pt(m, s - m), Pt(s - m, m))
         kind == ShapeKind.POINT_LOAD -> kind.create(Pt(s / 2, m), Pt(s / 2, s - m))
         else -> kind.create(Pt(m, m), Pt(s - m, s - m))

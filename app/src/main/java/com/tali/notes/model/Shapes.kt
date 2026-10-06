@@ -215,7 +215,8 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
     val n = (abs(sweep) * radius / 3f).toInt().coerceIn(16, 160)
     val arc = List(n + 1) { i -> center + Pt.polar(radius, start + sweep * i / n) }
     if (!arrowEnd) return listOf(arc)
-    return listOf(arc) + arrowHead(arc[arc.size - 2], arc.last(), penSize)
+    // Sized by the whole arc, like a straight arrow by its length (the last step alone made it tiny).
+    return listOf(arc) + arrowHead(arc[arc.size - 2], arc.last(), penSize, room = abs(sweep) * radius)
   }
 
   // Mirrored, it runs the other way round from its (mirrored) start.
@@ -437,13 +438,13 @@ internal fun positiveTurn(a: Float): Float {
   return s
 }
 
-/** Two short barbs at [tip], pointing back toward [from]. */
-fun arrowHead(from: Pt, tip: Pt, penSize: Float): List<List<Pt>> {
+/** Two short barbs at [tip], pointing back toward [from]. [room] is the length of what it heads. */
+fun arrowHead(from: Pt, tip: Pt, penSize: Float, room: Float = from.dist(tip)): List<List<Pt>> {
   val dir = (tip - from).normalized()
   if (dir == Pt.ZERO) return emptyList()
   // A clear head, like a hand-drawn arrow's: about 3 mm or 7 pen widths, whichever is bigger,
   // opening at 30° each side (it used to be small enough to get lost on a thin pen).
-  val len = min(max(20f, penSize * 7f), from.dist(tip) * 0.4f)
+  val len = min(max(20f, penSize * 7f), room * 0.4f)
   val back = dir * -len
   val left = tip + back.rotated(0.52f)
   val right = tip + back.rotated(-0.52f)
