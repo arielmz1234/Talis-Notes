@@ -104,6 +104,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /** The memo button, the bar it opens into, and the recording bar. All in dp, so the same on every tablet. */
 private val MEMO_SIZE = 48.dp
@@ -168,9 +169,21 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
   val gap = with(density) { MEMO_GAP.toPx() }
   // 0 = the round button, 1 = the open bar.
   val openness = remember { Animatable(0f) }
-  // It settles in from slightly smaller when it first shows: never from nothing.
+  // It settles in from slightly smaller when it first shows: never from nothing. Just added from a
+  // recording, it pops instead: springs up past its size and back, with a ring and a few sparks
+  // spreading out from it.
+  val popping = remember { vm.justAdded == memo.id }
   val shown = remember { Animatable(0f) }
-  LaunchedEffect(Unit) { shown.animateTo(1f, tween(OPEN_MS, easing = EaseOutStrong)) }
+  val burst = remember { Animatable(if (popping) 0f else 1f) }
+  LaunchedEffect(Unit) {
+    if (popping) {
+      vm.justAdded = null
+      launch { burst.animateTo(1f, tween(560, easing = EaseOutStrong)) }
+      shown.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.48f, stiffness = 520f))
+    } else {
+      shown.animateTo(1f, tween(OPEN_MS, easing = EaseOutStrong))
+    }
+  }
   LaunchedEffect(open) {
     if (open) openness.animateTo(1f, tween(OPEN_MS, easing = EaseOutStrong))
     else openness.animateTo(0f, tween(CLOSE_MS, easing = EaseOutStrong))
@@ -183,8 +196,13 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
     delay(PUFF_LEAVE_MS.toLong())
     vm.deleteMemo(memo.id)
   }
-  // Held and moved: where it is under the finger (screen centre), and the lift while it's carried.
+  // Held and moved: where the finger is, and the lift while it's carried. It keeps to its margin
+  // beside the paper ([dragX], gliding across when the finger crosses the page's middle) and only
+  // follows the finger up and down.
   var drag by remember { mutableStateOf<Offset?>(null) }
+  val dragX = remember { Animatable(0f) }
+  var dragSide by remember { mutableStateOf<Int?>(null) }
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
   val lift by animateFloatAsState(if (drag != null) 1f else 0f, tween(160, easing = EaseOutStrong), label = "lift")
   // After a drop it glides from where it was let go to where it lands (just off the paper).
   val settle = remember { Animatable(1f) }
@@ -209,7 +227,8 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
           Modifier
             .graphicsLayer {
               alpha = shown.value
-              val k = (0.9f + 0.1f * shown.value) * (1f + 0.1f * lift)
+              alpha = shown.value.coerceAtMost(1f)
+              val k = (if (popping) 0.5f + 0.5f * shown.value else 0.9f + 0.1f * shown.value) * (1f + 0.1f * lift)
               scaleX = k
               scaleY = k
             }
@@ -226,15 +245,26 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     vm.openMemo = null
                     drag = Offset(placed[0], placed[1])
+                    dragSide = current.side
+                    scope.launch { dragX.snapTo(placed[0]) }
                   },
                   onDrag = { change, amount ->
                     change.consume()
-                    drag = drag?.plus(amount)
+                    val d = (drag ?: return@detectDragGesturesAfterLongPress) + amount
+                    drag = d
+                    val spot = canvas.memoDrop(current, d.x, d.y)
+                    val x = canvas.memoCenter(spot, size / 2, gap).x
+                    if (spot.side != dragSide) {
+                      dragSide = spot.side
+                      scope.launch { dragX.animateTo(x, tween(220, easing = EaseOutStrong)) }
+                    } else if (!dragX.isRunning) {
+                      scope.launch { dragX.snapTo(x) }
+                    }
                   },
                   onDragEnd = {
                     drag?.let { d ->
-                      settleFrom = d
-                      vm.moveMemo(canvas.memoDrop(current, d.x, d.y, gap + size / 2))
+                      settleFrom = Offset(dragX.value, d.y)
+                      vm.moveMemo(canvas.memoDrop(current, d.x, d.y))
                     }
                     drag = null
                   },
@@ -272,7 +302,20 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
           editing = false
         }
       }
-      // 2: folded, a titled memo shows its name faintly under the button.
+      // 2: the pop's ring and sparks (placed under the button).
+      Canvas(Modifier.size(MEMO_SIZE * 2.4f)) {
+        val p = burst.value
+        if (p >= 1f) return@Canvas
+        val r0 = MEMO_SIZE.toPx() / 2
+        val o = Offset(this.size.width / 2, this.size.height / 2)
+        drawCircle(c.accent.copy(alpha = 0.45f * (1f - p)), radius = r0 * (1f + 0.75f * p), center = o, style = Stroke(2.dp.toPx() * (1f - p) + 0.5f))
+        for (i in 0 until 6) {
+          val a = i * (PI.toFloat() / 3f) + 0.35f
+          val r = r0 * (1.05f + 0.95f * p)
+          drawCircle(c.accent.copy(alpha = 0.8f * (1f - p)), radius = 2.6.dp.toPx() * (1f - p * 0.7f), center = Offset(o.x + r * kotlin.math.cos(a), o.y + r * sin(a)))
+        }
+      }
+      // 3: folded, a titled memo shows its name faintly under the button.
       Box(Modifier.graphicsLayer { alpha = (1f - openness.value * 3f).coerceIn(0f, 1f) * shown.value * (1f - lift) }) {
         if (memo.title.isNotBlank()) {
           Text(
@@ -293,11 +336,12 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
     val w = size + (full - size) * openness.value
     val bar = parts[0].measure(Constraints.fixed(w.roundToInt(), size.roundToInt()))
     val title = parts[1].measure(Constraints(maxWidth = full.roundToInt()))
-    val caption = parts[2].measure(Constraints())
+    val sparks = parts[2].measure(Constraints())
+    val caption = parts[3].measure(Constraints())
     val home = centres()[memo.id] ?: Pt(-10_000f, -10_000f)
     val from = settleFrom
     val centre =
-      drag?.let { Pt(it.x, it.y) }
+      drag?.let { Pt(dragX.value, it.y) }
         ?: from?.let { f -> Pt(f.x + (home.x - f.x) * settle.value, f.y + (home.y - f.y) * settle.value) }
         ?: home
     if (drag == null) {
@@ -310,6 +354,7 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
     val left = if (toLeft) centre.x + size / 2 - w else centre.x - size / 2
     val top = centre.y - size / 2
     layout(constraints.maxWidth, constraints.maxHeight) {
+      sparks.place((centre.x - sparks.width / 2).roundToInt(), (centre.y - sparks.height / 2).roundToInt())
       bar.place(left.roundToInt(), top.roundToInt())
       val edge = 4.dp.toPx()
       val tx = if (toLeft) centre.x + size / 2 - full + 10.dp.toPx() else centre.x - size / 2 + 10.dp.toPx()
@@ -471,10 +516,14 @@ fun RecorderPanel(vm: NotebookViewModel, anchor: () -> LayoutCoordinates?, onAdd
       val width = minOf(RECORDER_BAR, androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(200.dp)
       PuffBox(leaving = leaving, appearing = false) {
         Box(Modifier.width(width).height(RECORDER_HEIGHT).cloudSurface(RECORDER_HEIGHT / 2, CloudCrown.NONE, shadowDepth = 6.dp).clip(RoundedCornerShape(RECORDER_HEIGHT / 2))) {
-          val draft = vm.draftMemo
+          // The last draft shown, kept while the bar leaves (after Add the draft is gone, and the bar
+          // must not flip back to recording on its way out).
+          var shownDraft by remember { mutableStateOf<AudioItem?>(null) }
+          vm.draftMemo?.let { shownDraft = it }
+          LaunchedEffect(present) { if (present && vm.draftMemo == null) shownDraft = null }
           // Recording, then listening back: the contents cross-fade, the bar stays.
           AnimatedContent(
-            targetState = draft != null && !leaving,
+            targetState = !voice.recording && shownDraft != null && !leaving,
             transitionSpec = { fadeIn(tween(200, delayMillis = 60)) togetherWith fadeOut(tween(120)) },
             label = "recorder",
           ) { review ->
@@ -487,7 +536,7 @@ fun RecorderPanel(vm: NotebookViewModel, anchor: () -> LayoutCoordinates?, onAdd
                 Icon(Icons.Outlined.DeleteOutline, "Delete the recording", tint = c.inkFaint, modifier = Modifier.size(20.dp))
               }
             }
-            val memo = vm.draftMemo
+            val memo = shownDraft
             if (review && memo != null) {
               PlayRow(memo, voice, { 1f }, width, RECORDER_HEIGHT) {
                 trash()

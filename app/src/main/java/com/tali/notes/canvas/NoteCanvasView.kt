@@ -2636,7 +2636,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   fun memoCenter(memo: AudioItem, radius: Float, gap: Float): Pt {
     val p = camera.toScreen(memo.at)
     if (pageCount == null) return p
-    val out = memo.edge * density
+    // Always the same margin from the paper (memos only move up and down, on either side).
+    val out = AudioItem.EDGE * density
     val x =
       if (memo.side == AudioItem.LEFT) camera.toScreen(Pt(0f, memo.at.y)).x - out
       else camera.toScreen(Pt(pageLayout.width, memo.at.y)).x + out
@@ -2644,18 +2645,18 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   /**
-   * Where a memo dropped at screen point [sx], [sy] goes: on A4 pages, the side of the page it's
-   * nearer to and how far out from that edge (a drop on the paper goes just off it, [minEdge] px
-   * out), at that height (kept within the pages); on an endless canvas, right there.
+   * Where a memo dropped at screen point [sx], [sy] goes: on A4 pages, beside the side of the page
+   * it's nearer to, at the usual margin, at that height (kept within the pages); on an endless
+   * canvas, right there.
    */
-  fun memoDrop(memo: AudioItem, sx: Float, sy: Float, minEdge: Float): AudioItem {
+  fun memoDrop(memo: AudioItem, sx: Float, sy: Float): AudioItem {
     val w = camera.toWorld(sx, sy)
     val n = pageCount ?: return memo.movedTo(w, memo.side, memo.edge)
     val y = w.y.coerceIn(0f, (n - 1) * pageLayout.pitch + pageLayout.height)
     val left = camera.toScreen(Pt(0f, y)).x
     val right = camera.toScreen(Pt(pageLayout.width, y)).x
-    return if (sx >= (left + right) / 2) memo.movedTo(Pt(pageLayout.width + AudioItem.SIZE, y), AudioItem.RIGHT, maxOf(minEdge, sx - right) / density)
-    else memo.movedTo(Pt(-AudioItem.SIZE, y), AudioItem.LEFT, maxOf(minEdge, left - sx) / density)
+    return if (sx >= (left + right) / 2) memo.movedTo(Pt(pageLayout.width + AudioItem.SIZE, y), AudioItem.RIGHT, AudioItem.EDGE)
+    else memo.movedTo(Pt(-AudioItem.SIZE, y), AudioItem.LEFT, AudioItem.EDGE)
   }
 
   /**

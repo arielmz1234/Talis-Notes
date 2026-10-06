@@ -221,14 +221,14 @@ fun MainToolbar(
           }
         }
       },
-      // Typing: a text block where the next line would go.
-      "Keyboard" to { ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard) },
       // A voice memo, kept beside the page; pressed again while recording, it stops.
       "Voice" to {
         androidx.compose.foundation.layout.Box(Modifier.onGloballyPositioned(onVoiceAnchor)) {
           ToolButton(Icons.Outlined.Mic, if (recording) "Voice memo" else "Record a voice memo", selected = recording, blue = true, onClick = onVoice)
         }
       },
+      // Typing: a text block where the next line would go.
+      "Keyboard" to { ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard) },
     )
     ToolStrip(items, toolKey, tools)
   }

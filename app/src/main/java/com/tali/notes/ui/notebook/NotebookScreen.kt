@@ -211,9 +211,11 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit, onSwitch: (String) ->
     // recording going on (it's saved as a memo) and pauses one playing.
     val observer = LifecycleEventObserver { _, event ->
       if (event == Lifecycle.Event.ON_RESUME) apply()
-      // Leaving the app ends a recording going on (kept as a draft to decide on) and pauses one playing.
+      // Leaving the app (or the tablet switching off) never loses a recording: one going on, or one
+      // not yet added, goes beside the page. One playing pauses.
       if (event == Lifecycle.Event.ON_STOP) {
         if (vm.voice.recording) vm.stopMemo()
+        vm.keepDraft()
         vm.voice.pause()
       }
     }

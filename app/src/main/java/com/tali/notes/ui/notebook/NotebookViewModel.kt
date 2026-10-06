@@ -149,6 +149,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   val draftMemo: com.tali.notes.model.AudioItem?
     get() = draft?.let { com.tali.notes.model.AudioItem(DRAFT_ID, 0, it.file, com.tali.notes.geometry.Pt(0f, 0f), it.durationMs, it.wave, 0L) }
 
+  /** The memo just added from a recording: it pops in. */
+  var justAdded by mutableStateOf<String?>(null)
+
   /** The memo opened into a player, if any. */
   var openMemo by mutableStateOf<String?>(null)
 
@@ -184,7 +187,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     if (voice.current == DRAFT_ID) voice.stopPlayback()
     draft = null
     recordingAt = null
-    d.commit(Change(emptyList(), listOf(com.tali.notes.model.AudioItem(d.newId(), d.nextZ(), r.file, at, r.durationMs, r.wave, System.currentTimeMillis()))))
+    val memo = com.tali.notes.model.AudioItem(d.newId(), d.nextZ(), r.file, at, r.durationMs, r.wave, System.currentTimeMillis())
+    justAdded = memo.id
+    d.commit(Change(emptyList(), listOf(memo)))
   }
 
   /** Throws away the recording going on, or the draft. */

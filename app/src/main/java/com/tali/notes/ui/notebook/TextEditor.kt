@@ -1,5 +1,9 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -84,6 +88,11 @@ fun TextEditorOverlay(
   }
   // Read on every camera move (the tick changes), so the field stays over its block.
   val scale = if (cameraTick >= 0) canvas.pixelsPerUnit else 1f
+  var fieldHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+  // The width grip's drag outlives recompositions: it works on the block as it is now.
+  val latest by androidx.compose.runtime.rememberUpdatedState(edit)
+  val onChangeNow by androidx.compose.runtime.rememberUpdatedState(onChange)
+  val scaleNow: () -> Float = { canvas.pixelsPerUnit }
   val at = canvas.screenOf(edit.origin)
   val widthDp = with(density) { (edit.width * scale).toDp() }
   val fontSp = with(density) { (edit.fontSize * scale).toSp() }
@@ -114,8 +123,32 @@ fun TextEditorOverlay(
             )
           }
           .padding(6.dp)
-          .focusRequester(focus),
+          .focusRequester(focus)
+          .onSizeChanged { fieldHeight = it.height },
     )
+    // Its width: a small grip on the right edge, dragged sideways (the text re-wraps as it goes).
+    // In world units, so it's the same block at any zoom; never narrower than a few letters.
+    val gripW = with(density) { 14.dp.toPx() }
+    val gripH = with(density) { 36.dp.toPx() }
+    Box(
+      Modifier.offset {
+          val right = at.x - pad + (edit.width * scale) + 12.dp.toPx()
+          IntOffset((right - gripW / 2).roundToInt(), (at.y - pad + fieldHeight / 2f - gripH / 2).roundToInt())
+        }
+        .size(14.dp, 36.dp)
+        .pointerInput(Unit) { detectTapGestures { } }
+        .pointerInput(Unit) {
+          var w = 0f
+          detectHorizontalDragGestures(onDragStart = { w = latest.width }) { change, dx ->
+            change.consume()
+            w = (w + dx / scaleNow()).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH)
+            onChangeNow(latest.copy(width = w))
+          }
+        },
+      contentAlignment = Alignment.Center,
+    ) {
+      Box(Modifier.size(6.dp, 26.dp).clip(RoundedCornerShape(3.dp)).background(c.accent.copy(alpha = 0.8f)))
+    }
     // The bar sits just above the block, or below the toolbars if the block is near the top.
     val barY = with(density) { (at.y - 64.dp.toPx()).coerceAtLeast(84.dp.toPx()) }
     Box(Modifier.offset { IntOffset(at.x.roundToInt(), barY.roundToInt()) }.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
@@ -145,3 +178,7 @@ private fun SizeButton(label: String, onClick: () -> Unit) {
     Text(label, style = MaterialTheme.typography.labelLarge, color = c.ink)
   }
 }
+
+/** How narrow and how wide a typed block can be dragged, in world units (A4 is 1322 wide). */
+private const val MIN_TEXT_WIDTH = 60f
+private const val MAX_TEXT_WIDTH = 2400f
