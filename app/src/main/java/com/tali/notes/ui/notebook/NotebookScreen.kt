@@ -37,7 +37,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -792,8 +792,9 @@ private fun NamePill(title: String, modifier: Modifier = Modifier, onRename: () 
 }
 
 /**
- * How tall a drop-down under an anchor may be: the room from the anchor's bottom to above the
- * navigation bar. A DropdownMenu taller than that is moved up and covers its own button.
+ * How tall a drop-down under an anchor may be. A DropdownMenu that doesn't fit below its button is
+ * moved up over the button, and "fits" means ending [MENU_EDGE_DP] above the bottom of the area
+ * inside the system bars. So: from the anchor's bottom, less the system bars and that margin.
  */
 private class RoomBelow(private val density: androidx.compose.ui.unit.Density, private val windowHeight: () -> Int, private val bottomInset: () -> Int) {
   private var anchorBottom by mutableIntStateOf(0)
@@ -803,15 +804,19 @@ private class RoomBelow(private val density: androidx.compose.ui.unit.Density, p
   }
 
   val max: Dp
-    get() = with(density) { (windowHeight() - bottomInset() - anchorBottom).toDp() - 12.dp }.coerceAtLeast(160.dp)
+    get() = with(density) { (windowHeight() - bottomInset() - anchorBottom).toDp() - MENU_EDGE_DP.dp - 8.dp }.coerceAtLeast(160.dp)
 }
+
+/** The margin Material keeps between a drop-down menu and the edge of the window. */
+private const val MENU_EDGE_DP = 48
 
 @Composable
 private fun rememberRoomBelow(): RoomBelow {
   val density = LocalDensity.current
   val view = LocalView.current
-  val insets = WindowInsets.navigationBars
-  return remember(density, view) { RoomBelow(density, { view.rootView.height }, { insets.getBottom(density) }) }
+  // The status bar counts too: the menu's window is measured inside both bars.
+  val bars = WindowInsets.systemBars
+  return remember(density, view) { RoomBelow(density, { view.rootView.height }, { bars.getBottom(density) + bars.getTop(density) }) }
 }
 
 /**
