@@ -204,8 +204,10 @@ class ImageItem(
 }
 
 /**
- * Typed text: a block that wraps at [width] (world units), its top-left corner at [origin]. Moving
- * and resizing it with the lasso scales the text too, so "enlarge" makes it bigger.
+ * Typed text: a text box, its top-left corner at [origin], [width] wide (the text wraps inside it)
+ * and at least [height] tall (0 = as tall as the text; a box holding more text than fits grows to
+ * hold it). The box's size and the text's size are set apart. Resizing it with the lasso scales the
+ * text too, so "enlarge" makes it bigger.
  */
 class TextItem(
   override val id: String,
@@ -216,13 +218,14 @@ class TextItem(
   val fontSize: Float,
   val color: Int,
   override val locked: Boolean = false,
+  val height: Float = 0f,
 ) : CanvasItem() {
   override val pen: PenType? = null
 
   /** Laid out once; drawn as real text, so it stays sharp at any zoom and in PDFs. */
   val layout: android.text.StaticLayout by lazy { layoutFor(color) }
 
-  override val bounds: Rect = Rect(origin.x, origin.y, origin.x + width, origin.y + maxOf(layout.height.toFloat(), fontSize * LINE))
+  override val bounds: Rect = Rect(origin.x, origin.y, origin.x + width, origin.y + maxOf(layout.height.toFloat(), fontSize * LINE, height))
 
   fun layoutFor(color: Int): android.text.StaticLayout {
     val paint =
@@ -236,16 +239,16 @@ class TextItem(
 
   override fun transformed(m: Affine, newId: String, newZ: Long): TextItem {
     val s = m.scaleFactor()
-    return TextItem(newId, newZ, text, m.apply(origin), (width * s).coerceAtLeast(40f), (fontSize * s).coerceIn(6f, 400f), color)
+    return TextItem(newId, newZ, text, m.apply(origin), (width * s).coerceAtLeast(40f), (fontSize * s).coerceIn(6f, 400f), color, height = height * s)
   }
 
-  override fun withZ(newZ: Long) = TextItem(id, newZ, text, origin, width, fontSize, color, locked)
+  override fun withZ(newZ: Long) = TextItem(id, newZ, text, origin, width, fontSize, color, locked, height)
 
-  override fun withLocked(on: Boolean) = TextItem(id, z, text, origin, width, fontSize, color, on)
+  override fun withLocked(on: Boolean) = TextItem(id, z, text, origin, width, fontSize, color, on, height)
 
-  fun recolored(c: Int) = TextItem(id, z, text, origin, width, fontSize, c)
+  fun recolored(c: Int) = TextItem(id, z, text, origin, width, fontSize, c, locked, height)
 
-  fun withText(t: String) = TextItem(id, z, t, origin, width, fontSize, color)
+  fun withText(t: String) = TextItem(id, z, t, origin, width, fontSize, color, locked, height)
 
   companion object {
     /** Line height as a multiple of the font size, matched by the editor. */

@@ -41,7 +41,7 @@ object ItemCodec {
 
   @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false, val front: Boolean = false, val locked: Boolean = false, val walls: List<String> = emptyList(), val flipX: Boolean = false, val flipY: Boolean = false)
 
-  @Serializable private class TextPayload(val text: String, val x: Float, val y: Float, val width: Float, val locked: Boolean = false)
+  @Serializable private class TextPayload(val text: String, val x: Float, val y: Float, val width: Float, val locked: Boolean = false, val height: Float = 0f)
 
   @Serializable private class AudioPayload(val file: String, val x: Float, val y: Float, val durationMs: Long, val wave: List<Int> = emptyList(), val created: Long = 0L, val locked: Boolean = false, val side: Int = AudioItem.RIGHT, val edge: Float = AudioItem.EDGE, val title: String = "")
 
@@ -70,7 +70,7 @@ object ItemCodec {
         ItemRow(item.id, item.z, KIND_IMAGE, null, 0, 0f, bytes, b.left, b.top, b.right, b.bottom)
       }
       is TextItem -> {
-        val bytes = json.encodeToString(TextPayload.serializer(), TextPayload(item.text, item.origin.x, item.origin.y, item.width, item.locked)).encodeToByteArray()
+        val bytes = json.encodeToString(TextPayload.serializer(), TextPayload(item.text, item.origin.x, item.origin.y, item.width, item.locked, item.height)).encodeToByteArray()
         ItemRow(item.id, item.z, KIND_TEXT, null, item.color, item.fontSize, bytes, b.left, b.top, b.right, b.bottom)
       }
       is AudioItem -> {
@@ -112,7 +112,7 @@ object ItemCodec {
           }
           KIND_TEXT -> {
             val p = json.decodeFromString(TextPayload.serializer(), row.payload.decodeToString())
-            TextItem(row.id, row.z, p.text, com.tali.notes.geometry.Pt(p.x, p.y), p.width, row.size, row.color, p.locked)
+            TextItem(row.id, row.z, p.text, com.tali.notes.geometry.Pt(p.x, p.y), p.width, row.size, row.color, p.locked, p.height)
           }
           KIND_AUDIO -> {
             val p = json.decodeFromString(AudioPayload.serializer(), row.payload.decodeToString())

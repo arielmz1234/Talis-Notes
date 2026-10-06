@@ -1,5 +1,9 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.material.icons.outlined.OpenWith
+
+import androidx.compose.ui.layout.layout
+
 import androidx.compose.foundation.border
 
 import androidx.compose.material3.Icon
@@ -70,9 +74,13 @@ import com.tali.notes.ui.components.colorRing
 import com.tali.notes.ui.components.rememberSlidingSelection
 
 /**
- * Typing on the page: a text field laid exactly over the text block (it follows the page when it
- * scrolls or zooms), with a small bar above it for size, colour, delete and done. Tapping anywhere
- * else finishes, like tapping away from a text box in any notes app.
+ * Typing on the page: a text box laid exactly over the text block (it follows the page when it
+ * scrolls or zooms), with a small bar above it for size, colour, delete and done.
+ *
+ * It acts like a text box: the box has its own size, set by the dots on its sides and the chip at
+ * its corner (the text wraps at its width; the box grows if the text needs more room), apart from
+ * the text's size (A− / A+). Dragging its frame or the move chip moves it, anywhere, on or off the
+ * paper. Tapping elsewhere finishes; tapping another text box opens that one.
  */
 @Composable
 fun TextEditorOverlay(
@@ -95,31 +103,58 @@ fun TextEditorOverlay(
   }
   // Read on every camera move (the tick changes), so the field stays over its block.
   val scale = if (cameraTick >= 0) canvas.pixelsPerUnit else 1f
-  var fieldHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-  // The width grip's drag outlives recompositions: it works on the block as it is now.
+  // How tall the typed text is, in screen pixels.
+  var textHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+  // Drags outlive recompositions: they work on the box as it is now.
   val latest by androidx.compose.runtime.rememberUpdatedState(edit)
   val onChangeNow by androidx.compose.runtime.rememberUpdatedState(onChange)
   val scaleNow: () -> Float = { canvas.pixelsPerUnit }
+  // The box's content height in world units: what she set, or the text's own if that's taller.
+  val contentNow: (TextEdit) -> Float = { e -> maxOf(e.height, textHeight / scaleNow(), e.fontSize * TextItem.LINE) }
   val at = canvas.screenOf(edit.origin)
-  val widthDp = with(density) { (edit.width * scale).toDp() }
+  val pad = with(density) { 6.dp.toPx() }
+  val w = edit.width * scale
+  val minH = edit.height * scale
   val fontSp = with(density) { (edit.fontSize * scale).toSp() }
   val lineSp = with(density) { (edit.fontSize * scale * TextItem.LINE).toSp() }
   val ink = Color(if (darkPaper) Brushes.onDarkPaper(edit.color) else edit.color)
+  val textNow by androidx.compose.runtime.rememberUpdatedState(value.text)
+  val onDoneNow by androidx.compose.runtime.rememberUpdatedState(onDone)
   val finish = {
     keyboard?.hide()
-    onDone(value.text)
+    onDoneNow(textNow)
   }
   androidx.activity.compose.BackHandler(onBack = finish)
-  Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = finish)) {
-    val pad = with(density) { 6.dp.toPx() }
+  val boxLeft = at.x - pad
+  val boxTop = at.y - pad
+  val boxW = w + 2 * pad
+  val boxH = maxOf(textHeight.toFloat(), minH, edit.fontSize * scale * TextItem.LINE) + 2 * pad
+  Box(
+    Modifier.fillMaxSize().pointerInput(canvas) {
+      detectTapGestures { tap ->
+        finish()
+        // Tapping another text box goes straight on to that one.
+        canvas.runSafely { textAt(worldOf(tap.x, tap.y))?.let { editText(it.id) } }
+      }
+    }
+  ) {
+    // Its frame: a band round the box that moves it (the text inside is for typing).
+    val band = with(density) { 14.dp.toPx() }
+    Box(
+      Modifier.placedAt({ boxLeft - band }, { boxTop - band })
+        .size(with(density) { (boxW + 2 * band).toDp() }, with(density) { (boxH + 2 * band).toDp() })
+        .moves(latest = { latest }, scale = scaleNow, change = { onChangeNow(it) })
+    )
     BasicTextField(
       value,
       { value = it },
       textStyle = TextStyle(color = ink, fontSize = fontSp, lineHeight = lineSp, fontFamily = FontFamily.SansSerif),
       cursorBrush = SolidColor(c.accent),
+      onTextLayout = { textHeight = kotlin.math.ceil(it.multiParagraph.height).toInt() },
       modifier =
-        Modifier.offset { IntOffset((at.x - pad).roundToInt(), (at.y - pad).roundToInt()) }
-          .width(widthDp + 12.dp)
+        Modifier.placedAt({ boxLeft }, { boxTop })
+          .width(with(density) { boxW.toDp() })
+          .height(with(density) { boxH.toDp() })
           .drawBehind {
             drawRoundRect(
               c.accent.copy(alpha = 0.55f),
@@ -130,76 +165,67 @@ fun TextEditorOverlay(
             )
           }
           .padding(6.dp)
-          .focusRequester(focus)
-          .onSizeChanged { fieldHeight = it.height },
+          .focusRequester(focus),
     )
-    // Resizing, like a rectangle: a dot in the middle of each side stretches one way (left and right
-    // set the width and the text re-wraps; top and bottom set the text size), the opposite side
-    // staying put; the resize chip at the corner scales the whole block. In world units, so it's the
-    // same block at any zoom.
-    val boxLeft = at.x - pad
-    val boxTop = at.y - pad
-    val boxW = edit.width * scale + with(density) { 12.dp.toPx() }
-    // The field's measured height is inside its padding; the dashed box is 6 dp bigger each way.
-    val boxH = fieldHeight + with(density) { 12.dp.toPx() }
+    // Sizing the box, like a rectangle: a dot in the middle of each side moves that side (left and
+    // right set the width, top and bottom the height), the opposite side staying put; the chip at the
+    // corner moves the corner. The text keeps its size. In world units, so it's the same at any zoom.
     SideDot(boxLeft, boxTop + boxH / 2, { latest }, onChangeNow) { start, d ->
-      val w = (start.width - d.x / scaleNow()).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH)
-      start.copy(width = w, origin = com.tali.notes.geometry.Pt(start.origin.x + (start.width - w), start.origin.y))
+      val nw = (start.width - d.x / scaleNow()).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH)
+      start.copy(width = nw, origin = com.tali.notes.geometry.Pt(start.origin.x + (start.width - nw), start.origin.y))
     }
     SideDot(boxLeft + boxW, boxTop + boxH / 2, { latest }, onChangeNow) { start, d ->
       start.copy(width = (start.width + d.x / scaleNow()).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH))
     }
     SideDot(boxLeft + boxW / 2, boxTop, { latest }, onChangeNow) { start, d ->
-      val h = fieldHeight.toFloat().coerceAtLeast(1f)
-      val size = (start.fontSize * (1f - d.y / h)).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)
-      val f = size / start.fontSize
-      // The bottom stays where it was: the top moves by how much the block grew.
-      start.copy(fontSize = size, origin = com.tali.notes.geometry.Pt(start.origin.x, start.origin.y + h / scaleNow() * (1f - f)))
+      val was = contentNow(start)
+      // Never smaller than the text in it: the bottom stays where it was.
+      val now = (was - d.y / scaleNow()).coerceIn(textHeight / scaleNow(), MAX_TEXT_HEIGHT)
+      start.copy(height = now, origin = com.tali.notes.geometry.Pt(start.origin.x, start.origin.y + (was - now)))
     }
     SideDot(boxLeft + boxW / 2, boxTop + boxH, { latest }, onChangeNow) { start, d ->
-      val h = fieldHeight.toFloat().coerceAtLeast(1f)
-      start.copy(fontSize = (start.fontSize * (1f + d.y / h)).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE))
+      start.copy(height = (contentNow(start) + d.y / scaleNow()).coerceIn(0f, MAX_TEXT_HEIGHT))
     }
     val chip = with(density) { 30.dp.toPx() }
     val chipGap = with(density) { 10.dp.toPx() }
-    Box(
-      Modifier.offset { IntOffset((boxLeft + boxW + chipGap - chip / 2).roundToInt(), (boxTop + boxH + chipGap - chip / 2).roundToInt()) }
-        .size(30.dp)
-        .pointerInput(Unit) { detectTapGestures { } }
-        .pointerInput(Unit) {
-          var total = Offset.Zero
-          var start = latest
-          var startH = 1f
-          detectDragGestures(
-            onDragStart = {
-              total = Offset.Zero
-              start = latest
-              startH = fieldHeight.toFloat().coerceAtLeast(1f)
-            }
-          ) { change, delta ->
-            change.consume()
-            total += delta
-            val k = scaleNow()
-            val f = (1f + (total.x / (start.width * k) + total.y / startH) / 2f).coerceIn(0.2f, 6f)
-            onChangeNow(start.copy(width = (start.width * f).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH), fontSize = (start.fontSize * f).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)))
-          }
+    // The resize chip at the bottom-right corner: the corner follows the finger.
+    EditorChip(Icons.Outlined.OpenInFull, "Resize the text box", { boxLeft + boxW + chipGap - chip / 2 }, { boxTop + boxH + chipGap - chip / 2 }, rotate = 90f) {
+      var total = Offset.Zero
+      var start = latest
+      var startContent = 0f
+      detectDragGestures(
+        onDragStart = {
+          total = Offset.Zero
+          start = latest
+          startContent = contentNow(start)
         }
-        .graphicsLayer {
-          shadowElevation = 3.dp.toPx()
-          shape = CircleShape
-          clip = true
-        }
-        .background(c.surface),
-      contentAlignment = Alignment.Center,
-    ) {
-      Icon(Icons.Outlined.OpenInFull, "Resize the text", tint = c.accent, modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = 90f })
+      ) { change, delta ->
+        change.consume()
+        total += delta
+        val k = scaleNow()
+        onChangeNow(start.copy(width = (start.width + total.x / k).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH), height = (startContent + total.y / k).coerceIn(0f, MAX_TEXT_HEIGHT)))
+      }
     }
-    // The bar sits just above the block, or below the toolbars if the block is near the top.
-    val barY = with(density) { (at.y - 64.dp.toPx()).coerceAtLeast(84.dp.toPx()) }
-    Box(Modifier.offset { IntOffset(at.x.roundToInt(), barY.roundToInt()) }.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
+    // The move chip at the bottom-left corner: drags the whole box.
+    EditorChip(Icons.Outlined.OpenWith, "Move the text box", { boxLeft - chipGap - chip / 2 }, { boxTop + boxH + chipGap - chip / 2 }) {
+      var start = latest
+      var total = Offset.Zero
+      detectDragGestures(onDragStart = {
+        start = latest
+        total = Offset.Zero
+      }) { change, delta ->
+        change.consume()
+        total += delta
+        val k = scaleNow()
+        onChangeNow(start.copy(origin = com.tali.notes.geometry.Pt(start.origin.x + total.x / k, start.origin.y + total.y / k)))
+      }
+    }
+    // The bar sits just above the box, or below the toolbars if the box is near the top.
+    val barY = with(density) { (boxTop - 60.dp.toPx()).coerceAtLeast(84.dp.toPx()) }
+    Box(Modifier.placedAt({ boxLeft.coerceAtLeast(with(density) { 8.dp.toPx() }) }, { barY }).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
       FloatingBar(Modifier.height(48.dp), crown = CloudCrown.NONE) {
-        SizeButton("A−") { onChange(edit.copy(fontSize = (edit.fontSize / 1.15f).coerceAtLeast(10f))) }
-        SizeButton("A+") { onChange(edit.copy(fontSize = (edit.fontSize * 1.15f).coerceAtMost(160f))) }
+        SizeButton("A−") { onChange(edit.copy(fontSize = (edit.fontSize / 1.15f).coerceAtLeast(MIN_TEXT_SIZE))) }
+        SizeButton("A+") { onChange(edit.copy(fontSize = (edit.fontSize * 1.15f).coerceAtMost(MAX_TEXT_SIZE))) }
         Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(24.dp).background(c.line))
         val ring = rememberSlidingSelection()
         Row(Modifier.colorRing(ring, Color(edit.color)), verticalAlignment = Alignment.CenterVertically) {
@@ -217,14 +243,64 @@ fun TextEditorOverlay(
 }
 
 /**
- * A side dot of the text box at [x], [y] (screen pixels): dragging it reshapes the block from how
+ * Places this at [x], [y] (screen pixels, read at placement) at its own size, even past the
+ * screen's edges: a box partly off screen keeps its width instead of being squeezed.
+ */
+private fun Modifier.placedAt(x: () -> Float, y: () -> Float) =
+  layout { m, cs ->
+    val p = m.measure(androidx.compose.ui.unit.Constraints())
+    layout(cs.maxWidth, cs.maxHeight) { p.place(x().roundToInt(), y().roundToInt()) }
+  }
+
+/** Dragging this moves the text box. */
+private fun Modifier.moves(latest: () -> TextEdit, scale: () -> Float, change: (TextEdit) -> Unit) =
+  pointerInput(Unit) { detectTapGestures { } }.pointerInput(Unit) {
+    var start = latest()
+    var total = Offset.Zero
+    detectDragGestures(onDragStart = {
+      start = latest()
+      total = Offset.Zero
+    }) { ch, delta ->
+      ch.consume()
+      total += delta
+      val k = scale()
+      change(start.copy(origin = com.tali.notes.geometry.Pt(start.origin.x + total.x / k, start.origin.y + total.y / k)))
+    }
+  }
+
+/** A round white chip by the box's corner, with its own drag. */
+@Composable
+private fun EditorChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, x: () -> Float, y: () -> Float, rotate: Float = 0f, drag: suspend androidx.compose.ui.input.pointer.PointerInputScope.() -> Unit) {
+  val c = Tali.colors
+  Box(
+    Modifier.placedAt(x, y)
+      .size(30.dp)
+      .pointerInput(Unit) { detectTapGestures { } }
+      .pointerInput(Unit, drag)
+      .graphicsLayer {
+        shadowElevation = 3.dp.toPx()
+        shape = CircleShape
+        clip = true
+      }
+      .background(c.surface),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(icon, label, tint = c.accent, modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = rotate })
+  }
+}
+
+/**
+ * A side dot of the text box at [x], [y] (screen pixels): dragging it reshapes the box from how
  * it was when the drag began ([resize] gets that and how far the finger has gone).
  */
 @Composable
 private fun SideDot(x: Float, y: Float, latest: () -> TextEdit, change: (TextEdit) -> Unit, resize: (start: TextEdit, moved: Offset) -> TextEdit) {
   val c = Tali.colors
+  val xs by androidx.compose.runtime.rememberUpdatedState(x)
+  val ys by androidx.compose.runtime.rememberUpdatedState(y)
+  val half = with(LocalDensity.current) { 16.dp.toPx() }
   Box(
-    Modifier.offset { IntOffset((x - 16.dp.toPx()).roundToInt(), (y - 16.dp.toPx()).roundToInt()) }
+    Modifier.placedAt({ xs - half }, { ys - half })
       .size(32.dp)
       .pointerInput(Unit) { detectTapGestures { } }
       .pointerInput(Unit) {
@@ -257,6 +333,9 @@ private fun SizeButton(label: String, onClick: () -> Unit) {
 private const val MIN_TEXT_WIDTH = 60f
 private const val MAX_TEXT_WIDTH = 2400f
 
-/** The text sizes the resize chip and A−/A+ keep to. */
+/** The text sizes A−/A+ keep to. */
 private const val MIN_TEXT_SIZE = 10f
 private const val MAX_TEXT_SIZE = 160f
+
+/** How tall a text box can be set, in world units (an A4 page is 1871 tall). */
+private const val MAX_TEXT_HEIGHT = 4000f

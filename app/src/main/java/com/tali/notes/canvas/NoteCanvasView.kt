@@ -102,7 +102,7 @@ interface CanvasHost {
 data class PasteOffer(val screenX: Float, val screenY: Float, val at: Pt, val count: Int)
 
 /** A text block being typed: [id] is null for a new one. Positions and sizes are in world units. */
-data class TextEdit(val id: String?, val origin: Pt, val width: Float, val fontSize: Float, val color: Int, val text: String)
+data class TextEdit(val id: String?, val origin: Pt, val width: Float, val fontSize: Float, val color: Int, val text: String, val height: Float = 0f)
 
 /** Selection summary in screen pixels, for placing the selection menu. */
 data class SelectionInfo(
@@ -1644,8 +1644,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     removeCallbacks(pasteHold)
     when (mode) {
       Mode.INK -> {
-        val tapped = if (e.eventTime - e.downTime < PEN_TAP_MS) shapeTappedByPen() else null
-        if (tapped != null) {
+        val quickTap = e.eventTime - e.downTime < PEN_TAP_MS
+        val text = if (quickTap) textTappedByPen() else null
+        val tapped = if (quickTap && text == null) shapeTappedByPen() else null
+        if (text != null) {
+          // A quick tap on a text box opens it for typing.
+          strokeId?.let {
+            inProgress.cancelStroke(it, e)
+            strokePens.remove(it)
+            strokeColors.remove(it)
+          }
+          strokeId = null
+          post { editText(text.id) }
+        } else if (tapped != null) {
           // A quick tap on a shape's outline picks the shape up to change it, rather than leaving a dot.
           strokeId?.let {
             inProgress.cancelStroke(it, e)
@@ -2261,6 +2272,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       ?: near.firstOrNull { item -> item is ImageItem && (pages || !item.pdfPage) && item.rect.contains(p) }
   }
 
+  /** The text box under a pen tap that barely moved, if any (writing over a text box still writes). */
+  private fun textTappedByPen(): TextItem? {
+    if (strokePoints.isEmpty()) return null
+    val first = camera.toScreen(strokePoints.first())
+    if (strokePoints.any { camera.toScreen(it).dist(first) > touchSlop / 2 }) return null
+    return textAt(strokePoints.first())
+  }
+
+  /** The (unlocked) text box at [p], topmost first. */
+  fun textAt(p: Pt): TextItem? = doc?.all?.filterIsInstance<TextItem>()?.filter { !it.locked && it.bounds.contains(p) }?.maxByOrNull { it.z }
+
   /** The shape under a pen tap that barely moved, if any (writing on top of a shape still writes). */
   private fun shapeTappedByPen(): ShapeItem? {
     if (strokePoints.isEmpty()) return null
@@ -2707,6 +2729,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Where a world point is on screen, in pixels (for the text editor laid over the page). */
   fun screenOf(p: Pt): Pt = camera.toScreen(p)
 
+  /** The world point under screen pixel [x], [y]. */
+  fun worldOf(x: Float, y: Float): Pt = camera.toWorld(x, y)
+
   /** Screen pixels per world unit. */
   val pixelsPerUnit: Float
     get() = camera.scale
@@ -2742,7 +2767,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     clearSelection()
     tiles.hidden = setOf(id)
     showForTyping(item.origin.y)
-    host.onEditText(TextEdit(id, item.origin, item.width, item.fontSize, item.color, item.text))
+    host.onEditText(TextEdit(id, item.origin, item.width, item.fontSize, item.color, item.text, item.height))
     invalidate()
   }
 
@@ -2753,10 +2778,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val old = edit.id?.let { d[it] as? TextItem }
     val trimmed = text.trimEnd()
     when {
-      old == null && trimmed.isNotBlank() -> d.commit(Change(emptyList(), listOf(TextItem(d.newId(), d.nextZ(), trimmed, edit.origin, edit.width, edit.fontSize, edit.color))))
+      old == null && trimmed.isNotBlank() -> d.commit(Change(emptyList(), listOf(TextItem(d.newId(), d.nextZ(), trimmed, edit.origin, edit.width, edit.fontSize, edit.color, height = edit.height))))
       old != null && trimmed.isBlank() -> d.commit(Change(listOf(old), emptyList()))
-      old != null && (old.text != trimmed || old.fontSize != edit.fontSize || old.color != edit.color) ->
-        d.commit(Change(listOf(old), listOf(TextItem(old.id, old.z, trimmed, old.origin, old.width, edit.fontSize, edit.color))))
+      old != null && (old.text != trimmed || old.fontSize != edit.fontSize || old.color != edit.color || old.origin != edit.origin || old.width != edit.width || old.height != edit.height) ->
+        d.commit(Change(listOf(old), listOf(TextItem(old.id, old.z, trimmed, edit.origin, edit.width, edit.fontSize, edit.color, old.locked, edit.height))))
     }
     host.onEditText(null)
     invalidate()
@@ -3179,6 +3204,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // With the fill tool, a finger tap fills too.
     if (tool == Tool.FILL) {
       fillAt(p)
+      return
+    }
+    // A finger tap on a text box opens it for typing, like any text box.
+    if (tool != Tool.LASSO) textAt(p)?.let {
+      editText(it.id)
       return
     }
     // A finger tap only picks something up with the lasso tool (she found taps picking things up by
