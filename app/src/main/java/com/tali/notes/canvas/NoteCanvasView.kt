@@ -1028,7 +1028,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           drawBubble(canvas, label, mid.x + n.x * off, mid.y + n.y * off)
         }
       }
-      is ArcShape -> drawBubble(canvas, "${g.degrees}°", camera.toScreen(g.center))
+      is ArcShape -> if (!g.arrowEnd) drawBubble(canvas, "${g.degrees}°", camera.toScreen(g.center))
       is TriangleShape -> {
         // Each corner's angle, just inside the corner, while it's being drawn or reshaped.
         if (mode != Mode.HANDLE_DRAG && mode != Mode.SHAPE_CREATE && mode != Mode.LIVE_SHAPE) return
@@ -3028,6 +3028,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (hypot(fx - tapStartFocus.x, fy - tapStartFocus.y) > touchSlop || kotlin.math.abs(span - tapStartSpan) > touchSlop) multiTapMoved = true
         camera.pan(fx - lastFocusX, resisted(fy - lastFocusY))
         if (lastSpan > 10f && span > 10f) camera.zoomAround(fx, fy, span / lastSpan)
+        // Zooming out shows more below the last page, which isn't pulling: once the fingers zoom, this
+        // gesture can't show the add-page sign or add a page (only sliding does).
+        if (pulling && kotlin.math.abs(camera.zoom - zoomAtDown) > zoomAtDown * 0.04f) {
+          pulling = false
+          invalidate()
+        }
         lastFocusX = fx
         lastFocusY = fy
         lastSpan = span

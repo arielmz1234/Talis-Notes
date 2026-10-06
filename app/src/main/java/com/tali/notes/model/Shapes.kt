@@ -228,7 +228,8 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
   // Mirrored, it runs the other way round from its (mirrored) start.
   override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = m.mapAngle(start), sweep = if (m.mirrors) -sweep else sweep)
 
-  override fun handles() = listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep))
+  // A moment (the arc with an arrow) keeps its form: no end dots, only the resize chip.
+  override fun handles() = if (arrowEnd) emptyList() else listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep))
 
   /** How far round the arc goes, in whole degrees (always positive). */
   val degrees: Int
