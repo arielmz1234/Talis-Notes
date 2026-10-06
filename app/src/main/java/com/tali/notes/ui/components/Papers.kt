@@ -2,6 +2,14 @@ package com.tali.notes.ui.components
 
 import androidx.compose.ui.layout.onSizeChanged
 import android.net.Uri
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.AnimatedVisibility
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,7 +38,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -82,6 +89,10 @@ import kotlin.math.roundToInt
  * Paper choices: the built-in styles, then her own backgrounds, then a tile to make a new one. Her
  * own ones can be removed with a long press.
  */
+/** The paper picker's More unfolding the rest (an entry), and folding them away (quicker, as exits are). */
+private const val PAPERS_OPEN_MS = 260
+private const val PAPERS_CLOSE_MS = 180
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun PaperPicker(
@@ -116,13 +127,8 @@ fun PaperPicker(
   val folded = (FOLDED + PaperStyle.entries.map { it.name }.filterNot { it in FOLDED } + customs.map { it.id }).take(fit - 1)
   // While folded, More stands in for a paper in use that isn't showing, so it holds the highlight.
   val foldedAway = !expanded && (customId ?: style.name) !in folded
-  Column {
-  FlowRow(
-    Modifier.slidingHighlight(glide, if (foldedAway) "more" else customId ?: style, SolidColor(c.accentSoft), 10.dp),
-    horizontalArrangement = Arrangement.spacedBy(4.dp),
-    verticalArrangement = Arrangement.spacedBy(4.dp),
-    maxItemsInEachRow = fit,
-  ) {
+  // The highlight is drawn by the whole column, so it glides between the two rows too.
+  Column(Modifier.slidingHighlight(glide, if (foldedAway) "more" else customId ?: style, SolidColor(c.accentSoft), 10.dp)) {
     val tile: @Composable (Any, String, Boolean, () -> Unit, (() -> Unit)?, @Composable (Modifier) -> Unit) -> Unit = { key, label, on, click, longClick, swatch ->
       val edge by animateColorAsState(if (on) c.accent else Color.Transparent, tween(220), label = "swatchEdge")
       val ink by animateColorAsState(if (on) c.accent else c.inkMuted, tween(220), label = "paperLabel")
@@ -143,34 +149,59 @@ fun PaperPicker(
     val all: List<Pair<String, @Composable () -> Unit>> =
       PaperStyle.entries.map { s -> s.name to @Composable { tile(s, s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
         customs.map { cp -> cp.id to @Composable { tile(cp.id, cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
-    // Folded: as many as fit (Blank, Lines and Grid first), then More. Open: every paper, hers, and Your own last.
     val current = customId ?: style.name
-    val shown = if (expanded) all else folded.mapNotNull { name -> all.firstOrNull { it.first == name } }
-    shown.forEach { it.second() }
-    // While folded, More stands in for a paper in use that isn't one of the three.
     val hiddenCurrent = !expanded && current !in folded
     val currentCustom = customs.firstOrNull { it.id == customId }
-    tile("more", if (expanded) "Fewer" else if (hiddenCurrent) (currentCustom?.name ?: style.label) else "More", hiddenCurrent, { expanded = !expanded }, null) { m ->
-      Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
-        if (hiddenCurrent) {
-          if (currentCustom != null) CustomPaperSwatch(currentCustom, Modifier.fillMaxSize()) else PaperSwatch(style, Modifier.fillMaxSize())
+    // The first row never moves: as many papers as fit (Blank, Lines and Grid first), then More.
+    // Opening unfolds the rest underneath, so nothing she's looking at jumps.
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), maxItemsInEachRow = fit) {
+      folded.forEach { name -> all.firstOrNull { it.first == name }?.second?.invoke() }
+      val turn = animateFloatAsState(if (expanded) 180f else 0f, tween(PAPERS_OPEN_MS, easing = EaseOutStrong), label = "moreArrow")
+      // While folded, More stands in for a paper in use that isn't showing.
+      tile("more", if (expanded) "Fewer" else if (hiddenCurrent) (currentCustom?.name ?: style.label) else "More", hiddenCurrent, { expanded = !expanded }, null) { m ->
+        Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
+          if (hiddenCurrent) {
+            if (currentCustom != null) CustomPaperSwatch(currentCustom, Modifier.fillMaxSize()) else PaperSwatch(style, Modifier.fillMaxSize())
+          }
+          Icon(
+            Icons.Outlined.KeyboardArrowDown,
+            null,
+            tint = c.inkMuted,
+            // Turned in the draw phase, so the arrow doesn't recompose the picker every frame.
+            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = turn.value }.then(if (hiddenCurrent) Modifier.clip(RoundedCornerShape(6.dp)).background(c.surface.copy(alpha = 0.85f)) else Modifier),
+          )
         }
-        Icon(
-          if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-          null,
-          tint = c.inkMuted,
-          modifier = Modifier.size(20.dp).then(if (hiddenCurrent) Modifier.clip(RoundedCornerShape(6.dp)).background(c.surface.copy(alpha = 0.85f)) else Modifier),
-        )
       }
     }
-    if (expanded) {
-      tile("own", "Your own", false, onAdd, null) { m ->
-        Box(m.clip(RoundedCornerShape(8.dp)).border(1.dp, c.line, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-          Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(18.dp))
+    // The rest, then Your own. The height eases open with a strong ease-out while the tiles drift
+    // down into place and fade in, row after row; folding is quicker, and they fade before the
+    // height closes over them.
+    AnimatedVisibility(
+      expanded,
+      enter = expandVertically(tween(PAPERS_OPEN_MS, easing = EaseOutStrong), expandFrom = Alignment.Top),
+      exit = shrinkVertically(tween(PAPERS_CLOSE_MS, easing = EaseOutStrong), shrinkTowards = Alignment.Top) + fadeOut(tween(PAPERS_CLOSE_MS / 2)),
+    ) {
+      val rest = all.filterNot { it.first in folded }
+      FlowRow(
+        Modifier.padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        maxItemsInEachRow = fit,
+      ) {
+        val items = rest.map { it.second } + @Composable {
+          tile("own", "Your own", false, onAdd, null) { m ->
+            Box(m.clip(RoundedCornerShape(8.dp)).border(1.dp, c.line, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+              Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(18.dp))
+            }
+          }
+        }
+        items.forEachIndexed { i, item ->
+          val row = i / fit
+          val shown = transition.animateFloat({ tween(PAPERS_OPEN_MS - 40, delayMillis = minOf(row, 3) * 40, easing = EaseOutStrong) }, label = "paperIn") { if (it == EnterExitState.Visible) 1f else 0f }
+          Box(Modifier.graphicsLayer { alpha = shown.value; translationY = (1f - shown.value) * -8.dp.toPx() }) { item() }
         }
       }
     }
-  }
   if (lineWeight != null && onLineWeight != null) LineWeightRow(lineWeight, onLineWeight)
   }
   }
