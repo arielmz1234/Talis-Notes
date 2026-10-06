@@ -379,6 +379,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   /** A built-in paper's own line thickness (from its edit card). */
   fun setPaperWeight(style: PaperStyle, weight: Float) = store.update { it.copy(paperWeights = it.paperWeights + (style.name to weight.coerceIn(0.5f, 5f))) }
 
+  /** A built-in paper's own colours (from its edit card); null for both puts it back as it was. */
+  fun setPaperLook(style: PaperStyle, look: com.tali.notes.model.PaperLook) =
+    store.update { it.copy(paperLooks = if (look.line == null && look.paper == null) it.paperLooks - style.name else it.paperLooks + (style.name to look)) }
+
   /** Saves changes to one of her papers (from its edit card). */
   fun updateCustomPaper(paper: CustomPaper) = store.update { s -> s.copy(customPapers = s.customPapers.map { if (it.id == paper.id) paper else it }) }
 
@@ -643,7 +647,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       val dark = m?.dark == true
       val custom = customPaperOf(m, settings.value)
       val landscape = m?.landscape == true
-      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, settings.value.paperLineWeight, settings.value.paperWeights).joinToString("|")
+      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, settings.value.paperLineWeight, settings.value.paperWeights, settings.value.paperLooks).joinToString("|")
       exported[key]?.takeIf { it.exists() }?.let { return@withLock it }
       val items = doc.all.toList()
       val title = (m?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }

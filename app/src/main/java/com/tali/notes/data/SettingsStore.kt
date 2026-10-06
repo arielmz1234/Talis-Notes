@@ -106,6 +106,8 @@ data class AppSettings(
   val paperLineWeight: Float = 1f,
   /** Line thickness per built-in paper (by [PaperStyle] name), set from its edit card; missing ones use [paperLineWeight]. */
   val paperWeights: Map<String, Float> = emptyMap(),
+  /** Line and paper colours per built-in paper (by [PaperStyle] name), set from its edit card. */
+  val paperLooks: Map<String, com.tali.notes.model.PaperLook> = emptyMap(),
   /** The system bars (status and navigation) are hidden inside notebooks (swipe from an edge to see them). */
   val hideNavBar: Boolean = false,
   /** On A4 pages, one stroke may carry on across the gap between pages (the gap isn't exported). Off, ink stops at each page's edge. */
@@ -171,6 +173,7 @@ class SettingsStore(context: Context) {
   private val _settings = MutableStateFlow(load().also {
     PaperRenderer.lineWeight = it.paperLineWeight
     PaperRenderer.weights = it.paperWeights
+    PaperRenderer.looks = it.paperLooks
   })
   val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
@@ -183,6 +186,7 @@ class SettingsStore(context: Context) {
     _settings.value = next
     PaperRenderer.lineWeight = next.paperLineWeight
     PaperRenderer.weights = next.paperWeights
+    PaperRenderer.looks = next.paperLooks
     prefs.edit().putString("json", ItemCodec.json.encodeToString(AppSettings.serializer(), next)).apply()
   }
 

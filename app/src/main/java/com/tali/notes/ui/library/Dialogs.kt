@@ -218,6 +218,8 @@ fun NewNotebookDialog(
         },
         tileWidth = 80.dp,
         perRow = 7,
+        dark = dark || c.isDark,
+        looks = settings.paperLooks,
       )
       Spacer(Modifier.height(12.dp))
       // Pages and orientation side by side. With an endless canvas, orientation fades out but keeps

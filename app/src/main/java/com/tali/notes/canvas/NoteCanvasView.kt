@@ -159,7 +159,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   var settings = AppSettings()
     set(value) {
       // The paper redraws when her line weight changes.
-      if (value.paperLineWeight != field.paperLineWeight || value.paperWeights != field.paperWeights || value.customPapers != field.customPapers) invalidate()
+      if (value.paperLineWeight != field.paperLineWeight || value.paperWeights != field.paperWeights || value.paperLooks != field.paperLooks || value.customPapers != field.customPapers) invalidate()
       val reclip = value.inkBetweenPages != field.inkBetweenPages
       field = value
       // Writing past the pages shows or hides again with Write between pages.

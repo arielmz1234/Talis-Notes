@@ -48,6 +48,9 @@ class PaperRenderer {
     /** Each built-in paper's own thickness, set on its edit card (by style name); missing ones use [lineWeight]. */
     @Volatile var weights: Map<String, Float> = emptyMap()
 
+    /** Each built-in paper's own colours (by style name); they apply on light paper. */
+    @Volatile var looks: Map<String, com.tali.notes.model.PaperLook> = emptyMap()
+
     /** How heavy [style] (or her own paper [custom]) is drawn. */
     fun weightOf(style: PaperStyle, custom: CustomPaper?): Float = custom?.let { it.lineWeight ?: lineWeight } ?: weights[style.name] ?: lineWeight
 
@@ -87,9 +90,29 @@ class PaperRenderer {
       drawCustom(canvas, it, camera, width, height)
       return
     }
-    canvas.drawColor(paperColor)
+    // Her colours for this paper, on light paper (dark paper keeps its own dark look).
+    val look = if (dark) null else looks[style.name]
+    val saved = intArrayOf(lineColor, blueLine, engineeringMinor, engineeringMajor)
+    look?.line?.let { l ->
+      lineColor = l
+      blueLine = l
+      engineeringMajor = l
+      engineeringMinor = (l and 0x00FFFFFF) or ((((l ushr 24) * 0.45f).toInt()) shl 24)
+    }
+    canvas.drawColor(look?.paper ?: paperColor)
     val mm = 160f / 25.4f
     val k = (if (print) 0.45f else 1f) * weight
+    try {
+      drawStyle(canvas, style, camera, width, height, mm, k)
+    } finally {
+      lineColor = saved[0]
+      blueLine = saved[1]
+      engineeringMinor = saved[2]
+      engineeringMajor = saved[3]
+    }
+  }
+
+  private fun drawStyle(canvas: Canvas, style: PaperStyle, camera: Camera, width: Int, height: Int, mm: Float, k: Float) {
     when (style) {
       PaperStyle.BLANK -> Unit
       PaperStyle.DOTS -> dots(canvas, camera, width, height, 5 * mm, lineColor)

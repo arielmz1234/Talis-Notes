@@ -113,6 +113,10 @@ fun PaperPicker(
   onLineWeight: ((Float) -> Unit)? = null,
   /** Tapping the paper already in use opens its edit card (its line thickness, and more for hers). */
   onEditCurrent: (() -> Unit)? = null,
+  /** Show the papers as dark pages (dark paper, or the dark theme). */
+  dark: Boolean = Tali.colors.isDark,
+  /** Her colours for the built-in papers. */
+  looks: Map<String, com.tali.notes.model.PaperLook> = emptyMap(),
 ) {
   val c = Tali.colors
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
@@ -165,11 +169,11 @@ fun PaperPicker(
     val all: List<Pair<String, @Composable () -> Unit>> =
       PaperStyle.entries.map { s ->
         val on = customId == null && s == style
-        s.name to @Composable { tile(s, s.label, on, { if (on && onEditCurrent != null) onEditCurrent() else onStyle(s) }, null) { m -> PaperSwatch(s, m) } }
+        s.name to @Composable { tile(s, s.label, on, { if (on && onEditCurrent != null) onEditCurrent() else onStyle(s) }, null) { m -> PaperSwatch(s, m, dark, looks[s.name]) } }
       } +
         customs.map { cp ->
           val on = cp.id == customId
-          cp.id to @Composable { tile(cp.id, cp.name, on, { if (on && onEditCurrent != null) onEditCurrent() else onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } }
+          cp.id to @Composable { tile(cp.id, cp.name, on, { if (on && onEditCurrent != null) onEditCurrent() else onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m, dark) } }
         }
     // The first row never moves: as many papers as fit (Blank, Lines and Grid first), then More.
     // Opening unfolds the rest underneath, so nothing she's looking at jumps.
@@ -236,25 +240,27 @@ fun PaperPicker(
 
 /** A small picture of one of her backgrounds. */
 @Composable
-fun CustomPaperSwatch(cp: CustomPaper, modifier: Modifier = Modifier) {
+fun CustomPaperSwatch(cp: CustomPaper, modifier: Modifier = Modifier, dark: Boolean = false) {
   val image = cp.image
   if (image != null) {
     val bmp = rememberPaperImage(image, 240)
-    Box(modifier.clip(RoundedCornerShape(8.dp)).background(Color.White)) {
-      if (bmp != null) Image(bmp, null, contentScale = ContentScale.Crop, alpha = cp.opacity.coerceIn(0.15f, 1f), modifier = Modifier.fillMaxSize())
+    // On dark paper the picture is dimmed, as the page shows it.
+    Box(modifier.clip(RoundedCornerShape(8.dp)).background(if (dark) Color(com.tali.notes.canvas.PaperRenderer.DARK_PAPER) else Color.White)) {
+      if (bmp != null) Image(bmp, null, contentScale = ContentScale.Crop, alpha = cp.opacity.coerceIn(0.15f, 1f) * (if (dark) 0.4f else 1f), modifier = Modifier.fillMaxSize())
     }
     return
   }
-  PatternSwatch(cp, modifier)
+  PatternSwatch(cp, modifier, dark)
 }
 
 /** Her designed pattern, drawn as if the swatch showed a strip about 60 mm wide. */
 @Composable
-private fun PatternSwatch(cp: CustomPaper, modifier: Modifier) {
+private fun PatternSwatch(cp: CustomPaper, modifier: Modifier, dark: Boolean = false) {
   Canvas(modifier) {
-    drawRoundRect(Color(cp.paperColor), cornerRadius = CornerRadius(8.dp.toPx()))
+    // On dark paper: the dark page, her line colour lightened (as the page draws it).
+    drawRoundRect(if (dark) Color(com.tali.notes.canvas.PaperRenderer.DARK_PAPER) else Color(cp.paperColor), cornerRadius = CornerRadius(8.dp.toPx()))
     val step = size.width * cp.spacingMm / 60f
-    val line = Color(cp.faded(cp.lineColor))
+    val line = Color(cp.faded(if (dark) (com.tali.notes.ink.Brushes.onDarkPaper(cp.lineColor) and 0x00FFFFFF) or 0x70000000 else cp.lineColor))
     if (step >= 2f) {
       when (cp.pattern) {
         PaperStyle.BLANK -> Unit
@@ -475,28 +481,58 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
 }
 
 /**
- * A built-in paper's edit card: what it looks like and how heavy its lines are. The change shows
- * at once, on the page behind and in every notebook using this paper.
+ * A built-in paper's edit card: how it looks, and its line thickness, line colour and paper
+ * colour. Changes show at once, on the page behind and in every notebook using this paper. Reset
+ * puts it back as it came.
  */
 @Composable
-fun BuiltInPaperDialog(style: PaperStyle, weight: Float, onWeight: (Float) -> Unit, onDismiss: () -> Unit) {
+fun BuiltInPaperDialog(
+  style: PaperStyle,
+  weight: Float,
+  onWeight: (Float) -> Unit,
+  look: com.tali.notes.model.PaperLook?,
+  onLook: (com.tali.notes.model.PaperLook) -> Unit,
+  onDismiss: () -> Unit,
+) {
   val c = Tali.colors
-  DialogCard(onDismiss, width = 460) {
+  val current = look ?: com.tali.notes.model.PaperLook()
+  DialogCard(onDismiss, width = 520) {
     Text(style.label, style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(4.dp))
     Text("Changes show in every notebook on this paper.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(16.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.Top) {
       Box(Modifier.width(110.dp).aspectRatio(1322f / 1871f).clip(RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))) {
-        PaperSwatch(style, Modifier.fillMaxSize())
+        PaperSwatch(style, Modifier.fillMaxSize(), look = look)
       }
       Spacer(Modifier.width(20.dp))
       Column(Modifier.weight(1f)) {
-        if (style == PaperStyle.BLANK) Text("A blank page has no lines to thicken.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
-        else LineWeightRow(weight, onWeight)
+        if (style != PaperStyle.BLANK) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel("Lines", Modifier.width(64.dp))
+            val lineRing = rememberSlidingSelection()
+            val line = current.line ?: LINE_COLORS.first()
+            Row(Modifier.colorRing(lineRing, Color(line))) {
+              LINE_COLORS.forEach { col -> ColorDot(Color(col), selected = col == line, size = 26.dp, selection = lineRing) { onLook(current.copy(line = col)) } }
+            }
+          }
+          Spacer(Modifier.height(8.dp))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          SectionLabel("Paper", Modifier.width(64.dp))
+          val paperRing = rememberSlidingSelection()
+          val paper = current.paper ?: PAPER_COLORS.first()
+          Row(Modifier.colorRing(paperRing, Color(paper))) {
+            PAPER_COLORS.forEach { col -> ColorDot(Color(col), selected = col == paper, size = 26.dp, selection = paperRing) { onLook(current.copy(paper = col)) } }
+          }
+        }
+        if (style != PaperStyle.BLANK) LineWeightRow(weight, onWeight)
       }
     }
     Spacer(Modifier.height(20.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { PrimaryButton("Done", onClick = onDismiss) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+      if (look != null) QuietButton("Reset") { onLook(com.tali.notes.model.PaperLook()) }
+      PrimaryButton("Done", onClick = onDismiss)
+    }
   }
 }

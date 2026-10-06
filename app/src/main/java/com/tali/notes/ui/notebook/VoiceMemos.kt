@@ -108,7 +108,8 @@ import kotlinx.coroutines.launch
 
 /** The memo button, the bar it opens into, and the recording bar. All in dp, so the same on every tablet. */
 private val MEMO_SIZE = 48.dp
-private val MEMO_BAR = 312.dp
+/** Shorter than the recording bar: the wave gives up the length, the buttons and times keep theirs. */
+private val MEMO_BAR = 260.dp
 private val MEMO_GAP = 12.dp
 private val RECORDER_BAR = 404.dp
 private val RECORDER_HEIGHT = 56.dp

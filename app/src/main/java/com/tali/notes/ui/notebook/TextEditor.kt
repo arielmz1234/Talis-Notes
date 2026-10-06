@@ -1,5 +1,7 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.foundation.border
+
 import androidx.compose.material3.Icon
 
 import androidx.compose.ui.graphics.graphicsLayer
@@ -131,50 +133,55 @@ fun TextEditorOverlay(
           .focusRequester(focus)
           .onSizeChanged { fieldHeight = it.height },
     )
-    // Resizing: the usual resize chip at the box's bottom-right corner. Which way she drags decides
-    // what it does (settled after a short move): sideways sets the width (the text re-wraps), up and
-    // down the text size, diagonally both together (the block scales). In world units, so it's the
+    // Resizing, like a rectangle: a dot in the middle of each side stretches one way (left and right
+    // set the width and the text re-wraps; top and bottom set the text size), the opposite side
+    // staying put; the resize chip at the corner scales the whole block. In world units, so it's the
     // same block at any zoom.
+    val boxLeft = at.x - pad
+    val boxTop = at.y - pad
+    val boxW = edit.width * scale + with(density) { 12.dp.toPx() }
+    // The field's measured height is inside its padding; the dashed box is 6 dp bigger each way.
+    val boxH = fieldHeight + with(density) { 12.dp.toPx() }
+    SideDot(boxLeft, boxTop + boxH / 2, { latest }, onChangeNow) { start, d ->
+      val w = (start.width - d.x / scaleNow()).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH)
+      start.copy(width = w, origin = com.tali.notes.geometry.Pt(start.origin.x + (start.width - w), start.origin.y))
+    }
+    SideDot(boxLeft + boxW, boxTop + boxH / 2, { latest }, onChangeNow) { start, d ->
+      start.copy(width = (start.width + d.x / scaleNow()).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH))
+    }
+    SideDot(boxLeft + boxW / 2, boxTop, { latest }, onChangeNow) { start, d ->
+      val h = fieldHeight.toFloat().coerceAtLeast(1f)
+      val size = (start.fontSize * (1f - d.y / h)).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)
+      val f = size / start.fontSize
+      // The bottom stays where it was: the top moves by how much the block grew.
+      start.copy(fontSize = size, origin = com.tali.notes.geometry.Pt(start.origin.x, start.origin.y + h / scaleNow() * (1f - f)))
+    }
+    SideDot(boxLeft + boxW / 2, boxTop + boxH, { latest }, onChangeNow) { start, d ->
+      val h = fieldHeight.toFloat().coerceAtLeast(1f)
+      start.copy(fontSize = (start.fontSize * (1f + d.y / h)).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE))
+    }
     val chip = with(density) { 30.dp.toPx() }
+    val chipGap = with(density) { 10.dp.toPx() }
     Box(
-      Modifier.offset {
-          val right = at.x - pad + (edit.width * scale) + 12.dp.toPx()
-          val bottom = at.y - pad + fieldHeight
-          IntOffset((right - chip / 2).roundToInt(), (bottom - chip / 2).roundToInt())
-        }
+      Modifier.offset { IntOffset((boxLeft + boxW + chipGap - chip / 2).roundToInt(), (boxTop + boxH + chipGap - chip / 2).roundToInt()) }
         .size(30.dp)
         .pointerInput(Unit) { detectTapGestures { } }
         .pointerInput(Unit) {
           var total = Offset.Zero
-          var axis = 0 // 0 undecided, 1 sideways, 2 up and down, 3 diagonal
-          var startW = 0f
-          var startFont = 0f
+          var start = latest
           var startH = 1f
           detectDragGestures(
             onDragStart = {
               total = Offset.Zero
-              axis = 0
-              startW = latest.width
-              startFont = latest.fontSize
+              start = latest
               startH = fieldHeight.toFloat().coerceAtLeast(1f)
             }
           ) { change, delta ->
             change.consume()
             total += delta
-            if (axis == 0 && total.getDistance() > 10.dp.toPx()) {
-              val angle = Math.toDegrees(kotlin.math.atan2(kotlin.math.abs(total.y), kotlin.math.abs(total.x)).toDouble())
-              axis = if (angle < 25) 1 else if (angle > 65) 2 else 3
-            }
             val k = scaleNow()
-            val e = latest
-            when (axis) {
-              1 -> onChangeNow(e.copy(width = (startW + total.x / k).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH)))
-              2 -> onChangeNow(e.copy(fontSize = (startFont * (1f + total.y / startH)).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)))
-              3 -> {
-                val f = (1f + (total.x / (startW * k) + total.y / startH) / 2f).coerceIn(0.2f, 6f)
-                onChangeNow(e.copy(width = (startW * f).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH), fontSize = (startFont * f).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)))
-              }
-            }
+            val f = (1f + (total.x / (start.width * k) + total.y / startH) / 2f).coerceIn(0.2f, 6f)
+            onChangeNow(start.copy(width = (start.width * f).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH), fontSize = (start.fontSize * f).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)))
           }
         }
         .graphicsLayer {
@@ -206,6 +213,35 @@ fun TextEditorOverlay(
         ToolButton(Icons.Outlined.Check, "Done", onClick = finish)
       }
     }
+  }
+}
+
+/**
+ * A side dot of the text box at [x], [y] (screen pixels): dragging it reshapes the block from how
+ * it was when the drag began ([resize] gets that and how far the finger has gone).
+ */
+@Composable
+private fun SideDot(x: Float, y: Float, latest: () -> TextEdit, change: (TextEdit) -> Unit, resize: (start: TextEdit, moved: Offset) -> TextEdit) {
+  val c = Tali.colors
+  Box(
+    Modifier.offset { IntOffset((x - 16.dp.toPx()).roundToInt(), (y - 16.dp.toPx()).roundToInt()) }
+      .size(32.dp)
+      .pointerInput(Unit) { detectTapGestures { } }
+      .pointerInput(Unit) {
+        var total = Offset.Zero
+        var start: TextEdit? = null
+        detectDragGestures(onDragStart = {
+          total = Offset.Zero
+          start = latest()
+        }) { ch, delta ->
+          ch.consume()
+          total += delta
+          start?.let { change(resize(it, total)) }
+        }
+      },
+    contentAlignment = Alignment.Center,
+  ) {
+    Box(Modifier.size(13.dp).clip(CircleShape).background(Color.White).border(2.dp, c.accent, CircleShape))
   }
 }
 

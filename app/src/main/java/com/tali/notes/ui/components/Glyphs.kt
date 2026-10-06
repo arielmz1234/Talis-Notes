@@ -183,15 +183,31 @@ fun GeometryIcon(geometry: ShapeGeometry, color: Color, modifier: Modifier = Mod
   }
 }
 
-/** A small square of paper showing its pattern. */
+/**
+ * A small square of paper showing its pattern: on dark paper (or in the dark theme) as the dark
+ * page it would be, and in her own colours for it ([look]) when she has set them.
+ */
 @Composable
-fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
+fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier, dark: Boolean = false, look: com.tali.notes.model.PaperLook? = null) {
   val c = Tali.colors
+  val chosen = if (dark) null else look?.line?.let { Color(it) }
+  // Each of the usual greys, as the dark page shows it or in her line colour.
+  fun ink(usual: Color): Color =
+    when {
+      dark -> when (usual.value) {
+        Color(0xFFEDEDED).value -> Color(0xFF2E2D35)
+        Color(0xFFDADADA).value, Color(0xFFD2D2D2).value -> Color(0xFF45434D)
+        Color(0xFFF0A0B4).value -> Color(0x99E07A90)
+        else -> Color(0xFF5E5C66)
+      }
+      chosen != null -> if (usual.value == Color(0xFFEDEDED).value) chosen.copy(alpha = chosen.alpha * 0.45f) else if (usual.value == Color(0xFFF0A0B4).value) usual else chosen
+      else -> usual
+    }
   // Clipped to its rounded corners: the white paper and its lines used to reach past the corners
   // and the edge, which showed as a stray bright line against the dark theme.
   Canvas(modifier.clip(RoundedCornerShape(8.dp))) {
-    drawRoundRect(Color.White, cornerRadius = CornerRadius(8.dp.toPx()))
-    val line = Color(0xFFC4C4C4)
+    drawRoundRect(if (dark) Color(com.tali.notes.canvas.PaperRenderer.DARK_PAPER) else look?.paper?.let { Color(it) } ?: Color.White, cornerRadius = CornerRadius(8.dp.toPx()))
+    val line = ink(Color(0xFFC4C4C4))
     val step = size.width / 7f
     // Too small to draw a pattern (and a zero step would never finish the loops below).
     if (step < 2f) return@Canvas
@@ -208,14 +224,14 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
           y += step
         }
       }
-      PaperStyle.GRID -> grid(step, Color(0xFFDADADA), 1f, both = true)
-      PaperStyle.LINES -> grid(step * 1.4f, Color(0xFFD2D2D2), 1.2f, both = false)
+      PaperStyle.GRID -> grid(step, ink(Color(0xFFDADADA)), 1f, both = true)
+      PaperStyle.LINES -> grid(step * 1.4f, ink(Color(0xFFD2D2D2)), 1.2f, both = false)
       PaperStyle.ENGINEERING -> {
-        grid(step / 2.5f, Color(0xFFEDEDED), 0.8f, both = true)
-        grid(step * 2f, Color(0xFFCFCFCF), 1.2f, both = true)
+        grid(step / 2.5f, ink(Color(0xFFEDEDED)), 0.8f, both = true)
+        grid(step * 2f, ink(Color(0xFFCFCFCF)), 1.2f, both = true)
       }
       PaperStyle.ISOMETRIC -> {
-        val iso = Color(0xFFDADADA)
+        val iso = ink(Color(0xFFDADADA))
         val h = step * 1.2f
         val t = 0.57735026f
         clipRect {
@@ -234,8 +250,8 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
         }
       }
       PaperStyle.CORNELL, PaperStyle.RULED -> {
-        val ruled = Color(0xFFDADADA)
-        val strong = Color(0xFFBDBDBD)
+        val ruled = ink(Color(0xFFDADADA))
+        val strong = ink(Color(0xFFBDBDBD))
         val header = size.height * 0.2f
         val end = if (style == PaperStyle.CORNELL) size.height * 0.74f else size.height
         var y = header + step
@@ -248,7 +264,7 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier) {
           drawLine(strong, Offset(size.width * 0.3f, header), Offset(size.width * 0.3f, end), 1.3f * density)
           drawLine(strong, Offset(0f, end), Offset(size.width, end), 1.3f * density)
         } else {
-          drawLine(Color(0xFFF0A0B4), Offset(size.width * 0.18f, 0f), Offset(size.width * 0.18f, size.height), 1.2f * density)
+          drawLine(ink(Color(0xFFF0A0B4)), Offset(size.width * 0.18f, 0f), Offset(size.width * 0.18f, size.height), 1.2f * density)
         }
       }
     }

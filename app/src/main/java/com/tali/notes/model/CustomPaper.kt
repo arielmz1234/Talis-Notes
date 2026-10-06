@@ -35,3 +35,7 @@ data class CustomPaper(
     const val PREFIX = "custom:"
   }
 }
+
+/** A built-in paper's own colours, set on its edit card (null keeps the usual ones). */
+@Serializable
+data class PaperLook(val line: Int? = null, val paper: Int? = null)

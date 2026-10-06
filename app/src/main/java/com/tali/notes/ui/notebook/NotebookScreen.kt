@@ -603,6 +603,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                     close()
                     editingPaper = true
                   },
+                  dark = darkPaper || c.isDark,
+                  looks = settings.paperLooks,
                 )
               },
               fingerDraws = settings.fingerDraws,
@@ -766,7 +768,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
     } else {
       val style = meta?.paper ?: PaperStyle.DOTS
-      BuiltInPaperDialog(style, settings.paperWeights[style.name] ?: settings.paperLineWeight, { vm.setPaperWeight(style, it) }) { editingPaper = false }
+      BuiltInPaperDialog(style, settings.paperWeights[style.name] ?: settings.paperLineWeight, { vm.setPaperWeight(style, it) }, settings.paperLooks[style.name], { vm.setPaperLook(style, it) }) { editingPaper = false }
     }
   }
   if (makingPaper) {
