@@ -84,7 +84,7 @@ data class CustomShape(val id: String, val name: String, val geometry: ShapeGeom
             val pts = Geo.simplify(StrokeFactory.points(item.stroke), max(0.25f, diag * 0.0015f))
             if (pts.size >= 2) parts += PolyShape(pts, closed = false, smooth = true)
           }
-          is ImageItem, is TextItem -> Unit
+          is ImageItem, is TextItem, is AudioItem -> Unit
         }
       }
       if (parts.isEmpty()) return null

@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import com.tali.notes.data.ImageStore
+import com.tali.notes.model.AudioItem
 import com.tali.notes.model.CanvasItem
 import com.tali.notes.model.ImageItem
 import com.tali.notes.model.InkItem
@@ -69,7 +70,7 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
         when (item) {
           is InkItem -> item.isBuilt
           is ShapeItem -> item.isBuilt
-          is ImageItem, is TextItem -> true
+          is ImageItem, is TextItem, is AudioItem -> true
         }
       if (!built && deferUnbuilt) deferred = true
       return built || !deferUnbuilt
@@ -95,6 +96,8 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
 
   private fun drawItem(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
     when (item) {
+      // Shown by the notebook as a button beside the page, never drawn on it (or in a PDF).
+      is AudioItem -> Unit
       is InkItem -> strokes.draw(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
       is ShapeItem -> {
         // Its fill first, under the outline, in exactly the colour she chose (on dark paper too).

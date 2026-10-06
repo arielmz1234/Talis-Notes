@@ -7,6 +7,7 @@ import androidx.ink.storage.decode
 import androidx.ink.storage.encode
 import com.tali.notes.geometry.Rect
 import com.tali.notes.ink.Brushes
+import com.tali.notes.model.AudioItem
 import com.tali.notes.model.CanvasItem
 import com.tali.notes.model.ImageItem
 import com.tali.notes.model.InkItem
@@ -31,6 +32,7 @@ object ItemCodec {
   const val KIND_SHAPE = 1
   const val KIND_IMAGE = 2
   const val KIND_TEXT = 3
+  const val KIND_AUDIO = 4
 
   val json = Json {
     ignoreUnknownKeys = true
@@ -40,6 +42,8 @@ object ItemCodec {
   @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false, val front: Boolean = false, val locked: Boolean = false, val walls: List<String> = emptyList(), val flipX: Boolean = false, val flipY: Boolean = false)
 
   @Serializable private class TextPayload(val text: String, val x: Float, val y: Float, val width: Float, val locked: Boolean = false)
+
+  @Serializable private class AudioPayload(val file: String, val x: Float, val y: Float, val durationMs: Long, val wave: List<Int> = emptyList(), val created: Long = 0L, val locked: Boolean = false, val side: Int = AudioItem.RIGHT, val edge: Float = AudioItem.EDGE, val title: String = "")
 
   fun encode(item: CanvasItem): ItemRow {
     val b = item.bounds
@@ -68,6 +72,10 @@ object ItemCodec {
       is TextItem -> {
         val bytes = json.encodeToString(TextPayload.serializer(), TextPayload(item.text, item.origin.x, item.origin.y, item.width, item.locked)).encodeToByteArray()
         ItemRow(item.id, item.z, KIND_TEXT, null, item.color, item.fontSize, bytes, b.left, b.top, b.right, b.bottom)
+      }
+      is AudioItem -> {
+        val bytes = json.encodeToString(AudioPayload.serializer(), AudioPayload(item.file, item.at.x, item.at.y, item.durationMs, item.wave, item.created, item.locked, item.side, item.edge, item.title)).encodeToByteArray()
+        ItemRow(item.id, item.z, KIND_AUDIO, null, 0, 0f, bytes, b.left, b.top, b.right, b.bottom)
       }
     }
   }
@@ -105,6 +113,10 @@ object ItemCodec {
           KIND_TEXT -> {
             val p = json.decodeFromString(TextPayload.serializer(), row.payload.decodeToString())
             TextItem(row.id, row.z, p.text, com.tali.notes.geometry.Pt(p.x, p.y), p.width, row.size, row.color, p.locked)
+          }
+          KIND_AUDIO -> {
+            val p = json.decodeFromString(AudioPayload.serializer(), row.payload.decodeToString())
+            AudioItem(row.id, row.z, p.file, com.tali.notes.geometry.Pt(p.x, p.y), p.durationMs, p.wave, p.created, p.locked, p.side, p.edge, p.title)
           }
           else -> null
         }

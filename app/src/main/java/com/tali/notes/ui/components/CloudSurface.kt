@@ -32,6 +32,9 @@ enum class CloudCrown {
 
   /** A low, narrow crown for a single button: a hint of cloud that stays within the button's width. */
   LITTLE,
+
+  /** Like [LITTLE] but two puffs leaning to one side, so two little buttons side by side don't match. */
+  LITTLE_TWIN,
 }
 
 /** A stable pseudo-random number in [0, 1) so the bumps look hand-placed but never change. */
@@ -62,6 +65,9 @@ private val CENTER_PUFFS = listOf(Triple(-20f, 6f, 11f), Triple(0f, 0f, 16f), Tr
 
 /** [CloudCrown.LITTLE] puffs: rise about 6 dp instead of 16 and span about 37 dp instead of 62. */
 private val LITTLE_PUFFS = listOf(Triple(-11f, 7f, 7.5f), Triple(0f, 4f, 10f), Triple(11f, 7.5f, 7f))
+
+/** [CloudCrown.LITTLE_TWIN] puffs: a fuller one left of centre and a smaller one to its right. */
+private val TWIN_PUFFS = listOf(Triple(-6f, 4.5f, 9.5f), Triple(9.5f, 7.5f, 7f))
 
 /**
  * Draws a soft cloud-like surface behind the content: white fading to a pale blue-lilac belly,
@@ -106,6 +112,7 @@ fun Modifier.cloudSurface(radius: Dp = 22.dp, crown: CloudCrown = CloudCrown.NON
       }
       CloudCrown.CENTER -> CENTER_PUFFS.forEach { (x, y, rad) -> puff(w / 2 / d + x, y, rad) }
       CloudCrown.LITTLE -> LITTLE_PUFFS.forEach { (x, y, rad) -> puff(w / 2 / d + x, y, rad) }
+      CloudCrown.LITTLE_TWIN -> TWIN_PUFFS.forEach { (x, y, rad) -> puff(w / 2 / d + x, y, rad) }
     }
     if (!puffs.isEmpty) outline.op(puffs, Path.Op.UNION)
     // Drawn straight onto the (hardware) canvas, with the shadow as a GPU shadow layer. It used to

@@ -57,6 +57,7 @@ object BackupArchive {
           zip.closeEntry()
           addFolder(zip, repo.imagesDir, "images/")
           addFolder(zip, repo.thumbsDir, "thumbs/")
+          addFolder(zip, repo.audioDir, "audio/")
         }
       } finally {
         tmp.delete()
@@ -102,6 +103,7 @@ object BackupArchive {
               name == DB_ENTRY -> File(work, DB_ENTRY).outputStream().use { zip.copyTo(it) }
               name == SETTINGS_ENTRY -> settingsJson = zip.readBytes().decodeToString()
               name.startsWith("images/") -> File(repo.imagesDir, base).let { if (!it.exists()) it.outputStream().use { o -> zip.copyTo(o) } }
+              name.startsWith("audio/") -> File(repo.audioDir, base).let { if (!it.exists()) it.outputStream().use { o -> zip.copyTo(o) } }
               name.startsWith("thumbs/") -> File(work, "thumb-$base").outputStream().use { zip.copyTo(it) }
             }
           }

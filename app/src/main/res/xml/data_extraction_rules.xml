@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android's own backup (Android 12 and newer) and tablet-to-tablet transfer: notebooks and
      settings. Cloud backup leaves pictures out to stay under the 25 MB limit (the backup file has them);
-     a direct tablet-to-tablet transfer has no limit, so it takes everything. -->
+     a direct tablet-to-tablet transfer has no limit, so it takes everything (voice memos too). -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="database" path="notes.db" />
@@ -12,6 +12,7 @@
         <include domain="database" path="notes.db" />
         <include domain="database" path="notes.db-wal" />
         <include domain="file" path="images/" />
+        <include domain="file" path="audio/" />
         <include domain="sharedpref" path="settings.xml" />
     </device-transfer>
 </data-extraction-rules>

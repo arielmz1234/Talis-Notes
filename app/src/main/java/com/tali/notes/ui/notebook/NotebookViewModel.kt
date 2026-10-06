@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.tali.notes.canvas.Change
 import com.tali.notes.canvas.Document
 import com.tali.notes.canvas.SelectionInfo
 import com.tali.notes.data.AppSettings
@@ -53,6 +54,9 @@ enum class PanelKind {
   SHAPES,
   FILL,
 }
+
+/** The draft recording's id while it's played back (it isn't a memo yet). */
+const val DRAFT_ID = "draft"
 
 /** How many notebooks quick open lists. */
 const val RECENT_MAX = 8
@@ -124,6 +128,107 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun thumbnailFile(id: String): File = repo.thumbnailFile(id)
 
+  // ---- Voice memos ----
+
+  /** Records and plays this notebook's memos. */
+  val voice = com.tali.notes.audio.VoiceRecorder(app, repo.audioDir, viewModelScope)
+
+  /** The notebook's voice memos, kept in step with the document. */
+  var memos by mutableStateOf<List<com.tali.notes.model.AudioItem>>(emptyList())
+    private set
+
+  /** Where the memo being recorded (or listened back to) will go (world) if she adds it. */
+  var recordingAt by mutableStateOf<com.tali.notes.geometry.Pt?>(null)
+    private set
+
+  /** A finished recording not yet on the page: she can listen to it, delete it, or add it. */
+  var draft by mutableStateOf<com.tali.notes.audio.Recorded?>(null)
+    private set
+
+  /** The draft as a memo, for playing it back. */
+  val draftMemo: com.tali.notes.model.AudioItem?
+    get() = draft?.let { com.tali.notes.model.AudioItem(DRAFT_ID, 0, it.file, com.tali.notes.geometry.Pt(0f, 0f), it.durationMs, it.wave, 0L) }
+
+  /** The memo opened into a player, if any. */
+  var openMemo by mutableStateOf<String?>(null)
+
+  /** Starts recording a memo that will sit at [at] if she adds it; false if the microphone couldn't be opened. */
+  fun startMemo(at: com.tali.notes.geometry.Pt): Boolean {
+    if (document == null || voice.recording) return false
+    discardDraft()
+    if (!voice.start()) {
+      showHint("The microphone couldn't start. Try again in a moment.")
+      return false
+    }
+    openMemo = null
+    recordingAt = at
+    return true
+  }
+
+  /** Done recording: it waits as a draft to be listened to, deleted or added. */
+  fun stopMemo() {
+    val r = voice.stop()
+    if (r == null) {
+      recordingAt = null
+      showHint("Too short to keep")
+      return
+    }
+    draft = r
+  }
+
+  /** Puts the draft beside the page (an undoable step). */
+  fun keepDraft() {
+    val r = draft ?: return
+    val at = recordingAt ?: return
+    val d = document ?: return
+    if (voice.current == DRAFT_ID) voice.stopPlayback()
+    draft = null
+    recordingAt = null
+    d.commit(Change(emptyList(), listOf(com.tali.notes.model.AudioItem(d.newId(), d.nextZ(), r.file, at, r.durationMs, r.wave, System.currentTimeMillis()))))
+  }
+
+  /** Throws away the recording going on, or the draft. */
+  fun discardDraft() {
+    if (voice.recording) voice.cancel()
+    if (voice.current == DRAFT_ID) voice.stopPlayback()
+    draft?.let { File(repo.audioDir, it.file).delete() }
+    draft = null
+    recordingAt = null
+  }
+
+  /** Names memo [id] (an empty title takes the name away). */
+  fun renameMemo(id: String, title: String) {
+    val d = document ?: return
+    val old = d.memos.firstOrNull { it.id == id } ?: return
+    if (old.title == title.trim()) return
+    d.commit(Change(listOf(old), listOf(old.titled(title))))
+  }
+
+  /** Moves a memo to where it was dragged (an undoable step). */
+  fun moveMemo(moved: com.tali.notes.model.AudioItem) {
+    val d = document ?: return
+    val old = d.memos.firstOrNull { it.id == moved.id } ?: return
+    d.commit(Change(listOf(old), listOf(moved)))
+  }
+
+  /** Deletes memo [id] (undo brings it back; the recording itself is kept until the notebook is erased). */
+  fun deleteMemo(id: String) {
+    val d = document ?: return
+    val m = d.memos.firstOrNull { it.id == id } ?: return
+    if (voice.current == id) voice.stopPlayback()
+    if (openMemo == id) openMemo = null
+    d.commit(Change(listOf(m), emptyList()))
+    showHint("Voice memo deleted (undo brings it back)")
+  }
+
+  override fun onCleared() {
+    // Leaving mid-recording (or before deciding) keeps what was recorded, beside the page.
+    if (voice.recording) stopMemo()
+    keepDraft()
+    voice.release()
+    super.onCleared()
+  }
+
   init {
     // This one goes to the top of the recent list.
     store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
@@ -136,7 +241,14 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       doc.listeners += { change ->
         repo.applyChange(notebookId, change)
         revision++
+        if (change.added.any { it is com.tali.notes.model.AudioItem } || change.removed.any { it is com.tali.notes.model.AudioItem }) {
+          memos = doc.memos.toList()
+          // A memo taken away (deleted, or an undo) stops playing and closes.
+          if (voice.current != null && memos.none { it.id == voice.current }) voice.stopPlayback()
+          if (openMemo != null && memos.none { it.id == openMemo }) openMemo = null
+        }
       }
+      memos = doc.memos.toList()
       doc.onHistoryChanged = { u, r ->
         canUndo = u
         canRedo = r

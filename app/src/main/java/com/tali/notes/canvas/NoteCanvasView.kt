@@ -38,6 +38,7 @@ import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import com.tali.notes.geometry.ShapeRecognizer
 import com.tali.notes.model.ArcShape
+import com.tali.notes.model.AudioItem
 import com.tali.notes.model.CustomShape
 import com.tali.notes.talisApp
 import com.tali.notes.data.NotesRepository
@@ -504,7 +505,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
-  private fun onDocChanged(c: Change) {
+  private fun onDocChanged(change: Change) {
+    // Voice memos aren't drawn or touched by the canvas.
+    val c = if (change.removed.none { it is AudioItem } && change.added.none { it is AudioItem }) change else Change(change.removed.filterNot { it is AudioItem }, change.added.filterNot { it is AudioItem })
     buildNew(c.added)
     if (pageCount == null && (c.added + c.removed).any { it is ImageItem && it.pdfPage }) refreshPages()
     c.removed.forEach { tiles.invalidate(it.bounds) }
@@ -1158,9 +1161,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun world(e: MotionEvent, index: Int) = camera.toWorld(e.getX(index), e.getY(index))
 
+  /** Any finger or pen landing on the page (an open voice memo folds away). */
+  var onTouchDown: (() -> Unit)? = null
+
   @SuppressLint("ClickableViewAccessibility")
   override fun dispatchTouchEvent(e: MotionEvent): Boolean {
     if (doc == null) return true
+    if (e.actionMasked == MotionEvent.ACTION_DOWN) onTouchDown?.invoke()
     try {
       handleTouch(e)
     } catch (t: Throwable) {
@@ -2135,7 +2142,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     when (item) {
       is InkItem -> listOf(item.stroke)
       is ShapeItem -> item.strokes
-      is ImageItem, is TextItem -> emptyList()
+      is ImageItem, is TextItem, is AudioItem -> emptyList()
     }
 
   private fun parallelogram(a: Pt, b: Pt, padding: Float): Parallelogram {
@@ -2190,6 +2197,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       is ShapeItem -> item.geometry.paths(item.size).any { Lasso.nearPath(it, path, r) }
       is ImageItem -> !item.pdfPage && Lasso.nearRect(item.rect, path, r)
       is TextItem -> Lasso.nearRect(item.bounds, path, r)
+      is AudioItem -> false
     }
 
   /**
@@ -2202,6 +2210,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       is ShapeItem -> item.geometry.paths(item.size).any { Lasso.touchesPath(it, poly) }
       is ImageItem -> if (item.pdfPage) insideFraction(item, poly) >= 0.5f else Lasso.touchesRect(item.rect, poly)
       is TextItem -> Lasso.touchesRect(item.bounds, poly)
+      is AudioItem -> false
     }
 
   private fun insideFraction(item: CanvasItem, poly: List<Pt>): Float {
@@ -2211,6 +2220,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         is ShapeItem -> item.geometry.paths(item.size).flatten()
         is ImageItem -> item.rect.let { r -> listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom), r.center) }
         is TextItem -> item.bounds.let { r -> listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom), r.center) }
+        is AudioItem -> emptyList()
       }
     if (samples.isEmpty()) return 0f
     return samples.count { Geo.pointInPolygon(it, poly) }.toFloat() / samples.size
@@ -2514,7 +2524,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           is InkItem -> it.recolored(color)
           is ShapeItem -> it.recolored(color)
           is TextItem -> it.recolored(color)
-          is ImageItem -> it
+          is ImageItem, is AudioItem -> it
         }
       }
     d.commit(Change(selection, recolored))
@@ -2613,6 +2623,62 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     setPages(start + pdf.size)
     d.commit(Change(emptyList(), items))
     goToPage(start)
+  }
+
+  // ---- Voice memos ----
+
+  /**
+   * Where a memo's round button goes on screen (its centre, in pixels), [radius] and [gap] in
+   * pixels. On A4 pages: just right of the page, at the memo's height, over the desk; when the desk
+   * there is off screen or too narrow, it keeps to the screen's right edge instead. On an endless
+   * canvas it stays where it was recorded.
+   */
+  fun memoCenter(memo: AudioItem, radius: Float, gap: Float): Pt {
+    val p = camera.toScreen(memo.at)
+    if (pageCount == null) return p
+    val out = memo.edge * density
+    val x =
+      if (memo.side == AudioItem.LEFT) camera.toScreen(Pt(0f, memo.at.y)).x - out
+      else camera.toScreen(Pt(pageLayout.width, memo.at.y)).x + out
+    return Pt(x.coerceIn(gap + radius, maxOf(gap + radius, width - gap - radius)), p.y)
+  }
+
+  /**
+   * Where a memo dropped at screen point [sx], [sy] goes: on A4 pages, the side of the page it's
+   * nearer to and how far out from that edge (a drop on the paper goes just off it, [minEdge] px
+   * out), at that height (kept within the pages); on an endless canvas, right there.
+   */
+  fun memoDrop(memo: AudioItem, sx: Float, sy: Float, minEdge: Float): AudioItem {
+    val w = camera.toWorld(sx, sy)
+    val n = pageCount ?: return memo.movedTo(w, memo.side, memo.edge)
+    val y = w.y.coerceIn(0f, (n - 1) * pageLayout.pitch + pageLayout.height)
+    val left = camera.toScreen(Pt(0f, y)).x
+    val right = camera.toScreen(Pt(pageLayout.width, y)).x
+    return if (sx >= (left + right) / 2) memo.movedTo(Pt(pageLayout.width + AudioItem.SIZE, y), AudioItem.RIGHT, maxOf(minEdge, sx - right) / density)
+    else memo.movedTo(Pt(-AudioItem.SIZE, y), AudioItem.LEFT, maxOf(minEdge, left - sx) / density)
+  }
+
+  /**
+   * Where a new memo goes, in the world: beside the page that's on screen, near the top of what
+   * shows of it (below the toolbars), and below any memos already there so none overlap. [spacing]
+   * is the screen distance between two memos, in pixels.
+   */
+  fun newMemoSpot(memos: Collection<AudioItem>, spacing: Float): Pt {
+    val visible = camera.visibleWorld(width, height)
+    val step = spacing / camera.scale
+    val top = visible.top + (topClearance + 12f) / camera.zoom + step / 2
+    val n = pageCount
+    if (n == null) {
+      val x = visible.right - (spacing / 2 + 16f * density) / camera.scale
+      var y = top
+      while (memos.any { kotlin.math.abs(it.at.y - y) < step * 0.9f && kotlin.math.abs(it.at.x - x) < step }) y += step
+      return Pt(x, y)
+    }
+    val page = pageLayout.rect(pageLayout.indexAt(visible.top + visible.height * 0.4f).coerceIn(0, n - 1))
+    val x = page.right + AudioItem.SIZE
+    var y = top.coerceIn(page.top + step / 2, maxOf(page.top + step / 2, page.bottom - step / 2))
+    while (memos.any { kotlin.math.abs(it.at.y - y) < step * 0.9f } && y + step < page.bottom) y += step
+    return Pt(x, y)
   }
 
   // ---- Typed text ----
@@ -3260,7 +3326,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val pitch = pageLayout.pitch
     val before = ArrayList<CanvasItem>()
     val after = ArrayList<CanvasItem>()
-    for (item in d.all) {
+    for (item in d.all + d.memos) {
       val p = floor(item.bounds.center.y / pitch).toInt().coerceIn(0, n - 1)
       val q = Pages.movedIndex(p, from, to)
       if (q != p) {
@@ -3281,7 +3347,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     val n = pageCount ?: return
     val pitch = pageLayout.pitch
-    val byPage = d.all.groupBy { floor(it.bounds.center.y / pitch).toInt().coerceIn(0, n - 1) }
+    // Voice memos go with their pages too.
+    val byPage = (d.all + d.memos).groupBy { floor(it.bounds.center.y / pitch).toInt().coerceIn(0, n - 1) }
     val before = ArrayList<CanvasItem>()
     val after = ArrayList<CanvasItem>()
     val placed = HashSet<Int>()
@@ -3305,12 +3372,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     val n = pageCount ?: return
     val top = index * pageLayout.pitch
-    val on = d.all.filter { it.bounds.center.y in top..<top + pageLayout.pitch }
+    val on = (d.all + d.memos).filter { it.bounds.center.y in top..<top + pageLayout.pitch }
     if (n == 1) {
       if (on.isNotEmpty()) d.commit(Change(on, emptyList()))
       return
     }
-    val below = d.all.filter { it.bounds.center.y >= top + pageLayout.pitch }
+    val below = (d.all + d.memos).filter { it.bounds.center.y >= top + pageLayout.pitch }
     val shift = Affine.translate(0f, -pageLayout.pitch)
     setPages(n - 1)
     clearSelection()

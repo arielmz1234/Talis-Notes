@@ -252,3 +252,54 @@ class TextItem(
     const val LINE = 1.3f
   }
 }
+
+/**
+ * A voice memo: a recording kept beside the page. It isn't drawn on the canvas: the notebook shows
+ * it as a round button over the desk. [wave] is the recording's loudness in [WAVE_BARS] steps
+ * (0..100), drawn as its sound wave.
+ *
+ * Where it sits: on A4 pages, [at]'s height is the height it belongs to (so it moves, copies and
+ * goes with its page), and it shows on the page's [side], [edge] dp (on screen) out from the page's
+ * edge, so it stays off the paper at any zoom. On an endless canvas it sits at [at].
+ */
+class AudioItem(
+  override val id: String,
+  override val z: Long,
+  val file: String,
+  val at: Pt,
+  val durationMs: Long,
+  val wave: List<Int>,
+  val created: Long,
+  override val locked: Boolean = false,
+  val side: Int = RIGHT,
+  val edge: Float = EDGE,
+  /** Her name for it, or empty. */
+  val title: String = "",
+) : CanvasItem() {
+  override val pen: PenType? = null
+
+  override val bounds: Rect = Rect(at.x - SIZE / 2, at.y - SIZE / 2, at.x + SIZE / 2, at.y + SIZE / 2)
+
+  override fun transformed(m: Affine, newId: String, newZ: Long) = AudioItem(newId, newZ, file, m.apply(at), durationMs, wave, created, locked, side, edge, title)
+
+  override fun withZ(newZ: Long) = AudioItem(id, newZ, file, at, durationMs, wave, created, locked, side, edge, title)
+
+  override fun withLocked(on: Boolean) = AudioItem(id, z, file, at, durationMs, wave, created, on, side, edge, title)
+
+  /** The same memo somewhere else (dragged there). */
+  fun movedTo(p: Pt, side: Int, edge: Float) = AudioItem(id, z, file, p, durationMs, wave, created, locked, side, edge, title)
+
+  fun titled(t: String) = AudioItem(id, z, file, at, durationMs, wave, created, locked, side, edge, t.trim())
+
+  companion object {
+    const val RIGHT = 0
+    const val LEFT = 1
+
+    /** How far a memo's centre sits out from the page's edge by default, in dp on screen. */
+    const val EDGE = 36f
+
+    /** Its footprint in world units (only used to place it and to tell which page it belongs to). */
+    const val SIZE = 40f
+    const val WAVE_BARS = 48
+  }
+}

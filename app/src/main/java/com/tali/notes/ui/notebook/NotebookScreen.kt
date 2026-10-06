@@ -176,7 +176,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.animateFloat
 
 private class CanvasHolder {
-  var view: NoteCanvasView? = null
+  // State, so what lays itself over the canvas (the voice memos) appears once the canvas exists.
+  var view: NoteCanvasView? by mutableStateOf(null)
 }
 
 @Composable
@@ -206,8 +207,16 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit, onSwitch: (String) ->
       }
     }
     apply()
-    // Coming back to the app can bring the bar back; hide it again.
-    val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) apply() }
+    // Coming back to the app can bring the bar back; hide it again. Leaving the app keeps a
+    // recording going on (it's saved as a memo) and pauses one playing.
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) apply()
+      // Leaving the app ends a recording going on (kept as a draft to decide on) and pauses one playing.
+      if (event == Lifecycle.Event.ON_STOP) {
+        if (vm.voice.recording) vm.stopMemo()
+        vm.voice.pause()
+      }
+    }
     navOwner.lifecycle.addObserver(observer)
     onDispose {
       navOwner.lifecycle.removeObserver(observer)
@@ -269,6 +278,17 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           if (result == null) vm.showHint("That photo couldn't be opened") else holder.view?.runSafely { insertImage(result.first, result.second) }
         }
       }
+    }
+  // Where the mic button is (the recording bar hangs just below it). Not state: it moves with the toolbar.
+  val micAnchor = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+  // A voice memo goes beside the page on screen, below any already there.
+  val memoSpacing = memoSpacingPx()
+  val startMemo: () -> Unit = {
+    holder.view?.let { canvas -> vm.startMemo(canvas.newMemoSpot(vm.memos, memoSpacing)) }
+  }
+  val micPermission =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+      if (granted) startMemo() else vm.showHint("To record voice memos, allow the microphone for Tali's Notes in the tablet's settings")
     }
   val pdfPicker =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -393,6 +413,9 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       Text("Opening…", style = MaterialTheme.typography.bodyLarge, color = c.inkFaint, modifier = Modifier.align(Alignment.Center))
     }
 
+    // Voice memos beside the pages, over the canvas and under the toolbars.
+    holder.view?.let { canvas -> if (doc != null) VoiceMemoLayer(vm, canvas) }
+
     // Tapping the page closes an open panel instead of drawing.
     if (vm.panel != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { vm.panel = null } })
 
@@ -508,6 +531,15 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             onPdf = {
               vm.panel = null
               pdfPicker.launch(arrayOf("application/pdf"))
+            },
+            recording = vm.voice.recording || vm.draft != null,
+            onVoiceAnchor = { micAnchor[0] = it },
+            onVoice = {
+              vm.panel = null
+              if (vm.voice.recording) vm.stopMemo()
+              else if (vm.draft != null) Unit
+              else if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startMemo()
+              else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
             },
           )
           AnimatedVisibility(
@@ -632,6 +664,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
     }
     }
+    // Recording a voice memo: the bar hangs just below the mic button, over everything.
+    RecorderPanel(vm, anchor = { micAnchor[0] }, onAdd = vm::keepDraft)
     ShowToolbarsButton(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
 
     pasteOffer?.let { offer ->
@@ -830,7 +864,8 @@ private fun QuickOpen(recent: List<com.tali.notes.data.NotebookMeta>, thumbnail:
   var open by remember { mutableStateOf(false) }
   val roomBelow = rememberRoomBelow()
   Box(Modifier.onGloballyPositioned { roomBelow.anchor(it) }) {
-    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE) {
+    // Two puffs, not the back button's three, so the two little clouds side by side don't match.
+    FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE_TWIN) {
       // No highlight while the menu is open: the menu itself shows it.
       ToolButton(TaliIcons.RecentNotebook, "Recent notebooks") { open = true }
     }

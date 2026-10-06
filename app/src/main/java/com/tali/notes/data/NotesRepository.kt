@@ -92,6 +92,9 @@ class NotesRepository(private val context: Context) {
   val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
   val thumbsDir = File(context.filesDir, "thumbs").apply { mkdirs() }
 
+  /** Voice memo recordings (one .m4a each). */
+  val audioDir = File(context.filesDir, "audio").apply { mkdirs() }
+
   /** Pictures and PDF pages, loaded as they come into view. */
   val images = ImageStore(imagesDir)
   val databaseFile: File
@@ -277,8 +280,10 @@ class NotesRepository(private val context: Context) {
 
   private fun erase(id: String) {
     val files = imageFilesOf(id)
+    val recordings = filesOf(id, ItemCodec.KIND_AUDIO)
     db.writableDatabase.delete("notebooks", "id=?", arrayOf(id))
     files.forEach { if (!isImageUsedElsewhere(it)) File(imagesDir, it).delete() }
+    recordings.forEach { if (!isUsedElsewhere(it, ItemCodec.KIND_AUDIO)) File(audioDir, it).delete() }
     File(thumbsDir, "$id.png").delete()
     reload()
     _revision.value++
@@ -425,13 +430,18 @@ class NotesRepository(private val context: Context) {
       }
     }
 
-  private fun imageFilesOf(notebookId: String): List<String> =
-    readRows(notebookId).filter { it.kind == ItemCodec.KIND_IMAGE }.mapNotNull { row ->
+  private fun imageFilesOf(notebookId: String): List<String> = filesOf(notebookId, ItemCodec.KIND_IMAGE)
+
+  /** The files (pictures or recordings, by [kind]) that a notebook's items point to. */
+  private fun filesOf(notebookId: String, kind: Int): List<String> =
+    readRows(notebookId).filter { it.kind == kind }.mapNotNull { row ->
       runCatching { ItemCodec.json.parseToJsonElement(row.payload.decodeToString()).let { (it as kotlinx.serialization.json.JsonObject)["file"].toString().trim('"') } }.getOrNull()
     }
 
-  private fun isImageUsedElsewhere(file: String): Boolean =
-    db.readableDatabase.rawQuery("SELECT 1 FROM items WHERE kind=? AND payload LIKE ? LIMIT 1", arrayOf(ItemCodec.KIND_IMAGE.toString(), "%$file%")).use { it.moveToFirst() }
+  private fun isImageUsedElsewhere(file: String): Boolean = isUsedElsewhere(file, ItemCodec.KIND_IMAGE)
+
+  private fun isUsedElsewhere(file: String, kind: Int): Boolean =
+    db.readableDatabase.rawQuery("SELECT 1 FROM items WHERE kind=? AND payload LIKE ? LIMIT 1", arrayOf(kind.toString(), "%$file%")).use { it.moveToFirst() }
 
   /**
    * Copies the database to [target] as one consistent file. Runs on the writer thread, so no edit

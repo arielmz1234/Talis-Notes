@@ -26,6 +26,8 @@ import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,6 +101,9 @@ fun MainToolbar(
   onPdf: () -> Unit,
   onKeyboard: () -> Unit,
   modifier: Modifier = Modifier,
+  recording: Boolean = false,
+  onVoice: () -> Unit = {},
+  onVoiceAnchor: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit = {},
 ) {
   val c = Tali.colors
   FloatingBar(modifier.height(MAIN_TOOLBAR_HEIGHT), crown = CloudCrown.EDGE) {
@@ -218,6 +223,12 @@ fun MainToolbar(
       },
       // Typing: a text block where the next line would go.
       "Keyboard" to { ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard) },
+      // A voice memo, kept beside the page; pressed again while recording, it stops.
+      "Voice" to {
+        androidx.compose.foundation.layout.Box(Modifier.onGloballyPositioned(onVoiceAnchor)) {
+          ToolButton(Icons.Outlined.Mic, if (recording) "Voice memo" else "Record a voice memo", selected = recording, blue = true, onClick = onVoice)
+        }
+      },
     )
     ToolStrip(items, toolKey, tools)
   }

@@ -1,6 +1,7 @@
 package com.tali.notes.canvas
 
 import com.tali.notes.geometry.Rect
+import com.tali.notes.model.AudioItem
 import com.tali.notes.model.CanvasItem
 import java.util.UUID
 
@@ -25,8 +26,15 @@ class Document(initial: List<CanvasItem>) {
   /** Called when undo or redo availability changes. */
   var onHistoryChanged: ((canUndo: Boolean, canRedo: Boolean) -> Unit)? = null
 
+  private val memoItems = LinkedHashMap<String, AudioItem>()
+
+  /** The notebook's voice memos (not among [all]). */
+  val memos: Collection<AudioItem>
+    get() = memoItems.values
+
   init {
-    initial.sortedBy { it.z }.forEach { items[it.id] = it }
+    initial.filterIsInstance<AudioItem>().forEach { memoItems[it.id] = it }
+    initial.filterNot { it is AudioItem }.sortedBy { it.z }.forEach { items[it.id] = it }
     nextZ = (initial.maxOfOrNull { it.z } ?: 0L) + 1
   }
 
@@ -36,7 +44,7 @@ class Document(initial: List<CanvasItem>) {
   val size: Int
     get() = items.size
 
-  operator fun get(id: String): CanvasItem? = items[id]
+  operator fun get(id: String): CanvasItem? = items[id] ?: memoItems[id]
 
   fun newId(): String = UUID.randomUUID().toString()
 
@@ -76,7 +84,11 @@ class Document(initial: List<CanvasItem>) {
   val canRedo: Boolean
     get() = redoStack.isNotEmpty()
 
-  private fun applyRaw(c: Change) {
+  private fun applyRaw(change: Change) {
+    // Voice memos are kept apart: the canvas's tools (lasso, eraser, fill, drawing) never meet them.
+    change.removed.forEach { if (it is AudioItem) memoItems.remove(it.id) }
+    change.added.forEach { if (it is AudioItem) memoItems[it.id] = it }
+    val c = Change(change.removed.filterNot { it is AudioItem }, change.added.filterNot { it is AudioItem })
     c.removed.forEach { items.remove(it.id) }
     // Re-insert in z order so iteration stays back-to-front.
     if (c.added.isNotEmpty()) {
@@ -91,7 +103,8 @@ class Document(initial: List<CanvasItem>) {
       }
       nextZ = maxOf(nextZ, c.added.maxOf { it.z } + 1)
     }
-    listeners.toList().forEach { it(c) }
+    // Listeners hear the whole change (storage keeps the memos too).
+    listeners.toList().forEach { it(change) }
   }
 
   private fun notifyHistory() = onHistoryChanged?.invoke(canUndo, canRedo)
