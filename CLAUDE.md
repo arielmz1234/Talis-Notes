@@ -111,7 +111,8 @@ Backups come in three layers:
 
 ## Open items
 
-- Copy `keystore/` somewhere safe (it is not in git). As of 3 Oct 2026 it was **not** on the owner's PC (`C:\dev\Talis-Notes`); find out where it is before building anything for Tali, and if it's lost, decide on a new key once and stick to it.
+- Copy `keystore/` somewhere safe (it is not in git). As of 3 Oct 2026 it was **not** on the owner's PC (`C:\dev\Talis-Notes`). On 6 Oct 2026 it **was** found in the laptop checkout (`C:\Users\ariel\source\repos\talis-notes\keystore`), and its SHA-1 matches the release SHA-1 below, so build Tali's release APKs on the laptop.
+- The owner now also tests on a Galaxy Tab S6 Lite (SM-P620, Android 16, 1200×2000 @240dpi, which is 800×1333 dp, so the narrow layout when held upright).
 - Google Drive setup, then set `DRIVE_BACKUP=true`.
 - Try two-finger undo and three-finger redo on the real tablet. They are tested only in instrumented tests and the emulator.
 - The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
