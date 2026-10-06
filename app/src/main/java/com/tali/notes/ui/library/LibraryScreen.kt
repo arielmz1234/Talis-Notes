@@ -1288,7 +1288,7 @@ internal fun greetingFor(hour: Int): String =
     else -> "Good night"
   }
 
-/** "Good morning, Tali" by the tablet's clock, above the heading; it changes on its own as the day goes on. */
+/** "Good morning" by the tablet's clock, above the heading; it changes on its own as the day goes on. */
 @Composable
 private fun Greeting() {
   val c = Tali.colors
@@ -1304,6 +1304,6 @@ private fun Greeting() {
     transitionSpec = { fadeIn(tween(260)).togetherWith(fadeOut(tween(180))) },
     label = "greeting",
   ) { text ->
-    Text("$text, Tali", style = MaterialTheme.typography.titleMedium, color = c.accent)
+    Text(text, style = MaterialTheme.typography.titleMedium, color = c.accent)
   }
 }

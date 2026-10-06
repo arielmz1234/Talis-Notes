@@ -2761,12 +2761,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     host.onEditText(edit)
   }
 
-  /** Opens an existing text block for typing; it's hidden here while the editor shows it. */
+  /** Picks up an existing text block in the editor (a second tap types); it's hidden here while the editor shows it. */
   fun editText(id: String) {
     val item = doc?.get(id) as? TextItem ?: return
     clearSelection()
     tiles.hidden = setOf(id)
-    showForTyping(item.origin.y)
     host.onEditText(TextEdit(id, item.origin, item.width, item.fontSize, item.color, item.text, item.height))
     invalidate()
   }
@@ -2788,7 +2787,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   /** Scrolls so the line being typed sits comfortably below the toolbars, above the keyboard. */
-  private fun showForTyping(top: Float) {
+  fun showForTyping(top: Float) {
     if (width == 0 || height == 0) return
     val view = camera.visibleWorld(width, height)
     val wantTop = view.top + (topClearance + 40f) / camera.zoom

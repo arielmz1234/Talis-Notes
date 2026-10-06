@@ -97,9 +97,16 @@ fun TextEditorOverlay(
   var value by remember(edit.id) { mutableStateOf(TextFieldValue(edit.text, TextRange(edit.text.length))) }
   val focus = remember { FocusRequester() }
   val keyboard = LocalSoftwareKeyboardController.current
-  LaunchedEffect(edit.id) {
-    focus.requestFocus()
-    keyboard?.show()
+  // A new box opens for typing; an existing one is first just picked up (to move or size it), and
+  // a second tap on it brings the keyboard.
+  var typing by remember(edit.id) { mutableStateOf(edit.id == null) }
+  LaunchedEffect(edit.id, typing) {
+    if (typing) {
+      // Picked up first and moved, it may now be where the keyboard comes: bring it into view.
+      if (edit.id != null) canvas.runSafely { showForTyping(edit.origin.y) }
+      focus.requestFocus()
+      keyboard?.show()
+    }
   }
   // Read on every camera move (the tick changes), so the field stays over its block.
   val scale = if (cameraTick >= 0) canvas.pixelsPerUnit else 1f
@@ -166,7 +173,16 @@ fun TextEditorOverlay(
           }
           .padding(6.dp)
           .focusRequester(focus),
+      readOnly = !typing,
     )
+    // Picked up, not yet typing: the whole box moves when dragged, and a tap starts typing.
+    if (!typing) {
+      Box(
+        Modifier.placedAt({ boxLeft }, { boxTop })
+          .size(with(density) { boxW.toDp() }, with(density) { boxH.toDp() })
+          .moves(latest = { latest }, scale = scaleNow, change = { onChangeNow(it) }, onTap = { typing = true })
+      )
+    }
     // Sizing the box, like a rectangle: a dot in the middle of each side moves that side (left and
     // right set the width, top and bottom the height), the opposite side staying put; the chip at the
     // corner moves the corner. The text keeps its size. In world units, so it's the same at any zoom.
@@ -253,8 +269,8 @@ private fun Modifier.placedAt(x: () -> Float, y: () -> Float) =
   }
 
 /** Dragging this moves the text box. */
-private fun Modifier.moves(latest: () -> TextEdit, scale: () -> Float, change: (TextEdit) -> Unit) =
-  pointerInput(Unit) { detectTapGestures { } }.pointerInput(Unit) {
+private fun Modifier.moves(latest: () -> TextEdit, scale: () -> Float, change: (TextEdit) -> Unit, onTap: () -> Unit = {}) =
+  pointerInput(Unit) { detectTapGestures { onTap() } }.pointerInput(Unit) {
     var start = latest()
     var total = Offset.Zero
     detectDragGestures(onDragStart = {
