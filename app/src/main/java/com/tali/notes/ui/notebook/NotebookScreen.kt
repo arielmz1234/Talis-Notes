@@ -48,6 +48,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -1041,7 +1042,15 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
           ToolButton(Icons.Outlined.LibraryAdd, "Duplicate", onClick = onDuplicate)
           ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
           Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
-          ToolButton(Icons.Outlined.MoreHoriz, if (more) "Fewer options" else "More options", selected = more) { more = !more; extra = null }
+          // Like the toolbar's chevron: > opens the rest to its right, and turns round into < to fold them away.
+          val turn by androidx.compose.animation.core.animateFloatAsState(if (more) 180f else 0f, androidx.compose.animation.core.tween(220, easing = com.tali.notes.ui.components.EaseOutStrong), label = "moreArrow")
+          Box(
+            Modifier.size(30.dp, 44.dp).clip(RoundedCornerShape(10.dp))
+              .clickable(onClickLabel = if (more) "Fewer options" else "More options", role = Role.Button) { more = !more; extra = null },
+            contentAlignment = Alignment.Center,
+          ) {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, if (more) "Fewer options" else "More options", tint = c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
+          }
         }
         if (more) {
           // The rest of what the menu always had, as plain buttons; colour and thickness each open their own row.

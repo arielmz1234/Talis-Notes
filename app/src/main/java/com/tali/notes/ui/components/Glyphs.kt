@@ -126,11 +126,16 @@ private fun DrawScope.cone(cx: Float, bodyTop: Float, half: Float, top: Float, t
   drawPath(p, outline, style = Stroke(1f * (size.width / 26f)))
 }
 
+/** The grid shape icons are built on: an arrowhead (20 units at most) is about 30% of the icon. */
+private const val ICON_GRID = 66f
+
 /** The shape itself, built from the same geometry the canvas uses, so icons never drift from reality. */
 @Composable
 fun ShapeIcon(kind: ShapeKind, color: Color, modifier: Modifier = Modifier, size: Dp = 30.dp) {
   Canvas(modifier.size(size)) {
-    val s = this.size.width
+    // Built on a fixed grid and scaled to fit, so arrowheads keep the same share of the icon on every screen.
+    val s = ICON_GRID
+    val k = this.size.width / s
     val m = s * 0.14f
     val geometry =
       when {
@@ -143,12 +148,12 @@ fun ShapeIcon(kind: ShapeKind, color: Color, modifier: Modifier = Modifier, size
         kind == ShapeKind.POINT_LOAD -> kind.create(Pt(s / 2, m), Pt(s / 2, s - m))
         else -> kind.create(Pt(m, m), Pt(s - m, s - m))
       }
-    val stroke = Stroke(width = s * 0.055f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-    geometry.paths(s * 0.05f).forEach { pts ->
+    val stroke = Stroke(width = s * k * 0.055f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    geometry.paths(1f).forEach { pts ->
       if (pts.size < 2) return@forEach
       val path = Path().apply {
-        moveTo(pts[0].x, pts[0].y)
-        for (i in 1 until pts.size) lineTo(pts[i].x, pts[i].y)
+        moveTo(pts[0].x * k, pts[0].y * k)
+        for (i in 1 until pts.size) lineTo(pts[i].x * k, pts[i].y * k)
       }
       drawPath(path, color, style = stroke)
     }
