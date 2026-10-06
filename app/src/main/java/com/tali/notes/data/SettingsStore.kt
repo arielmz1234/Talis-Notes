@@ -51,7 +51,6 @@ data class AppSettings(
     listOf(
       PenSlot("p1", PenType.FINELINER, DEFAULT_COLORS[0], 2.4f),
       PenSlot("p2", PenType.FOUNTAIN, DEFAULT_COLORS[2], 3f),
-      PenSlot("p3", PenType.PENCIL, DEFAULT_COLORS[1], 2.6f),
       PenSlot("p4", PenType.FINELINER, DEFAULT_COLORS[3], 2.4f),
       PenSlot("p5", PenType.HIGHLIGHTER, DEFAULT_COLORS[7], 18f),
     ),
@@ -114,6 +113,12 @@ data class AppSettings(
     var s = this
     if (s.pens.any { it.type == PenType.DASHED }) {
       s = s.copy(pens = s.pens.map { if (it.type == PenType.DASHED) it.copy(type = PenType.FINELINER, line = LineStyle.SHORT_DASH) else it })
+    }
+    // The built-in pencil left the toolbar (October 2026): four pens to start with. Pencil is still a
+    // pen type to choose, and a pen she adds herself has a random id, so only the original one goes.
+    if (s.pens.size > 1 && s.pens.any { it.id == "p3" && it.type == PenType.PENCIL }) {
+      val pens = s.pens.filterNot { it.id == "p3" && it.type == PenType.PENCIL }
+      s = s.copy(pens = pens, activePen = if (pens.any { it.id == s.activePen }) s.activePen else pens.first().id)
     }
     // Every pen needs its own id (a change to one pen, like a star, must not reach the others).
     if (s.pens.map { it.id }.toSet().size != s.pens.size) {
