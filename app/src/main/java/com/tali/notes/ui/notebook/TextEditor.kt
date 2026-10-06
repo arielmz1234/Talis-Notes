@@ -1,8 +1,13 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.material3.Icon
+
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -126,28 +131,61 @@ fun TextEditorOverlay(
           .focusRequester(focus)
           .onSizeChanged { fieldHeight = it.height },
     )
-    // Its width: a small grip on the right edge, dragged sideways (the text re-wraps as it goes).
-    // In world units, so it's the same block at any zoom; never narrower than a few letters.
-    val gripW = with(density) { 14.dp.toPx() }
-    val gripH = with(density) { 36.dp.toPx() }
+    // Resizing: the usual resize chip at the box's bottom-right corner. Which way she drags decides
+    // what it does (settled after a short move): sideways sets the width (the text re-wraps), up and
+    // down the text size, diagonally both together (the block scales). In world units, so it's the
+    // same block at any zoom.
+    val chip = with(density) { 30.dp.toPx() }
     Box(
       Modifier.offset {
           val right = at.x - pad + (edit.width * scale) + 12.dp.toPx()
-          IntOffset((right - gripW / 2).roundToInt(), (at.y - pad + fieldHeight / 2f - gripH / 2).roundToInt())
+          val bottom = at.y - pad + fieldHeight
+          IntOffset((right - chip / 2).roundToInt(), (bottom - chip / 2).roundToInt())
         }
-        .size(14.dp, 36.dp)
+        .size(30.dp)
         .pointerInput(Unit) { detectTapGestures { } }
         .pointerInput(Unit) {
-          var w = 0f
-          detectHorizontalDragGestures(onDragStart = { w = latest.width }) { change, dx ->
+          var total = Offset.Zero
+          var axis = 0 // 0 undecided, 1 sideways, 2 up and down, 3 diagonal
+          var startW = 0f
+          var startFont = 0f
+          var startH = 1f
+          detectDragGestures(
+            onDragStart = {
+              total = Offset.Zero
+              axis = 0
+              startW = latest.width
+              startFont = latest.fontSize
+              startH = fieldHeight.toFloat().coerceAtLeast(1f)
+            }
+          ) { change, delta ->
             change.consume()
-            w = (w + dx / scaleNow()).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH)
-            onChangeNow(latest.copy(width = w))
+            total += delta
+            if (axis == 0 && total.getDistance() > 10.dp.toPx()) {
+              val angle = Math.toDegrees(kotlin.math.atan2(kotlin.math.abs(total.y), kotlin.math.abs(total.x)).toDouble())
+              axis = if (angle < 25) 1 else if (angle > 65) 2 else 3
+            }
+            val k = scaleNow()
+            val e = latest
+            when (axis) {
+              1 -> onChangeNow(e.copy(width = (startW + total.x / k).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH)))
+              2 -> onChangeNow(e.copy(fontSize = (startFont * (1f + total.y / startH)).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)))
+              3 -> {
+                val f = (1f + (total.x / (startW * k) + total.y / startH) / 2f).coerceIn(0.2f, 6f)
+                onChangeNow(e.copy(width = (startW * f).coerceIn(MIN_TEXT_WIDTH, MAX_TEXT_WIDTH), fontSize = (startFont * f).coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)))
+              }
+            }
           }
-        },
+        }
+        .graphicsLayer {
+          shadowElevation = 3.dp.toPx()
+          shape = CircleShape
+          clip = true
+        }
+        .background(c.surface),
       contentAlignment = Alignment.Center,
     ) {
-      Box(Modifier.size(6.dp, 26.dp).clip(RoundedCornerShape(3.dp)).background(c.accent.copy(alpha = 0.8f)))
+      Icon(Icons.Outlined.OpenInFull, "Resize the text", tint = c.accent, modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = 90f })
     }
     // The bar sits just above the block, or below the toolbars if the block is near the top.
     val barY = with(density) { (at.y - 64.dp.toPx()).coerceAtLeast(84.dp.toPx()) }
@@ -182,3 +220,7 @@ private fun SizeButton(label: String, onClick: () -> Unit) {
 /** How narrow and how wide a typed block can be dragged, in world units (A4 is 1322 wide). */
 private const val MIN_TEXT_WIDTH = 60f
 private const val MAX_TEXT_WIDTH = 2400f
+
+/** The text sizes the resize chip and A−/A+ keep to. */
+private const val MIN_TEXT_SIZE = 10f
+private const val MAX_TEXT_SIZE = 160f

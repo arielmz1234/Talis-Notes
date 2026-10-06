@@ -21,6 +21,8 @@ data class CustomPaper(
   val margin: Boolean = false,
   /** How strongly the lines (or the picture) show over the page, 0.15..1. Older papers are fully opaque. */
   val opacity: Float = 1f,
+  /** How heavy its lines are drawn (1 is standard); null follows the app-wide setting it had before. */
+  val lineWeight: Float? = null,
 ) {
   /** [color] with its alpha scaled by [opacity]. */
   fun faded(color: Int): Int {

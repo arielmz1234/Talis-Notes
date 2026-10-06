@@ -140,6 +140,12 @@ import com.tali.notes.ui.components.slidingOption
 @Composable
 fun LibraryScreen(onOpen: (String) -> Unit) {
   val app = LocalContext.current.applicationContext as Application
+  // Full screen is for notebooks: the library always shows the clock bar and navigation bar.
+  val rootView = androidx.compose.ui.platform.LocalView.current
+  androidx.compose.runtime.LaunchedEffect(Unit) {
+    val window = (rootView.context as? android.app.Activity)?.window ?: return@LaunchedEffect
+    androidx.core.view.WindowCompat.getInsetsController(window, rootView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+  }
   val vm: LibraryViewModel = viewModel { LibraryViewModel(app) }
   val c = Tali.colors
   val notebooks by vm.notebooks.collectAsState()

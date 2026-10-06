@@ -45,6 +45,12 @@ class PaperRenderer {
      */
     @Volatile var lineWeight = 1f
 
+    /** Each built-in paper's own thickness, set on its edit card (by style name); missing ones use [lineWeight]. */
+    @Volatile var weights: Map<String, Float> = emptyMap()
+
+    /** How heavy [style] (or her own paper [custom]) is drawn. */
+    fun weightOf(style: PaperStyle, custom: CustomPaper?): Float = custom?.let { it.lineWeight ?: lineWeight } ?: weights[style.name] ?: lineWeight
+
     /** Picture backgrounds on dark paper: dimmed to about a third so ink stays readable. */
     private val DIM = ColorMatrixColorFilter(ColorMatrix().apply { setScale(0.35f, 0.35f, 0.38f, 1f) })
   }
@@ -72,14 +78,18 @@ class PaperRenderer {
   private val dst = RectF()
   private val src = android.graphics.Rect()
 
+  /** The thickness of the paper being drawn (see [weightOf]). */
+  private var weight = 1f
+
   fun draw(canvas: Canvas, style: PaperStyle, camera: Camera, width: Int, height: Int) {
+    weight = weightOf(style, custom)
     custom?.let {
       drawCustom(canvas, it, camera, width, height)
       return
     }
     canvas.drawColor(paperColor)
     val mm = 160f / 25.4f
-    val k = (if (print) 0.45f else 1f) * lineWeight
+    val k = (if (print) 0.45f else 1f) * weight
     when (style) {
       PaperStyle.BLANK -> Unit
       PaperStyle.DOTS -> dots(canvas, camera, width, height, 5 * mm, lineColor)
@@ -155,7 +165,7 @@ class PaperRenderer {
    */
   private fun drawCustom(canvas: Canvas, cp: CustomPaper, camera: Camera, width: Int, height: Int) {
     val mm = 160f / 25.4f
-    val k = (if (print) 0.45f else 1f) * lineWeight
+    val k = (if (print) 0.45f else 1f) * weight
     val image = cp.image
     if (image != null) {
       canvas.drawColor(if (dark) DARK_PAPER else 0xFFFFFFFF.toInt())
@@ -282,7 +292,7 @@ class PaperRenderer {
     if (step < 7f && !print) return
     paint.color = color
     paint.alpha = ((if (print) 1f else ((step - 7f) / 10f).coerceIn(0f, 1f)) * (color ushr 24)).toInt()
-    paint.strokeWidth = (if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)) * lineWeight.coerceAtMost(3f)
+    paint.strokeWidth = (if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)) * weight.coerceAtMost(3f)
     paint.strokeCap = Paint.Cap.ROUND
     val world = camera.visibleWorld(width, height)
     var n = 0

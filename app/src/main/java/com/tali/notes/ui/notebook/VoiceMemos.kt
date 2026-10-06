@@ -252,6 +252,8 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
                     change.consume()
                     val d = (drag ?: return@detectDragGesturesAfterLongPress) + amount
                     drag = d
+                    // Near an edge the page scrolls along under it.
+                    canvas.carryMemo(Pt(d.x, d.y))
                     val spot = canvas.memoDrop(current, d.x, d.y)
                     val x = canvas.memoCenter(spot, size / 2, gap).x
                     if (spot.side != dragSide) {
@@ -262,13 +264,17 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
                     }
                   },
                   onDragEnd = {
+                    canvas.carryMemo(null)
                     drag?.let { d ->
                       settleFrom = Offset(dragX.value, d.y)
                       vm.moveMemo(canvas.memoDrop(current, d.x, d.y))
                     }
                     drag = null
                   },
-                  onDragCancel = { drag = null },
+                  onDragCancel = {
+                    canvas.carryMemo(null)
+                    drag = null
+                  },
                 )
               }
               .clickable(enabled = !open, onClickLabel = "Open voice memo", role = Role.Button) { vm.openMemo = memo.id },
@@ -348,8 +354,8 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
       placed[0] = centre.x
       placed[1] = centre.y
     }
-    // It opens towards the page: from the right of the screen leftwards, or the other way on the left.
-    val toLeft = centre.x > constraints.maxWidth / 2f
+    // It opens to the right when there's room for the whole bar there, otherwise to the left.
+    val toLeft = centre.x - size / 2 + full > constraints.maxWidth - gap
     grows[0] = toLeft
     val left = if (toLeft) centre.x + size / 2 - w else centre.x - size / 2
     val top = centre.y - size / 2

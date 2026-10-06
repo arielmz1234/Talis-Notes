@@ -104,6 +104,8 @@ data class AppSettings(
   val smartUndo: Boolean = true,
   /** How heavy the paper's lines, grid and dots are drawn: 1 is the standard weight, 0.5..5. */
   val paperLineWeight: Float = 1f,
+  /** Line thickness per built-in paper (by [PaperStyle] name), set from its edit card; missing ones use [paperLineWeight]. */
+  val paperWeights: Map<String, Float> = emptyMap(),
   /** The system bars (status and navigation) are hidden inside notebooks (swipe from an edge to see them). */
   val hideNavBar: Boolean = false,
   /** On A4 pages, one stroke may carry on across the gap between pages (the gap isn't exported). Off, ink stops at each page's edge. */
@@ -166,7 +168,10 @@ data class AppSettings(
 
 class SettingsStore(context: Context) {
   private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-  private val _settings = MutableStateFlow(load().also { PaperRenderer.lineWeight = it.paperLineWeight })
+  private val _settings = MutableStateFlow(load().also {
+    PaperRenderer.lineWeight = it.paperLineWeight
+    PaperRenderer.weights = it.paperWeights
+  })
   val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
   private fun load(): AppSettings =
@@ -177,6 +182,7 @@ class SettingsStore(context: Context) {
     if (next == _settings.value) return
     _settings.value = next
     PaperRenderer.lineWeight = next.paperLineWeight
+    PaperRenderer.weights = next.paperWeights
     prefs.edit().putString("json", ItemCodec.json.encodeToString(AppSettings.serializer(), next)).apply()
   }
 

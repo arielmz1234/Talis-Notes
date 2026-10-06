@@ -159,7 +159,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   var settings = AppSettings()
     set(value) {
       // The paper redraws when her line weight changes.
-      if (value.paperLineWeight != field.paperLineWeight) invalidate()
+      if (value.paperLineWeight != field.paperLineWeight || value.paperWeights != field.paperWeights || value.customPapers != field.customPapers) invalidate()
       val reclip = value.inkBetweenPages != field.inkBetweenPages
       field = value
       // Writing past the pages shows or hides again with Write between pages.
@@ -1786,6 +1786,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private var dragScreen = Pt.ZERO
   private var edgeScrolling = false
+
+  /** A voice memo being carried, where it is on screen (null when none is). */
+  private var carriedMemo: Pt? = null
+
+  /**
+   * A voice memo is being carried at [at] on screen (null when it's let go): near an edge the page
+   * scrolls that way, sooner and from further in than for a selection, since it's a small button.
+   */
+  fun carryMemo(at: Pt?) {
+    carriedMemo = at
+    if (at != null && !edgeScrolling) {
+      edgeScrolling = true
+      edgeSince = 0L
+      edgeFrameAt = 0L
+      postOnAnimation(edgeStep)
+    }
+  }
   private var edgeSince = 0L
   private var edgeFrameAt = 0L
 
@@ -1793,37 +1810,40 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * How fast to scroll (screen px per second, in the direction to look) with the carried item at
    * [p]: nothing outside the edge zones, then a gentle ramp the deeper into the zone it goes.
    */
-  private fun edgeVelocity(p: Pt): Pt {
-    val zone = EDGE_ZONE_DP * density
+  private fun edgeVelocity(p: Pt, memo: Boolean = false): Pt {
+    val zone = (if (memo) MEMO_EDGE_ZONE_DP else EDGE_ZONE_DP) * density
     val top = max(zone, (topClearance + 20f) * density)
     fun push(dist: Float, z: Float): Float = ((z - dist) / z).coerceIn(0f, 1f).let { it * it }
     val max = EDGE_MAX_DP_S * density
-    val vx = (push(width - dragScreen.x, zone) - push(dragScreen.x, zone)) * max
-    val vy = (push(height - dragScreen.y, zone) - push(dragScreen.y, top)) * max
+    val vx = (push(width - p.x, zone) - push(p.x, zone)) * max
+    val vy = (push(height - p.y, zone) - push(p.y, top)) * max
     return Pt(vx, vy)
   }
 
   /** Each frame while an item is carried: after a short pause in an edge zone, the page scrolls along. */
   private val edgeStep: Runnable = object : Runnable {
     override fun run() {
-      if (mode != Mode.MOVE_SELECTION) {
+      val memo = carriedMemo
+      if (mode != Mode.MOVE_SELECTION && memo == null) {
         edgeScrolling = false
         return
       }
       val now = SystemClock.uptimeMillis()
-      val v = edgeVelocity(dragScreen)
+      val v = if (memo != null) edgeVelocity(memo, memo = true) else edgeVelocity(dragScreen)
       if (v.x == 0f && v.y == 0f) {
         edgeSince = 0L
       } else {
         if (edgeSince == 0L) edgeSince = now
         // Passing an edge on the way somewhere doesn't scroll; resting there does.
-        if (now - edgeSince >= EDGE_DWELL_MS && edgeFrameAt != 0L) {
+        if (now - edgeSince >= (if (memo != null) MEMO_EDGE_DWELL_MS else EDGE_DWELL_MS) && edgeFrameAt != 0L) {
           val dt = ((now - edgeFrameAt).coerceAtMost(32L)) / 1000f
           camera.pan(-v.x * dt, -v.y * dt)
           afterCameraMove()
           // The item stays under the finger or pen while the page moves beneath it.
-          val p = camera.toWorld(dragScreen.x, dragScreen.y)
-          dragTransform = Affine.translate(p.x - dragStart.x, p.y - dragStart.y)
+          if (memo == null) {
+            val p = camera.toWorld(dragScreen.x, dragScreen.y)
+            dragTransform = Affine.translate(p.x - dragStart.x, p.y - dragStart.y)
+          }
           invalidate()
         }
       }
@@ -3524,6 +3544,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */
     private const val EDGE_ZONE_DP = 100f
     private const val EDGE_DWELL_MS = 120L
+    /** A carried voice memo: a deeper zone and a shorter wait (it's a small button, held by a fingertip). */
+    private const val MEMO_EDGE_ZONE_DP = 140f
+    private const val MEMO_EDGE_DWELL_MS = 60L
     /** The fastest edge scroll, deep in the zone (dp per second); it eases up from nothing. */
     private const val EDGE_MAX_DP_S = 900f
     /** How close a turn has to come to a 45° step to snap onto it (5°). */

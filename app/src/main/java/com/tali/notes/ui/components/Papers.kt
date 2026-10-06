@@ -2,6 +2,9 @@ package com.tali.notes.ui.components
 
 import androidx.compose.ui.layout.onSizeChanged
 import android.net.Uri
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
@@ -108,6 +111,8 @@ fun PaperPicker(
   perRow: Int = 4,
   lineWeight: Float? = null,
   onLineWeight: ((Float) -> Unit)? = null,
+  /** Tapping the paper already in use opens its edit card (its line thickness, and more for hers). */
+  onEditCurrent: (() -> Unit)? = null,
 ) {
   val c = Tali.colors
   var removing by remember { mutableStateOf<CustomPaper?>(null) }
@@ -143,15 +148,29 @@ fun PaperPicker(
           .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
       ) {
-        swatch(Modifier.width(tileWidth * 0.62f).aspectRatio(1.22f).border(1.5.dp, edge, RoundedCornerShape(8.dp)))
+        Box {
+          swatch(Modifier.width(tileWidth * 0.62f).aspectRatio(1.22f).border(1.5.dp, edge, RoundedCornerShape(8.dp)))
+          // The paper in use wears a small pencil: tapping it again edits it.
+          if (on && onEditCurrent != null && key != "more" && key != "own") {
+            Box(Modifier.align(Alignment.TopEnd).offset(x = 5.dp, y = (-5).dp).size(16.dp).clip(CircleShape).background(c.accent), contentAlignment = Alignment.Center) {
+              Icon(Icons.Outlined.Edit, null, tint = Color.White, modifier = Modifier.size(10.dp))
+            }
+          }
+        }
         Spacer(Modifier.height(4.dp))
         Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
       }
     }
     // Every choice in order: the built-in papers, then hers.
     val all: List<Pair<String, @Composable () -> Unit>> =
-      PaperStyle.entries.map { s -> s.name to @Composable { tile(s, s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
-        customs.map { cp -> cp.id to @Composable { tile(cp.id, cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
+      PaperStyle.entries.map { s ->
+        val on = customId == null && s == style
+        s.name to @Composable { tile(s, s.label, on, { if (on && onEditCurrent != null) onEditCurrent() else onStyle(s) }, null) { m -> PaperSwatch(s, m) } }
+      } +
+        customs.map { cp ->
+          val on = cp.id == customId
+          cp.id to @Composable { tile(cp.id, cp.name, on, { if (on && onEditCurrent != null) onEditCurrent() else onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } }
+        }
     // The first row never moves: as many papers as fit (Blank, Lines and Grid first), then More.
     // Opening unfolds the rest underneath, so nothing she's looking at jumps.
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), maxItemsInEachRow = fit) {
@@ -295,7 +314,7 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
  * as a stray white line under the papers.)
  */
 @Composable
-private fun LineWeightRow(value: Float, onChange: (Float) -> Unit) {
+internal fun LineWeightRow(value: Float, onChange: (Float) -> Unit) {
   val c = Tali.colors
   val choices = listOf(0.6f, 1f, 2f, 3.5f, 5f)
   val names = listOf("Thin", "Normal", "Bold", "Bolder", "Heavy")
@@ -336,12 +355,12 @@ private val PAPER_COLORS = listOf(0xFFFFFFFF, 0xFFFFF8E8, 0xFFF4EEFF, 0xFFEEF5FF
  * shows an A4 page.
  */
 @Composable
-fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?, onSave: (CustomPaper) -> Unit) {
+fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?, editing: CustomPaper? = null, onSave: (CustomPaper) -> Unit) {
   val c = Tali.colors
   val scope = rememberCoroutineScope()
-  var picture by remember { mutableStateOf(false) }
-  var draft by remember { mutableStateOf(CustomPaper(id = UUID.randomUUID().toString().take(8), name = "")) }
-  var name by remember { mutableStateOf(TextFieldValue("")) }
+  var picture by remember { mutableStateOf(editing?.image != null) }
+  var draft by remember { mutableStateOf(editing ?: CustomPaper(id = UUID.randomUUID().toString().take(8), name = "")) }
+  var name by remember { mutableStateOf(TextFieldValue(editing?.name ?: "")) }
   var loading by remember { mutableStateOf(false) }
   var failed by remember { mutableStateOf(false) }
   val picker =
@@ -364,9 +383,9 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
     onSave(shown.copy(name = name.text.trim().ifBlank { fallback }))
   }
   DialogCard(onDismiss, width = 640) {
-    Text("Your own paper", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(if (editing != null) "Edit paper" else "Your own paper", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(4.dp))
-    Text("Saved with your papers, so every notebook can use it.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    Text(if (editing != null) "Changes show in every notebook that uses it." else "Saved with your papers, so every notebook can use it.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(16.dp))
     Segmented(listOf(false, true), picture, { if (it) "From a picture" else "Design a pattern" }, { picture = it }, Modifier.fillMaxWidth())
     Spacer(Modifier.height(18.dp))
@@ -429,6 +448,7 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
             }
             Spacer(Modifier.height(2.dp))
             OpacityRow(draft.opacity) { draft = draft.copy(opacity = it) }
+            LineWeightRow(draft.lineWeight ?: com.tali.notes.canvas.PaperRenderer.lineWeight) { draft = draft.copy(lineWeight = it) }
           }
           Spacer(Modifier.height(6.dp))
           Row(verticalAlignment = Alignment.CenterVertically) {
@@ -448,8 +468,35 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
     Spacer(Modifier.height(22.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton("Cancel", onClick = onDismiss)
-      if (canSave) PrimaryButton("Save paper") { save() }
+      if (canSave) PrimaryButton(if (editing != null) "Save changes" else "Save paper") { save() }
       else PrimaryButton("Choose a picture") { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     }
+  }
+}
+
+/**
+ * A built-in paper's edit card: what it looks like and how heavy its lines are. The change shows
+ * at once, on the page behind and in every notebook using this paper.
+ */
+@Composable
+fun BuiltInPaperDialog(style: PaperStyle, weight: Float, onWeight: (Float) -> Unit, onDismiss: () -> Unit) {
+  val c = Tali.colors
+  DialogCard(onDismiss, width = 460) {
+    Text(style.label, style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(4.dp))
+    Text("Changes show in every notebook on this paper.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    Spacer(Modifier.height(16.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box(Modifier.width(110.dp).aspectRatio(1322f / 1871f).clip(RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))) {
+        PaperSwatch(style, Modifier.fillMaxSize())
+      }
+      Spacer(Modifier.width(20.dp))
+      Column(Modifier.weight(1f)) {
+        if (style == PaperStyle.BLANK) Text("A blank page has no lines to thicken.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+        else LineWeightRow(weight, onWeight)
+      }
+    }
+    Spacer(Modifier.height(20.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { PrimaryButton("Done", onClick = onDismiss) }
   }
 }

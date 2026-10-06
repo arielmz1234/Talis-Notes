@@ -376,6 +376,12 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setPaperLineWeight(weight: Float) = store.update { it.copy(paperLineWeight = weight.coerceIn(0.5f, 5f)) }
 
+  /** A built-in paper's own line thickness (from its edit card). */
+  fun setPaperWeight(style: PaperStyle, weight: Float) = store.update { it.copy(paperWeights = it.paperWeights + (style.name to weight.coerceIn(0.5f, 5f))) }
+
+  /** Saves changes to one of her papers (from its edit card). */
+  fun updateCustomPaper(paper: CustomPaper) = store.update { s -> s.copy(customPapers = s.customPapers.map { if (it.id == paper.id) paper else it }) }
+
   fun setPenType(type: PenType) =
     updateActivePen { slot ->
       // Her thickness stays when she changes the pen type (only kept within what the new pen can do).
@@ -637,7 +643,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       val dark = m?.dark == true
       val custom = customPaperOf(m, settings.value)
       val landscape = m?.landscape == true
-      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, settings.value.paperLineWeight).joinToString("|")
+      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, settings.value.paperLineWeight, settings.value.paperWeights).joinToString("|")
       exported[key]?.takeIf { it.exists() }?.let { return@withLock it }
       val items = doc.all.toList()
       val title = (m?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }

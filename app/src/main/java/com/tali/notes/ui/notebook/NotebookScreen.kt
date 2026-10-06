@@ -4,6 +4,7 @@ import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.Fullscreen
 import com.tali.notes.ui.components.TaliIcons
+import com.tali.notes.ui.components.BuiltInPaperDialog
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.VerticalAlignCenter
 import androidx.compose.material.icons.outlined.LockOpen
@@ -220,10 +221,9 @@ fun NotebookScreen(notebookId: String, onBack: () -> Unit, onSwitch: (String) ->
       }
     }
     navOwner.lifecycle.addObserver(observer)
-    onDispose {
-      navOwner.lifecycle.removeObserver(observer)
-      bars?.show(nav)
-    }
+    // The bars come back in the library (it shows them itself), not here: switching straight to
+    // another notebook (quick open) closes this one after the next has hidden them again.
+    onDispose { navOwner.lifecycle.removeObserver(observer) }
   }
   DisposableEffect(darkTop) {
     val window = (view.context as? android.app.Activity)?.window
@@ -254,6 +254,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   val paged = vm.pageCount != null
   var pagesOpen by remember { mutableStateOf(false) }
   var makingPaper by remember { mutableStateOf(false) }
+  // The paper in use, opened for editing from the ⋯ menu.
+  var editingPaper by remember { mutableStateOf(false) }
   var renaming by remember { mutableStateOf(false) }
   var exporting by remember { mutableStateOf(false) }
   var savingShape by remember { mutableStateOf<ShapeGeometry?>(null) }
@@ -597,8 +599,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                     makingPaper = true
                   },
                   onRemove = { vm.deleteCustomPaper(it.id) },
-                  lineWeight = settings.paperLineWeight,
-                  onLineWeight = vm::setPaperLineWeight,
+                  onEditCurrent = {
+                    close()
+                    editingPaper = true
+                  },
                 )
               },
               fingerDraws = settings.fingerDraws,
@@ -752,6 +756,18 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         vm.showHint("Page ${index + 1} deleted \u2014 undo brings the writing back")
       },
     )
+  }
+  if (editingPaper) {
+    val current = vm.customPaperOf(meta, settings)
+    if (current != null) {
+      NewPaperDialog(onDismiss = { editingPaper = false }, importImage = vm::importPaperImage, editing = current) {
+        vm.updateCustomPaper(it)
+        editingPaper = false
+      }
+    } else {
+      val style = meta?.paper ?: PaperStyle.DOTS
+      BuiltInPaperDialog(style, settings.paperWeights[style.name] ?: settings.paperLineWeight, { vm.setPaperWeight(style, it) }) { editingPaper = false }
+    }
   }
   if (makingPaper) {
     NewPaperDialog(onDismiss = { makingPaper = false }, importImage = vm::importPaperImage) {
@@ -910,7 +926,7 @@ private fun QuickOpen(recent: List<com.tali.notes.data.NotebookMeta>, thumbnail:
           Spacer(Modifier.width(12.dp))
           Column(Modifier.weight(1f, fill = false)) {
             Text(nb.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Edited ${com.tali.notes.ui.components.relativeTime(nb.updated)}", style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1)
+            Text("Edited " + com.tali.notes.ui.components.relativeTime(nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1)
           }
         }
       }
