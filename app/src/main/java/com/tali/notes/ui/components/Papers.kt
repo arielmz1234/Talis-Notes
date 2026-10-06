@@ -123,12 +123,15 @@ fun PaperPicker(
     if (widthPx == 0) maxOf(2, perRow)
     else with(density) { ((widthPx.toDp() + 4.dp) / (tileWidth + 4.dp)).toInt() }.coerceIn(2, maxOf(2, perRow))
   Box(modifier.onSizeChanged { widthPx = it.width }) {
-  // Folded: the papers she's most likely to want first, as many as fit beside More.
-  val folded = (FOLDED + PaperStyle.entries.map { it.name }.filterNot { it in FOLDED } + customs.map { it.id }).take(fit - 1)
-  // While folded, More stands in for a paper in use that isn't showing, so it holds the highlight.
-  val foldedAway = !expanded && (customId ?: style.name) !in folded
+  // Folded: the papers she's most likely to want first, as many as fit beside More. A paper in use
+  // that isn't among them takes the first place, so it shows; More always stays More. The row only
+  // changes while folded, so a paper picked from the open list doesn't jump up under her finger.
+  var shownCurrent by remember { mutableStateOf(customId ?: style.name) }
+  if (!expanded) shownCurrent = customId ?: style.name
+  val usual = (FOLDED + PaperStyle.entries.map { it.name }.filterNot { it in FOLDED } + customs.map { it.id }).take(fit - 1)
+  val folded = if (shownCurrent in usual || (PaperStyle.entries.none { it.name == shownCurrent } && customs.none { it.id == shownCurrent })) usual else (listOf(shownCurrent) + usual).take(fit - 1)
   // The highlight is drawn by the whole column, so it glides between the two rows too.
-  Column(Modifier.slidingHighlight(glide, if (foldedAway) "more" else customId ?: style, SolidColor(c.accentSoft), 10.dp)) {
+  Column(Modifier.slidingHighlight(glide, customId ?: style, SolidColor(c.accentSoft), 10.dp)) {
     val tile: @Composable (Any, String, Boolean, () -> Unit, (() -> Unit)?, @Composable (Modifier) -> Unit) -> Unit = { key, label, on, click, longClick, swatch ->
       val edge by animateColorAsState(if (on) c.accent else Color.Transparent, tween(220), label = "swatchEdge")
       val ink by animateColorAsState(if (on) c.accent else c.inkMuted, tween(220), label = "paperLabel")
@@ -149,26 +152,19 @@ fun PaperPicker(
     val all: List<Pair<String, @Composable () -> Unit>> =
       PaperStyle.entries.map { s -> s.name to @Composable { tile(s, s.label, customId == null && s == style, { onStyle(s) }, null) { m -> PaperSwatch(s, m) } } } +
         customs.map { cp -> cp.id to @Composable { tile(cp.id, cp.name, cp.id == customId, { onCustom(cp) }, { removing = cp }) { m -> CustomPaperSwatch(cp, m) } } }
-    val current = customId ?: style.name
-    val hiddenCurrent = !expanded && current !in folded
-    val currentCustom = customs.firstOrNull { it.id == customId }
     // The first row never moves: as many papers as fit (Blank, Lines and Grid first), then More.
     // Opening unfolds the rest underneath, so nothing she's looking at jumps.
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), maxItemsInEachRow = fit) {
       folded.forEach { name -> all.firstOrNull { it.first == name }?.second?.invoke() }
       val turn = animateFloatAsState(if (expanded) 180f else 0f, tween(PAPERS_OPEN_MS, easing = EaseOutStrong), label = "moreArrow")
-      // While folded, More stands in for a paper in use that isn't showing.
-      tile("more", if (expanded) "Fewer" else if (hiddenCurrent) (currentCustom?.name ?: style.label) else "More", hiddenCurrent, { expanded = !expanded }, null) { m ->
+      tile("more", if (expanded) "Fewer" else "More", false, { expanded = !expanded }, null) { m ->
         Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
-          if (hiddenCurrent) {
-            if (currentCustom != null) CustomPaperSwatch(currentCustom, Modifier.fillMaxSize()) else PaperSwatch(style, Modifier.fillMaxSize())
-          }
           Icon(
             Icons.Outlined.KeyboardArrowDown,
             null,
             tint = c.inkMuted,
             // Turned in the draw phase, so the arrow doesn't recompose the picker every frame.
-            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = turn.value }.then(if (hiddenCurrent) Modifier.clip(RoundedCornerShape(6.dp)).background(c.surface.copy(alpha = 0.85f)) else Modifier),
+            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = turn.value },
           )
         }
       }

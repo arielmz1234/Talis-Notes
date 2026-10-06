@@ -95,6 +95,24 @@ object TaliIcons {
     )
   }
 
+  /**
+   * Quick open (recent notebooks): a notebook with its spine and a line of writing, and a rewind
+   * clock badge over its lower-right corner. The notebook's outline stops short of the clock, so
+   * the badge sits in front of it with a little air around it.
+   */
+  val RecentNotebook: ImageVector by lazy {
+    outline(
+      "Recent notebooks",
+      "M10.4 19 H5 A1.5 1.5 0 0 1 3.5 17.5 V4 A1.5 1.5 0 0 1 5 2.5 H13 A1.5 1.5 0 0 1 14.5 4 V10.9",
+      "M6.6 2.5 V19",
+      "M9 6.6 H11.9",
+      "M9 9.6 H11",
+      "M12.47 14.89 A5 5 0 1 1 12.47 19.11",
+      "M14.35 14.21 L12.47 14.89 L11.79 13.01",
+      "M17 14.6 V17 L18.7 18.1",
+    )
+  }
+
   val Pages: ImageVector by lazy {
     outline("Pages", "M6 3.5 H14.5 L18.5 7.5 V20.5 H6 Z", "M14.5 3.5 V7.5 H18.5", "M9 12 H15.5", "M9 15.5 H15.5")
   }

@@ -57,6 +57,9 @@ enum class PanelKind {
 /** How many notebooks quick open lists. */
 const val RECENT_MAX = 8
 
+/** How many opened notebooks are remembered (the library can sort by last opened). */
+const val RECENT_KEPT = 80
+
 class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewModel(app) {
   private val repo = app.talisApp.repository
   private val store = app.talisApp.settings
@@ -123,7 +126,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   init {
     // This one goes to the top of the recent list.
-    store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_MAX + 4)) }
+    store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
     viewModelScope.launch {
       val m = meta.value ?: repo.notebooks.value.firstOrNull { it.id == notebookId }
       initialViewport = m?.viewport

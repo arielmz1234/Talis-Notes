@@ -63,6 +63,10 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.ArrowDownward
+import com.tali.notes.data.LibrarySort
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -265,6 +269,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
               )
             } else {
               SearchField(query, onChange = { vm.query.value = it }, modifier = mod)
+              // Sorting sits with the search: both decide what the list shows.
+              if (!inTrash) {
+                Spacer(Modifier.width(8.dp))
+                SortButton(settings.librarySort, settings.librarySortReversed, vm::sortBy)
+              }
               Spacer(Modifier.width(12.dp))
               if (inTrash) QuietButton("Empty", color = c.danger) { emptyingTrash = true }
               else {
@@ -346,7 +355,16 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
               item(key = "new-folder") { NewFolderTile { newFolder = NewFolderRequest(currentFolder.id) } }
             }
             if (notebooks.isNotEmpty()) {
-              item(key = "notebooks-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(if (inTrash) "Tap a notebook to bring it back" else if (currentFolder != null) "Notebooks" else "Recent") }
+              item(key = "notebooks-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(
+                  when {
+                    inTrash -> "Tap a notebook to bring it back"
+                    currentFolder != null -> "Notebooks"
+                    settings.librarySort == LibrarySort.EDITED && !settings.librarySortReversed -> "Recent"
+                    settings.librarySort == LibrarySort.OPENED && !settings.librarySortReversed -> "Recently opened"
+                    else -> "Notebooks"
+                  }
+                )
+              }
             }
             items(notebooks, key = { it.id }) { nb ->
               PuffBox(leaving = nb.id in vanishing, appearing = false) {
@@ -380,6 +398,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     NewNotebookDialog(
       settings = settings,
       folderName = currentFolder?.name,
+      suggestedName = remember { vm.freeNotebookName() },
       defaultCover = remember { vm.nextCover() },
       onDismiss = { creating = false },
       importImage = vm::importImage,
@@ -464,7 +483,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val parentName = folders.firstOrNull { it.id == parentId }?.name
     NewFolderDialog(
       title = if (parentName != null) "New folder in $parentName" else "New folder",
-      placeholder = "New folder",
+      placeholder = remember(request) { vm.freeFolderName(parentId) },
       initialColor = remember(request) { vm.nextFolderColor(parentId) },
       onDismiss = { newFolder = null },
     ) { name, color ->
@@ -730,7 +749,7 @@ private fun NewFolderDialog(title: String, placeholder: String, initialColor: In
       Text(title, style = MaterialTheme.typography.titleLarge, color = c.ink)
     }
     Spacer(Modifier.height(18.dp))
-    TitleField(name, { name = it }, placeholder) { onCreate(name.text, color) }
+    TitleField(name, { name = it }, placeholder) { onCreate(name.text.ifBlank { placeholder }, color) }
     Spacer(Modifier.height(16.dp))
     SectionLabel("Colour")
     Spacer(Modifier.height(6.dp))
@@ -738,7 +757,7 @@ private fun NewFolderDialog(title: String, placeholder: String, initialColor: In
     Spacer(Modifier.height(22.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton("Cancel", onClick = onDismiss)
-      PrimaryButton("Create") { onCreate(name.text, color) }
+      PrimaryButton("Create") { onCreate(name.text.ifBlank { placeholder }, color) }
     }
   }
 }
@@ -787,6 +806,50 @@ private fun CoverSwatches(current: Int, onPick: (Int) -> Unit) {
 }
 
 // ---- Main area ----
+
+/**
+ * Sort, beside the search box and shaped like it: a menu of the ways to order notebooks. The one in
+ * use is ticked, with which way round it goes; tapping it again turns it the other way.
+ */
+@Composable
+private fun SortButton(sort: LibrarySort, reversed: Boolean, onSort: (LibrarySort) -> Unit) {
+  val c = Tali.colors
+  var open by remember { mutableStateOf(false) }
+  Box {
+    Box(
+      Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp))
+        .clickable(onClickLabel = "Sort notebooks", role = Role.Button) { open = true },
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(Icons.AutoMirrored.Outlined.Sort, "Sort notebooks", tint = c.inkMuted, modifier = Modifier.size(22.dp))
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
+      Text("Sort by", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp))
+      LibrarySort.entries.forEach { s ->
+        val on = s == sort
+        val way =
+          when {
+            s == LibrarySort.NAME -> if (on && reversed) "Z to A" else "A to Z"
+            on && reversed -> "Oldest first"
+            else -> "Newest first"
+          }
+        DropdownMenuItem(
+          text = {
+            Column {
+              Text(s.label, color = if (on) c.accent else c.ink)
+              if (on) Text("$way · tap again to turn it round", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+            }
+          },
+          trailingIcon = {
+            if (on) Icon(if (reversed) Icons.Outlined.ArrowUpward else Icons.Outlined.ArrowDownward, way, tint = c.accent, modifier = Modifier.size(18.dp))
+          },
+          // Staying open after a tap shows the list re-sort behind it, and lets her turn it round.
+          onClick = { onSort(s) },
+        )
+      }
+    }
+  }
+}
 
 @Composable
 private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {

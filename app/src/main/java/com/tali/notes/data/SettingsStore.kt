@@ -41,6 +41,15 @@ val DEFAULT_HIGHLIGHTER_COLORS =
     0xFFB28DFF, // lilac
   ).map { it.toInt() }
 
+/** How the library orders notebooks. The first way is newest first (A to Z for names). */
+@Serializable
+enum class LibrarySort(val label: String) {
+  EDITED("Last edited"),
+  OPENED("Last opened"),
+  CREATED("Date created"),
+  NAME("Name"),
+}
+
 /** Light or dark: following the tablet, or always one. */
 @Serializable
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -107,8 +116,11 @@ data class AppSettings(
   val minimal: Boolean = false,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
-  /** Notebooks she opened, newest first (the notebook's quick-open list). */
+  /** Notebooks she opened, newest first (quick open, and sorting the library by last opened). */
   val recentNotebooks: List<String> = emptyList(),
+  /** How the library orders notebooks, and whether the other way round (oldest first, Z to A). */
+  val librarySort: LibrarySort = LibrarySort.EDITED,
+  val librarySortReversed: Boolean = false,
 ) {
   /** The old Dashed pen became a fineliner drawing short dashes, now that any pen can dash. */
   fun migrated(): AppSettings {

@@ -31,19 +31,38 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   val trash: StateFlow<List<NotebookMeta>> = repo.trash
 
   val notebooks: StateFlow<List<NotebookMeta>> =
-    combine(repo.notebooks, repo.trash, query, selectedFolder) { list, trash, q, folder ->
-        val source = if (folder == TRASH) trash else list.filter { folder == null || it.folderId == folder }
+    combine(repo.notebooks, repo.trash, query, selectedFolder, settings) { list, trash, q, folder, s ->
+        // Recently deleted stays in the order things were deleted; the rest follow her sort.
+        val source = if (folder == TRASH) trash else sortNotebooks(list.filter { folder == null || it.folderId == folder }, s.librarySort, s.librarySortReversed, s.recentNotebooks)
         source.filter { q.isBlank() || it.title.contains(q.trim(), ignoreCase = true) }
       }
       .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
   fun thumbnailFile(id: String) = repo.thumbnailFile(id)
 
+  /** Sorts the library by [sort]; choosing the sort already in use turns it the other way round. */
+  fun sortBy(sort: com.tali.notes.data.LibrarySort) =
+    getApplication<Application>().talisApp.settings.update { s ->
+      if (s.librarySort == sort) s.copy(librarySortReversed = !s.librarySortReversed) else s.copy(librarySort = sort, librarySortReversed = false)
+    }
+
+  /**
+   * What a new notebook is called when she leaves the name empty: "New notebook", or the next free
+   * "New notebook 2" among the notebooks in the folder it goes into. (Her own names may repeat.)
+   */
+  fun freeNotebookName(): String {
+    val folder = selectedFolder.value?.takeIf { it != TRASH }
+    return nextFreeName("New notebook", repo.notebooks.value.filter { it.folderId == folder }.map { it.title })
+  }
+
+  /** The same for a new folder, among the folders beside it. */
+  fun freeFolderName(parentId: String?): String = nextFreeName("New folder", folders.value.filter { it.parentId == parentId }.map { it.name })
+
   fun create(n: NewNotebook, onCreated: (String) -> Unit) {
     viewModelScope.launch {
       val meta =
         repo.create(
-          n.title.ifBlank { "New notebook" },
+          n.title.ifBlank { freeNotebookName() },
           n.paper,
           selectedFolder.value?.takeIf { it != TRASH },
           pages = if (n.paged) 1 else null,
@@ -105,7 +124,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   fun createFolder(name: String, parentId: String? = null, chosen: Int? = null) {
     viewModelScope.launch {
       val color = chosen ?: parentId?.let { p -> folders.value.firstOrNull { it.id == p }?.color } ?: COVER_COLORS[folders.value.size % COVER_COLORS.size]
-      val folder = repo.createFolder(name.ifBlank { "New folder" }, color, parentId)
+      val folder = repo.createFolder(name.ifBlank { freeFolderName(parentId) }, color, parentId)
       if (parentId == null) selectedFolder.value = folder.id
     }
   }
@@ -165,4 +184,45 @@ fun folderPath(folders: List<Folder>, id: String?): List<Folder> {
     cur = folders.firstOrNull { it.id == cur!!.parentId }
   }
   return out
+}
+
+/** [base] if no name in [taken] is it (ignoring case and spaces at the ends), else "[base] 2", "[base] 3"… */
+internal fun nextFreeName(base: String, taken: Collection<String>): String {
+  val used = taken.map { it.trim().lowercase() }.toSet()
+  if (base.lowercase() !in used) return base
+  var n = 2
+  while ("${base.lowercase()} $n" in used) n++
+  return "$base $n"
+}
+
+/** Notebooks in [sort] order: newest first (A to Z for names), or the other way round when [reversed]. */
+internal fun sortNotebooks(list: List<NotebookMeta>, sort: com.tali.notes.data.LibrarySort, reversed: Boolean, opened: List<String>): List<NotebookMeta> {
+  val base =
+    when (sort) {
+      com.tali.notes.data.LibrarySort.EDITED -> list.sortedByDescending { it.updated }
+      com.tali.notes.data.LibrarySort.CREATED -> list.sortedByDescending { it.created }
+      // Ones she hasn't opened since this was kept come after, newest edited first.
+      com.tali.notes.data.LibrarySort.OPENED -> {
+        val rank = opened.withIndex().associate { it.value to it.index }
+        list.sortedWith(compareBy<NotebookMeta> { rank[it.id] ?: Int.MAX_VALUE }.thenByDescending { it.updated })
+      }
+      com.tali.notes.data.LibrarySort.NAME -> list.sortedWith { a, b -> naturalCompare(a.title, b.title) }
+    }
+  return if (reversed) base.reversed() else base
+}
+
+/** Compares names the way people read them: ignoring case, and "Notebook 2" before "Notebook 10". */
+internal fun naturalCompare(a: String, b: String): Int {
+  val chunk = Regex("\\d+|\\D+")
+  val x = chunk.findAll(a.trim().lowercase()).map { it.value }.toList()
+  val y = chunk.findAll(b.trim().lowercase()).map { it.value }.toList()
+  for (i in 0 until minOf(x.size, y.size)) {
+    val p = x[i]
+    val q = y[i]
+    val c =
+      if (p[0].isDigit() && q[0].isDigit()) p.trimStart('0').length.compareTo(q.trimStart('0').length).takeIf { it != 0 } ?: p.trimStart('0').compareTo(q.trimStart('0'))
+      else p.compareTo(q)
+    if (c != 0) return c
+  }
+  return x.size.compareTo(y.size)
 }

@@ -33,7 +33,7 @@ class SelectIconsShotTest {
   fun icons() {
     rule.setContent {
       Row(Modifier.testTag("stage").background(Color.White).padding(12.dp)) {
-        listOf(TaliIcons.Lasso, TaliIcons.LassoDotted, TaliIcons.FreeSelect, TaliIcons.MirrorHorizontal, TaliIcons.MirrorVertical).forEach { Icon(it, null, tint = Color(0xFF1B1F2A), modifier = Modifier.padding(8.dp).size(64.dp)) }
+        listOf(TaliIcons.Lasso, TaliIcons.LassoDotted, TaliIcons.FreeSelect, TaliIcons.MirrorHorizontal, TaliIcons.MirrorVertical, TaliIcons.RecentNotebook).forEach { Icon(it, null, tint = Color(0xFF1B1F2A), modifier = Modifier.padding(8.dp).size(64.dp)) }
       }
     }
     rule.waitForIdle()

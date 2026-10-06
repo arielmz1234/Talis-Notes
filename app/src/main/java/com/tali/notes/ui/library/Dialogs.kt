@@ -157,6 +157,8 @@ data class NewNotebook(
 fun NewNotebookDialog(
   settings: AppSettings,
   folderName: String? = null,
+  /** What it's called if she leaves the name empty (shown as the hint). */
+  suggestedName: String = "New notebook",
   defaultCover: Int,
   onDismiss: () -> Unit,
   importImage: suspend (android.net.Uri) -> String?,
@@ -173,7 +175,7 @@ fun NewNotebookDialog(
   var landscape by remember { mutableStateOf(settings.defaultLandscape) }
   var cover by remember { mutableStateOf(defaultCover) }
   var makingPaper by remember { mutableStateOf(false) }
-  val create = { onCreate(NewNotebook(title.text, paper, custom, paged, dark, cover, landscape = paged && landscape)) }
+  val create = { onCreate(NewNotebook(title.text.ifBlank { suggestedName }, paper, custom, paged, dark, cover, landscape = paged && landscape)) }
   DialogCard(onDismiss, width = 640) {
     // The choices scroll and give way first, so Cancel and Create below always fit on screen.
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -192,7 +194,7 @@ fun NewNotebookDialog(
       // rest, and the notebook is made only with Create.
       val focus = androidx.compose.ui.platform.LocalFocusManager.current
       val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-      TitleField(title, { title = it }, "New notebook", autoFocus = false) {
+      TitleField(title, { title = it }, suggestedName, autoFocus = false) {
         keyboard?.hide()
         focus.clearFocus()
       }

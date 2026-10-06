@@ -3,7 +3,7 @@ package com.tali.notes.ui.notebook
 import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.History
+import com.tali.notes.ui.components.TaliIcons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.VerticalAlignCenter
 import androidx.compose.material.icons.outlined.LockOpen
@@ -36,6 +36,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -789,6 +792,29 @@ private fun NamePill(title: String, modifier: Modifier = Modifier, onRename: () 
 }
 
 /**
+ * How tall a drop-down under an anchor may be: the room from the anchor's bottom to above the
+ * navigation bar. A DropdownMenu taller than that is moved up and covers its own button.
+ */
+private class RoomBelow(private val density: androidx.compose.ui.unit.Density, private val windowHeight: () -> Int, private val bottomInset: () -> Int) {
+  private var anchorBottom by mutableIntStateOf(0)
+
+  fun anchor(c: androidx.compose.ui.layout.LayoutCoordinates) {
+    anchorBottom = (c.positionInWindow().y + c.size.height).roundToInt()
+  }
+
+  val max: Dp
+    get() = with(density) { (windowHeight() - bottomInset() - anchorBottom).toDp() - 12.dp }.coerceAtLeast(160.dp)
+}
+
+@Composable
+private fun rememberRoomBelow(): RoomBelow {
+  val density = LocalDensity.current
+  val view = LocalView.current
+  val insets = WindowInsets.navigationBars
+  return remember(density, view) { RoomBelow(density, { view.rootView.height }, { insets.getBottom(density) }) }
+}
+
+/**
  * Quick open: her recent notebooks in a drop-down, one tap to switch. The rows drift down into
  * place and fade in one after another (strong ease-out, 30 ms apart), so the list pours out of the
  * button. Copied writing stays copied across notebooks, so she can hold to paste in the next one.
@@ -797,11 +823,13 @@ private fun NamePill(title: String, modifier: Modifier = Modifier, onRename: () 
 private fun QuickOpen(recent: List<com.tali.notes.data.NotebookMeta>, thumbnail: (String) -> java.io.File, onOpen: (String) -> Unit) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
-  Box {
+  val roomBelow = rememberRoomBelow()
+  Box(Modifier.onGloballyPositioned { roomBelow.anchor(it) }) {
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE) {
-      ToolButton(Icons.Outlined.History, "Recent notebooks", selected = open) { open = true }
+      // No highlight while the menu is open: the menu itself shows it.
+      ToolButton(TaliIcons.RecentNotebook, "Recent notebooks") { open = true }
     }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = roomBelow.max - 6.dp), shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
       Text("Recent notebooks", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp))
       if (recent.isEmpty()) {
         Text(
@@ -875,9 +903,11 @@ private fun MoreMenu(
   var open by remember { mutableStateOf(false) }
   // Counted when the menu opens, so it's always current.
   val locked = remember(open) { if (open) lockedCount() else 0 }
-  Box {
+  val roomBelow = rememberRoomBelow()
+  Box(Modifier.onGloballyPositioned { roomBelow.anchor(it) }) {
     ToolButton(Icons.Outlined.MoreHoriz, "More") { open = true }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+    // Kept to the room under the button (it scrolls): taller, the menu was moved up over the button.
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = roomBelow.max), shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
       if (locked > 0) {
         DropdownMenuItem(
           text = { Column { Text("Unlock all"); Text(if (locked == 1) "1 locked item" else "$locked locked items", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
