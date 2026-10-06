@@ -230,6 +230,10 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       Spacer(Modifier.height(if (minimal) 36.dp else 112.dp))
       val heading: @Composable (Modifier) -> Unit = { mod ->
         Column(mod) {
+          if (!inTrash) {
+            Greeting()
+            Spacer(Modifier.height(2.dp))
+          }
           // Inside a folder within a folder: the way back up, one tap per level.
           val path = folderPath(folders, currentFolder?.id).dropLast(1)
           if (path.isNotEmpty()) {
@@ -1272,5 +1276,34 @@ private fun PickBar(
     }
     Spacer(Modifier.width(10.dp))
     PrimaryButton("Done", onClick = onDone)
+  }
+}
+
+/** Which part of the day [hour] (0-23) is, as a greeting. */
+internal fun greetingFor(hour: Int): String =
+  when (hour) {
+    in 5..11 -> "Good morning"
+    in 12..16 -> "Good afternoon"
+    in 17..20 -> "Good evening"
+    else -> "Good night"
+  }
+
+/** "Good morning, Tali" by the tablet's clock, above the heading; it changes on its own as the day goes on. */
+@Composable
+private fun Greeting() {
+  val c = Tali.colors
+  var hour by remember { mutableStateOf(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) }
+  LaunchedEffect(Unit) {
+    while (true) {
+      kotlinx.coroutines.delay(30_000)
+      hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    }
+  }
+  androidx.compose.animation.AnimatedContent(
+    targetState = greetingFor(hour),
+    transitionSpec = { fadeIn(tween(260)).togetherWith(fadeOut(tween(180))) },
+    label = "greeting",
+  ) { text ->
+    Text("$text, Tali", style = MaterialTheme.typography.titleMedium, color = c.accent)
   }
 }
