@@ -211,6 +211,28 @@ class SnapTest {
   }
 
   @Test
+  fun handwritingsMiddleLinesUpWithAShapesSides() {
+    val box = rect(0f, 0f, 200f, 100f).snapFeatures()
+    // Writing whose middle is 4 right of the box's right side: it lines up there; its own edges never do.
+    val writing = SnapFeatures.middleOf(Rect(154f, 300f, 254f, 340f))
+    val r = Snap.move(writing, listOf(box), tol = 8f)
+    assertEquals(-4f, r.offset.x, 0.01f)
+    // Its bottom 2 off the box's top doesn't count.
+    val below = SnapFeatures.middleOf(Rect(500f, -60f, 600f, -2f))
+    assertEquals(0f, Snap.move(below, listOf(box), tol = 8f).offset.y, 0.01f)
+  }
+
+  @Test
+  fun resizingHandwritingLinesUpOnlyItsMiddle() {
+    val target = rect(0f, 0f, 200f, 60f).snapFeatures()
+    // Its bottom (10 + 48 × 1.02) comes within 1 of the target's bottom: a shape locks on there...
+    val box = Rect(300f, 10f, 400f, 58f)
+    assertEquals(50f / 48f, Snap.scale(box, Pt(300f, 10f), 1.02f, listOf(target), SnapSession(4f)).first, 0.001f)
+    // ...handwriting doesn't (its middle isn't near anything).
+    assertEquals(1.02f, Snap.scale(box, Pt(300f, 10f), 1.02f, listOf(target), SnapSession(4f), middleOnly = true).first, 0.001f)
+  }
+
+  @Test
   fun aRectanglesSideDraggedPastTheOtherTurnsItOver() {
     val r = rect(0f, 0f, 100f, 50f)
     // The right side's dot (index 1) dragged to x = -40: the rectangle now runs from -40 to 0.

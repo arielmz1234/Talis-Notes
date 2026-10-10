@@ -1802,8 +1802,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val corner = Pt(b.right, b.bottom)
         var s = (world(e, idx).dist(anchor) / max(1f, dragStart.dist(anchor))).coerceIn(0.1f, 10f)
         // Its far side or middle lines up with nearby shapes as it grows or shrinks.
-        snapMoving?.box?.let { box ->
-          val (snapped, guides) = Snap.scale(box, anchor, s, snapTargets, snap)
+        snapMoving?.let { m -> m.box?.let { box -> m to box } }?.let { (m, box) ->
+          val (snapped, guides) = Snap.scale(box, anchor, s, snapTargets, snap, m.middleOnly)
           s = snapped.coerceIn(0.1f, 10f)
           showSnap(guides)
         }

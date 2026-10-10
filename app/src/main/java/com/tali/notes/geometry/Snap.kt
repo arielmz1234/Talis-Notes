@@ -254,20 +254,21 @@ object Snap {
     val near = mb?.outset(reach)
     targets.forEachIndexed { ti, t ->
       val tb = t.box
-      // Lining up: sides and middles, each way (only middles for handwriting).
+      // Lining up: sides and middles, each way. Handwriting lines up only its own middle, with
+      // the other shape's sides and middle alike.
       if (mb != null && tb != null) {
         val mx = if (moving.middleOnly) floatArrayOf(mb.center.x) else floatArrayOf(mb.left, mb.center.x, mb.right)
-        val tx = if (moving.middleOnly) floatArrayOf(tb.center.x) else floatArrayOf(tb.left, tb.center.x, tb.right)
+        val tx = floatArrayOf(tb.left, tb.center.x, tb.right)
         for (mi in mx.indices) for (vi in tx.indices) {
           val d = tx[vi] - mx[mi]
-          val middle = mx.size == 1 || (mi == 1 && vi == 1)
+          val middle = vi == 1 && (mx.size == 1 || mi == 1)
           if (abs(d) < reach && s.catches(key(K_ALIGN_X, ti, mi, vi), abs(d), middle)) bx.offer(abs(d) * if (middle) MIDDLE_BIAS else 1f, d, SnapGuide.Align(true, tx[vi], min(mb.top, tb.top), max(mb.bottom, tb.bottom)), key(K_ALIGN_X, ti, mi, vi))
         }
         val my = if (moving.middleOnly) floatArrayOf(mb.center.y) else floatArrayOf(mb.top, mb.center.y, mb.bottom)
-        val ty = if (moving.middleOnly) floatArrayOf(tb.center.y) else floatArrayOf(tb.top, tb.center.y, tb.bottom)
+        val ty = floatArrayOf(tb.top, tb.center.y, tb.bottom)
         for (mi in my.indices) for (vi in ty.indices) {
           val d = ty[vi] - my[mi]
-          val middle = my.size == 1 || (mi == 1 && vi == 1)
+          val middle = vi == 1 && (my.size == 1 || mi == 1)
           if (abs(d) < reach && s.catches(key(K_ALIGN_Y, ti, mi, vi), abs(d), middle)) by.offer(abs(d) * if (middle) MIDDLE_BIAS else 1f, d, SnapGuide.Align(false, ty[vi], min(mb.left, tb.left), max(mb.right, tb.right)), key(K_ALIGN_Y, ti, mi, vi))
         }
       }
@@ -305,11 +306,12 @@ object Snap {
 
   /**
    * Resizing from the corner opposite [anchor]: the scale [k] of [box] (as it was) nudged so its far
-   * side or middle lines up with something in [targets]. Returns the scale to use and the guides of
-   * everything lined up. Only a way the box really reaches counts: a level line's height is next to
-   * nothing, and lining that up would throw its length wildly.
+   * side or middle lines up with something in [targets] (only its middle when [middleOnly], for
+   * handwriting). Returns the scale to use and the guides of everything lined up. Only a way the
+   * box really reaches counts: a level line's height is next to nothing, and lining that up would
+   * throw its length wildly.
    */
-  fun scale(box: Rect, anchor: Pt, k: Float, targets: List<SnapFeatures>, s: SnapSession): Pair<Float, List<SnapGuide>> {
+  fun scale(box: Rect, anchor: Pt, k: Float, targets: List<SnapFeatures>, s: SnapSession, middleOnly: Boolean = false): Pair<Float, List<SnapGuide>> {
     fun at(v: Float, a: Float, f: Float) = a + (v - a) * f
     val now = Rect(at(box.left, anchor.x, k), at(box.top, anchor.y, k), at(box.right, anchor.x, k), at(box.bottom, anchor.y, k))
     val extent = max(box.right - anchor.x, box.bottom - anchor.y)
@@ -325,6 +327,7 @@ object Snap {
       for (vi in 0..2) {
         for ((ei, pair) in listOf(now.right to box.right, now.center.x to box.center.x).withIndex()) {
           val (edge, base) = pair
+          if (middleOnly && ei == 0) continue
           if (abs(base - anchor.x) < lever) continue
           val err = abs(xs[vi] - edge)
           val kk = key(K_SCALE_X, ti, vi, ei)
@@ -332,6 +335,7 @@ object Snap {
         }
         for ((ei, pair) in listOf(now.bottom to box.bottom, now.center.y to box.center.y).withIndex()) {
           val (edge, base) = pair
+          if (middleOnly && ei == 0) continue
           if (abs(base - anchor.y) < lever) continue
           val err = abs(ys[vi] - edge)
           val kk = key(K_SCALE_Y, ti, vi, ei)
@@ -342,7 +346,7 @@ object Snap {
     if (bestErr == Float.MAX_VALUE || bestS <= 0f) return k to emptyList()
     s.use(bestKey)
     // Everything that lines up at that size.
-    val moved = SnapFeatures(emptyList(), emptyList(), Rect(at(box.left, anchor.x, bestS), at(box.top, anchor.y, bestS), at(box.right, anchor.x, bestS), at(box.bottom, anchor.y, bestS)))
+    val moved = SnapFeatures(emptyList(), emptyList(), Rect(at(box.left, anchor.x, bestS), at(box.top, anchor.y, bestS), at(box.right, anchor.x, bestS), at(box.bottom, anchor.y, bestS)), middleOnly)
     val lined = move(moved, targets.map { SnapFeatures(emptyList(), emptyList(), it.box) }, SAME * 4)
     return bestS to lined.guides
   }
