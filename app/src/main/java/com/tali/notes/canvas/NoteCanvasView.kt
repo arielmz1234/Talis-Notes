@@ -536,10 +536,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   override fun onStrokesFinished(finished: Map<InProgressStrokeId, Stroke>) {
-    // Only strokes not handed over yet ([handOffFinished] may have taken them already).
+    // Only strokes not handed over yet (Ink may report a stroke already taken).
     val strokes = finished.filterKeys { strokePens.containsKey(it) }
     if (strokes.isEmpty()) {
       inProgress.removeFinishedStrokes(finished.keys)
+      if (strokePens.isEmpty()) resetInkLayer()
       return
     }
     val d = doc
@@ -561,6 +562,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     // Hand-off in the same frame the tiles pick the strokes up, so there's no flicker.
     inProgress.removeFinishedStrokes(strokes.keys)
+    // Nothing left waiting: Ink's layer goes back in place (the tiles draw the strokes now, in the same frame).
+    if (strokePens.isEmpty()) resetInkLayer()
     invalidate()
   }
 
@@ -569,16 +572,39 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * screen: if the page moves first (a quick scroll or zoom right after writing), the last stroke
    * slid along with the screen and then jumped back. They're taken onto the page now instead.
    */
-  private fun handOffFinished() {
-    // Strokes written but not handed over yet (none while a stroke is still being written).
-    if (strokePens.isEmpty() || mode == Mode.INK || mode == Mode.LIVE_SHAPE) return
-    // Ink finishes a stroke on its own thread a moment after the pen lifts, so the stroke may not
-    // be ready to take yet (the first fix only took ready ones, and the stroke still slid). flush()
-    // waits for it, briefly, and hands it over through onStrokesFinished.
-    runCatching { inProgress.flush(HANDOFF_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
-    val done = runCatching { inProgress.getFinishedStrokes() }.getOrNull() ?: return
-    if (done.isNotEmpty()) onStrokesFinished(done)
+  private fun followWaitingInk() {
+    // Two earlier tries took the strokes out of Ink early (getFinishedStrokes, then flush()); the
+    // stroke still slid because Ink finishes it on its own thread a moment after the pen lifts,
+    // and flush() crashed Ink's drawing layer on her tablet. Now nothing is taken from Ink: its
+    // layer is moved and scaled with the page until it hands the strokes over by itself.
+    val since = waitingSince ?: return
+    if (strokePens.isEmpty() || mode == Mode.INK) return
+    val m = android.graphics.Matrix(since).apply { postConcat(camera.worldToScreen) }
+    val v = FloatArray(9).also(m::getValues)
+    inProgress.pivotX = 0f
+    inProgress.pivotY = 0f
+    inProgress.scaleX = v[android.graphics.Matrix.MSCALE_X]
+    inProgress.scaleY = v[android.graphics.Matrix.MSCALE_Y]
+    inProgress.translationX = v[android.graphics.Matrix.MTRANS_X]
+    inProgress.translationY = v[android.graphics.Matrix.MTRANS_Y]
   }
+
+  /** Ink's layer back where it belongs, once nothing waits (or a new stroke starts, which it draws in place). */
+  private fun resetInkLayer() {
+    waitingSince = null
+    if (inProgress.translationX == 0f && inProgress.translationY == 0f && inProgress.scaleX == 1f && inProgress.scaleY == 1f) return
+    inProgress.translationX = 0f
+    inProgress.translationY = 0f
+    inProgress.scaleX = 1f
+    inProgress.scaleY = 1f
+  }
+
+  /**
+   * Where the screen was (screen → world) when the first stroke still waiting for Ink's hand-off
+   * was finished, or null when none waits. Until the hand-off, Ink draws those strokes itself, in
+   * screen places from then.
+   */
+  private var waitingSince: android.graphics.Matrix? = null
 
   fun viewport(): Viewport = camera.viewport()
 
@@ -1507,8 +1533,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       val nearCorner = resizeChip(r).dist(screen) < HANDLE_HIT_DP * density
       // A shape that picked itself up after being drawn doesn't take the pen inside it: she may be
-      // writing in the box she just drew. A finger still moves it.
-      val writesThrough = softSelection && !drawIsFinger && !nearCorner
+      // writing in the box she just drew. A finger still moves it, and so does the pen with the
+      // Shapes tool (dragging in the shape just drawn moves it rather than starting another).
+      val writesThrough = softSelection && !drawIsFinger && !nearCorner && tool != Tool.SHAPE
       if (!writesThrough && (nearCorner || r.contains(screen.x, screen.y))) {
         dragStart = p
         dragTransform = Affine.IDENTITY
@@ -1542,8 +1569,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         // A new shape can start right on another one (a line from a corner or off an edge).
         snapTargets = gatherSnapTargets(emptySet())
         val stuck = Snap.point(p, snapTargets, snapTol())
-        shapeStart = stuck ?: p
+        // Not touching anything: it starts lined up with other shapes' sides, middles and corners.
+        val lined = if (stuck == null) Snap.alignPoint(p, snapTargets, snapTol()) else null
+        shapeStart = stuck ?: lined?.first ?: p
         shapeStartStuck = stuck != null
+        startGuides = lined?.second.orEmpty()
         shapePreview = null
         mode = Mode.SHAPE_CREATE
       }
@@ -1561,6 +1591,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val slot = settings.activeSlot
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
     predictor.record(e)
+    // Ink draws the new stroke where the pen is: its layer must be back in place (strokes still
+    // waiting after the page moved jump back for a moment; a stroke started that fast is rare).
+    resetInkLayer()
     // Ink running off the page is hidden as it's drawn, so what she sees is what's kept.
     inProgress.maskPath = inkAreas(slot.size / 2f, pageAt(p))?.let { areas ->
       android.graphics.Path().apply {
@@ -1666,19 +1699,27 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val bg = base.geometry
         // A dot dragged onto another shape's corner or edge locks on there (a line meeting a line).
         val stuck = if (bg is LineShape) lineEndAt(if (handleIndex == 0) bg.b else bg.a, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snapTol())
+        // Not touching anything: the dot lines up with other shapes' sides, middles and corners
+        // (and with its own shape's other corners), unless a line's end is already on a tidy angle.
+        var aligned: Pair<Pt, List<SnapGuide>>? = null
+        if (stuck == null) {
+          val angled = bg is LineShape && ShapeRecognizer.snappedLine(if (handleIndex == 0) bg.b else bg.a, raw).b.dist(raw) > 0.01f
+          if (!angled) aligned = Snap.alignPoint(raw, snapTargets + ownCorners(bg, handleIndex), snapTol()).takeIf { it.second.isNotEmpty() }
+        }
+        val at = stuck ?: aligned?.first
         var g = when {
-          stuck != null && bg is TriangleShape -> when (handleIndex) {
-            0 -> bg.copy(a = stuck)
-            1 -> bg.copy(b = stuck)
-            else -> bg.copy(c = stuck)
+          at != null && bg is TriangleShape -> when (handleIndex) {
+            0 -> bg.copy(a = at)
+            1 -> bg.copy(b = at)
+            else -> bg.copy(c = at)
           }
-          stuck != null && bg is LineShape -> if (handleIndex == 0) bg.copy(a = stuck) else bg.copy(b = stuck)
-          stuck != null -> bg.withHandle(handleIndex, stuck)
+          at != null && bg is LineShape -> if (handleIndex == 0) bg.copy(a = at) else bg.copy(b = at)
+          at != null -> bg.withHandle(handleIndex, at)
           else -> bg.withHandle(handleIndex, raw)
         }
         // A line end being dragged snaps to the same tidy angles as a freshly drawn line.
-        if (stuck == null && g is LineShape) g = if (handleIndex == 1) g.copy(b = ShapeRecognizer.snappedLine(g.a, g.b).b) else g.copy(a = ShapeRecognizer.snappedLine(g.b, g.a).b)
-        showSnap(listOfNotNull(stuck?.let { SnapGuide.Touch(it) }))
+        if (at == null && g is LineShape) g = if (handleIndex == 1) g.copy(b = ShapeRecognizer.snappedLine(g.a, g.b).b) else g.copy(a = ShapeRecognizer.snappedLine(g.b, g.a).b)
+        showSnap(stuck?.let { listOf(SnapGuide.Touch(it)) } ?: aligned?.second.orEmpty())
         liveEdit = base.withGeometry(g)
         invalidate()
       }
@@ -1686,10 +1727,24 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val raw = world(e, idx)
         // Nothing until the pen has slid a little: a touch alone never drops a shape.
         if (shapePreview == null && camera.toScreen(raw).dist(camera.toScreen(shapeStart)) < SHAPE_START_DP * density) return
-        val line = customShape == null && (shapeKind == ShapeKind.LINE || shapeKind == ShapeKind.ARROW || shapeKind == ShapeKind.DOUBLE_ARROW || shapeKind == ShapeKind.DIMENSION)
-        val stuck = if (line) lineEndAt(shapeStart, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snapTol())
-        shapePreview = buildShape(shapeStart, stuck ?: raw, keepEnd = stuck != null)
-        showSnap(listOfNotNull(shapeStart.takeIf { shapeStartStuck }?.let { SnapGuide.Touch(it) }, stuck?.let { SnapGuide.Touch(it) }))
+        val kind = shapeKind.takeIf { customShape == null }
+        // Where the drag ends: a line's end (and a point load's tip, a fixed support's wall) onto
+        // an edge or corner; a box's corner onto a corner or edge, or lined up with other shapes.
+        // Shapes drawn out from a point (supports, moments, circles) only snap where they start.
+        val (end, guides) = when {
+          kind?.drawnFromPoint == true -> raw to emptyList()
+          kind?.drawnAsLine == true -> lineEndAt(shapeStart, raw).let { (p, on) ->
+            when {
+              on -> p to listOf<SnapGuide>(SnapGuide.Touch(p))
+              // On a tidy angle already: that wins. Otherwise its end lines up like any corner.
+              p.dist(raw) > 0.01f -> raw to emptyList()
+              else -> Snap.alignPoint(raw, snapTargets, snapTol())
+            }
+          }
+          else -> Snap.point(raw, snapTargets, snapTol())?.let { it to listOf<SnapGuide>(SnapGuide.Touch(it)) } ?: Snap.alignPoint(raw, snapTargets, snapTol())
+        }
+        shapePreview = buildShape(shapeStart, end, keepEnd = guides.isNotEmpty())
+        showSnap(listOfNotNull(shapeStart.takeIf { shapeStartStuck }?.let { SnapGuide.Touch(it) }) + startGuides + guides)
         invalidate()
       }
       else -> Unit
@@ -1820,12 +1875,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun buildShape(p0: Pt, p1: Pt, keepEnd: Boolean = false): ShapeItem {
     // The Shapes tool has its own style (its panel), apart from the pen in use.
     val look = settings.shapeLook
-    var geometry = customShape?.fitInto(p0, p1)
-      ?: shapeKind.create(p0, p1)
-    if (geometry is LineShape && !keepEnd) {
-      val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
-      geometry = geometry.copy(b = snapped.b)
-    }
+    // Anything drawn like a line (lines, arrows, dimensions, point loads, fixed supports) keeps to tidy angles unless its end locked onto something.
+    val end = if (!keepEnd && customShape == null && shapeKind.drawnAsLine) ShapeRecognizer.snappedLine(p0, p1).b else p1
+    val geometry = customShape?.fitInto(p0, p1) ?: shapeKind.create(p0, end)
     val shape = ShapeItem("preview", 0, PenType.FINELINER, look.outlineArgb, look.size, geometry, line = look.line)
     val fill = look.fillArgb
     return if (fill != null && shape.closed) shape.filled(fill) else shape
@@ -1860,7 +1912,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           strokeId = null
           selectShape(tapped)
         } else {
-          strokeId?.let { inProgress.finishStroke(e, drawPointer, it) }
+          strokeId?.let {
+            inProgress.finishStroke(e, drawPointer, it)
+            if (waitingSince == null) waitingSince = android.graphics.Matrix(camera.screenToWorld)
+          }
           strokeId = null
         }
       }
@@ -1961,6 +2016,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var snapMoving: SnapFeatures? = null
   private var snapGuides: List<SnapGuide> = emptyList()
   private var shapeStartStuck = false
+
+  /** What a new shape's first point lined up with (shown while it's drawn). */
+  private var startGuides: List<SnapGuide> = emptyList()
   private var liveStartStuck = false
 
   /** How close (world units) things have to come to lock on: [SNAP_DP] on screen at any zoom. */
@@ -2028,6 +2086,20 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     return angled to false
   }
 
+  /**
+   * The other corners of [g] while its dot [index] is dragged, for its corner to line up with
+   * (a triangle's or polygon's corner level with another). Only shapes whose dot moves its own
+   * corner alone: a rectangle's side moves two corners, which would line up with themselves.
+   */
+  private fun ownCorners(g: ShapeGeometry, index: Int): List<SnapFeatures> {
+    val corners = when {
+      g is TriangleShape -> g.points
+      g is com.tali.notes.model.PolyShape && !g.smooth && !g.isRect() -> g.points
+      else -> return emptyList()
+    }
+    return listOf(SnapFeatures(corners.filterIndexed { i, _ -> i != index }, emptyList(), null))
+  }
+
   /** Shows [guides]; a light tick when something first locks on. */
   private fun showSnap(guides: List<SnapGuide>) {
     if (guides.isNotEmpty() && snapGuides.isEmpty()) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -2039,6 +2111,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     snapTargets = emptyList()
     snapMoving = null
     shapeStartStuck = false
+    startGuides = emptyList()
     liveStartStuck = false
   }
 
@@ -3351,8 +3424,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun fingerDown(e: MotionEvent) {
-    // Fingers usually move the page next: hand the last strokes over now, before it moves (see [handOffFinished]).
-    handOffFinished()
+    // Fingers usually move the page next: ask Ink to hand the last strokes over soon (see [followWaitingInk]).
+    if (strokePens.isNotEmpty()) runCatching { inProgress.requestHandoff() }
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
       velocity = VelocityTracker.obtain().also { it.addMovement(e) }
@@ -3668,7 +3741,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun afterCameraMove() {
-    handOffFinished()
+    followWaitingInk()
     clampCamera()
     host.onCameraMoved()
     if (selection.isNotEmpty()) publishSelection()
@@ -4024,8 +4097,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val LOOP_CLOSE_DP = 40f
     /** How far (dp, each way) the resize chip sits out from the selection's padded corner. */
     private const val RESIZE_CHIP_OFFSET_DP = 14f
-    /** How long a finger landing right after writing waits for Ink to hand the last strokes over. */
-    private const val HANDOFF_WAIT_MS = 120L
+
     /** How far (dp on screen) the Shapes tool has to be dragged before a shape appears; a tap draws nothing. */
     private const val SHAPE_START_DP = 12f
     /** How long the resize chip takes to come back after a move or a dot drag. */

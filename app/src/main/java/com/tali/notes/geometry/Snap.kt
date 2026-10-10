@@ -219,6 +219,38 @@ object Snap {
     }
   }
 
+  /**
+   * A dot being dragged to [p] (a shape's corner or side, a new shape's corner) lines up with the
+   * sides, middles and corners of [targets], each way on its own, within [tol]. Returns where it
+   * goes and the guides of everything it lines up with (none when it doesn't).
+   */
+  fun alignPoint(p: Pt, targets: List<SnapFeatures>, tol: Float): Pair<Pt, List<SnapGuide>> {
+    val bx = Best()
+    val by = Best()
+    for (t in targets) {
+      val tb = t.box
+      if (tb != null) {
+        for (v in floatArrayOf(tb.left, tb.center.x, tb.right)) {
+          val d = v - p.x
+          if (abs(d) < tol) bx.offer(abs(d), d, SnapGuide.Align(true, v, min(p.y, tb.top), max(p.y, tb.bottom)))
+        }
+        for (v in floatArrayOf(tb.top, tb.center.y, tb.bottom)) {
+          val d = v - p.y
+          if (abs(d) < tol) by.offer(abs(d), d, SnapGuide.Align(false, v, min(p.x, tb.left), max(p.x, tb.right)))
+        }
+      }
+      for (q in t.points) {
+        val dx = q.x - p.x
+        if (abs(dx) < tol) bx.offer(abs(dx), dx, SnapGuide.Align(true, q.x, min(p.y, q.y), max(p.y, q.y)))
+        val dy = q.y - p.y
+        if (abs(dy) < tol) by.offer(abs(dy), dy, SnapGuide.Align(false, q.y, min(p.x, q.x), max(p.x, q.x)))
+      }
+    }
+    val gx = bx.guides()
+    val gy = by.guides()
+    return Pt(p.x + if (gx.isNotEmpty()) bx.delta else 0f, p.y + if (gy.isNotEmpty()) by.delta else 0f) to (gx + gy)
+  }
+
   /** The nearest end or corner of [targets] within [tol] of [p]. */
   fun corner(p: Pt, targets: List<SnapFeatures>, tol: Float): Pt? {
     var best: Pt? = null

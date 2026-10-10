@@ -507,8 +507,24 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
     val offered = entries.filter { it != SQUARE }
   }
 
-  /** Builds this shape to fill the box dragged from [p0] to [p1]. */
-  fun create(p0: Pt, p1: Pt): ShapeGeometry {
+  /**
+   * Builds this shape as the Shapes tool draws it, from where the pen landed ([p0]) to where it is
+   * ([p1]). Most shapes fill the box between them. The engineering symbols start at the point they
+   * attach to, so that's the point that snaps onto a beam: a support's tip, a load's arrow tip (the
+   * end of the drag), a moment's centre, a fixed support's wall from end to end.
+   */
+  fun create(p0: Pt, p1: Pt): ShapeGeometry =
+    when (this) {
+      PIN_SUPPORT -> pinSupportAt(p0, max(p0.dist(p1), 12f))
+      ROLLER_SUPPORT -> rollerSupportAt(p0, max(p0.dist(p1), 12f))
+      FIXED_SUPPORT -> fixedSupport(p0, if (p0.dist(p1) < 4f) p0 + Pt(0f, 40f) else p1)
+      POINT_LOAD -> LineShape(p0, p1, arrowEnd = true)
+      MOMENT -> ArcShape(p0, max(p0.dist(p1), 6f), (0.75 * PI).toFloat(), (1.5 * PI).toFloat(), arrowEnd = true)
+      else -> inBox(p0, p1)
+    }
+
+  /** This shape filling the box from [p0] to [p1] (the shape icons, and every shape but the engineering symbols when drawn). */
+  fun inBox(p0: Pt, p1: Pt): ShapeGeometry {
     val l = min(p0.x, p1.x)
     val r = max(p0.x, p1.x)
     val t = min(p0.y, p1.y)
@@ -547,7 +563,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       STAR -> star(c, side / 2f)
       PIN_SUPPORT -> pinSupport(c, side)
       ROLLER_SUPPORT -> rollerSupport(c, side)
-      FIXED_SUPPORT -> fixedSupport(c, h.coerceAtLeast(w))
+      FIXED_SUPPORT -> fixedSupport(Pt(c.x, c.y - max(w, h) / 2f), Pt(c.x, c.y + max(w, h) / 2f))
       POINT_LOAD -> LineShape(Pt(c.x, t), Pt(c.x, b), arrowEnd = true)
       DISTRIBUTED_LOAD -> distributedLoad(l, r, t, b)
       MOMENT -> ArcShape(c, side / 2f, (0.75 * PI).toFloat(), (1.5 * PI).toFloat(), arrowEnd = true)
@@ -557,6 +573,14 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
   /** Whether dragging should keep the drag's aspect ratio rather than a free box. */
   val dragIsSegment: Boolean
     get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == CIRCLE || this == PART_CIRCLE
+
+  /** Drawn like a line from one end to the other: its end snaps where a line's would (onto edges, at tidy angles). */
+  val drawnAsLine: Boolean
+    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == POINT_LOAD || this == FIXED_SUPPORT
+
+  /** Drawn out from a point (a support's tip, a moment's centre): only that first point snaps; the drag just sets its size. */
+  val drawnFromPoint: Boolean
+    get() = this == PIN_SUPPORT || this == ROLLER_SUPPORT || this == MOMENT || this == CIRCLE || this == PART_CIRCLE
 }
 
 enum class ShapeGroup(val label: String) {
@@ -608,10 +632,27 @@ private fun rollerSupport(c: Pt, size: Float): ShapeGeometry {
   )
 }
 
-private fun fixedSupport(c: Pt, size: Float): ShapeGeometry {
-  val top = Pt(c.x, c.y - size / 2f)
-  val bottom = Pt(c.x, c.y + size / 2f)
-  return GroupShape(listOf(LineShape(top, bottom)) + hatch(top, bottom, 7, Pt(-size * 0.16f, size * 0.12f)))
+/** A pin support whose tip is at [apex], [height] tall down to the bottom of its hatching. */
+private fun pinSupportAt(apex: Pt, height: Float): ShapeGeometry {
+  // pinSupport(c, size): tip 0.3·size above c, hatching reaching 0.432·size below it.
+  val size = height / 0.732f
+  return pinSupport(Pt(apex.x, apex.y + 0.3f * size), size)
+}
+
+/** A roller support whose tip is at [apex], [height] tall down to the bottom of its hatching. */
+private fun rollerSupportAt(apex: Pt, height: Float): ShapeGeometry {
+  // rollerSupport(c, size): tip 0.25·size above c, hatching reaching 0.375·size below it.
+  val size = height / 0.625f
+  return rollerSupport(Pt(apex.x, apex.y + 0.25f * size), size)
+}
+
+/** A fixed support: the wall from [a] to [b], hatched on its left (seen going from [a] to [b]; behind the wall drawn downward). */
+private fun fixedSupport(a: Pt, b: Pt): ShapeGeometry {
+  val size = a.dist(b)
+  val d = (b - a).normalized()
+  val across = Pt(d.y, -d.x)
+  val offset = across * (-size * 0.16f) + d * (size * 0.12f)
+  return GroupShape(listOf(LineShape(a, b)) + hatch(a, b, 7, offset))
 }
 
 private fun distributedLoad(l: Float, r: Float, t: Float, b: Float): ShapeGeometry {
@@ -667,7 +708,15 @@ fun ShapeGeometry.snapFeatures(): com.tali.notes.geometry.SnapFeatures {
       is EllipseShape -> listOf(center, point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat())) to segs(paths(1f).first())
       is ArcShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
       is SectorShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
-      is GroupShape -> return com.tali.notes.geometry.SnapFeatures.of(parts.map { it.snapFeatures() })
+      // Engineering symbols: their outlines, ground lines and arrows snap; the hatching under a
+      // support (five or more short plain lines) doesn't, or its ends would catch on everything.
+      is GroupShape -> {
+        val box = Rect.around(parts.flatMap { it.paths(1f).flatten() })
+        val reach = box?.let { Pt(it.width, it.height).length() } ?: 0f
+        val short = parts.filter { it is LineShape && !it.arrowStart && !it.arrowEnd && !it.ticks && it.length < reach * 0.3f }
+        val hatching = if (short.size >= 5) short.toSet() else emptySet()
+        return com.tali.notes.geometry.SnapFeatures.of(parts.filterNot { it in hatching }.map { it.snapFeatures() })
+      }
     }
   val box = Rect.around(points + segments.flatMap { listOf(it.first, it.second) })
   return com.tali.notes.geometry.SnapFeatures(points, segments, box)

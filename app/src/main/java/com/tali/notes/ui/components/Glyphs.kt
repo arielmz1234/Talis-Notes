@@ -146,7 +146,7 @@ fun ShapeIcon(kind: ShapeKind, color: Color, modifier: Modifier = Modifier, size
         kind == ShapeKind.ELLIPSE -> kind.create(Pt(m * 0.5f, s * 0.3f), Pt(s - m * 0.5f, s * 0.7f))
         kind.dragIsSegment -> kind.create(Pt(m, s - m), Pt(s - m, m))
         kind == ShapeKind.POINT_LOAD -> kind.create(Pt(s / 2, m), Pt(s / 2, s - m))
-        else -> kind.create(Pt(m, m), Pt(s - m, s - m))
+        else -> kind.inBox(Pt(m, m), Pt(s - m, s - m))
       }
     val stroke = Stroke(width = s * k * 0.055f, cap = StrokeCap.Round, join = StrokeJoin.Round)
     geometry.paths(1f).forEach { pts ->

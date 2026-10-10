@@ -95,6 +95,32 @@ class SnapTest {
   }
 
   @Test
+  fun aDotLinesUpWithAnotherShapesSide() {
+    val box = rect(0f, 0f, 100f, 50f).snapFeatures()
+    val (p, guides) = Snap.alignPoint(Pt(103f, 200f), listOf(box), tol = 6f)
+    assertEquals(100f, p.x, 0.01f)
+    assertEquals(200f, p.y, 0.01f)
+    assertTrue(guides.single() is SnapGuide.Align)
+  }
+
+  @Test
+  fun engineeringSymbolsAttachAtTheirPoint() {
+    // A support drawn from its tip: the tip is where the pen landed, and it snaps (its hatching doesn't).
+    val pin = ShapeKind.PIN_SUPPORT.create(Pt(200f, 100f), Pt(200f, 180f))
+    val f = pin.snapFeatures()
+    assertTrue(f.points.any { it.dist(Pt(200f, 100f)) < 0.01f })
+    assertTrue(f.points.size < 12)
+    assertEquals(180f, f.box!!.bottom + 0f, 25f)
+    // A point load's tip is the end of the drag; a moment is centred where it starts.
+    assertEquals(Pt(50f, 90f), (ShapeKind.POINT_LOAD.create(Pt(50f, 10f), Pt(50f, 90f)) as LineShape).b)
+    assertEquals(Pt(5f, 5f), (ShapeKind.MOMENT.create(Pt(5f, 5f), Pt(45f, 5f)) as com.tali.notes.model.ArcShape).center)
+    // A fixed support's wall runs from start to end.
+    val wall = ShapeKind.FIXED_SUPPORT.create(Pt(0f, 0f), Pt(0f, 100f)).snapFeatures()
+    assertTrue(wall.points.containsAll(listOf(Pt(0f, 0f), Pt(0f, 100f))))
+    assertEquals(1, wall.segments.size)
+  }
+
+  @Test
   fun dimensionIsALineWithMarks() {
     val g = ShapeKind.DIMENSION.create(Pt(0f, 0f), Pt(100f, 0f))
     assertTrue(g is LineShape && g.ticks && g.arrowStart && g.arrowEnd)
