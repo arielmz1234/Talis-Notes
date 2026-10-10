@@ -558,10 +558,15 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             enter = fadeIn(tween(140)) + slideInVertically(tween(180)) { -it / 12 } + scaleIn(tween(180), initialScale = 0.97f),
             exit = fadeOut(tween(100)) + scaleOut(tween(100), targetScale = 0.98f),
           ) {
+            // The panel that's showing, kept while it fades out: switching to nothing at once left
+            // an empty card that shrank into a small round blob as it faded.
+            val last = remember { arrayOfNulls<PanelKind>(1) }
+            vm.panel?.let { last[0] = it }
+            val shown = last[0]
             Column {
               Spacer(Modifier.height(10.dp))
               Panel {
-                when (vm.panel) {
+                when (shown) {
                   PanelKind.PEN -> PenPanel(settings, vm)
                   PanelKind.ERASER -> EraserPanel(settings, vm)
                   PanelKind.LASSO -> LassoPanel(settings, vm)

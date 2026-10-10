@@ -7,18 +7,22 @@ import kotlin.math.min
 /**
  * What something offers to snap to, in world units: its key [points] (corners, ends, middles,
  * centres), its [segments] (straight edges, and short pieces of curves) and its [box] (the drawn
- * outline's extent, without the pen's thickness).
+ * outline's extent, without the pen's thickness). [middleOnly]: only the middle of its box lines
+ * up (handwriting picked up with the lasso), and nothing of it touches.
  */
-class SnapFeatures(val points: List<Pt>, val segments: List<Pair<Pt, Pt>>, val box: Rect?) {
+class SnapFeatures(val points: List<Pt>, val segments: List<Pair<Pt, Pt>>, val box: Rect?, val middleOnly: Boolean = false) {
   fun moved(dx: Float, dy: Float): SnapFeatures {
     if (dx == 0f && dy == 0f) return this
     val d = Pt(dx, dy)
-    return SnapFeatures(points.map { it + d }, segments.map { (a, b) -> (a + d) to (b + d) }, box?.let { Rect(it.left + dx, it.top + dy, it.right + dx, it.bottom + dy) })
+    return SnapFeatures(points.map { it + d }, segments.map { (a, b) -> (a + d) to (b + d) }, box?.let { Rect(it.left + dx, it.top + dy, it.right + dx, it.bottom + dy) }, middleOnly)
   }
 
   companion object {
     fun of(parts: List<SnapFeatures>): SnapFeatures =
       SnapFeatures(parts.flatMap { it.points }, parts.flatMap { it.segments }, parts.mapNotNull { it.box }.reduceOrNull(Rect::union))
+
+    /** Just the middle of [box], for handwriting: it lines up its middle with shapes, and nothing lines up with it. */
+    fun middleOf(box: Rect) = SnapFeatures(emptyList(), emptyList(), box, middleOnly = true)
   }
 }
 
@@ -39,11 +43,94 @@ class SnapResult(val offset: Pt, val guides: List<SnapGuide>) {
 }
 
 /**
+ * One drag's snapping: how far things catch, and what she has pulled free of.
+ *
+ * Touching (an end or corner onto another shape's end, corner or edge) catches from [contact]
+ * away and holds firmly; lining up with something at a distance is softer, catching only from
+ * [align]. When she pulls something out of a lock, that lock lets go for the rest of the drag
+ * (she wanted it near, not on), until she moves well away from it ([REARM] times [contact]); after
+ * that it catches again, so coming back to it on purpose still works.
+ *
+ * Each frame: [begin], then any of [Snap]'s functions, then [end]. Each lock is known by a key
+ * naming the two things that meet (which corner of what's moving, which edge of which shape), so
+ * pulling free of one doesn't stop anything else catching.
+ */
+class SnapSession(contact: Float, align: Float = contact) {
+  var contact = contact
+    private set
+  var align = align
+    private set
+
+  /** Locks shown last frame. */
+  private var engaged: Set<Long> = emptySet()
+
+  /** Locks she pulled out of: they don't catch until she moves well away from them. */
+  private val escaped = HashSet<Long>()
+
+  /** This frame: how near each lock within reach came, and how far it catches from. */
+  private val seen = HashMap<Long, Float>()
+  private val catchOf = HashMap<Long, Float>()
+  private val used = HashSet<Long>()
+
+  /** How far away locks are still watched (to notice pulling out of them, and moving away). */
+  val reach: Float
+    get() = contact * REARM
+
+  /** Starts a frame; [contact] and [align] follow the zoom. */
+  fun begin(contact: Float = this.contact, align: Float = this.align) {
+    this.contact = contact
+    this.align = align
+    seen.clear()
+    catchOf.clear()
+    used.clear()
+  }
+
+  /** Whether lock [key], [dist] away, catches (a touch, [contact], or lining up). */
+  fun catches(key: Long, dist: Float, touch: Boolean): Boolean {
+    val tol = if (touch) contact else align
+    val before = seen[key]
+    if (before == null || dist < before) {
+      seen[key] = dist
+      catchOf[key] = tol
+    }
+    return dist < tol && key !in escaped
+  }
+
+  /** Lock [key] is what's holding (it's shown). */
+  fun use(key: Long) {
+    used += key
+  }
+
+  /**
+   * Ends a frame: a lock held last frame that's now further than it catches from was pulled free
+   * of, and lets go; a lock let go of is back once she's moved away from it.
+   */
+  fun end() {
+    for (k in engaged) if (k !in used) {
+      val d = seen[k]
+      if (d == null || d >= (catchOf[k] ?: 0f)) escaped += k
+    }
+    escaped.removeAll { k -> (seen[k] ?: Float.MAX_VALUE) > reach }
+    engaged = HashSet(used)
+  }
+
+  /** Whether anything is holding this frame. */
+  val holding: Boolean
+    get() = used.isNotEmpty()
+
+  companion object {
+    /** A lock she pulled free of catches again once she's this many [contact]s from it. */
+    const val REARM = 3f
+  }
+}
+
+/**
  * Magnetic snapping for shapes, like a drawing app's smart guides. Moving something, it locks on
  * when it comes within reach of another shape: an end or corner onto another's corner or edge (a
  * line meeting a line, a support sitting on a beam), and its edges or middle lining up with
  * another's top, bottom, sides or middle. Each direction snaps on its own, so a box can sit on a
- * line and line up with a neighbour at the same time.
+ * line and line up with a neighbour at the same time. See [SnapSession] for how firmly each kind
+ * holds and how she pulls free.
  */
 object Snap {
   /** Edges this close to level or upright (as a share of their length) count as straight across or up. */
@@ -53,18 +140,50 @@ object Snap {
   private const val TOUCH_BIAS = 0.75f
   private const val POINT_BIAS = 0.5f
 
+  // What kind of lock a key names.
+  private const val K_ALIGN_X = 1
+  private const val K_ALIGN_Y = 2
+  private const val K_POINT = 3
+  private const val K_EDGE = 4
+  private const val K_EDGE_BACK = 5
+  private const val K_SCALE_X = 6
+  private const val K_SCALE_Y = 7
+  private const val K_DOT_X = 8
+  private const val K_DOT_Y = 9
+
+  /**
+   * The key of a lock onto the point [q] (by where it is, so an edge whose nearest place is its own
+   * end counts as that corner: pulled free of a corner, the edges meeting there don't catch it back).
+   */
+  private fun pointKey(q: Pt, moving: Int = 0) = key(K_POINT, Math.round(q.x * 8f), Math.round(q.y * 8f), moving)
+
+  /** The key of a lock onto edge [si] of target [ti], or onto its end when [q] is one. */
+  private fun edgeKey(q: Pt, a: Pt, b: Pt, kind: Int, ti: Int, si: Int, moving: Int = 0) =
+    if (q == a || q == b) pointKey(q, moving) else key(kind, ti, si, moving)
+
+  /** A lock's key: its kind, and the indices naming what meets what. */
+  private fun key(kind: Int, a: Int, b: Int = 0, c: Int = 0, d: Int = 0): Long {
+    var h = kind.toLong()
+    h = h * 1_000_003L + a
+    h = h * 1_000_003L + b
+    h = h * 1_000_003L + c
+    h = h * 1_000_003L + d
+    return h
+  }
+
   /**
    * The ways one direction could lock on. The nearest wins; every other one that lands on the same
    * place shows too (a box beside one the same size lines up at the top, middle and bottom at once).
    */
   private class Best {
-    private class Option(val score: Float, val delta: Float, val guide: SnapGuide)
+    class Option(val score: Float, val delta: Float, val guide: SnapGuide, val key: Long)
 
     private val options = ArrayList<Option>()
-    private var best: Option? = null
+    var best: Option? = null
+      private set
 
-    fun offer(score: Float, delta: Float, guide: SnapGuide) {
-      val o = Option(score, delta, guide)
+    fun offer(score: Float, delta: Float, guide: SnapGuide, key: Long) {
+      val o = Option(score, delta, guide, key)
       options += o
       if (score < (best?.score ?: Float.MAX_VALUE)) best = o
     }
@@ -73,13 +192,14 @@ object Snap {
       get() = best?.score ?: Float.MAX_VALUE
     val delta: Float
       get() = best?.delta ?: 0f
+    val touch: Boolean
+      get() = best?.guide is SnapGuide.Touch
 
-    /** The winner's guides: touches when it's a touch (shown as a cross where they meet), else every lining-up at the same place. */
-    fun guides(): List<SnapGuide> {
+    /** The winner when it's a touch (one cross, where they meet), else every lining-up at the same place. */
+    fun winners(): List<Option> {
       val win = best ?: return emptyList()
-      val touch = win.guide is SnapGuide.Touch
-      val same = options.filter { abs(it.delta - win.delta) < SAME && (it.guide is SnapGuide.Touch) == touch }.map { it.guide }
-      return if (touch) same.distinct() else mergeAligns(same.filterIsInstance<SnapGuide.Align>())
+      if (win.guide is SnapGuide.Touch) return listOf(win)
+      return options.filter { abs(it.delta - win.delta) < SAME && it.guide is SnapGuide.Align }
     }
   }
 
@@ -97,7 +217,14 @@ object Snap {
     return out
   }
 
-  private class Best2(var score: Float = Float.MAX_VALUE, var offset: Pt = Pt.ZERO, var guide: SnapGuide? = null)
+  /** Shows [picked] (using their locks) and returns their guides: lining-ups merged, at most one cross. */
+  private fun show(picked: List<Best.Option>, s: SnapSession): List<SnapGuide> {
+    picked.forEach { s.use(it.key) }
+    val touch = picked.filter { it.guide is SnapGuide.Touch }.minByOrNull { it.score }
+    return mergeAligns(picked.mapNotNull { it.guide as? SnapGuide.Align }) + listOfNotNull(touch?.guide)
+  }
+
+  private class Both(var score: Float = Float.MAX_VALUE, var offset: Pt = Pt.ZERO, var guide: SnapGuide? = null, var key: Long = 0L)
 
   private fun vertical(a: Pt, b: Pt) = abs(a.x - b.x) <= abs(a.y - b.y) * AXIS
   private fun horizontal(a: Pt, b: Pt) = abs(a.y - b.y) <= abs(a.x - b.x) * AXIS
@@ -111,82 +238,104 @@ object Snap {
     return a + ab * t
   }
 
-  /** How far to move [moving] (already at its unsnapped place) to lock onto [targets], within [tol]. */
-  fun move(moving: SnapFeatures, targets: List<SnapFeatures>, tol: Float): SnapResult {
+  fun move(moving: SnapFeatures, targets: List<SnapFeatures>, tol: Float): SnapResult = move(moving, targets, SnapSession(tol))
+
+  /** How far to move [moving] (already at its unsnapped place) to lock onto [targets]. */
+  fun move(moving: SnapFeatures, targets: List<SnapFeatures>, s: SnapSession): SnapResult {
     if (targets.isEmpty()) return SnapResult.NONE
     val bx = Best()
     val by = Best()
-    val two = Best2()
+    val two = Both()
     val mb = moving.box
-    val reach = mb?.outset(tol)
-    for (t in targets) {
+    val reach = s.reach
+    val near = mb?.outset(reach)
+    targets.forEachIndexed { ti, t ->
       val tb = t.box
-      // Lining up: sides and middles, each way.
+      // Lining up: sides and middles, each way (only middles for handwriting).
       if (mb != null && tb != null) {
-        val mx = floatArrayOf(mb.left, mb.center.x, mb.right)
-        val tx = floatArrayOf(tb.left, tb.center.x, tb.right)
-        for (m in mx) for (v in tx) {
-          val d = v - m
-          if (abs(d) < tol) bx.offer(abs(d), d, SnapGuide.Align(true, v, min(mb.top, tb.top), max(mb.bottom, tb.bottom)))
+        val mx = if (moving.middleOnly) floatArrayOf(mb.center.x) else floatArrayOf(mb.left, mb.center.x, mb.right)
+        val tx = if (moving.middleOnly) floatArrayOf(tb.center.x) else floatArrayOf(tb.left, tb.center.x, tb.right)
+        for (mi in mx.indices) for (vi in tx.indices) {
+          val d = tx[vi] - mx[mi]
+          if (abs(d) < reach && s.catches(key(K_ALIGN_X, ti, mi, vi), abs(d), false)) bx.offer(abs(d), d, SnapGuide.Align(true, tx[vi], min(mb.top, tb.top), max(mb.bottom, tb.bottom)), key(K_ALIGN_X, ti, mi, vi))
         }
-        val my = floatArrayOf(mb.top, mb.center.y, mb.bottom)
-        val ty = floatArrayOf(tb.top, tb.center.y, tb.bottom)
-        for (m in my) for (v in ty) {
-          val d = v - m
-          if (abs(d) < tol) by.offer(abs(d), d, SnapGuide.Align(false, v, min(mb.left, tb.left), max(mb.right, tb.right)))
+        val my = if (moving.middleOnly) floatArrayOf(mb.center.y) else floatArrayOf(mb.top, mb.center.y, mb.bottom)
+        val ty = if (moving.middleOnly) floatArrayOf(tb.center.y) else floatArrayOf(tb.top, tb.center.y, tb.bottom)
+        for (mi in my.indices) for (vi in ty.indices) {
+          val d = ty[vi] - my[mi]
+          if (abs(d) < reach && s.catches(key(K_ALIGN_Y, ti, mi, vi), abs(d), false)) by.offer(abs(d), d, SnapGuide.Align(false, ty[vi], min(mb.left, tb.left), max(mb.right, tb.right)), key(K_ALIGN_Y, ti, mi, vi))
         }
       }
       // Touching only matters for things within reach.
-      if (reach != null && tb != null && !reach.intersects(tb.outset(tol))) continue
+      if (near != null && tb != null && !near.intersects(tb.outset(reach))) return@forEachIndexed
       // An end or corner onto an end or corner.
-      for (p in moving.points) for (q in t.points) {
-        val d = p.dist(q)
-        if (d < tol && d * POINT_BIAS < two.score) {
-          two.score = d * POINT_BIAS
-          two.offset = q - p
-          two.guide = SnapGuide.Touch(q)
+      moving.points.forEachIndexed { pi, p ->
+        t.points.forEachIndexed { qi, q ->
+          val d = p.dist(q)
+          val k = pointKey(q, pi + 1)
+          if (d < reach && s.catches(k, d, true) && d * POINT_BIAS < two.score) {
+            two.score = d * POINT_BIAS
+            two.offset = q - p
+            two.guide = SnapGuide.Touch(q)
+            two.key = k
+          }
         }
       }
       // Moving points onto the target's edges, and the target's points onto moving edges.
-      for ((a, b) in t.segments) for (p in moving.points) touch(p, a, b, tol, bx, by, two, sign = 1f)
-      for ((a, b) in moving.segments) for (q in t.points) touch(q, a, b, tol, bx, by, two, sign = -1f)
+      t.segments.forEachIndexed { si, (a, b) -> moving.points.forEachIndexed { pi, p -> touch(p, a, b, s, key(K_EDGE, ti, si, pi), pi, bx, by, two, sign = 1f) } }
+      moving.segments.forEachIndexed { si, (a, b) -> t.points.forEachIndexed { qi, q -> touch(q, a, b, s, key(K_EDGE_BACK, ti, qi, si), -1, bx, by, two, sign = -1f) } }
     }
-    val gx = bx.guides()
-    val gy = by.guides()
     // One snap that fixes both ways (an end on an end, or on a slanted edge) wins if it's the nearest.
-    val axisBest = min(bx.score, by.score)
-    if (two.guide != null && two.score <= axisBest) return SnapResult(two.offset, listOf(two.guide!!))
-    if (gx.isEmpty() && gy.isEmpty()) return SnapResult.NONE
-    return SnapResult(Pt(if (gx.isNotEmpty()) bx.delta else 0f, if (gy.isNotEmpty()) by.delta else 0f), gx + gy)
+    if (two.guide != null && two.score <= min(bx.score, by.score)) {
+      s.use(two.key)
+      return SnapResult(two.offset, listOf(two.guide!!))
+    }
+    val wx = bx.winners()
+    val wy = by.winners()
+    if (wx.isEmpty() && wy.isEmpty()) return SnapResult.NONE
+    return SnapResult(Pt(if (wx.isNotEmpty()) bx.delta else 0f, if (wy.isNotEmpty()) by.delta else 0f), show(wx + wy, s))
   }
 
+  fun scale(box: Rect, anchor: Pt, s: Float, targets: List<SnapFeatures>, tol: Float): Pair<Float, List<SnapGuide>> = scale(box, anchor, s, targets, SnapSession(tol))
+
   /**
-   * Resizing from the corner opposite [anchor]: the scale [s] of [box] (as it was) nudged so its far
-   * side or middle lines up with something in [targets], within [tol] of where it is now. Returns
-   * the scale to use and the guides of everything lined up.
+   * Resizing from the corner opposite [anchor]: the scale [k] of [box] (as it was) nudged so its far
+   * side or middle lines up with something in [targets]. Returns the scale to use and the guides of
+   * everything lined up. Only a way the box really reaches counts: a level line's height is next to
+   * nothing, and lining that up would throw its length wildly.
    */
-  fun scale(box: Rect, anchor: Pt, s: Float, targets: List<SnapFeatures>, tol: Float): Pair<Float, List<SnapGuide>> {
-    fun at(v: Float, a: Float, k: Float) = a + (v - a) * k
-    val now = Rect(at(box.left, anchor.x, s), at(box.top, anchor.y, s), at(box.right, anchor.x, s), at(box.bottom, anchor.y, s))
-    var bestErr = tol
-    var bestS = s
-    for (t in targets) {
-      val tb = t.box ?: continue
+  fun scale(box: Rect, anchor: Pt, k: Float, targets: List<SnapFeatures>, s: SnapSession): Pair<Float, List<SnapGuide>> {
+    fun at(v: Float, a: Float, f: Float) = a + (v - a) * f
+    val now = Rect(at(box.left, anchor.x, k), at(box.top, anchor.y, k), at(box.right, anchor.x, k), at(box.bottom, anchor.y, k))
+    val extent = max(box.right - anchor.x, box.bottom - anchor.y)
+    val lever = max(extent * 0.2f, s.contact)
+    var bestErr = Float.MAX_VALUE
+    var bestS = k
+    var bestKey = 0L
+    targets.forEachIndexed { ti, t ->
+      val tb = t.box ?: return@forEachIndexed
       // The far side and the middle move with the size; the near side stays at the anchor.
-      for (v in floatArrayOf(tb.left, tb.center.x, tb.right)) {
-        for ((edge, base) in listOf(now.right to box.right, now.center.x to box.center.x)) {
-          val err = abs(v - edge)
-          if (err < bestErr && abs(base - anchor.x) > 1e-3f) { bestErr = err; bestS = (v - anchor.x) / (base - anchor.x) }
+      val xs = floatArrayOf(tb.left, tb.center.x, tb.right)
+      val ys = floatArrayOf(tb.top, tb.center.y, tb.bottom)
+      for (vi in 0..2) {
+        for ((ei, pair) in listOf(now.right to box.right, now.center.x to box.center.x).withIndex()) {
+          val (edge, base) = pair
+          if (abs(base - anchor.x) < lever) continue
+          val err = abs(xs[vi] - edge)
+          val kk = key(K_SCALE_X, ti, vi, ei)
+          if (err < s.reach && s.catches(kk, err, false) && err < bestErr) { bestErr = err; bestS = (xs[vi] - anchor.x) / (base - anchor.x); bestKey = kk }
         }
-      }
-      for (v in floatArrayOf(tb.top, tb.center.y, tb.bottom)) {
-        for ((edge, base) in listOf(now.bottom to box.bottom, now.center.y to box.center.y)) {
-          val err = abs(v - edge)
-          if (err < bestErr && abs(base - anchor.y) > 1e-3f) { bestErr = err; bestS = (v - anchor.y) / (base - anchor.y) }
+        for ((ei, pair) in listOf(now.bottom to box.bottom, now.center.y to box.center.y).withIndex()) {
+          val (edge, base) = pair
+          if (abs(base - anchor.y) < lever) continue
+          val err = abs(ys[vi] - edge)
+          val kk = key(K_SCALE_Y, ti, vi, ei)
+          if (err < s.reach && s.catches(kk, err, false) && err < bestErr) { bestErr = err; bestS = (ys[vi] - anchor.y) / (base - anchor.y); bestKey = kk }
         }
       }
     }
-    if (bestS == s || bestS <= 0f) return s to emptyList()
+    if (bestErr == Float.MAX_VALUE || bestS <= 0f) return k to emptyList()
+    s.use(bestKey)
     // Everything that lines up at that size.
     val moved = SnapFeatures(emptyList(), emptyList(), Rect(at(box.left, anchor.x, bestS), at(box.top, anchor.y, bestS), at(box.right, anchor.x, bestS), at(box.bottom, anchor.y, bestS)))
     val lined = move(moved, targets.map { SnapFeatures(emptyList(), emptyList(), it.box) }, SAME * 4)
@@ -196,131 +345,165 @@ object Snap {
   /**
    * Point [p] against segment [a]–[b] (sign 1: [p] moves; -1: the segment moves). Level and
    * upright edges snap one way only (so the other way can still line up); slanted ones both ways.
+   * [pi] is which of the moving points [p] is (when it's the one moving).
    */
-  private fun touch(p: Pt, a: Pt, b: Pt, tol: Float, bx: Best, by: Best, two: Best2, sign: Float) {
+  private fun touch(p: Pt, a: Pt, b: Pt, s: SnapSession, k: Long, pi: Int, bx: Best, by: Best, two: Both, sign: Float) {
+    val reach = s.reach
     if (vertical(a, b)) {
-      if (p.y < min(a.y, b.y) - tol || p.y > max(a.y, b.y) + tol) return
+      if (p.y < min(a.y, b.y) - s.contact || p.y > max(a.y, b.y) + s.contact) return
       val x = (a.x + b.x) / 2f
       val d = x - p.x
-      if (abs(d) < tol) bx.offer(abs(d) * TOUCH_BIAS, d * sign, SnapGuide.Touch(Pt(if (sign > 0) x else p.x, p.y.coerceIn(min(a.y, b.y), max(a.y, b.y)))))
+      if (abs(d) < reach && s.catches(k, abs(d), true)) bx.offer(abs(d) * TOUCH_BIAS, d * sign, SnapGuide.Touch(Pt(if (sign > 0) x else p.x, p.y.coerceIn(min(a.y, b.y), max(a.y, b.y)))), k)
     } else if (horizontal(a, b)) {
-      if (p.x < min(a.x, b.x) - tol || p.x > max(a.x, b.x) + tol) return
+      if (p.x < min(a.x, b.x) - s.contact || p.x > max(a.x, b.x) + s.contact) return
       val y = (a.y + b.y) / 2f
       val d = y - p.y
-      if (abs(d) < tol) by.offer(abs(d) * TOUCH_BIAS, d * sign, SnapGuide.Touch(Pt(p.x.coerceIn(min(a.x, b.x), max(a.x, b.x)), if (sign > 0) y else p.y)))
+      if (abs(d) < reach && s.catches(k, abs(d), true)) by.offer(abs(d) * TOUCH_BIAS, d * sign, SnapGuide.Touch(Pt(p.x.coerceIn(min(a.x, b.x), max(a.x, b.x)), if (sign > 0) y else p.y)), k)
     } else {
       val q = nearestOn(p, a, b)
       val d = p.dist(q)
-      if (d < tol && d * TOUCH_BIAS < two.score) {
+      // Onto the edge's end: the same lock as onto that corner.
+      val kk = if (sign > 0 && (q == a || q == b)) pointKey(q, pi + 1) else k
+      if (d < reach && s.catches(kk, d, true) && d * TOUCH_BIAS < two.score) {
         two.score = d * TOUCH_BIAS
         two.offset = (q - p) * sign
         two.guide = SnapGuide.Touch(if (sign > 0) q else p)
+        two.key = kk
       }
     }
   }
+
+  fun alignPoint(p: Pt, targets: List<SnapFeatures>, tol: Float): Pair<Pt, List<SnapGuide>> = alignPoint(p, targets, SnapSession(tol))
 
   /**
    * A dot being dragged to [p] (a shape's corner or side, a new shape's corner) lines up with the
-   * sides, middles and corners of [targets], each way on its own, within [tol]. Returns where it
-   * goes and the guides of everything it lines up with (none when it doesn't).
+   * sides, middles and corners of [targets], each way on its own. Returns where it goes and the
+   * guides of everything it lines up with (none when it doesn't).
    */
-  fun alignPoint(p: Pt, targets: List<SnapFeatures>, tol: Float): Pair<Pt, List<SnapGuide>> {
+  fun alignPoint(p: Pt, targets: List<SnapFeatures>, s: SnapSession): Pair<Pt, List<SnapGuide>> {
     val bx = Best()
     val by = Best()
-    for (t in targets) {
+    val reach = s.reach
+    targets.forEachIndexed { ti, t ->
       val tb = t.box
       if (tb != null) {
-        for (v in floatArrayOf(tb.left, tb.center.x, tb.right)) {
+        floatArrayOf(tb.left, tb.center.x, tb.right).forEachIndexed { vi, v ->
           val d = v - p.x
-          if (abs(d) < tol) bx.offer(abs(d), d, SnapGuide.Align(true, v, min(p.y, tb.top), max(p.y, tb.bottom)))
+          val k = key(K_ALIGN_X, ti, vi)
+          if (abs(d) < reach && s.catches(k, abs(d), false)) bx.offer(abs(d), d, SnapGuide.Align(true, v, min(p.y, tb.top), max(p.y, tb.bottom)), k)
         }
-        for (v in floatArrayOf(tb.top, tb.center.y, tb.bottom)) {
+        floatArrayOf(tb.top, tb.center.y, tb.bottom).forEachIndexed { vi, v ->
           val d = v - p.y
-          if (abs(d) < tol) by.offer(abs(d), d, SnapGuide.Align(false, v, min(p.x, tb.left), max(p.x, tb.right)))
+          val k = key(K_ALIGN_Y, ti, vi)
+          if (abs(d) < reach && s.catches(k, abs(d), false)) by.offer(abs(d), d, SnapGuide.Align(false, v, min(p.x, tb.left), max(p.x, tb.right)), k)
         }
       }
-      for (q in t.points) {
+      t.points.forEachIndexed { qi, q ->
         val dx = q.x - p.x
-        if (abs(dx) < tol) bx.offer(abs(dx), dx, SnapGuide.Align(true, q.x, min(p.y, q.y), max(p.y, q.y)))
+        val kx = key(K_DOT_X, ti, qi)
+        if (abs(dx) < reach && s.catches(kx, abs(dx), false)) bx.offer(abs(dx), dx, SnapGuide.Align(true, q.x, min(p.y, q.y), max(p.y, q.y)), kx)
         val dy = q.y - p.y
-        if (abs(dy) < tol) by.offer(abs(dy), dy, SnapGuide.Align(false, q.y, min(p.x, q.x), max(p.x, q.x)))
+        val ky = key(K_DOT_Y, ti, qi)
+        if (abs(dy) < reach && s.catches(ky, abs(dy), false)) by.offer(abs(dy), dy, SnapGuide.Align(false, q.y, min(p.x, q.x), max(p.x, q.x)), ky)
       }
     }
-    val gx = bx.guides()
-    val gy = by.guides()
-    return Pt(p.x + if (gx.isNotEmpty()) bx.delta else 0f, p.y + if (gy.isNotEmpty()) by.delta else 0f) to (gx + gy)
+    val wx = bx.winners()
+    val wy = by.winners()
+    return Pt(p.x + if (wx.isNotEmpty()) bx.delta else 0f, p.y + if (wy.isNotEmpty()) by.delta else 0f) to show(wx + wy, s)
   }
 
-  /** The nearest end or corner of [targets] within [tol] of [p]. */
-  fun corner(p: Pt, targets: List<SnapFeatures>, tol: Float): Pt? {
+  fun corner(p: Pt, targets: List<SnapFeatures>, tol: Float): Pt? = corner(p, targets, SnapSession(tol))
+
+  /** The nearest end or corner of [targets] that catches [p]. */
+  fun corner(p: Pt, targets: List<SnapFeatures>, s: SnapSession): Pt? {
     var best: Pt? = null
-    var dist = tol
-    for (t in targets) for (q in t.points) {
-      val d = p.dist(q)
-      if (d < dist) {
-        dist = d
-        best = q
+    var bestKey = 0L
+    var dist = Float.MAX_VALUE
+    targets.forEachIndexed { ti, t ->
+      t.points.forEach { q ->
+        val d = p.dist(q)
+        val k = pointKey(q)
+        if (d < s.reach && s.catches(k, d, true) && d < dist) {
+          dist = d
+          best = q
+          bestKey = k
+        }
       }
     }
+    if (best != null) s.use(bestKey)
     return best
   }
 
+  fun alongLine(from: Pt, to: Pt, targets: List<SnapFeatures>, tol: Float): Pt? = alongLine(from, to, targets, SnapSession(tol))
+
   /**
-   * Where the line from [from] through [to] meets an edge of [targets] within [tol] of [to]: a line
-   * being drawn keeps its direction (its tidy angle) and just stops on the edge it reaches.
+   * Where the line from [from] through [to] meets an edge of [targets] near [to]: a line being drawn
+   * keeps its direction (its tidy angle) and just stops on the edge it reaches.
    */
-  fun alongLine(from: Pt, to: Pt, targets: List<SnapFeatures>, tol: Float): Pt? {
+  fun alongLine(from: Pt, to: Pt, targets: List<SnapFeatures>, s: SnapSession): Pt? {
     val dir = to - from
     if (dir.length() < 1e-3f) return null
     var best: Pt? = null
-    var dist = tol
-    for (t in targets) {
+    var bestKey = 0L
+    var dist = Float.MAX_VALUE
+    targets.forEachIndexed { ti, t ->
       val tb = t.box
-      if (tb != null && !tb.outset(tol).contains(to)) continue
-      for ((a, b) in t.segments) {
+      if (tb != null && !tb.outset(s.reach).contains(to)) return@forEachIndexed
+      t.segments.forEachIndexed { si, (a, b) ->
         val e = b - a
         val den = dir.cross(e)
-        if (abs(den) < 1e-6f) continue
+        if (abs(den) < 1e-6f) return@forEachIndexed
         // from + dir·s = a + e·u, with the meeting point on the edge (0..1 along it).
         val u = (a - from).cross(dir) / den
-        if (u < -1e-4f || u > 1f + 1e-4f) continue
-        val q = a + e * u.coerceIn(0f, 1f)
+        if (u < -1e-4f || u > 1f + 1e-4f) return@forEachIndexed
+        val q = if (u <= 0f) a else if (u >= 1f) b else a + e * u
         val d = q.dist(to)
-        if (d < dist) {
+        val k = edgeKey(q, a, b, K_EDGE, ti, si)
+        if (d < s.reach && s.catches(k, d, true) && d < dist) {
           dist = d
           best = q
+          bestKey = k
         }
       }
     }
+    if (best != null) s.use(bestKey)
     return best
   }
 
+  fun point(p: Pt, targets: List<SnapFeatures>, tol: Float): Pt? = point(p, targets, SnapSession(tol))
+
   /**
    * Where a single point being dragged (a line's end, a shape's dot, where a new shape starts)
-   * locks on: another shape's end or corner first, else the nearest place on an edge, within [tol].
+   * locks on: another shape's end or corner first, else the nearest place on an edge.
    */
-  fun point(p: Pt, targets: List<SnapFeatures>, tol: Float): Pt? {
+  fun point(p: Pt, targets: List<SnapFeatures>, s: SnapSession): Pt? {
     var best: Pt? = null
+    var bestKey = 0L
     var score = Float.MAX_VALUE
-    for (t in targets) {
+    targets.forEachIndexed { ti, t ->
       val tb = t.box
-      if (tb != null && !tb.outset(tol).contains(p)) continue
-      for (q in t.points) {
+      if (tb != null && !tb.outset(s.reach).contains(p)) return@forEachIndexed
+      t.points.forEach { q ->
         val d = p.dist(q)
-        if (d < tol && d * POINT_BIAS < score) {
+        val k = pointKey(q)
+        if (d < s.reach && s.catches(k, d, true) && d * POINT_BIAS < score) {
           score = d * POINT_BIAS
           best = q
+          bestKey = k
         }
       }
-      for ((a, b) in t.segments) {
+      t.segments.forEachIndexed { si, (a, b) ->
         val q = nearestOn(p, a, b)
         val d = p.dist(q)
-        if (d < tol && d < score) {
+        val k = edgeKey(q, a, b, K_EDGE, ti, si)
+        if (d < s.reach && s.catches(k, d, true) && d < score) {
           score = d
           best = q
+          bestKey = k
         }
       }
     }
+    if (best != null) s.use(bestKey)
     return best
   }
 }

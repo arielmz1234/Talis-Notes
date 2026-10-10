@@ -85,6 +85,8 @@ data class AppSettings(
   val snapShapes: Boolean = true,
   /** The Shapes tool's own colour, thickness, line and fill; null until she first sets it (then it starts from her pen). */
   val shapeStyle: com.tali.notes.model.ShapeStyle? = null,
+  /** The Shapes tool takes its colour, size and line from the pen in use instead of its own style. */
+  val shapeFollowsPen: Boolean = false,
   val holdDelayMs: Long = 450L,
   /** null means automatic: fingers draw only on devices without a stylus. */
   val fingerDraws: Boolean? = null,
@@ -173,9 +175,20 @@ data class AppSettings(
   val shapeSlot: PenSlot
     get() = activeSlot.takeIf { it.type != PenType.HIGHLIGHTER } ?: pens.firstOrNull { it.type != PenType.HIGHLIGHTER } ?: activeSlot
 
-  /** How the Shapes tool draws: her shape style, or until she sets one, the look of her writing pen. */
+  /**
+   * The Shapes tool's own style, which stays as she set it whatever pen she picks (before she sets
+   * one: her first pen's starting colour and size).
+   */
+  val shapeOwn: com.tali.notes.model.ShapeStyle
+    get() = shapeStyle ?: com.tali.notes.model.ShapeStyle(DEFAULT_COLORS[0], 2.4f)
+
+  /**
+   * How the Shapes tool draws: its own style; or, with [shapeFollowsPen], the colour, size and line
+   * of her writing pen, keeping its own fill and opacities.
+   */
   val shapeLook: com.tali.notes.model.ShapeStyle
-    get() = shapeStyle ?: shapeSlot.let { com.tali.notes.model.ShapeStyle(it.color, it.size.coerceIn(com.tali.notes.model.ShapeStyle.MIN_SIZE, com.tali.notes.model.ShapeStyle.MAX_SIZE), it.lineStyle) }
+    get() = if (!shapeFollowsPen) shapeOwn
+    else shapeSlot.let { shapeOwn.copy(color = it.color or (0xFF shl 24), size = it.size.coerceIn(com.tali.notes.model.ShapeStyle.MIN_SIZE, com.tali.notes.model.ShapeStyle.MAX_SIZE), line = it.lineStyle) }
 }
 
 class SettingsStore(context: Context) {

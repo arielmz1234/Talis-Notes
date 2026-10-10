@@ -121,6 +121,108 @@ class SnapTest {
   }
 
   @Test
+  fun touchingHoldsFromFurtherThanLiningUp() {
+    val s = SnapSession(contact = 10f, align = 5f)
+    val box = rect(0f, 0f, 100f, 50f).snapFeatures()
+    // 7 away: a corner landing on the box's side catches (a touch)...
+    val touching = rect(107f, 10f, 160f, 40f).snapFeatures()
+    assertEquals(-7f, Snap.move(touching, listOf(box), s).offset.x, 0.01f)
+    // ...but a box far below with its side 7 off the box's side doesn't line up (softer).
+    s.begin()
+    val below = rect(107f, 300f, 160f, 340f).snapFeatures()
+    assertEquals(0f, Snap.move(below, listOf(box), s).offset.x, 0.01f)
+  }
+
+  @Test
+  fun pulledFreeOfALockItLetsGoUntilSheMovesAway() {
+    val s = SnapSession(contact = 10f, align = 5f)
+    val corner = listOf(rect(100f, 100f, 200f, 160f).snapFeatures())
+    fun at(x: Float, y: Float): Pt? {
+      s.begin()
+      return Snap.point(Pt(x, y), corner, s).also { s.end() }
+    }
+    // Onto the corner, then pulled away past where it catches, then back near it: left free.
+    assertEquals(Pt(100f, 100f), at(96f, 97f))
+    assertNull(at(85f, 85f))
+    assertNull(at(95f, 95f))
+    // The edges meeting there don't pull it back onto the corner either.
+    assertNull(at(97f, 98f))
+    // Far away and back: it catches again.
+    assertNull(at(40f, 40f))
+    assertEquals(Pt(100f, 100f), at(96f, 97f))
+  }
+
+  @Test
+  fun aLockSheSlidesOutOfIntoAnotherDoesntLetGo() {
+    val s = SnapSession(contact = 10f, align = 5f)
+    val wall = listOf(LineShape(Pt(100f, 0f), Pt(100f, 400f)).snapFeatures())
+    fun at(x: Float, y: Float): Pt? {
+      s.begin()
+      return Snap.point(Pt(x, y), wall, s).also { s.end() }
+    }
+    // Sliding along the wall stays on it the whole way.
+    assertEquals(100f, at(104f, 100f)!!.x, 0.01f)
+    assertEquals(100f, at(104f, 200f)!!.x, 0.01f)
+    assertEquals(100f, at(97f, 300f)!!.x, 0.01f)
+  }
+
+  @Test
+  fun moveShowsOneCrossWhereItTouches() {
+    // A box resting in a corner touches both walls at once: one cross.
+    val floor = LineShape(Pt(0f, 100f), Pt(300f, 100f)).snapFeatures()
+    val wall = LineShape(Pt(0f, 0f), Pt(0f, 100f)).snapFeatures()
+    val box = rect(3f, 40f, 63f, 97f).snapFeatures()
+    val r = Snap.move(box, listOf(floor, wall), tol = 10f)
+    assertEquals(-3f, r.offset.x, 0.01f)
+    assertEquals(3f, r.offset.y, 0.01f)
+    assertEquals(1, r.guides.count { it is SnapGuide.Touch })
+  }
+
+  @Test
+  fun resizingALevelLineDoesntJumpToAnotherShapesHeight() {
+    // A level line touching another line, resized from its left end: its height is nothing, so lining
+    // its "bottom" up with the other line's would have thrown its length wildly.
+    val other = LineShape(Pt(200f, 50f), Pt(200f, 150f)).snapFeatures()
+    val box = Rect(0f, 100f, 200f, 100f)
+    val (s, _) = Snap.scale(box, Pt(0f, 98.8f), 1.3f, listOf(other), tol = 10f)
+    assertEquals(1.3f, s, 0.001f)
+  }
+
+  @Test
+  fun handwritingLinesUpItsMiddleOnly() {
+    val box = rect(0f, 0f, 200f, 100f).snapFeatures()
+    // Writing whose middle is 3 off the box's middle lines up; its own left edge 2 off the box's doesn't count.
+    val writing = SnapFeatures.middleOf(Rect(2f, 300f, 196f, 340f))
+    val r = Snap.move(writing, listOf(box), tol = 8f)
+    assertEquals(1f, r.offset.x, 0.01f)
+    assertEquals(0f, r.offset.y, 0.01f)
+  }
+
+  @Test
+  fun aRectanglesSideDraggedPastTheOtherTurnsItOver() {
+    val r = rect(0f, 0f, 100f, 50f)
+    // The right side's dot (index 1) dragged to x = -40: the rectangle now runs from -40 to 0.
+    val g = r.withHandle(1, Pt(-40f, 25f)) as PolyShape
+    assertEquals(-40f, g.points.minOf { it.x }, 0.01f)
+    assertEquals(0f, g.points.maxOf { it.x }, 0.01f)
+    // The dot she's dragging is still under the pen.
+    assertEquals(-40f, g.handles()[1].x, 0.01f)
+  }
+
+  @Test
+  fun aDistributedLoadGainsArrowsAsItLengthens() {
+    val load = ShapeKind.DISTRIBUTED_LOAD.create(Pt(0f, 0f), Pt(112f, 40f)) as com.tali.notes.model.LoadShape
+    assertEquals(4, load.count)
+    // The right end dragged out to 224: twice as many gaps, same spacing; arrows still hang down.
+    val longer = load.withHandle(1, Pt(224f, 0f)) as com.tali.notes.model.LoadShape
+    assertEquals(8, longer.count)
+    assertEquals(40f, longer.handles()[2].y, 0.01f)
+    // Old loads (a group of a line and arrows) load as one.
+    val old = GroupShape(listOf(LineShape(Pt(0f, 0f), Pt(90f, 0f))) + (0..3).map { i -> LineShape(Pt(i * 30f, 0f), Pt(i * 30f, 40f), arrowEnd = true) })
+    assertEquals(com.tali.notes.model.LoadShape(Pt(0f, 0f), Pt(90f, 0f), 40f, 3), old.upgraded())
+  }
+
+  @Test
   fun dimensionIsALineWithMarks() {
     val g = ShapeKind.DIMENSION.create(Pt(0f, 0f), Pt(100f, 0f))
     assertTrue(g is LineShape && g.ticks && g.arrowStart && g.arrowEnd)

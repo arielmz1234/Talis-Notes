@@ -489,7 +489,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun setSnapShapes(on: Boolean) = store.update { it.copy(snapShapes = on) }
 
   /** Changes the Shapes tool's own style (colour, thickness, line, fill). */
-  fun updateShapeStyle(change: (com.tali.notes.model.ShapeStyle) -> com.tali.notes.model.ShapeStyle) = store.update { it.copy(shapeStyle = change(it.shapeLook)) }
+  fun updateShapeStyle(change: (com.tali.notes.model.ShapeStyle) -> com.tali.notes.model.ShapeStyle) = store.update { it.copy(shapeStyle = change(it.shapeOwn)) }
+
+  /** Shapes drawn like the pen in use, or in their own style. */
+  fun setShapeFollowsPen(on: Boolean) = store.update { it.copy(shapeFollowsPen = on) }
 
   fun setFingerDraws(value: Boolean?) = store.update { it.copy(fingerDraws = value) }
 

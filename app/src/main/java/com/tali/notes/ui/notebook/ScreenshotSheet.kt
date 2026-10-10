@@ -19,9 +19,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,8 +67,14 @@ fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit, on
   var saved by remember(file) { mutableStateOf(false) }
   val maxPreview = (LocalConfiguration.current.screenHeightDp * 0.5f).dp
   DialogCard(onDone, width = 560) {
-    Text("Screenshot", style = MaterialTheme.typography.titleLarge, color = c.ink)
-    Spacer(Modifier.height(14.dp))
+    // Close sits in the corner, so the three things to do with it are centred under the picture.
+    Box(Modifier.fillMaxWidth()) {
+      Text("Screenshot", style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.align(Alignment.CenterStart))
+      IconButton(onClick = onDone, modifier = Modifier.align(Alignment.CenterEnd).size(40.dp)) {
+        Icon(Icons.Outlined.Close, "Close", tint = c.inkMuted)
+      }
+    }
+    Spacer(Modifier.height(10.dp))
     Box(
       Modifier.fillMaxWidth().heightIn(min = 120.dp, max = maxPreview).clip(RoundedCornerShape(12.dp)).background(c.sunken).border(1.dp, c.line, RoundedCornerShape(12.dp)),
       contentAlignment = Alignment.Center,
@@ -72,8 +82,7 @@ fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit, on
       image?.let { Image(it, "The screenshot", contentScale = ContentScale.Fit, modifier = Modifier.padding(6.dp)) }
     }
     Spacer(Modifier.height(18.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-      QuietButton("Close", onClick = onDone)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
       QuietButton("Copy") {
         // Onto the page (hold anywhere to paste it) and into other apps alike.
         onCopy()

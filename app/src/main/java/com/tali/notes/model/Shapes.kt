@@ -128,7 +128,9 @@ data class PolyShape(
 
   /**
    * A side's middle dot moves that side only (the opposite one stays put), making the rectangle
-   * longer or shorter one way. Within [SQUARE_SNAP] of square it snaps to an exact square.
+   * longer or shorter one way. Dragged on past the opposite side, it turns over and carries on
+   * growing that way, the dot still under the pen (like a line's end dragged past its other end).
+   * Within [SQUARE_SNAP] of square it snaps to an exact square.
    */
   private fun withSide(side: Int, p: Pt): ShapeGeometry {
     val c = Geo.centroid(points)
@@ -143,18 +145,23 @@ data class PolyShape(
     val w = r - l
     val h = b - t
     val horizontal = abs(mid.x) / w > abs(mid.y) / h
+    // The scale is signed: past the opposite side it's negative, and the rectangle turns over.
+    fun signedSize(reach: Float, was: Float, other: Float): Float {
+      val sign = if (reach < 0f) -1f else 1f
+      var size = max(abs(reach), was * MIN_SCALE)
+      if (abs(size - other) < other * SQUARE_SNAP) size = other
+      return sign * size
+    }
     val out =
       if (horizontal) {
         val anchor = if (mid.x > 0) l else r
-        var size = max(abs(target.x - anchor), w * MIN_SCALE)
-        if (abs(size - h) < h * SQUARE_SNAP) size = h
-        val sx = size / w
+        val toward = if (mid.x > 0) 1f else -1f
+        val sx = signedSize((target.x - anchor) * toward, w, h) / w
         local.map { q -> Pt(anchor + (q.x - anchor) * sx, q.y) }
       } else {
         val anchor = if (mid.y > 0) t else b
-        var size = max(abs(target.y - anchor), h * MIN_SCALE)
-        if (abs(size - w) < w * SQUARE_SNAP) size = w
-        val sy = size / h
+        val toward = if (mid.y > 0) 1f else -1f
+        val sy = signedSize((target.y - anchor) * toward, h, w) / h
         local.map { q -> Pt(q.x, anchor + (q.y - anchor) * sy) }
       }
     return copy(points = out.map { c + it.rotated(theta) })
@@ -420,6 +427,60 @@ data class TriangleShape(val a: Pt, val b: Pt, val c: Pt) : ShapeGeometry {
   }
 }
 
+/**
+ * A distributed load: a line from [a] to [b] with [count] + 1 evenly spaced arrows hanging [depth]
+ * off it (to its right going from [a] to [b], which is downward for a load drawn left to right;
+ * negative is the other side). Its end dots lengthen or shorten it, and the arrows thin out or
+ * fill in to keep their spacing, as when it's drawn; the middle dot (on the arrow tips) sets how
+ * long the arrows are.
+ */
+@Serializable
+@SerialName("load")
+data class LoadShape(val a: Pt, val b: Pt, val depth: Float, val count: Int) : ShapeGeometry {
+  private val across: Pt
+    get() = (b - a).normalized().let { Pt(-it.y, it.x) }
+
+  /** Where the arrow under [p] on the line points to. */
+  private fun tip(p: Pt) = p + across * depth
+
+  override fun paths(penSize: Float): List<List<Pt>> {
+    val out = mutableListOf(listOf(a, b))
+    for (i in 0..count) {
+      val p = a + (b - a) * (i.toFloat() / count)
+      val t = tip(p)
+      out += listOf(p, t)
+      out += arrowHead(p, t, penSize)
+    }
+    return out
+  }
+
+  // A mirror flips which side the arrows hang (their side is measured from a to b, which a mirror reverses).
+  override fun transformed(m: Affine): ShapeGeometry {
+    val s = m.scaleFactor()
+    return copy(a = m.apply(a), b = m.apply(b), depth = depth * s * if (m.mirrors) -1f else 1f)
+  }
+
+  override fun handles() = listOf(a, b, tip(a + (b - a) * 0.5f))
+
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    if (index == 2) {
+      // The arrows' length (dragged across the line, they hang the other way).
+      val d = (p - (a + (b - a) * 0.5f)).dot(across)
+      return copy(depth = if (abs(d) < 6f) (if (d < 0f) -6f else 6f) else d)
+    }
+    val moved = if (index == 0) copy(a = p) else copy(b = p)
+    if (moved.a.dist(moved.b) < 8f) return this
+    // The arrows keep hanging on the same side as the line turns, and keep their spacing.
+    val keepSide = if (moved.across.dot(across) < 0f) -1f else 1f
+    return moved.copy(depth = depth * keepSide, count = loadArrows(moved.a.dist(moved.b)))
+  }
+
+  companion object {
+    /** How many gaps between arrows a load [length] long gets (about one every 28 units, as when drawn). */
+    fun loadArrows(length: Float) = (length / 28f).toInt().coerceIn(2, 40)
+  }
+}
+
 /** Several parts that move and scale together, used for engineering symbols. */
 @Serializable
 @SerialName("group")
@@ -655,14 +716,8 @@ private fun fixedSupport(a: Pt, b: Pt): ShapeGeometry {
   return GroupShape(listOf(LineShape(a, b)) + hatch(a, b, 7, offset))
 }
 
-private fun distributedLoad(l: Float, r: Float, t: Float, b: Float): ShapeGeometry {
-  val count = ((r - l) / 28f).toInt().coerceIn(3, 12)
-  val arrows = List(count + 1) { i ->
-    val x = l + (r - l) * i / count
-    LineShape(Pt(x, t), Pt(x, b), arrowEnd = true)
-  }
-  return GroupShape(listOf(LineShape(Pt(l, t), Pt(r, t))) + arrows)
-}
+private fun distributedLoad(l: Float, r: Float, t: Float, b: Float): ShapeGeometry =
+  LoadShape(Pt(l, t), Pt(r, t), b - t, LoadShape.loadArrows(r - l))
 
 /** A dimension line is a line like any other (end dots, angle snapping, its length shown), with arrows and end marks. */
 private fun dimension(p0: Pt, p1: Pt): ShapeGeometry = LineShape(p0, p1, arrowStart = true, arrowEnd = true, ticks = true)
@@ -675,12 +730,34 @@ private const val TICK = 8f
  * and its two end marks) becomes one dimension line, so it can be lengthened and turned like a line.
  */
 fun ShapeGeometry.upgraded(): ShapeGeometry {
+  if (this is GroupShape) loadOf(this)?.let { return it }
   if (this !is GroupShape || parts.size != 3 || parts.any { it !is LineShape }) return this
   val main = parts[0] as LineShape
   if (!main.arrowStart || !main.arrowEnd) return this
   val ends = parts.drop(1).map { it as LineShape }
   val marksEnds = ends.all { t -> t.a.mid(t.b).dist(main.a) < 0.5f || t.a.mid(t.b).dist(main.b) < 0.5f }
   return if (marksEnds) main.copy(ticks = true) else this
+}
+
+/**
+ * A distributed load saved as a group (a plain line, then arrows evenly spaced along it, all the
+ * same length and starting on it) as a [LoadShape], so its ends can be dragged; null if [g] isn't one.
+ */
+private fun loadOf(g: GroupShape): LoadShape? {
+  if (g.parts.size < 4) return null
+  val line = g.parts[0] as? LineShape ?: return null
+  if (line.arrowStart || line.arrowEnd || line.ticks || line.length < 1f) return null
+  val arrows = g.parts.drop(1).map { it as? LineShape ?: return null }
+  if (arrows.any { !it.arrowEnd || it.arrowStart }) return null
+  val count = arrows.size - 1
+  val tol = max(0.5f, line.length * 0.01f)
+  val across = (line.b - line.a).normalized().let { Pt(-it.y, it.x) }
+  val depth = (arrows[0].b - arrows[0].a).dot(across)
+  val fits = arrows.withIndex().all { (i, arrow) ->
+    val on = line.a + (line.b - line.a) * (i.toFloat() / count)
+    arrow.a.dist(on) < tol && arrow.b.dist(on + across * depth) < tol
+  }
+  return if (fits && abs(depth) > 1f) LoadShape(line.a, line.b, depth, count) else null
 }
 
 private fun Pt.mid(o: Pt) = Pt((x + o.x) / 2f, (y + o.y) / 2f)
@@ -708,6 +785,12 @@ fun ShapeGeometry.snapFeatures(): com.tali.notes.geometry.SnapFeatures {
       is EllipseShape -> listOf(center, point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat())) to segs(paths(1f).first())
       is ArcShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
       is SectorShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
+      // A distributed load: its line, and the line along its arrow tips (which rest on the beam).
+      is LoadShape -> {
+        val ta = a + (handles()[2] - mid(a, b))
+        val tb = b + (handles()[2] - mid(a, b))
+        listOf(a, b, mid(a, b), ta, tb, handles()[2]) to listOf(a to b, ta to tb, a to ta, b to tb)
+      }
       // Engineering symbols: their outlines, ground lines and arrows snap; the hatching under a
       // support (five or more short plain lines) doesn't, or its ends would catch on everything.
       is GroupShape -> {

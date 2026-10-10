@@ -501,17 +501,20 @@ private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
   val look = settings.shapeLook
   val outline = look.color or (0xFF shl 24)
   val fill = look.fill?.let { it or (0xFF shl 24) }
+  // Following the pen, its colour, size and line come from the pen in use: those choices rest.
+  val own = !settings.shapeFollowsPen
+  val resting = Modifier.graphicsLayer { alpha = if (own) 1f else 0.4f }
   Spacer(Modifier.height(12.dp))
   Row(verticalAlignment = Alignment.Top) {
     // Left: how it looks, and its colours.
     Column(Modifier.weight(1f)) {
-      ShapeStylePreview(look, Modifier.fillMaxWidth().height(104.dp))
+      ShapeStylePreview(look, Modifier.fillMaxWidth().height(88.dp))
       Spacer(Modifier.height(12.dp))
       SectionLabel("Outline colour")
       Spacer(Modifier.height(6.dp))
       val ring = rememberSlidingSelection()
-      FlowRow(Modifier.colorRing(ring, Color(outline)), horizontalArrangement = Arrangement.spacedBy(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        settings.savedColors.forEach { col -> ColorDot(Color(col), selected = (col or (0xFF shl 24)) == outline, size = 26.dp, selection = ring) { vm.updateShapeStyle { it.copy(color = col or (0xFF shl 24)) } } }
+      FlowRow(resting.colorRing(ring, Color(outline)), horizontalArrangement = Arrangement.spacedBy(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        settings.savedColors.forEach { col -> ColorDot(Color(col), selected = (col or (0xFF shl 24)) == outline, size = 26.dp, selection = ring) { if (own) vm.updateShapeStyle { it.copy(color = col or (0xFF shl 24)) } } }
       }
       Spacer(Modifier.height(10.dp))
       SectionLabel("Fill")
@@ -525,15 +528,21 @@ private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
     Spacer(Modifier.width(20.dp))
     // Right: thickness, opacities, line style, then the switches.
     Column(Modifier.weight(1.15f)) {
+      // Its own style stays the same whatever pen she picks; or it can follow the pen in use.
       Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Style", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
+        Segmented(listOf(false, true), settings.shapeFollowsPen, { if (it) "Like the pen" else "Its own" }, vm::setShapeFollowsPen, Modifier.weight(1f))
+      }
+      Spacer(Modifier.height(6.dp))
+      Row(resting, verticalAlignment = Alignment.CenterVertically) {
         Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
-        StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, 0.5f, { v -> vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
+        StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, 0.5f, { v -> if (own) vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
         Text(String.format(java.util.Locale.US, "%.1f", look.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
       }
       OpacitySlider("Opacity", look.opacity, enabled = true) { v -> vm.updateShapeStyle { it.copy(opacity = v) } }
       OpacitySlider("Fill opacity", look.fillOpacity, enabled = fill != null) { v -> vm.updateShapeStyle { it.copy(fillOpacity = v) } }
       Spacer(Modifier.height(4.dp))
-      CompactLineStylePicker(look.line, { l -> vm.updateShapeStyle { it.copy(line = l) } }, Modifier.fillMaxWidth())
+      CompactLineStylePicker(look.line, { l -> if (own) vm.updateShapeStyle { it.copy(line = l) } }, resting.fillMaxWidth())
       Spacer(Modifier.height(8.dp))
       ToggleRow("Snap to other shapes", settings.snapShapes, vm::setSnapShapes, detail = "Ends and edges lock on; shapes line up.")
       ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a pen stroke.")
