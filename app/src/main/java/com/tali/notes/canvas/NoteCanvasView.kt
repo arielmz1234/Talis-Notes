@@ -541,7 +541,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val strokes = finished.filterKeys { strokePens.containsKey(it) }
     if (strokes.isEmpty()) {
       inProgress.removeFinishedStrokes(finished.keys)
-      if (strokePens.isEmpty()) resetInkLayer()
+      finished.keys.forEach { shadows.remove(it) }
       return
     }
     val d = doc
@@ -550,9 +550,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val added =
           strokes.flatMap { (id, s) ->
             val pen = strokePens.remove(id)!!
-            // On dark paper the live stroke used the light version of the colour; store the real one.
-            val real = strokeColors.remove(id)?.let { Brushes.inkColor(pen, it) }
-            val stroke = if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s
+            val stroke = realColoured(id, pen, s)
+            strokeColors.remove(id)
             // Kept whole: on A4 pages the part past its page is only hidden (ItemRenderer.clipFor).
             listOf(InkItem(d.newId(), d.nextZ(), pen, stroke))
           }
@@ -561,81 +560,112 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         com.tali.notes.CrashLog.recovered(context, t)
       }
     }
-    // Hand-off in the same frame the tiles pick the strokes up, so there's no flicker.
+    // Hand-off in the same frame the tiles pick the strokes up, so there's no flicker (and our own
+    // copies of them, if the page moved meanwhile, go in that same frame).
     inProgress.removeFinishedStrokes(strokes.keys)
-    // Nothing left waiting: Ink's layer goes back in place (the tiles draw the strokes now, in the same frame).
-    if (strokePens.isEmpty()) resetInkLayer()
+    finished.keys.forEach { shadows.remove(it) }
+    invalidate()
+  }
+
+  /** On dark paper the live stroke used the light version of the colour: the stroke in its real one. */
+  private fun realColoured(id: InProgressStrokeId, pen: PenType, s: Stroke): Stroke {
+    val real = strokeColors[id]?.let { Brushes.inkColor(pen, it) }
+    return if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s
+  }
+
+  /**
+   * A stroke on Ink's layer (being written, or finished and waiting for Ink's hand-off), with its
+   * inputs recorded exactly as Ink takes them (see Ink's StrokeInputPool), so it can be drawn on
+   * the page here, the same, when the page moves before Ink hands it over ([shadowWaitingInk]).
+   */
+  private class InkShadow(val pen: PenType, val brush: androidx.ink.brush.Brush, val start: Long, val unitCm: Float, val toWorld: android.graphics.Matrix) {
+    val inputs = androidx.ink.strokes.MutableStrokeInputBatch()
+    var finished = false
+
+    /** Drawn on the page by us instead of by Ink's layer (the page moved before the hand-off). */
+    var item: InkItem? = null
+    private val pt = FloatArray(2)
+
+    /** Sample [h] of [e] ([MotionEvent.getHistorySize] for the latest one). */
+    fun add(e: MotionEvent, idx: Int, h: Int) {
+      if (idx < 0) return
+      val latest = h >= e.historySize
+      fun axis(a: Int) = if (latest) e.getAxisValue(a, idx) else e.getHistoricalAxisValue(a, idx, h)
+      pt[0] = axis(MotionEvent.AXIS_X)
+      pt[1] = axis(MotionEvent.AXIS_Y)
+      toWorld.mapPoints(pt)
+      val time = (if (latest) e.eventTime else e.getHistoricalEventTime(h)) - start
+      val type = e.getToolType(idx)
+      val stylus = type == MotionEvent.TOOL_TYPE_STYLUS
+      val tool = when (type) {
+        MotionEvent.TOOL_TYPE_MOUSE -> androidx.ink.brush.InputToolType.MOUSE
+        MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER -> androidx.ink.brush.InputToolType.STYLUS
+        else -> androidx.ink.brush.InputToolType.TOUCH
+      }
+      // Ink drops samples it finds invalid (repeated, or out of order) the same way.
+      runCatching {
+        inputs.add(
+          tool,
+          pt[0],
+          pt[1],
+          time,
+          unitCm,
+          if (stylus) axis(MotionEvent.AXIS_PRESSURE).coerceIn(0f, 1f) else androidx.ink.strokes.StrokeInput.NO_PRESSURE,
+          if (stylus) axis(MotionEvent.AXIS_TILT).coerceIn(0f, (PI / 2).toFloat()) else androidx.ink.strokes.StrokeInput.NO_TILT,
+          if (stylus) (axis(MotionEvent.AXIS_ORIENTATION) + 2.5f * PI.toFloat()).mod(2f * PI.toFloat()) else androidx.ink.strokes.StrokeInput.NO_ORIENTATION,
+        )
+      }
+    }
+  }
+
+  private val shadows = HashMap<InProgressStrokeId, InkShadow>()
+
+  private val smoother = com.tali.notes.ink.PenSmoother()
+
+  /**
+   * Finished strokes Ink hasn't handed over yet are drawn by its own layer, fixed to the screen,
+   * and Ink hands strokes over at most every half second. If the page moved meanwhile (a quick
+   * scroll or zoom right after writing), the last strokes slid along with the screen and then
+   * jumped into place.
+   *
+   * Tried before: taking them early (`getFinishedStrokes` only holds strokes already handed over;
+   * `flush()` crashed Ink's drawing layer on her tablet), and moving Ink's layer with the page
+   * (it held for a plain scroll, not on her tablet in use). Now, as the page starts to move, Ink's
+   * layer is masked out (its waiting strokes are cleared from it) and those strokes are drawn on
+   * the page here from the same inputs, until Ink hands them over.
+   */
+  private fun shadowWaitingInk() {
+    if (mode == Mode.INK) return
+    val waiting = shadows.entries.filter { (_, s) -> s.finished && s.item == null }
+    if (waiting.isEmpty()) return
+    // All or nothing: a stroke that can't be drawn here is left to Ink's layer.
+    val items = waiting.map { (id, s) ->
+      val stroke = runCatching { androidx.ink.strokes.Stroke(s.brush, s.inputs) }.getOrNull() ?: return
+      InkItem("waiting-ink-$id", 0L, s.pen, realColoured(id, s.pen, stroke))
+    }
+    waiting.forEachIndexed { i, (_, s) -> s.item = items[i] }
+    hideInkLayer()
     invalidate()
   }
 
   /**
-   * Finished strokes Ink hasn't handed over yet are still drawn by its own layer, fixed to the
-   * screen: if the page moves first (a quick scroll or zoom right after writing), the last stroke
-   * slid along with the screen and then jumped back. They're taken onto the page now instead.
+   * Clears Ink's layer: a mask over all of it, which Ink applies the next time it draws (it
+   * clears the masked area on every draw); a stroke started and cancelled at once, off screen
+   * and invisible, makes it draw now. The next stroke sets its usual mask again ([startInk]).
    */
-  private fun followWaitingInk() {
-    // Two earlier tries took the strokes out of Ink early (getFinishedStrokes, then flush()); the
-    // stroke still slid because Ink finishes it on its own thread a moment after the pen lifts,
-    // and flush() crashed Ink's drawing layer on her tablet. Now nothing is taken from Ink: its
-    // layer is moved and scaled with the page until it hands the strokes over by itself.
-    val m = inkLayerMatrix() ?: return
-    val v = FloatArray(9).also(m::getValues)
-    inProgress.pivotX = 0f
-    inProgress.pivotY = 0f
-    inProgress.scaleX = v[android.graphics.Matrix.MSCALE_X]
-    inProgress.scaleY = v[android.graphics.Matrix.MSCALE_Y]
-    inProgress.translationX = v[android.graphics.Matrix.MTRANS_X]
-    inProgress.translationY = v[android.graphics.Matrix.MTRANS_Y]
-  }
-
-  /** Ink's layer back where it belongs, once nothing waits on it any more. */
-  private fun resetInkLayer() {
-    inkAnchor = null
-    if (inProgress.translationX == 0f && inProgress.translationY == 0f && inProgress.scaleX == 1f && inProgress.scaleY == 1f) return
-    inProgress.translationX = 0f
-    inProgress.translationY = 0f
-    inProgress.scaleX = 1f
-    inProgress.scaleY = 1f
-  }
-
-  /**
-   * Ink's layer → world while strokes are on it (being written, or finished and waiting for Ink's
-   * hand-off), or null when it's empty. It's where the screen was when the first of them started:
-   * Ink draws them fixed to its layer, and the layer is moved with the page ([followWaitingInk]).
-   */
-  private var inkAnchor: android.graphics.Matrix? = null
-
-  /** Ink's layer → screen, or null while it sits in place. */
-  private fun inkLayerMatrix(): android.graphics.Matrix? {
-    val l = inkAnchor ?: return null
-    val m = android.graphics.Matrix(l).apply { postConcat(camera.worldToScreen) }
-    return if (m.isIdentity) null else m
-  }
-
-  /**
-   * [e] in the coordinates of Ink's layer. A new stroke started while earlier ones still wait (she
-   * scrolled and wrote again quickly) goes on the same moved layer, so nothing has to jump: the
-   * first version put the layer back for the new stroke, and the waiting ones sat in their old
-   * screen places until Ink handed them over, after the new stroke ended.
-   */
-  private fun forInk(e: MotionEvent): MotionEvent {
-    val m = inkLayerMatrix() ?: return e
-    val inv = android.graphics.Matrix().also { m.invert(it) }
-    return MotionEvent.obtain(e).also { it.transform(inv) }
-  }
-
-  private inline fun withInkEvent(e: MotionEvent, use: (MotionEvent) -> Unit) {
-    val ev = forInk(e)
-    try {
-      use(ev)
-    } finally {
-      if (ev !== e) ev.recycle()
+  private fun hideInkLayer() {
+    inProgress.maskPath = android.graphics.Path().apply { addRect(-1e5f, -1e5f, 1e5f, 1e5f, android.graphics.Path.Direction.CW) }
+    runCatching {
+      val id = inProgress.startStroke(androidx.ink.strokes.StrokeInput.create(-2000f, -2000f, 0L, androidx.ink.brush.InputToolType.STYLUS), clearBrush)
+      inProgress.cancelStroke(id, null)
     }
   }
 
-  /** A stroke went away without being kept: if nothing else is on Ink's layer, it goes back in place. */
+  private val clearBrush by lazy { Brushes.brush(PenType.FINELINER, 0x00000000, 1f, com.tali.notes.model.LineStyle.SOLID, false) }
+
+  /** Strokes that went away without being kept (cancelled) are forgotten here too. */
   private fun inkLayerIdle() {
-    if (strokePens.isEmpty()) resetInkLayer()
+    shadows.keys.retainAll(strokePens.keys)
   }
 
   fun viewport(): Viewport = camera.viewport()
@@ -781,6 +811,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     }
     restylePreview?.let { itemRenderer.drawAll(canvas, it, camera.worldToScreen) }
+    // Strokes still waiting for Ink's hand-off when the page moved, drawn here in Ink's place.
+    if (shadows.isNotEmpty()) shadows.values.mapNotNull { it.item }.takeIf { it.isNotEmpty() }?.let { itemRenderer.drawAll(canvas, it, camera.worldToScreen) }
     if (mode == Mode.LIVE_SHAPE) updateLiveShape()
     liveShape?.let { drawShapePreview(canvas, it) }
     straightPreview?.let { preview ->
@@ -1668,26 +1700,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     requestUnbufferedDispatch(e)
     val slot = settings.activeSlot
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
-    predictor.record(e)
-    // The first stroke on an empty layer fixes where the layer is; later ones join it, wherever
-    // the page has moved since (see [forInk]).
-    if (inkAnchor == null) inkAnchor = android.graphics.Matrix(camera.screenToWorld)
-    val anchor = android.graphics.Matrix(inkAnchor)
-    // Ink running off the page is hidden as it's drawn, so what she sees is what's kept (in the
-    // layer's own coordinates).
-    val toLayer = android.graphics.Matrix(camera.worldToScreen).also { m -> inkLayerMatrix()?.let { layer -> android.graphics.Matrix().also { inv -> layer.invert(inv); m.postConcat(inv) } } }
+    // The pen's path is smoothed before Ink sees it (see PenSmoother); the predictor follows the smoothed path too.
+    smoother.reset()
+    val se = smoother.smooth(e, idx, MotionEvent.ACTION_DOWN)
+    predictor.record(se)
+    // Ink running off the page is hidden as it's drawn, so what she sees is what's kept.
     inProgress.maskPath = inkAreas(slot.size / 2f, pageAt(p))?.let { areas ->
       android.graphics.Path().apply {
-        addRect(-width.toFloat(), -height.toFloat(), width * 2f, height * 2f, android.graphics.Path.Direction.CW)
-        op(areaPath(areas, toLayer), android.graphics.Path.Op.DIFFERENCE)
+        addRect(0f, 0f, width.toFloat(), height.toFloat(), android.graphics.Path.Direction.CW)
+        op(areaPath(areas, camera.worldToScreen), android.graphics.Path.Op.DIFFERENCE)
       }
     }
-    val ev = forInk(e)
-    val id = try {
-      inProgress.startStroke(ev, e.getPointerId(idx), brush, anchor)
-    } finally {
-      if (ev !== e) ev.recycle()
-    }
+    val id = inProgress.startStroke(se, e.getPointerId(idx), brush, camera.screenToWorld)
+    // Ink's stroke unit: how far the pen moves (cm) for one world unit, as Ink works it out.
+    val unitCm = camera.scale * 2.54f / resources.displayMetrics.xdpi
+    shadows[id] = InkShadow(slot.type, brush, e.eventTime, unitCm, android.graphics.Matrix(camera.screenToWorld)).also { it.add(se, 0, se.historySize) }
+    se.recycle()
     strokeId = id
     strokePens[id] = slot.type
     if (darkPaper) strokeColors[id] = slot.color
@@ -1709,19 +1737,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (hypot(e.getX(idx) - pasteHoldAt.x, e.getY(idx) - pasteHoldAt.y) > touchSlop) removeCallbacks(pasteHold)
     when (mode) {
       Mode.INK -> {
-        predictor.record(e)
+        val se = smoother.smooth(e, idx, MotionEvent.ACTION_MOVE)
+        predictor.record(se)
         val prediction = predictor.predict()
         strokeId?.let { sid ->
-          withInkEvent(e) { ev ->
-            val predicted = prediction?.let { forInk(it) }
-            try {
-              inProgress.addToStroke(ev, drawPointer, sid, predicted)
-            } finally {
-              if (predicted != null && predicted !== prediction) predicted.recycle()
-            }
-          }
+          inProgress.addToStroke(se, drawPointer, sid, prediction)
+          shadows[sid]?.let { s -> for (h in 0..se.historySize) s.add(se, 0, h) }
         }
         prediction?.recycle()
+        se.recycle()
         for (h in 0 until e.historySize) addInkPoint(camera.toWorld(e.getHistoricalX(idx, h), e.getHistoricalY(idx, h)))
         addInkPoint(world(e, idx))
       }
@@ -1993,7 +2017,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (text != null) {
           // A quick tap on a text box opens it for typing.
           strokeId?.let {
-            withInkEvent(e) { ev -> inProgress.cancelStroke(it, ev) }
+            inProgress.cancelStroke(it, e)
             strokePens.remove(it)
             strokeColors.remove(it)
           }
@@ -2003,7 +2027,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         } else if (tapped != null) {
           // A quick tap on a shape's outline picks the shape up to change it, rather than leaving a dot.
           strokeId?.let {
-            withInkEvent(e) { ev -> inProgress.cancelStroke(it, ev) }
+            inProgress.cancelStroke(it, e)
             strokePens.remove(it)
             strokeColors.remove(it)
           }
@@ -2011,7 +2035,20 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           inkLayerIdle()
           selectShape(tapped)
         } else {
-          strokeId?.let { sid -> withInkEvent(e) { ev -> inProgress.finishStroke(ev, drawPointer, sid) } }
+          strokeId?.let { sid ->
+            if (idx >= 0) {
+              val se = smoother.smooth(e, idx, MotionEvent.ACTION_UP)
+              inProgress.finishStroke(se, drawPointer, sid)
+              shadows[sid]?.apply {
+                add(se, 0, se.historySize)
+                finished = true
+              }
+              se.recycle()
+            } else {
+              inProgress.finishStroke(e, drawPointer, sid)
+              shadows[sid]?.finished = true
+            }
+          }
           strokeId = null
         }
       }
@@ -3578,7 +3615,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun fingerDown(e: MotionEvent) {
-    // Fingers usually move the page next: ask Ink to hand the last strokes over soon (see [followWaitingInk]).
+    // Fingers usually move the page next: ask Ink to hand the last strokes over soon (see [shadowWaitingInk]).
     if (strokePens.isNotEmpty()) runCatching { inProgress.requestHandoff() }
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
@@ -3895,7 +3932,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun afterCameraMove() {
-    followWaitingInk()
+    shadowWaitingInk()
     refreshSnapTargets()
     clampCamera()
     host.onCameraMoved()
@@ -4232,10 +4269,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** How long the captured area flashes. */
     private const val SHOT_FLASH_MS = 260L
     /** How close (dp on screen) a shape comes to another before it locks on. */
-    private const val SNAP_DP = 10f
+    private const val SNAP_DP = 14f
 
-    /** How close (dp on screen) things line up from at a distance: softer than touching. */
-    private const val ALIGN_DP = 5f
+    /** How close (dp on screen) sides line up from at a distance: softer than touching (middles lining up use [SNAP_DP]). */
+    private const val ALIGN_DP = 8f
     /** At most this many things around the view are considered for snapping. */
     private const val MAX_SNAP_TARGETS = 250
     /** A shape smaller than this on screen (dp) shows no dots: zoomed in, they come back. */

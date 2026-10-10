@@ -31,13 +31,13 @@ object Brushes {
   private const val SHAPE_EPSILON = 0.03f
 
   /**
-   * Handwriting is smoothed over a slightly longer moment than Ink's default (20 ms) and filled in
-   * more finely between the pen's samples, which takes the small wobbles and kinks out of quick
-   * writing without changing its shape. Shapes keep the default: a longer window would round
-   * their corners.
+   * Handwriting is filled in more finely between the pen's samples (360 a second, as the S Pen
+   * sends them) over Ink's usual 20 ms window; the jitter that showed as little kinks is taken out
+   * before Ink sees the pen (PenSmoother), with less lag than the 32 ms window tried before.
+   * Shapes keep the default model: a longer window would round their corners.
    */
   @OptIn(ExperimentalInkCustomBrushApi::class)
-  private val WRITING_MODEL: BrushFamily.InputModel = BrushFamily.SlidingWindowModel(32L, 360)
+  private val WRITING_MODEL: BrushFamily.InputModel = BrushFamily.SlidingWindowModel(20L, 360)
 
   private val writingFamilies = java.util.concurrent.ConcurrentHashMap<Triple<PenType, LineStyle, Boolean>, BrushFamily>()
 

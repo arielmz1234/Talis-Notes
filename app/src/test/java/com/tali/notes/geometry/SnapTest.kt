@@ -134,6 +134,18 @@ class SnapTest {
   }
 
   @Test
+  fun aShapeInsideAnotherLocksFirmlyOnItsMiddle() {
+    val s = SnapSession(contact = 10f, align = 5f)
+    val outer = rect(0f, 0f, 200f, 100f).snapFeatures()
+    // A small box 8 right and 7 down of the middle: further than sides catch, but middles hold firmly.
+    val inner = rect(78f, 37f, 138f, 77f).snapFeatures()
+    val r = Snap.move(inner, listOf(outer), s)
+    assertEquals(-8f, r.offset.x, 0.01f)
+    assertEquals(-7f, r.offset.y, 0.01f)
+    assertEquals(2, r.guides.count { it is SnapGuide.Align })
+  }
+
+  @Test
   fun pulledFreeOfALockItLetsGoUntilSheMovesAway() {
     val s = SnapSession(contact = 10f, align = 5f)
     val corner = listOf(rect(100f, 100f, 200f, 160f).snapFeatures())

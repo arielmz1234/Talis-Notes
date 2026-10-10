@@ -45,9 +45,9 @@ class SnapResult(val offset: Pt, val guides: List<SnapGuide>) {
 /**
  * One drag's snapping: how far things catch, and what she has pulled free of.
  *
- * Touching (an end or corner onto another shape's end, corner or edge) catches from [contact]
- * away and holds firmly; lining up with something at a distance is softer, catching only from
- * [align]. When she pulls something out of a lock, that lock lets go for the rest of the drag
+ * Touching (an end or corner onto another shape's end, corner or edge) and middles lining up (a
+ * shape centred on another, or inside it) catch from [contact] away and hold firmly; sides lining
+ * up with something at a distance are softer, catching only from [align]. When she pulls something out of a lock, that lock lets go for the rest of the drag
  * (she wanted it near, not on), until she moves well away from it ([REARM] times [contact]); after
  * that it catches again, so coming back to it on purpose still works.
  *
@@ -85,9 +85,9 @@ class SnapSession(contact: Float, align: Float = contact) {
     used.clear()
   }
 
-  /** Whether lock [key], [dist] away, catches (a touch, [contact], or lining up). */
-  fun catches(key: Long, dist: Float, touch: Boolean): Boolean {
-    val tol = if (touch) contact else align
+  /** Whether lock [key], [dist] away, catches: from [contact] when [firm] (a touch, or middles lining up), else from [align]. */
+  fun catches(key: Long, dist: Float, firm: Boolean): Boolean {
+    val tol = if (firm) contact else align
     val before = seen[key]
     if (before == null || dist < before) {
       seen[key] = dist
@@ -139,6 +139,9 @@ object Snap {
   /** A touch beats a lining-up at the same distance; an end on an end beats an end on an edge. */
   private const val TOUCH_BIAS = 0.75f
   private const val POINT_BIAS = 0.5f
+
+  /** Middles lining up (a shape centred on another, or inside it) hold firmly and win over a side at the same distance. */
+  private const val MIDDLE_BIAS = 0.8f
 
   // What kind of lock a key names.
   private const val K_ALIGN_X = 1
@@ -257,13 +260,15 @@ object Snap {
         val tx = if (moving.middleOnly) floatArrayOf(tb.center.x) else floatArrayOf(tb.left, tb.center.x, tb.right)
         for (mi in mx.indices) for (vi in tx.indices) {
           val d = tx[vi] - mx[mi]
-          if (abs(d) < reach && s.catches(key(K_ALIGN_X, ti, mi, vi), abs(d), false)) bx.offer(abs(d), d, SnapGuide.Align(true, tx[vi], min(mb.top, tb.top), max(mb.bottom, tb.bottom)), key(K_ALIGN_X, ti, mi, vi))
+          val middle = mx.size == 1 || (mi == 1 && vi == 1)
+          if (abs(d) < reach && s.catches(key(K_ALIGN_X, ti, mi, vi), abs(d), middle)) bx.offer(abs(d) * if (middle) MIDDLE_BIAS else 1f, d, SnapGuide.Align(true, tx[vi], min(mb.top, tb.top), max(mb.bottom, tb.bottom)), key(K_ALIGN_X, ti, mi, vi))
         }
         val my = if (moving.middleOnly) floatArrayOf(mb.center.y) else floatArrayOf(mb.top, mb.center.y, mb.bottom)
         val ty = if (moving.middleOnly) floatArrayOf(tb.center.y) else floatArrayOf(tb.top, tb.center.y, tb.bottom)
         for (mi in my.indices) for (vi in ty.indices) {
           val d = ty[vi] - my[mi]
-          if (abs(d) < reach && s.catches(key(K_ALIGN_Y, ti, mi, vi), abs(d), false)) by.offer(abs(d), d, SnapGuide.Align(false, ty[vi], min(mb.left, tb.left), max(mb.right, tb.right)), key(K_ALIGN_Y, ti, mi, vi))
+          val middle = my.size == 1 || (mi == 1 && vi == 1)
+          if (abs(d) < reach && s.catches(key(K_ALIGN_Y, ti, mi, vi), abs(d), middle)) by.offer(abs(d) * if (middle) MIDDLE_BIAS else 1f, d, SnapGuide.Align(false, ty[vi], min(mb.left, tb.left), max(mb.right, tb.right)), key(K_ALIGN_Y, ti, mi, vi))
         }
       }
       // Touching only matters for things within reach.
@@ -323,14 +328,14 @@ object Snap {
           if (abs(base - anchor.x) < lever) continue
           val err = abs(xs[vi] - edge)
           val kk = key(K_SCALE_X, ti, vi, ei)
-          if (err < s.reach && s.catches(kk, err, false) && err < bestErr) { bestErr = err; bestS = (xs[vi] - anchor.x) / (base - anchor.x); bestKey = kk }
+          if (err < s.reach && s.catches(kk, err, vi == 1 && ei == 1) && err < bestErr) { bestErr = err; bestS = (xs[vi] - anchor.x) / (base - anchor.x); bestKey = kk }
         }
         for ((ei, pair) in listOf(now.bottom to box.bottom, now.center.y to box.center.y).withIndex()) {
           val (edge, base) = pair
           if (abs(base - anchor.y) < lever) continue
           val err = abs(ys[vi] - edge)
           val kk = key(K_SCALE_Y, ti, vi, ei)
-          if (err < s.reach && s.catches(kk, err, false) && err < bestErr) { bestErr = err; bestS = (ys[vi] - anchor.y) / (base - anchor.y); bestKey = kk }
+          if (err < s.reach && s.catches(kk, err, vi == 1 && ei == 1) && err < bestErr) { bestErr = err; bestS = (ys[vi] - anchor.y) / (base - anchor.y); bestKey = kk }
         }
       }
     }
@@ -390,12 +395,12 @@ object Snap {
         floatArrayOf(tb.left, tb.center.x, tb.right).forEachIndexed { vi, v ->
           val d = v - p.x
           val k = key(K_ALIGN_X, ti, vi)
-          if (abs(d) < reach && s.catches(k, abs(d), false)) bx.offer(abs(d), d, SnapGuide.Align(true, v, min(p.y, tb.top), max(p.y, tb.bottom)), k)
+          if (abs(d) < reach && s.catches(k, abs(d), vi == 1)) bx.offer(abs(d) * if (vi == 1) MIDDLE_BIAS else 1f, d, SnapGuide.Align(true, v, min(p.y, tb.top), max(p.y, tb.bottom)), k)
         }
         floatArrayOf(tb.top, tb.center.y, tb.bottom).forEachIndexed { vi, v ->
           val d = v - p.y
           val k = key(K_ALIGN_Y, ti, vi)
-          if (abs(d) < reach && s.catches(k, abs(d), false)) by.offer(abs(d), d, SnapGuide.Align(false, v, min(p.x, tb.left), max(p.x, tb.right)), k)
+          if (abs(d) < reach && s.catches(k, abs(d), vi == 1)) by.offer(abs(d) * if (vi == 1) MIDDLE_BIAS else 1f, d, SnapGuide.Align(false, v, min(p.x, tb.left), max(p.x, tb.right)), k)
         }
       }
       t.points.forEachIndexed { qi, q ->
