@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Screenshot
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -181,7 +182,12 @@ fun MainToolbar(
     }
     val items: List<Pair<String, @Composable () -> Unit>> = listOf(
       "Eraser" to { ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true, selection = tools) { onTool(Tool.ERASER) } },
-      "Lasso" to { ToolButton(if (settings.lassoFree) TaliIcons.FreeSelect else TaliIcons.LassoDotted, if (settings.lassoFree) "Free-form select" else "Lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) } },
+      "Lasso" to {
+        when {
+          settings.lassoShot -> ToolButton(Icons.Outlined.Screenshot, "Screenshot lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
+          else -> ToolButton(if (settings.lassoFree) TaliIcons.FreeSelect else TaliIcons.LassoDotted, if (settings.lassoFree) "Free-form select" else "Lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
+        }
+      },
       "Fill" to { ToolButton(Icons.Outlined.FormatColorFill, "Fill", selected = tool == Tool.FILL, blue = true, selection = tools) { onTool(Tool.FILL) } },
       "Laser" to { ToolButton(TaliIcons.Laser, "Laser", selected = tool == Tool.LASER, blue = true, selection = tools) { onTool(Tool.LASER) } },
       "Shapes" to {

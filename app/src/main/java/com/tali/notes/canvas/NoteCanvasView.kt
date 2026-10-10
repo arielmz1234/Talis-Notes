@@ -66,6 +66,10 @@ import kotlin.math.min
 import kotlin.math.abs
 import kotlin.math.PI
 import com.tali.notes.geometry.Lasso
+import com.tali.notes.geometry.Snap
+import com.tali.notes.geometry.SnapFeatures
+import com.tali.notes.geometry.SnapGuide
+import com.tali.notes.model.snapFeatures
 
 /** What the canvas tells the screen around it. */
 interface CanvasHost {
@@ -93,6 +97,9 @@ interface CanvasHost {
 
   /** The S Pen button was double-pressed (+1, next starred pen) or triple-pressed (-1, back). */
   fun onPenCycle(step: Int) = Unit
+
+  /** The screenshot lasso took a picture of an area, saved as [file]. */
+  fun onScreenshot(file: java.io.File) = Unit
 
   /** A hold on the page with something copied: offer to paste it there (null takes the offer away). */
   fun onPasteOffer(offer: PasteOffer?) = Unit
@@ -528,13 +535,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
 
-  override fun onStrokesFinished(strokes: Map<InProgressStrokeId, Stroke>) {
+  override fun onStrokesFinished(finished: Map<InProgressStrokeId, Stroke>) {
+    // Only strokes not handed over yet ([handOffFinished] may have taken them already).
+    val strokes = finished.filterKeys { strokePens.containsKey(it) }
+    if (strokes.isEmpty()) {
+      inProgress.removeFinishedStrokes(finished.keys)
+      return
+    }
     val d = doc
     if (d != null) {
       try {
         val added =
           strokes.flatMap { (id, s) ->
-            val pen = strokePens.remove(id) ?: PenType.FINELINER
+            val pen = strokePens.remove(id)!!
             // On dark paper the live stroke used the light version of the colour; store the real one.
             val real = strokeColors.remove(id)?.let { Brushes.inkColor(pen, it) }
             val stroke = if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s
@@ -549,6 +562,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Hand-off in the same frame the tiles pick the strokes up, so there's no flicker.
     inProgress.removeFinishedStrokes(strokes.keys)
     invalidate()
+  }
+
+  /**
+   * Finished strokes Ink hasn't handed over yet are still drawn by its own layer, fixed to the
+   * screen: if the page moves first (a quick scroll or zoom right after writing), the last stroke
+   * slid along with the screen and then jumped back. They're taken onto the page now instead.
+   */
+  private fun handOffFinished() {
+    val done = runCatching { inProgress.getFinishedStrokes() }.getOrNull() ?: return
+    if (done.isNotEmpty()) onStrokesFinished(done)
   }
 
   fun viewport(): Viewport = camera.viewport()
@@ -704,8 +727,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     canvas.restore()
 
     drawLasso(canvas)
+    drawShotFlash(canvas)
     drawSelection(canvas)
     drawShapeHandles(canvas)
+    drawSnapGuides(canvas)
     drawMeasure(canvas)
     drawSquareHint(canvas)
     drawEraserCursor(canvas)
@@ -749,6 +774,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun drawLasso(canvas: Canvas) {
     if (mode != Mode.LASSO || lassoPoints.size < 2) return
+    // The screenshot lasso shows the rectangle it will capture around what she draws.
+    if (settings.lassoShot) Rect.around(lassoPoints)?.let { area ->
+      val r = screenRect(area, Affine.IDENTITY)
+      canvas.drawRect(r, lassoFill)
+      canvas.drawRect(r, selectionPaint)
+    }
     lassoPath.reset()
     lassoPoints.forEachIndexed { i, p ->
       val s = camera.toScreen(p)
@@ -921,7 +952,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Whether a touch at [screen] lands on the active shape's dots or on the selection (to move, resize or turn it). */
   private fun grabsEdit(screen: Pt): Boolean {
     val hit = HANDLE_HIT_DP * density
-    currentActiveShape()?.let { shape -> if (shape.geometry.handles().any { camera.toScreen(it).dist(screen) < hit }) return true }
+    currentActiveShape()?.let { shape -> if (handleAt(shape, screen) >= 0) return true }
     val sb = selectionBounds ?: return false
     val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
     if (canRotateSelection() && rotateHandle(r).dist(screen) < hit) return true
@@ -950,7 +981,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       // The shape's own dots move its corners; add the rotate handle and the resize chip.
       val r = screenRect(b, Affine.IDENTITY).apply { inset(-pad, -pad) }
       drawRotateHandle(canvas, r)
-      if (mode != Mode.HANDLE_DRAG) drawResizeChip(canvas, resizeChip(r))
+      if (mode != Mode.HANDLE_DRAG && mode != Mode.MOVE_SELECTION) drawResizeChip(canvas, resizeChip(r))
       return
     }
     if (mode == Mode.ROTATE_SELECTION) {
@@ -962,7 +993,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Snap to the pixel grid so all four dashed edges look equally crisp.
     r.set(Math.round(r.left) + 0.5f, Math.round(r.top) + 0.5f, Math.round(r.right) + 0.5f, Math.round(r.bottom) + 0.5f)
     canvas.drawRoundRect(r, 6f * density, 6f * density, selectionPaint)
-    drawResizeChip(canvas, resizeChip(r))
+    if (mode != Mode.MOVE_SELECTION) drawResizeChip(canvas, resizeChip(r))
     drawRotateHandle(canvas, r)
   }
 
@@ -1080,10 +1111,41 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun drawShapeHandles(canvas: Canvas) {
     if (isDraggingSelection()) return
     val shape = currentActiveShape() ?: return
+    // Smaller dots on a small shape, so they don't cover it; none on a tiny one (it's moved and resized whole).
+    val size = shapeScreenSize(shape)
+    if (size < TINY_SHAPE_DP * density && liveEdit == null) return
+    val r = (size * 0.12f / density).coerceIn(4.5f, 6.5f)
     shape.geometry.handles().forEach { p ->
       val s = camera.toScreen(p)
-      drawHandle(canvas, s.x, s.y, 6.5f)
+      drawHandle(canvas, s.x, s.y, r)
     }
+  }
+
+  /**
+   * How big [shape] is on screen (pixels) for sizing its dots: the length of a line or arc, the
+   * shorter side of anything else.
+   */
+  private fun shapeScreenSize(shape: ShapeItem): Float {
+    val r = screenRect(shape.bounds, Affine.IDENTITY)
+    val g = shape.geometry
+    return if (g is LineShape || g is ArcShape) max(r.width(), r.height()) else min(r.width(), r.height())
+  }
+
+  /**
+   * The dot of [shape] under [screen], or -1. The dots reach less far on a small shape (a share of
+   * its size, down to [MIN_HANDLE_HIT_DP]), and a touch on the shape that's nearer its middle than
+   * the nearest dot moves the shape instead, so a tiny box can still be picked up and carried.
+   */
+  private fun handleAt(shape: ShapeItem, screen: Pt): Int {
+    val handles = shape.geometry.handles()
+    if (handles.isEmpty() || shapeScreenSize(shape) < TINY_SHAPE_DP * density) return -1
+    val dists = handles.map { camera.toScreen(it).dist(screen) }
+    val i = dists.indices.minBy { dists[it] }
+    val reach = (shapeScreenSize(shape) * 0.3f).coerceIn(MIN_HANDLE_HIT_DP * density, HANDLE_HIT_DP * density)
+    if (dists[i] >= reach) return -1
+    val area = screenRect(shape.bounds, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
+    if (area.contains(screen.x, screen.y) && camera.toScreen(shape.bounds.center).dist(screen) < dists[i]) return -1
+    return i
   }
 
   /** The resize chip sits just off the selection's bottom-right corner, clear of a shape's own corner dot. */
@@ -1096,8 +1158,27 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
   private val resizePath = android.graphics.Path()
 
+  /** When a move or a dot drag ended: the resize chip (hidden meanwhile) fades back in from then. */
+  private var chipBackAt = 0L
+
   /** A round chip with a diagonal two-way arrow, like an enlarge icon: drag it to resize. */
   private fun drawResizeChip(canvas: Canvas, at: Pt) {
+    val d = density
+    // Hidden while the shape is carried or reshaped; it comes back quickly once she lets go.
+    val back = ((SystemClock.uptimeMillis() - chipBackAt) / CHIP_BACK_MS.toFloat()).coerceIn(0f, 1f)
+    if (back < 1f) {
+      val a = easeOut(back)
+      canvas.saveLayerAlpha(at.x - 16f * d, at.y - 16f * d, at.x + 16f * d, at.y + 16f * d, (a * 255).toInt())
+      canvas.scale(0.85f + 0.15f * a, 0.85f + 0.15f * a, at.x, at.y)
+      drawChipBody(canvas, at)
+      canvas.restore()
+      postInvalidateOnAnimation()
+      return
+    }
+    drawChipBody(canvas, at)
+  }
+
+  private fun drawChipBody(canvas: Canvas, at: Pt) {
     val d = density
     canvas.drawCircle(at.x, at.y, 13f * d, handleFill)
     canvas.drawCircle(at.x, at.y, 13f * d, handleStroke)
@@ -1328,15 +1409,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     // 1. Handles of the shape being edited win over everything else.
     currentActiveShape()?.let { shape ->
-      // The nearest dot, so on a small shape the one she aimed at wins.
       val handles = shape.geometry.handles()
-      val hit = handles.indices.filter { camera.toScreen(handles[it]).dist(screen) < HANDLE_HIT_DP * density }.minByOrNull { camera.toScreen(handles[it]).dist(screen) } ?: -1
+      val hit = handleAt(shape, screen)
       if (hit >= 0) {
         handleIndex = hit
         // Keep where on the dot she grabbed it, so the shape doesn't jump to the pen tip.
         handleGrab = handles[hit] - p
         liveEdit = shape
         tiles.hidden = setOf(shape.id)
+        snapTargets = gatherSnapTargets(setOf(shape.id))
         mode = Mode.HANDLE_DRAG
         return
       }
@@ -1365,6 +1446,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         dragStart = p
         dragTransform = Affine.IDENTITY
         tiles.hidden = selection.map { it.id }.toSet()
+        if (!nearCorner) startMoveSnap()
         mode = if (nearCorner) Mode.SCALE_SELECTION else Mode.MOVE_SELECTION
         host.onSelectionChanged(null)
         invalidate()
@@ -1390,7 +1472,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       Tool.LASSO -> startLasso(p)
       Tool.SHAPE -> {
-        shapeStart = p
+        // A new shape can start right on another one (a line from a corner or off an edge).
+        snapTargets = gatherSnapTargets(emptySet())
+        val stuck = Snap.point(p, snapTargets, snapTol())
+        shapeStart = stuck ?: p
+        shapeStartStuck = stuck != null
         shapePreview = null
         mode = Mode.SHAPE_CREATE
       }
@@ -1467,8 +1553,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         invalidate()
       }
       Mode.MOVE_SELECTION -> {
-        val p = world(e, idx)
-        dragTransform = Affine.translate(p.x - dragStart.x, p.y - dragStart.y)
+        moveSelectionTo(world(e, idx))
         dragScreen = Pt(e.getX(idx), e.getY(idx))
         if (!edgeScrolling) {
           edgeScrolling = true
@@ -1504,16 +1589,33 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.HANDLE_DRAG -> {
         val shape = liveEdit ?: return
         val base = doc?.get(shape.id) as? ShapeItem ?: return
-        var g = base.geometry.withHandle(handleIndex, world(e, idx) + handleGrab)
+        val raw = world(e, idx) + handleGrab
+        val bg = base.geometry
+        // A dot dragged onto another shape's corner or edge locks on there (a line meeting a line).
+        val stuck = if (bg is LineShape) lineEndAt(if (handleIndex == 0) bg.b else bg.a, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snapTol())
+        var g = when {
+          stuck != null && bg is TriangleShape -> when (handleIndex) {
+            0 -> bg.copy(a = stuck)
+            1 -> bg.copy(b = stuck)
+            else -> bg.copy(c = stuck)
+          }
+          stuck != null && bg is LineShape -> if (handleIndex == 0) bg.copy(a = stuck) else bg.copy(b = stuck)
+          stuck != null -> bg.withHandle(handleIndex, stuck)
+          else -> bg.withHandle(handleIndex, raw)
+        }
         // A line end being dragged snaps to the same tidy angles as a freshly drawn line.
-        if (g is LineShape) g = if (handleIndex == 1) g.copy(b = ShapeRecognizer.snappedLine(g.a, g.b).b) else g.copy(a = ShapeRecognizer.snappedLine(g.b, g.a).b)
+        if (stuck == null && g is LineShape) g = if (handleIndex == 1) g.copy(b = ShapeRecognizer.snappedLine(g.a, g.b).b) else g.copy(a = ShapeRecognizer.snappedLine(g.b, g.a).b)
+        showSnap(listOfNotNull(stuck?.let { SnapGuide.Touch(it) }))
         liveEdit = base.withGeometry(g)
         invalidate()
       }
       Mode.SHAPE_CREATE -> {
-        val p = world(e, idx)
-        if (camera.toScreen(p).dist(camera.toScreen(shapeStart)) < touchSlop) return
-        shapePreview = buildShape(shapeStart, p)
+        val raw = world(e, idx)
+        if (camera.toScreen(raw).dist(camera.toScreen(shapeStart)) < touchSlop) return
+        val line = customShape == null && (shapeKind == ShapeKind.LINE || shapeKind == ShapeKind.ARROW || shapeKind == ShapeKind.DOUBLE_ARROW || shapeKind == ShapeKind.DIMENSION)
+        val stuck = if (line) lineEndAt(shapeStart, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snapTol())
+        shapePreview = buildShape(shapeStart, stuck ?: raw, keepEnd = stuck != null)
+        showSnap(listOfNotNull(shapeStart.takeIf { shapeStartStuck }?.let { SnapGuide.Touch(it) }, stuck?.let { SnapGuide.Touch(it) }))
         invalidate()
       }
       else -> Unit
@@ -1547,7 +1649,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val g = shape.geometry
     // While still holding, a snapped line follows the pen so its length and angle can be set.
     if (g is LineShape && !g.arrowEnd) {
-      liveShape = shape.withGeometry(ShapeRecognizer.snappedLine(g.a, pen))
+      // Its end locks onto another shape's corner or edge, else it snaps to the usual angles.
+      val (end, on) = lineEndAt(g.a, pen)
+      val stuck = end.takeIf { on }
+      liveShape = shape.withGeometry(if (stuck != null) g.copy(b = stuck) else ShapeRecognizer.snappedLine(g.a, pen))
+      showSnap(listOfNotNull(g.a.takeIf { liveStartStuck }?.let { SnapGuide.Touch(it) }, stuck?.let { SnapGuide.Touch(it) }))
       invalidate()
     } else {
       // Any other shape grows or shrinks with the pen, evenly around its middle (a circle's edge
@@ -1610,7 +1716,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     val id = strokeId ?: return
     if (Geo.pathLength(strokePoints) * camera.scale < 24f * density) return
-    val geometry = ShapeRecognizer.recognize(strokePoints, settings.customShapes) ?: return
+    var geometry = ShapeRecognizer.recognize(strokePoints, settings.customShapes) ?: return
+    // A line drawn from another shape starts exactly on it.
+    snapTargets = gatherSnapTargets(emptySet())
+    liveStartStuck = false
+    val line = geometry as? LineShape
+    if (line != null && !line.arrowEnd) {
+      Snap.point(line.a, snapTargets, snapTol())?.let { a ->
+        geometry = line.copy(a = a)
+        liveStartStuck = true
+      }
+    }
     val slot = settings.activeSlot
     val pen = strokePens[id] ?: slot.type
     inProgress.cancelStroke(id, null)
@@ -1626,15 +1742,18 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
 
-  private fun buildShape(p0: Pt, p1: Pt): ShapeItem {
-    val slot = settings.shapeSlot
+  /** The shape the Shapes tool draws from [p0] to [p1]; a line keeps [p1] exactly when [keepEnd] (it snapped onto something). */
+  private fun buildShape(p0: Pt, p1: Pt, keepEnd: Boolean = false): ShapeItem {
+    // The Shapes tool has its own style (its panel), apart from the pen in use.
+    val look = settings.shapeLook
     var geometry = customShape?.fitInto(p0, p1)
       ?: shapeKind.create(p0, p1)
-    if (geometry is LineShape) {
+    if (geometry is LineShape && !keepEnd) {
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
       geometry = geometry.copy(b = snapped.b)
     }
-    return ShapeItem("preview", 0, slot.type, slot.color, slot.size, geometry, line = slot.lineStyle)
+    val shape = ShapeItem("preview", 0, PenType.FINELINER, look.color, look.size, geometry, line = look.line)
+    return if (look.fill != null && shape.closed) shape.filled(look.fill) else shape
   }
 
   private fun endDraw(e: MotionEvent) {
@@ -1687,8 +1806,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.LASSO -> finishLasso(if (idx >= 0) world(e, idx) else null)
       Mode.MOVE_SELECTION,
       Mode.SCALE_SELECTION,
-      Mode.ROTATE_SELECTION -> finishSelectionDrag()
+      Mode.ROTATE_SELECTION -> {
+        if (mode == Mode.MOVE_SELECTION) chipBackAt = SystemClock.uptimeMillis()
+        finishSelectionDrag()
+      }
       Mode.HANDLE_DRAG -> {
+        chipBackAt = SystemClock.uptimeMillis()
         val edited = liveEdit
         val original = edited?.let { d?.get(it.id) }
         if (edited != null && original != null && d != null) d.commit(Change(listOf(original), listOf(edited)))
@@ -1711,7 +1834,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (tapped != null) selectShape(tapped)
         else if (d != null) {
           val preview = shapePreview ?: buildShape(shapeStart - Pt(60f, 40f), shapeStart + Pt(60f, 40f))
-          val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry, line = preview.line)
+          val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry, fill = preview.fill, line = preview.line)
           d.commit(Change(emptyList(), listOf(shape)))
           // Picked up straight away, so it can be adjusted right after drawing.
           selectShape(shape, soft = true)
@@ -1721,12 +1844,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       else -> Unit
     }
+    endSnap()
     mode = Mode.NONE
     drawPointer = -1
     invalidate()
   }
 
   private fun abortDrawing() {
+    endSnap()
     removeCallbacks(holdRunnable)
     removeCallbacks(pasteHold)
     strokeId?.let { inProgress.cancelStroke(it, null) }
@@ -1747,6 +1872,128 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     mode = Mode.NONE
     drawPointer = -1
     invalidate()
+  }
+
+  // ---- Snapping ----
+
+  /** What's near the view that the thing being moved or drawn can snap to (gathered when it starts). */
+  private var snapTargets: List<SnapFeatures> = emptyList()
+
+  /** The selection's own snapping features where the move started, or null when it doesn't snap (just writing). */
+  private var snapMoving: SnapFeatures? = null
+  private var snapGuides: List<SnapGuide> = emptyList()
+  private var shapeStartStuck = false
+  private var liveStartStuck = false
+
+  /** How close (world units) things have to come to lock on: [SNAP_DP] on screen at any zoom. */
+  private fun snapTol() = SNAP_DP / camera.zoom
+
+  private fun featuresOf(item: CanvasItem): SnapFeatures? =
+    when (item) {
+      is ShapeItem -> item.geometry.snapFeatures()
+      is ImageItem -> if (item.pdfPage || isAreaFill(item)) null else boxFeatures(item.rect)
+      is TextItem -> boxFeatures(item.bounds)
+      else -> null
+    }
+
+  private fun boxFeatures(r: Rect): SnapFeatures {
+    val c = listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom))
+    return SnapFeatures(c + r.center, c.indices.map { c[it] to c[(it + 1) % 4] }, r)
+  }
+
+  /** Shapes, pictures and text around the view, apart from [skip]. Handwriting isn't snapped to. */
+  private fun gatherSnapTargets(skip: Set<String>): List<SnapFeatures> {
+    if (!settings.snapShapes) return emptyList()
+    val d = doc ?: return emptyList()
+    val view = camera.visibleWorld(width, height).let { it.outset(max(it.width, it.height) / 2f) }
+    return d.intersecting(view).filter { it.id !in skip && it !is InkItem }.take(MAX_SNAP_TARGETS).mapNotNull(::featuresOf)
+  }
+
+  /** A move begins: snapping is for shapes, pictures and text; plain writing moves freely. */
+  private fun startMoveSnap() {
+    val parts = selection.filter { it !is InkItem }.mapNotNull(::featuresOf)
+    if (parts.isEmpty() || !settings.snapShapes) {
+      snapMoving = null
+      return
+    }
+    val f = SnapFeatures.of(parts)
+    // A big selection just lines up by its box (checking every corner of every part would be slow).
+    snapMoving = if (f.points.size > 80 || f.segments.size > 600) SnapFeatures(emptyList(), emptyList(), f.box) else f
+    snapTargets = gatherSnapTargets(selection.map { it.id }.toSet())
+  }
+
+  /** Carries the selection so the point grabbed at [dragStart] is at [p], locking onto nearby shapes. */
+  private fun moveSelectionTo(p: Pt) {
+    var dx = p.x - dragStart.x
+    var dy = p.y - dragStart.y
+    val m = snapMoving
+    if (m != null) {
+      val r = Snap.move(m.moved(dx, dy), snapTargets, snapTol())
+      dx += r.offset.x
+      dy += r.offset.y
+      showSnap(r.guides)
+    }
+    dragTransform = Affine.translate(dx, dy)
+  }
+
+  /**
+   * Where a line's end goes, dragged to [raw] with its other end at [fixed]: onto another shape's
+   * end or corner; else, keeping its tidy angle, onto the edge it reaches; else onto the nearest
+   * edge; else free at its tidy angle. The second value says whether it locked onto something.
+   */
+  private fun lineEndAt(fixed: Pt, raw: Pt): Pair<Pt, Boolean> {
+    val tol = snapTol()
+    Snap.corner(raw, snapTargets, tol)?.let { return it to true }
+    val angled = ShapeRecognizer.snappedLine(fixed, raw).b
+    Snap.alongLine(fixed, angled, snapTargets, tol)?.let { return it to true }
+    Snap.point(raw, snapTargets, tol)?.let { return it to true }
+    return angled to false
+  }
+
+  /** Shows [guides]; a light tick when something first locks on. */
+  private fun showSnap(guides: List<SnapGuide>) {
+    if (guides.isNotEmpty() && snapGuides.isEmpty()) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+    snapGuides = guides
+  }
+
+  private fun endSnap() {
+    snapGuides = emptyList()
+    snapTargets = emptyList()
+    snapMoving = null
+    shapeStartStuck = false
+    liveStartStuck = false
+  }
+
+  private val guideLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+
+  /** Thin dashed lines where things line up, and a small ring where they touch. */
+  private fun drawSnapGuides(canvas: Canvas) {
+    if (snapGuides.isEmpty()) return
+    val d = density
+    guideLine.color = accentColor
+    for (g in snapGuides) when (g) {
+      is SnapGuide.Align -> {
+        guideLine.strokeWidth = 1.2f * d
+        guideLine.pathEffect = DashPathEffect(floatArrayOf(5f * d, 4f * d), 0f)
+        val pad = 14f * d
+        if (g.vertical) {
+          val a = camera.toScreen(Pt(g.at, g.from))
+          val b = camera.toScreen(Pt(g.at, g.to))
+          canvas.drawLine(a.x, a.y - pad, b.x, b.y + pad, guideLine)
+        } else {
+          val a = camera.toScreen(Pt(g.from, g.at))
+          val b = camera.toScreen(Pt(g.to, g.at))
+          canvas.drawLine(a.x - pad, a.y, b.x + pad, b.y, guideLine)
+        }
+      }
+      is SnapGuide.Touch -> {
+        val s = camera.toScreen(g.at)
+        guideLine.pathEffect = null
+        guideLine.strokeWidth = 2f * d
+        canvas.drawCircle(s.x, s.y, 5.5f * d, handleFill)
+        canvas.drawCircle(s.x, s.y, 5.5f * d, guideLine)
+      }
+    }
   }
 
   // ---- Straight highlighter ----
@@ -1851,10 +2098,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           camera.pan(-v.x * dt, -v.y * dt)
           afterCameraMove()
           // The item stays under the finger or pen while the page moves beneath it.
-          if (memo == null) {
-            val p = camera.toWorld(dragScreen.x, dragScreen.y)
-            dragTransform = Affine.translate(p.x - dragStart.x, p.y - dragStart.y)
-          }
+          if (memo == null) moveSelectionTo(camera.toWorld(dragScreen.x, dragScreen.y))
           invalidate()
         }
       }
@@ -2194,6 +2438,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val pts = lassoPoints.toList()
     lassoPoints.clear()
     val lengthPx = Geo.pathLength(pts) * camera.scale
+    if (settings.lassoShot) {
+      if (lengthPx >= 12f * density) takeScreenshot(pts)
+      return
+    }
     if (lengthPx < 12f * density) {
       // A tap with the lasso picks up whatever is under it.
       hitTest(end ?: pts.firstOrNull() ?: return, anyLock = settings.lassoLocked, filter = settings::lassoHits)?.let { selectGroup(it) }
@@ -2212,6 +2460,75 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     setSelection(picked)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
+  }
+
+  // ---- Screenshot lasso ----
+
+  /** The area just captured, flashing briefly like a camera, and when. */
+  private var shotFlash: Rect? = null
+  private var shotFlashAt = 0L
+  private var shooting = false
+  private val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+  /**
+   * The screenshot lasso: a picture of the rectangle around what she drew, as the page shows it
+   * (paper, pages and everything on them; no selection marks or toolbars), sharp enough to zoom
+   * into, rendered off the main thread and handed to the screen to save or share.
+   */
+  private fun takeScreenshot(pts: List<Pt>) {
+    val d = doc ?: return
+    val area = Rect.around(pts) ?: return
+    if (area.width * camera.scale < 16f * density || area.height * camera.scale < 16f * density || shooting) return
+    shotFlash = area
+    shotFlashAt = SystemClock.uptimeMillis()
+    postInvalidateOnAnimation()
+    performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+    // At least twice the screen's sharpness, up to about 16 million pixels.
+    val px = max(camera.scale, 2f * density).let { min(it, kotlin.math.sqrt(SHOT_MAX_PIXELS / (area.width * area.height))) }
+    val items = d.intersecting(area).toList()
+    val n = pageCount
+    val layout = pageLayout
+    val between = settings.inkBetweenPages
+    val clip: ((CanvasItem) -> Rect?)? = n?.let { count -> { item: CanvasItem -> layout.clipFor(item, count, between) } }
+    val style = paperStyle
+    val dark = darkPaper
+    val custom = customPaper
+    val desk = deskColor
+    val dir = java.io.File(context.cacheDir, "exports").apply { mkdirs() }
+    shooting = true
+    fillWorker.execute {
+      val file = runCatching {
+        val bmp = com.tali.notes.export.Exporter.snapshot(items, area, px, images, style, dark, custom, layout, n, desk, clip)
+        val name = "Tali's Notes " + java.text.SimpleDateFormat("yyyy-MM-dd HH.mm.ss", java.util.Locale.UK).format(java.util.Date()) + ".png"
+        dir.listFiles { f -> f.name.endsWith(".png") }?.forEach { it.delete() }
+        java.io.File(dir, name).also { f -> f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }; bmp.recycle() }
+      }.onFailure { com.tali.notes.CrashLog.recovered(context, it) }.getOrNull()
+      post {
+        shooting = false
+        if (file != null) host.onScreenshot(file) else host.onHint("Couldn't take the screenshot")
+      }
+    }
+  }
+
+  /** The captured area flashes white and fades, so she sees what was taken. */
+  private fun drawShotFlash(canvas: Canvas) {
+    val area = shotFlash ?: return
+    val t = (SystemClock.uptimeMillis() - shotFlashAt) / SHOT_FLASH_MS.toFloat()
+    if (t >= 1f) {
+      shotFlash = null
+      return
+    }
+    val r = screenRect(area, Affine.IDENTITY)
+    flashPaint.style = Paint.Style.FILL
+    flashPaint.color = 0xFFFFFFFF.toInt()
+    flashPaint.alpha = (170 * (1f - easeOut(t))).toInt()
+    canvas.drawRoundRect(r, 6f * density, 6f * density, flashPaint)
+    flashPaint.style = Paint.Style.STROKE
+    flashPaint.strokeWidth = 2f * density
+    flashPaint.color = accentColor
+    flashPaint.alpha = (255 * (1f - t)).toInt()
+    canvas.drawRoundRect(r, 6f * density, 6f * density, flashPaint)
+    postInvalidateOnAnimation()
   }
 
   /** Whether a free-form path comes back round near where it started (it then picks up what's inside too). */
@@ -2463,13 +2780,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
 
-  /** Pastes the clipboard a little down and right of the selection (from the selection menu). */
-  fun pasteBySelection() {
-    val b = selectionBounds
-    paste(b?.let { Pt(it.center.x + PASTE_NUDGE, it.center.y + PASTE_NUDGE) })
-  }
-
-    /** Pastes the clipboard centred on [at] (the middle of the screen if null), selected so it can be moved into place. */
+  /** Pastes the clipboard centred on [at] (the middle of the screen if null), selected so it can be moved into place. */
   fun paste(at: Pt? = null) {
     val d = doc ?: return
     val items = Clipboard.items
@@ -2912,6 +3223,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun fingerDown(e: MotionEvent) {
+    // Fingers usually move the page next: hand the last strokes over now (see [handOffFinished]).
+    runCatching { inProgress.requestHandoff() }
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
       velocity = VelocityTracker.obtain().also { it.addMovement(e) }
@@ -3212,7 +3525,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     // A finger tap only picks something up with the lasso tool (she found taps picking things up by
     // accident); elsewhere it just lets go of the selection. A pen tap on a shape still picks it up.
-    val item = if (tool == Tool.LASSO) hitTest(p, pages = false, anyLock = settings.lassoLocked, filter = settings::lassoHits) else null
+    val item = if (tool == Tool.LASSO && !settings.lassoShot) hitTest(p, pages = false, anyLock = settings.lassoLocked, filter = settings::lassoHits) else null
     if (item == null) clearSelection() else selectGroup(item)
   }
 
@@ -3227,6 +3540,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun afterCameraMove() {
+    handOffFinished()
     clampCamera()
     host.onCameraMoved()
     if (selection.isNotEmpty()) publishSelection()
@@ -3557,6 +3871,18 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** Gaps up to about this wide (world units, ~1 mm) in an outline still count as closed. */
     private const val FILL_BRIDGE = 3f
     private const val HANDLE_HIT_DP = 24f
+    /** The screenshot lasso's largest picture, in pixels. */
+    private const val SHOT_MAX_PIXELS = 16_000_000f
+    /** How long the captured area flashes. */
+    private const val SHOT_FLASH_MS = 260L
+    /** How close (dp on screen) a shape comes to another before it locks on. */
+    private const val SNAP_DP = 9f
+    /** At most this many things around the view are considered for snapping. */
+    private const val MAX_SNAP_TARGETS = 250
+    /** A shape smaller than this on screen (dp) shows no dots: zoomed in, they come back. */
+    private const val TINY_SHAPE_DP = 32f
+    /** The least a shape's dot reaches (dp), however small the shape. */
+    private const val MIN_HANDLE_HIT_DP = 9f
     private const val BUBBLE_H = 24f
     /** How long the laser stays lit after it was last lifted, so several strokes can be drawn. */
     private const val LASER_IDLE_MS = 1000L
@@ -3570,6 +3896,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val LOOP_CLOSE_DP = 40f
     /** How far (dp, each way) the resize chip sits out from the selection's padded corner. */
     private const val RESIZE_CHIP_OFFSET_DP = 14f
+    /** How long the resize chip takes to come back after a move or a dot drag. */
+    private const val CHIP_BACK_MS = 160L
     /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */
     private const val EDGE_ZONE_DP = 100f
     private const val EDGE_DWELL_MS = 120L
@@ -3585,9 +3913,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** How long a pen or finger stays still on the page before Paste is offered (after hold-to-shape's 450 ms, which needs a stroke). */
     private const val PASTE_HOLD_MS = 600L
-
-    /** How far a paste from the selection menu lands from the selection's middle (world units). */
-    private const val PASTE_NUDGE = 32f
     /** How long a finger is held on a locked item to unlock it. */
     private const val LONG_PRESS_MS = 1500L
     /** The S Pen's side button, as different pens report it. */

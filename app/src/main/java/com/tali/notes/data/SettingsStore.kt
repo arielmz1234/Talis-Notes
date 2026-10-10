@@ -74,11 +74,17 @@ data class AppSettings(
   val lassoSelectsImages: Boolean = true,
   /** Free-form selecting: whatever the lasso tool's path passes over or touches is picked (circling still works). Off, it's the classic lasso loop. */
   val lassoFree: Boolean = false,
+  /** The screenshot lasso: drawing around something takes a picture of it (to save or share) instead of picking it up. */
+  val lassoShot: Boolean = false,
   /** The lasso also picks up locked items (to move or unlock them). */
   val lassoLocked: Boolean = false,
   val eraserMode: EraserMode = EraserMode.STROKE,
   val eraserSize: Float = 16f,
   val holdToShape: Boolean = true,
+  /** Shapes, pictures and text lock onto each other when moved or drawn close (ends, edges, lining up). */
+  val snapShapes: Boolean = true,
+  /** The Shapes tool's own colour, thickness, line and fill; null until she first sets it (then it starts from her pen). */
+  val shapeStyle: com.tali.notes.model.ShapeStyle? = null,
   val holdDelayMs: Long = 450L,
   /** null means automatic: fingers draw only on devices without a stylus. */
   val fingerDraws: Boolean? = null,
@@ -166,6 +172,10 @@ data class AppSettings(
   /** The pen the shape tool draws with: the active pen, unless that's a highlighter, then the first writing pen. */
   val shapeSlot: PenSlot
     get() = activeSlot.takeIf { it.type != PenType.HIGHLIGHTER } ?: pens.firstOrNull { it.type != PenType.HIGHLIGHTER } ?: activeSlot
+
+  /** How the Shapes tool draws: her shape style, or until she sets one, the look of her writing pen. */
+  val shapeLook: com.tali.notes.model.ShapeStyle
+    get() = shapeStyle ?: shapeSlot.let { com.tali.notes.model.ShapeStyle(it.color, it.size.coerceIn(com.tali.notes.model.ShapeStyle.MIN_SIZE, com.tali.notes.model.ShapeStyle.MAX_SIZE), it.lineStyle) }
 }
 
 class SettingsStore(context: Context) {

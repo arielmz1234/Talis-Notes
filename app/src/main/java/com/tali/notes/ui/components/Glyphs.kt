@@ -188,7 +188,7 @@ fun GeometryIcon(geometry: ShapeGeometry, color: Color, modifier: Modifier = Mod
  * page it would be, and in her own colours for it ([look]) when she has set them.
  */
 @Composable
-fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier, dark: Boolean = false, look: com.tali.notes.model.PaperLook? = null) {
+fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier, dark: Boolean = false, look: com.tali.notes.model.PaperLook? = null, weight: Float = 1f) {
   val c = Tali.colors
   val chosen = if (dark) null else look?.line?.let { Color(it) }
   // Each of the usual greys, as the dark page shows it or in her line colour.
@@ -209,6 +209,8 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier, dark: Boolean 
     drawRoundRect(if (dark) Color(com.tali.notes.canvas.PaperRenderer.DARK_PAPER) else look?.paper?.let { Color(it) } ?: Color.White, cornerRadius = CornerRadius(8.dp.toPx()))
     val line = ink(Color(0xFFC4C4C4))
     val step = size.width / 7f
+    // Her line thickness, toned down for the small picture (Normal draws as before).
+    val w = 0.5f + 0.5f * weight.coerceIn(0.3f, 5f)
     // Too small to draw a pattern (and a zero step would never finish the loops below).
     if (step < 2f) return@Canvas
     when (style) {
@@ -218,17 +220,17 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier, dark: Boolean 
         while (y < size.height - step * 0.5f) {
           var x = step
           while (x < size.width - step * 0.5f) {
-            drawCircle(line, 1.4.dp.toPx(), Offset(x, y))
+            drawCircle(line, 1.4.dp.toPx() * (0.6f + 0.4f * weight.coerceIn(0.3f, 3f)), Offset(x, y))
             x += step
           }
           y += step
         }
       }
-      PaperStyle.GRID -> grid(step, ink(Color(0xFFDADADA)), 1f, both = true)
-      PaperStyle.LINES -> grid(step * 1.4f, ink(Color(0xFFD2D2D2)), 1.2f, both = false)
+      PaperStyle.GRID -> grid(step, ink(Color(0xFFDADADA)), 1f * w, both = true)
+      PaperStyle.LINES -> grid(step * 1.4f, ink(Color(0xFFD2D2D2)), 1.2f * w, both = false)
       PaperStyle.ENGINEERING -> {
-        grid(step / 2.5f, ink(Color(0xFFEDEDED)), 0.8f, both = true)
-        grid(step * 2f, ink(Color(0xFFCFCFCF)), 1.2f, both = true)
+        grid(step / 2.5f, ink(Color(0xFFEDEDED)), 0.8f * w, both = true)
+        grid(step * 2f, ink(Color(0xFFCFCFCF)), 1.2f * w, both = true)
       }
       PaperStyle.ISOMETRIC -> {
         val iso = ink(Color(0xFFDADADA))
@@ -237,14 +239,14 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier, dark: Boolean 
         clipRect {
           var x = h
           while (x < size.width) {
-            drawLine(iso, Offset(x, 0f), Offset(x, size.height), density)
+            drawLine(iso, Offset(x, 0f), Offset(x, size.height), density * w)
             x += h
           }
           val side = h / 0.8660254f
           var k = -size.width * t
           while (k < size.height + size.width * t) {
-            drawLine(iso, Offset(0f, k), Offset(size.width, k - size.width * t), density)
-            drawLine(iso, Offset(0f, k), Offset(size.width, k + size.width * t), density)
+            drawLine(iso, Offset(0f, k), Offset(size.width, k - size.width * t), density * w)
+            drawLine(iso, Offset(0f, k), Offset(size.width, k + size.width * t), density * w)
             k += side
           }
         }
@@ -256,15 +258,15 @@ fun PaperSwatch(style: PaperStyle, modifier: Modifier = Modifier, dark: Boolean 
         val end = if (style == PaperStyle.CORNELL) size.height * 0.74f else size.height
         var y = header + step
         while (y < end - step * 0.4f) {
-          drawLine(ruled, Offset(0f, y), Offset(size.width, y), density)
+          drawLine(ruled, Offset(0f, y), Offset(size.width, y), density * w)
           y += step
         }
-        drawLine(strong, Offset(0f, header), Offset(size.width, header), 1.3f * density)
+        drawLine(strong, Offset(0f, header), Offset(size.width, header),  1.3f * density * w)
         if (style == PaperStyle.CORNELL) {
-          drawLine(strong, Offset(size.width * 0.3f, header), Offset(size.width * 0.3f, end), 1.3f * density)
-          drawLine(strong, Offset(0f, end), Offset(size.width, end), 1.3f * density)
+          drawLine(strong, Offset(size.width * 0.3f, header), Offset(size.width * 0.3f, end),  1.3f * density * w)
+          drawLine(strong, Offset(0f, end), Offset(size.width, end),  1.3f * density * w)
         } else {
-          drawLine(ink(Color(0xFFF0A0B4)), Offset(size.width * 0.18f, 0f), Offset(size.width * 0.18f, size.height), 1.2f * density)
+          drawLine(ink(Color(0xFFF0A0B4)), Offset(size.width * 0.18f, 0f), Offset(size.width * 0.18f, size.height), 1.2f * density * w)
         }
       }
     }

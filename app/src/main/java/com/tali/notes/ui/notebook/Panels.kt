@@ -97,6 +97,7 @@ import com.tali.notes.ui.components.rememberSlidingSelection
 import com.tali.notes.ui.components.slidingHighlight
 import com.tali.notes.ui.components.slidingOption
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
 
 @Composable
 private fun PanelColumn(width: Int, content: @Composable () -> Unit) {
@@ -429,11 +430,16 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
     Segmented(listOf(false, true), settings.lassoFree, { if (it) "Free form" else "Lasso" }, vm::setLassoFree, Modifier.fillMaxWidth())
     Spacer(Modifier.height(10.dp))
     Text(
-      if (settings.lassoFree) "Trace over or touch anything to pick it up, or circle a group. Then move, resize, recolour or copy it."
-      else "Circle anything to move, resize, recolour or copy it. Tap a single item with the lasso to pick just that one.",
+      when {
+        settings.lassoShot -> "Draw around anything to take a picture of it: save it to your gallery, share it or copy it."
+        settings.lassoFree -> "Trace over or touch anything to pick it up, or circle a group. Then move, resize, recolour or copy it."
+        else -> "Circle anything to move, resize, recolour or copy it. Tap a single item with the lasso to pick just that one."
+      },
       style = MaterialTheme.typography.bodyMedium,
       color = c.inkMuted,
     )
+    Spacer(Modifier.height(6.dp))
+    ToggleRow("Screenshot", settings.lassoShot, vm::setLassoShot, detail = "The lasso takes a picture of the rectangle around what you draw, instead of picking it up.")
     Spacer(Modifier.height(14.dp))
     SectionLabel("Picks up")
     Spacer(Modifier.height(4.dp))
@@ -451,32 +457,126 @@ fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
 @Composable
 fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel) {
   val c = Tali.colors
+  // Two pages: the shapes to draw, and how they're drawn (kept while the app is open).
+  var styling by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
   PanelColumn(588) {
-    PanelTitle("Shapes")
-    ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a stroke and it snaps into a clean line or shape.")
-    if (settings.holdToShape) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Hold", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
-        TaliSlider(settings.holdDelayMs.toFloat(), 250f..1000f, { vm.setHoldDelay(it.toLong()) }, Modifier.weight(1f))
-        Text(String.format("%.2f s", settings.holdDelayMs / 1000f), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(56.dp).padding(start = 8.dp))
-      }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text("Shapes", style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.weight(1f))
+      Segmented(listOf(false, true), styling, { if (it) "Style" else "Choose" }, { styling = it }, Modifier.width(220.dp))
     }
-    ShapeGroup.entries.forEach { group ->
-      Spacer(Modifier.height(12.dp))
-      SectionLabel(group.label)
-      Spacer(Modifier.height(8.dp))
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ShapeKind.offered.filter { it.group == group }.forEach { kind ->
-          val on = kind == current && vm.customShapeId == null && vm.tool == com.tali.notes.model.Tool.SHAPE
-          ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
+    Spacer(Modifier.height(4.dp))
+    if (styling) {
+      ShapeStylePicker(settings, vm)
+      Spacer(Modifier.height(10.dp))
+      ToggleRow("Snap to other shapes", settings.snapShapes, vm::setSnapShapes, detail = "Ends and edges lock on when they touch, and shapes line up with each other's sides and middles.")
+      ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a pen stroke and it snaps into a clean line or shape.")
+    } else {
+      ShapeGroup.entries.forEach { group ->
+        Spacer(Modifier.height(12.dp))
+        SectionLabel(group.label)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          ShapeKind.offered.filter { it.group == group }.forEach { kind ->
+            val on = kind == current && vm.customShapeId == null && vm.tool == com.tali.notes.model.Tool.SHAPE
+            ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
+          }
         }
       }
+      if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null) {
+        Spacer(Modifier.height(10.dp))
+        Text("Part circle: drag from the centre outwards; it starts as a half. Then drag an end dot to make it any % of a circle.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+      }
+      MyShapes(settings.customShapes, vm)
     }
-    if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null) {
-      Spacer(Modifier.height(10.dp))
-      Text("Part circle: drag from the centre outwards; it starts as a half. Then drag an end dot to make it any % of a circle.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+  }
+}
+
+/**
+ * The Shapes tool's own look, apart from the pen she writes with: a small preview, then outline
+ * colour, thickness, line style and fill (closed shapes only; None leaves them see-through).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
+  val c = Tali.colors
+  val look = settings.shapeLook
+  Spacer(Modifier.height(12.dp))
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    ShapeStylePreview(look, Modifier.size(132.dp, 84.dp))
+    Spacer(Modifier.width(16.dp))
+    Column(Modifier.weight(1f)) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
+        StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, 0.5f, { v -> vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
+        Text(String.format(java.util.Locale.US, "%.1f", look.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+      }
+      Spacer(Modifier.height(6.dp))
+      CompactLineStylePicker(look.line, { l -> vm.updateShapeStyle { it.copy(line = l) } }, Modifier.fillMaxWidth())
     }
-    MyShapes(settings.customShapes, vm)
+  }
+  Spacer(Modifier.height(12.dp))
+  Text("Outline", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+  Spacer(Modifier.height(6.dp))
+  val ring = rememberSlidingSelection()
+  FlowRow(Modifier.colorRing(ring, Color(look.color)), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    settings.savedColors.forEach { col -> ColorDot(Color(col), selected = col == look.color, selection = ring) { vm.updateShapeStyle { it.copy(color = col) } } }
+  }
+  Spacer(Modifier.height(10.dp))
+  Text("Fill", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+  Spacer(Modifier.height(6.dp))
+  val fillRing = rememberSlidingSelection()
+  // The fill keeps exactly the colour picked, at the fill tool's opacity.
+  val opaque = look.fill?.let { it or (0xFF shl 24) }
+  FlowRow(Modifier.colorRing(fillRing, opaque?.let { Color(it) } ?: NO_FILL), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    NoneDot(fillRing, "No fill") { vm.updateShapeStyle { it.copy(fill = null) } }
+    settings.savedColors.forEach { col ->
+      ColorDot(Color(col), selected = col == opaque, selection = fillRing) {
+        val alpha = (255 * settings.fillOpacity.coerceIn(0.15f, 1f)).toInt()
+        vm.updateShapeStyle { it.copy(fill = (alpha shl 24) or (col and 0x00FFFFFF)) }
+      }
+    }
+  }
+}
+
+/** A box and an arrow drawn in the shape style, so each change shows at once. */
+@Composable
+private fun ShapeStylePreview(look: com.tali.notes.model.ShapeStyle, modifier: Modifier) {
+  val c = Tali.colors
+  Canvas(modifier.clip(RoundedCornerShape(14.dp)).background(c.paper).border(1.dp, c.line, RoundedCornerShape(14.dp))) {
+    val w = (look.size * density * 0.75f).coerceAtLeast(1f)
+    val pattern = look.line.pattern
+    val effect = if (pattern.isEmpty()) null else PathEffect.dashPathEffect(pattern.mapIndexed { i, v -> if (i % 2 == 0) maxOf((v - 1f) * w, 0.01f) else (v + 1f) * w }.toFloatArray())
+    val stroke = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round, pathEffect = effect)
+    val ink = Color(look.color)
+    val box = androidx.compose.ui.geometry.Rect(size.width * 0.12f, size.height * 0.2f, size.width * 0.52f, size.height * 0.8f)
+    look.fill?.let { drawRect(Color(it), box.topLeft, box.size) }
+    drawRect(ink, box.topLeft, box.size, style = stroke)
+    val a = Offset(size.width * 0.62f, size.height * 0.72f)
+    val b = Offset(size.width * 0.88f, size.height * 0.28f)
+    drawLine(ink, a, b, w, cap = androidx.compose.ui.graphics.StrokeCap.Round, pathEffect = effect)
+    // The arrowhead stays solid, as on the page.
+    val dir = (b - a) / (b - a).getDistance()
+    val head = maxOf(9.dp.toPx(), w * 3.5f)
+    fun barb(turn: Float) = Offset(dir.x * kotlin.math.cos(turn) - dir.y * kotlin.math.sin(turn), dir.x * kotlin.math.sin(turn) + dir.y * kotlin.math.cos(turn)) * -head
+    drawLine(ink, b, b + barb(0.52f), w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+    drawLine(ink, b, b + barb(-0.52f), w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+  }
+}
+
+/** The "none" choice in a colour ring: an empty circle with a red slash. */
+@Composable
+private fun NoneDot(ring: com.tali.notes.ui.components.SlidingSelection, label: String, onClick: () -> Unit) {
+  val c = Tali.colors
+  Box(
+    Modifier.slidingOption(ring, NO_FILL).size(38.dp).clip(CircleShape)
+      .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = label, onClick = onClick),
+    contentAlignment = Alignment.Center,
+  ) {
+    Canvas(Modifier.size(30.dp)) {
+      drawCircle(c.surface)
+      drawCircle(c.line, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+      drawLine(c.danger, Offset(size.width * 0.22f, size.height * 0.78f), Offset(size.width * 0.78f, size.height * 0.22f), 2.dp.toPx())
+    }
   }
 }
 

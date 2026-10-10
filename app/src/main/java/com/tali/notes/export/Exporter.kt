@@ -83,6 +83,52 @@ object Exporter {
     return bmp
   }
 
+  /**
+   * A picture of the region [world] as it looks on the page, [pxPerUnit] pixels per world unit:
+   * the paper (in a paged notebook each A4 page [layout] has, on the [desk] around them), then
+   * everything on it, shown only on its page as on screen ([clip]). Used by the screenshot lasso.
+   */
+  fun snapshot(
+    items: Collection<CanvasItem>,
+    world: Rect,
+    pxPerUnit: Float,
+    images: ImageStore,
+    paper: PaperStyle,
+    dark: Boolean,
+    custom: CustomPaper?,
+    layout: Pages,
+    pageCount: Int?,
+    desk: Int,
+    clip: ((CanvasItem) -> Rect?)?,
+  ): Bitmap {
+    val w = (world.width * pxPerUnit).toInt().coerceAtLeast(1)
+    val h = (world.height * pxPerUnit).toInt().coerceAtLeast(1)
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val camera = Camera(pxPerUnit).apply { set(com.tali.notes.data.Viewport(world.left, world.top, 1f)) }
+    val pr = paperRenderer(dark, custom, images)
+    if (pageCount != null) {
+      canvas.drawColor(desk)
+      for (i in 0 until pageCount) {
+        val r = layout.rect(i)
+        if (!r.intersects(world)) continue
+        val a = camera.toScreen(com.tali.notes.geometry.Pt(r.left, r.top))
+        val b = camera.toScreen(com.tali.notes.geometry.Pt(r.right, r.bottom))
+        canvas.save()
+        canvas.clipRect(a.x, a.y, b.x, b.y)
+        pr.originY = r.top
+        pr.pageRect = r
+        pr.draw(canvas, paper, camera, w, h)
+        canvas.restore()
+      }
+    } else {
+      pr.draw(canvas, paper, camera, w, h)
+    }
+    canvas.concat(camera.worldToScreen)
+    renderer(images, dark).also { it.clipFor = clip }.drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
+    return bmp
+  }
+
   private fun paperRenderer(dark: Boolean, custom: CustomPaper?, images: ImageStore) =
     PaperRenderer().apply {
       this.dark = dark

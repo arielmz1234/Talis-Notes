@@ -32,6 +32,19 @@ enum class PenType(val label: String, val defaultSize: Float, val minSize: Float
 }
 
 /**
+ * How the Shapes tool draws, set in its own panel (not borrowed from the pen in use): outline
+ * colour, thickness and line style, and a fill for closed shapes (null = none; stored with its
+ * opacity).
+ */
+@Serializable
+data class ShapeStyle(val color: Int, val size: Float, val line: LineStyle = LineStyle.SOLID, val fill: Int? = null) {
+  companion object {
+    const val MIN_SIZE = 0.5f
+    const val MAX_SIZE = 12f
+  }
+}
+
+/**
  * How a line is drawn along its length, for any pen and for shapes. [pattern] is the visible
  * lengths of the parts in multiples of the line's thickness, alternating drawn and gap, repeated
  * (a drawn part of 0 is a round dot).

@@ -20,8 +20,34 @@ import kotlin.math.PI
 
 /** Maps pen styles to Ink brushes. Colours are stored opaque; the highlighter adds its own transparency. */
 object Brushes {
-  /** Geometry precision in world units; small enough to stay smooth when zoomed in. */
-  private const val EPSILON = 0.08f
+  /**
+   * Geometry precision in world units: how far the drawn outline may stray from the true curve.
+   * Curves are built from straight pieces, and at 0.08 those pieces showed as corners when zoomed
+   * in (October 2026: other apps looked smoother). 0.02 makes the pieces about half as long.
+   */
+  private const val EPSILON = 0.02f
+
+  /** Shapes are mostly straight lines; their curves (circles, arcs) still need to look round zoomed in. */
+  private const val SHAPE_EPSILON = 0.03f
+
+  /**
+   * Handwriting is smoothed over a slightly longer moment than Ink's default (20 ms) and filled in
+   * more finely between the pen's samples, which takes the small wobbles and kinks out of quick
+   * writing without changing its shape. Shapes keep the default: a longer window would round
+   * their corners.
+   */
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  private val WRITING_MODEL: BrushFamily.InputModel = BrushFamily.SlidingWindowModel(32L, 360)
+
+  private val writingFamilies = java.util.concurrent.ConcurrentHashMap<Triple<PenType, LineStyle, Boolean>, BrushFamily>()
+
+  /** [family] with handwriting's smoothing (see [WRITING_MODEL]); as it is if Ink won't take it. */
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  private fun writingFamily(type: PenType, style: LineStyle, square: Boolean): BrushFamily =
+    writingFamilies.getOrPut(Triple(type, style, square)) {
+      val f = family(type, style, square)
+      runCatching { f.copy(inputModel = WRITING_MODEL) }.getOrDefault(f)
+    }
 
   const val HIGHLIGHTER_ALPHA = 0x66
 
@@ -185,10 +211,10 @@ object Brushes {
     if (type.isHighlighter) (color and 0x00FFFFFF) or (HIGHLIGHTER_ALPHA shl 24) else color or (0xFF shl 24)
 
   fun brush(type: PenType, color: Int, size: Float, style: LineStyle = LineStyle.SOLID, square: Boolean = false): Brush =
-    Brush.createWithColorIntArgb(family(type, style, square), inkColor(type, color), size, EPSILON)
+    Brush.createWithColorIntArgb(writingFamily(type, style, square), inkColor(type, color), size, EPSILON)
 
   fun shapeBrush(type: PenType, color: Int, size: Float): Brush =
-    Brush.createWithColorIntArgb(shapeFamily(type), inkColor(type, color), size, EPSILON)
+    Brush.createWithColorIntArgb(shapeFamily(type), inkColor(type, color), size, SHAPE_EPSILON)
 
   /** Opaque colour of a brush, as shown in the palette. */
   fun displayColor(brush: Brush): Int = brush.colorIntArgb or (0xFF shl 24)

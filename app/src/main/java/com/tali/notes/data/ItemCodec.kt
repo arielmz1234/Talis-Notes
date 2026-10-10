@@ -16,6 +16,7 @@ import com.tali.notes.model.LineStyle
 import com.tali.notes.model.ShapeGeometry
 import com.tali.notes.model.ShapeItem
 import com.tali.notes.model.TextItem
+import com.tali.notes.model.upgraded
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlinx.serialization.Serializable
@@ -99,7 +100,8 @@ object ItemCodec {
           KIND_SHAPE -> {
             val text = row.payload.decodeToString()
             // Triangles saved before they had their own shape get movable corners too.
-            val geometry = com.tali.notes.geometry.ShapeRecognizer.asTriangle(json.decodeFromString(ShapeGeometry.serializer(), text))!!
+            // Dimension lines saved as three loose lines become proper dimension lines.
+            val geometry = com.tali.notes.geometry.ShapeRecognizer.asTriangle(json.decodeFromString(ShapeGeometry.serializer(), text))!!.upgraded()
             val extra = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
             val fill = runCatching { extra?.get("fill")?.jsonPrimitive?.int }.getOrNull()
             val line = runCatching { LineStyle.valueOf(extra?.get("line")!!.jsonPrimitive.content) }.getOrDefault(LineStyle.SOLID)

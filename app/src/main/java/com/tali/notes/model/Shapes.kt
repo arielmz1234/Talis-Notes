@@ -37,11 +37,26 @@ sealed interface ShapeGeometry {
 
 @Serializable
 @SerialName("line")
-data class LineShape(val a: Pt, val b: Pt, val arrowStart: Boolean = false, val arrowEnd: Boolean = false) : ShapeGeometry {
+data class LineShape(
+  val a: Pt,
+  val b: Pt,
+  val arrowStart: Boolean = false,
+  val arrowEnd: Boolean = false,
+  /** A dimension line: short marks across each end (with arrows both ways), like on a drawing. */
+  val ticks: Boolean = false,
+) : ShapeGeometry {
   override fun paths(penSize: Float): List<List<Pt>> {
     val out = mutableListOf(listOf(a, b))
     if (arrowEnd) out += arrowHead(a, b, penSize)
     if (arrowStart) out += arrowHead(b, a, penSize)
+    if (ticks) {
+      val dir = (b - a).normalized()
+      if (dir != Pt.ZERO) {
+        val n = Pt(-dir.y, dir.x) * max(TICK, penSize * 2.5f)
+        out += listOf(a - n, a + n)
+        out += listOf(b - n, b + n)
+      }
+    }
     return out
   }
 
@@ -608,10 +623,52 @@ private fun distributedLoad(l: Float, r: Float, t: Float, b: Float): ShapeGeomet
   return GroupShape(listOf(LineShape(Pt(l, t), Pt(r, t))) + arrows)
 }
 
-private fun dimension(p0: Pt, p1: Pt): ShapeGeometry {
-  val dir = (p1 - p0).normalized()
-  val normal = Pt(-dir.y, dir.x) * 8f
-  return GroupShape(
-    listOf(LineShape(p0, p1, arrowStart = true, arrowEnd = true), LineShape(p0 - normal, p0 + normal), LineShape(p1 - normal, p1 + normal))
-  )
+/** A dimension line is a line like any other (end dots, angle snapping, its length shown), with arrows and end marks. */
+private fun dimension(p0: Pt, p1: Pt): ShapeGeometry = LineShape(p0, p1, arrowStart = true, arrowEnd = true, ticks = true)
+
+/** How far a dimension line's end marks reach each side (world units). */
+private const val TICK = 8f
+
+/**
+ * Older saved shapes in today's form: a dimension line saved as a group of three lines (the line
+ * and its two end marks) becomes one dimension line, so it can be lengthened and turned like a line.
+ */
+fun ShapeGeometry.upgraded(): ShapeGeometry {
+  if (this !is GroupShape || parts.size != 3 || parts.any { it !is LineShape }) return this
+  val main = parts[0] as LineShape
+  if (!main.arrowStart || !main.arrowEnd) return this
+  val ends = parts.drop(1).map { it as LineShape }
+  val marksEnds = ends.all { t -> t.a.mid(t.b).dist(main.a) < 0.5f || t.a.mid(t.b).dist(main.b) < 0.5f }
+  return if (marksEnds) main.copy(ticks = true) else this
+}
+
+private fun Pt.mid(o: Pt) = Pt((x + o.x) / 2f, (y + o.y) / 2f)
+
+/**
+ * What this shape offers for snapping (see [com.tali.notes.geometry.Snap]): its ends, corners,
+ * side middles and centre, its edges (a curve as short pieces), and the box of its outline. Arrow
+ * barbs and dimension marks aren't edges to snap to; the line itself is.
+ */
+fun ShapeGeometry.snapFeatures(): com.tali.notes.geometry.SnapFeatures {
+  fun segs(path: List<Pt>, closed: Boolean = false): List<Pair<Pt, Pt>> {
+    val out = ArrayList<Pair<Pt, Pt>>(path.size)
+    for (i in 0 until path.size - 1) out += path[i] to path[i + 1]
+    if (closed && path.size > 2) out += path.last() to path.first()
+    return out
+  }
+  fun mid(a: Pt, b: Pt) = Pt((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+  val (points, segments) =
+    when (this) {
+      is LineShape -> listOf(a, b, mid(a, b)) to listOf(a to b)
+      is PolyShape ->
+        if (smooth) listOf(points.first(), points.last()) to segs(Geo.smooth(points))
+        else (points + segs(points, closed).map { (p, q) -> mid(p, q) } + if (closed) listOf(Geo.centroid(points)) else emptyList()) to segs(points, closed)
+      is TriangleShape -> (points + segs(points, true).map { (p, q) -> mid(p, q) }) to segs(points, true)
+      is EllipseShape -> listOf(center, point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat())) to segs(paths(1f).first())
+      is ArcShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
+      is SectorShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
+      is GroupShape -> return com.tali.notes.geometry.SnapFeatures.of(parts.map { it.snapFeatures() })
+    }
+  val box = Rect.around(points + segments.flatMap { listOf(it.first, it.second) })
+  return com.tali.notes.geometry.SnapFeatures(points, segments, box)
 }

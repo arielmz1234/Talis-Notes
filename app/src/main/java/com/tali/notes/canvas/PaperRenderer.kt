@@ -13,7 +13,11 @@ import com.tali.notes.model.PaperStyle
 import kotlin.math.ceil
 import kotlin.math.floor
 
-/** Paper patterns drawn in screen space each frame. Spacing is real-world: 1 mm = 160/25.4 dp. */
+/**
+ * Paper patterns drawn in screen space each frame. Spacing is real-world: 1 mm = 160/25.4 dp, and so
+ * is line thickness: lines belong to the paper, so zooming in makes them thicker on screen just as
+ * the squares get bigger, and what's on screen matches the PDF.
+ */
 class PaperRenderer {
   var paperColor = 0xFFFFFFFF.toInt()
   var lineColor = 0xFFC4C4C4.toInt()
@@ -39,6 +43,12 @@ class PaperRenderer {
   companion object {
     const val DARK_PAPER = 0xFF1C1A23.toInt()
 
+    /** The thinnest a paper line is drawn on screen, in pixels. */
+    private const val MIN_LINE_PX = 0.75f
+
+    /** A dot's diameter in world units at standard weight (1.3 pt when printed). */
+    private const val DOT_WORLD = 1.3f / 0.45f
+
     /**
      * How heavy paper lines, grids and dots are drawn, from her setting (1 is standard). It's
      * shared by the canvas, page previews and PDF export, so they all match.
@@ -58,6 +68,12 @@ class PaperRenderer {
     private val DIM = ColorMatrixColorFilter(ColorMatrix().apply { setScale(0.35f, 0.35f, 0.38f, 1f) })
   }
   private var buffer = FloatArray(4096)
+
+  /**
+   * A line [world] units thick (world units, like the paper itself) in pixels. On screen it never
+   * gets thinner than a hairline, so zoomed far out the lines still show (and fade with the grid).
+   */
+  private fun px(world: Float, camera: Camera): Float = if (print) world * camera.scale else maxOf(world * camera.scale, MIN_LINE_PX)
 
   /**
    * When printing (PDF export), lines are hairlines in points and dense grids never fade out, so
@@ -101,7 +117,7 @@ class PaperRenderer {
     }
     canvas.drawColor(look?.paper ?: paperColor)
     val mm = 160f / 25.4f
-    val k = (if (print) 0.45f else 1f) * weight
+    val k = weight
     try {
       drawStyle(canvas, style, camera, width, height, mm, k)
     } finally {
@@ -160,7 +176,7 @@ class PaperRenderer {
     if (fade > 0f) {
       paint.color = blueLine
       paint.alpha = (fade * (blueLine ushr 24)).toInt()
-      paint.strokeWidth = 1.2f * k
+      paint.strokeWidth = px(1.2f * k, camera)
       var y = header + spacing
       while (y <= linesEnd - spacing * 0.5f) {
         canvas.drawLine(sx(r.left), sy(y), sx(r.right), sy(y), paint)
@@ -170,7 +186,7 @@ class PaperRenderer {
     // The structure lines are always shown, even zoomed far out.
     paint.color = engineeringMajor
     paint.alpha = engineeringMajor ushr 24
-    paint.strokeWidth = 1.6f * k
+    paint.strokeWidth = px(1.6f * k, camera)
     canvas.drawLine(sx(r.left), sy(header), sx(r.right), sy(header), paint)
     if (style == PaperStyle.CORNELL) {
       canvas.drawLine(sx(r.left + 60 * mm), sy(header), sx(r.left + 60 * mm), sy(linesEnd), paint)
@@ -188,7 +204,7 @@ class PaperRenderer {
    */
   private fun drawCustom(canvas: Canvas, cp: CustomPaper, camera: Camera, width: Int, height: Int) {
     val mm = 160f / 25.4f
-    val k = (if (print) 0.45f else 1f) * weight
+    val k = weight
     val image = cp.image
     if (image != null) {
       canvas.drawColor(if (dark) DARK_PAPER else 0xFFFFFFFF.toInt())
@@ -228,7 +244,7 @@ class PaperRenderer {
       // The red margin line of a school exercise book, 25 mm in from the page's left edge.
       val x = ((pageRect?.left ?: 0f) + 25f * mm - camera.x) * camera.scale
       paint.color = cp.faded(if (dark) 0x99E07A90.toInt() else 0xFFF0A0B4.toInt())
-      paint.strokeWidth = 1.4f * k
+      paint.strokeWidth = px(1.4f * k, camera)
       canvas.drawLine(x, 0f, x, height.toFloat(), paint)
     }
   }
@@ -237,14 +253,14 @@ class PaperRenderer {
    * Isometric paper: equilateral triangles of side [side], made of vertical lines and lines at
    * +30° and -30°. Lines are clipped to the visible area and drawn in one batch.
    */
-  private fun isometric(canvas: Canvas, camera: Camera, width: Int, height: Int, side: Float, color: Int, strokePx: Float) {
+  private fun isometric(canvas: Canvas, camera: Camera, width: Int, height: Int, side: Float, color: Int, strokeWorld: Float) {
     val h = side * 0.8660254f
     val step = h * camera.scale
     if (step < 6f && !print) return
     val alpha = if (print) 1f else ((step - 6f) / 10f).coerceIn(0f, 1f)
     paint.color = color
     paint.alpha = (alpha * (color ushr 24)).toInt()
-    paint.strokeWidth = strokePx
+    paint.strokeWidth = px(strokeWorld, camera)
     val w = camera.visibleWorld(width, height)
     val t = 0.57735026f // tan 30°
     var n = 0
@@ -275,14 +291,14 @@ class PaperRenderer {
     canvas.drawLines(buffer, 0, n, paint)
   }
 
-  private fun grid(canvas: Canvas, camera: Camera, width: Int, height: Int, spacing: Float, color: Int, strokePx: Float, horizontalOnly: Boolean) {
+  private fun grid(canvas: Canvas, camera: Camera, width: Int, height: Int, spacing: Float, color: Int, strokeWorld: Float, horizontalOnly: Boolean) {
     val step = spacing * camera.scale
     if (step < 5f && !print) return
     // Fade dense grids out as they get small instead of popping.
     val alpha = if (print) 1f else ((step - 5f) / 10f).coerceIn(0f, 1f)
     paint.color = color
     paint.alpha = (alpha * (color ushr 24)).toInt()
-    paint.strokeWidth = strokePx
+    paint.strokeWidth = px(strokeWorld, camera)
     val world = camera.visibleWorld(width, height)
     var n = 0
     fun push(x0: Float, y0: Float, x1: Float, y1: Float) {
@@ -315,7 +331,7 @@ class PaperRenderer {
     if (step < 7f && !print) return
     paint.color = color
     paint.alpha = ((if (print) 1f else ((step - 7f) / 10f).coerceIn(0f, 1f)) * (color ushr 24)).toInt()
-    paint.strokeWidth = (if (print) 1.3f else (1.6f * camera.scale).coerceIn(1.5f, 4f)) * weight.coerceAtMost(3f)
+    paint.strokeWidth = (DOT_WORLD * weight.coerceAtMost(3f) * camera.scale).let { if (print) it else it.coerceAtLeast(1.5f) }
     paint.strokeCap = Paint.Cap.ROUND
     val world = camera.visibleWorld(width, height)
     var n = 0

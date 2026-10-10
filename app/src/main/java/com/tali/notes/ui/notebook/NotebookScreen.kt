@@ -260,6 +260,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   var exporting by remember { mutableStateOf(false) }
   var savingShape by remember { mutableStateOf<ShapeGeometry?>(null) }
   var pasteOffer by remember { mutableStateOf<com.tali.notes.canvas.PasteOffer?>(null) }
+  // A picture just taken with the screenshot lasso, waiting to be saved or shared.
+  var screenshot by remember { mutableStateOf<java.io.File?>(null) }
   var pendingPdf by remember { mutableStateOf<File?>(null) }
 
   val imagePicker =
@@ -364,6 +366,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 
                 override fun onPasteOffer(offer: com.tali.notes.canvas.PasteOffer?) {
                   pasteOffer = offer
+                }
+
+                override fun onScreenshot(file: java.io.File) {
+                  screenshot = file
                 }
 
                 override fun onTip(id: String, message: String) = vm.tip(id, message)
@@ -683,14 +689,14 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
     }
 
+    screenshot?.let { file -> ScreenshotSheet(file, onDone = { screenshot = null }, onHint = vm::showHint) }
+
     vm.selection?.let { sel ->
       if (vm.panel == null) {
         SelectionMenu(
           sel,
           narrow = narrow,
           colors = settings.savedColors,
-          pasteCount = Clipboard.items.size,
-          onPaste = { holder.view?.runSafely { pasteBySelection() } },
           onDelete = { holder.view?.runSafely { deleteSelection() } },
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
           onCopy = { holder.view?.runSafely { copySelection() } },
@@ -1159,7 +1165,7 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
 }
 
 @Composable
-internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, pasteCount: Int, onPaste: () -> Unit, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit) {
+internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit) {
   val c = Tali.colors
   val density = LocalDensity.current
   // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
@@ -1202,7 +1208,6 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
         Row(Modifier.onSizeChanged { foldedWidth = it.width }, verticalAlignment = Alignment.CenterVertically) {
           ToolButton(Icons.Outlined.ContentCopy, "Copy (hold anywhere to paste it, here or in any notebook)", onClick = onCopy)
           ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
-          if (pasteCount > 0) ToolButton(Icons.Outlined.ContentPaste, if (pasteCount == 1) "Paste" else "Paste $pasteCount items", onClick = onPaste)
           ToolButton(Icons.Outlined.LibraryAdd, "Duplicate", onClick = onDuplicate)
           ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
           Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))

@@ -478,13 +478,18 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setLassoFree(on: Boolean) = store.update { it.copy(lassoFree = on) }
 
+  fun setLassoShot(on: Boolean) = store.update { it.copy(lassoShot = on) }
+
   fun setEraserMode(mode: EraserMode) = store.update { it.copy(eraserMode = mode) }
 
   fun setEraserSize(size: Float) = store.update { it.copy(eraserSize = size) }
 
   fun setHoldToShape(on: Boolean) = store.update { it.copy(holdToShape = on) }
 
-  fun setHoldDelay(ms: Long) = store.update { it.copy(holdDelayMs = ms) }
+  fun setSnapShapes(on: Boolean) = store.update { it.copy(snapShapes = on) }
+
+  /** Changes the Shapes tool's own style (colour, thickness, line, fill). */
+  fun updateShapeStyle(change: (com.tali.notes.model.ShapeStyle) -> com.tali.notes.model.ShapeStyle) = store.update { it.copy(shapeStyle = change(it.shapeLook)) }
 
   fun setFingerDraws(value: Boolean?) = store.update { it.copy(fingerDraws = value) }
 

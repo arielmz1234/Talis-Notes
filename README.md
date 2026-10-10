@@ -14,7 +14,10 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - The S Pen side button erases while held.
 - **Hold to perfect:** pause at the end of a stroke and it snaps into a clean shape: a line (with 0°, 30°, 45°, 60° and 90° snapping), arrow, circle, ellipse, triangle, rectangle, polygon or star. Keep moving without lifting to resize it (a line follows the pen tip).
 - **My shapes:** lasso any drawing and tap *Save as shape*. Holding the pen at the end of a similar one-stroke drawing then snaps to it. Matching uses a point-cloud recognizer, `geometry/ShapeMatcher.kt`.
-- Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines.
+- Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines. A dimension line is a line like the others (end dots, angle snapping, its length shown), with arrows and end marks.
+- **Shapes tool style:** the Shapes panel has two tabs, *Choose* (the shapes) and *Style*: the tool's own outline colour, thickness, line style and fill, apart from the pen she writes with.
+- **Snapping:** shapes, pictures and text lock onto each other when moved or drawn close: a line's end onto another line or corner (keeping its angle), and edges and middles lining up, with a dashed guide or a small ring to show it (*Snap to other shapes* in the Style tab). Handwriting moves freely.
+- Small shapes get smaller dots (none when tiny), and the middle of a shape always moves it.
 - Tap a shape (with a finger, a quick pen tap on its outline, or any tap with the Shapes tool) to get its dots and its menu; drag them with either, and the shape changes live. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length beside the line (not under the pen). Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
 - **Triangle:** one triangle whose corners each move on their own; a dragged corner moves a degree at a time and locks on to right angles, isosceles and the usual angles (30°, 45°, 60°… and lightly every 5°), showing each angle.
 - A shape stays selected right after it's drawn or adjusted, so it can be changed straight away (the pen still writes inside it).
@@ -30,7 +33,8 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 - The eraser can remove whole strokes or erase precisely. Filters choose which pen types the eraser and the lasso affect. On a fill, the stroke eraser takes the whole colour and the precise eraser rubs out just the part it passes over.
 - **Fill:** tap inside a shape to fill it with colour, or inside an area you drew around to fill it behind your writing (small gaps in the outline are bridged). It has its own colour, opacity, and "None" to take a fill away.
 - The lasso picks up anything it touches (circling the tip of a line takes the whole line). Pictures and writing can be brought to the front or sent to the back.
-- The lasso (or *Free form*, which picks whatever the pen traces over) can move, resize and rotate a selection (with live angle and 15° steps). Its menu shows Copy, Cut, Paste, Duplicate and Delete; ⋯ adds more buttons in the same row: colour and thickness (each opens its own drop-down; thickness also has the line style), to front, to back, mirror left–right or upside down, lock, edit text, save as shape.
+- **Screenshot lasso** (a switch in the lasso panel): draw around anything and the rectangle around it becomes a picture to save to the gallery, share or copy.
+- The lasso (or *Free form*, which picks whatever the pen traces over) can move, resize and rotate a selection (with live angle and 15° steps). Its menu shows Copy, Cut, Duplicate and Delete; ⋯ adds more buttons in the same row: colour and thickness (each opens its own drop-down; thickness also has the line style), to front, to back, mirror left–right or upside down, lock, edit text, save as shape.
 - **Paste:** after copying or cutting, hold the pen or a finger still on the page and tap *Paste*; it lands where you held, in this notebook or any other.
 - A fill and the outline it was made in act as one item (move, copy, mirror, lock); only the eraser treats them apart.
 - **Lock:** the selection menu's lock keeps things in place; the lasso, taps and the eraser leave them alone. Hold a locked item with a finger to unlock it, or use *Unlock all* in the ⋯ menu.
@@ -76,7 +80,7 @@ Requirements:
 | --- | --- |
 | `canvas/` | `NoteCanvasView` (input, tools, selection, fill), `TileCache` (GPU display-list tiles), `Camera`, `Document` (items and undo), `PaperRenderer`, `ItemRenderer`, `Pages` (portrait/landscape A4 layout), `AreaFill` (flood fill of hand-drawn areas) |
 | `ink/` | Brushes and helpers that build strokes from geometry |
-| `geometry/` | Points and affine maths, `ShapeRecognizer` (hold-to-shape), `ShapeMatcher` (her own shapes), `Lasso` (what a loop touches) |
+| `geometry/` | Points and affine maths, `ShapeRecognizer` (hold-to-shape), `ShapeMatcher` (her own shapes), `Lasso` (what a loop touches), `Snap` (shapes locking onto each other) |
 | `model/` | Canvas items, shape geometry, the engineering shapes and `CustomShape` |
 | `data/` | Plain SQLite (`NotesDb`), `NotesRepository` (single writer thread, trash, merge-restore, PDF import), `ImageStore` (lazy, memory-capped pictures), settings |
 | `backup/` | `BackupArchive` (the .zip) and `DriveBackup` (Drive REST and WorkManager; switched off until set up) |

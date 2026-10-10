@@ -169,7 +169,7 @@ fun PaperPicker(
     val all: List<Pair<String, @Composable () -> Unit>> =
       PaperStyle.entries.map { s ->
         val on = customId == null && s == style
-        s.name to @Composable { tile(s, s.label, on, { if (on && onEditCurrent != null) onEditCurrent() else onStyle(s) }, null) { m -> PaperSwatch(s, m, dark, looks[s.name]) } }
+        s.name to @Composable { tile(s, s.label, on, { if (on && onEditCurrent != null) onEditCurrent() else onStyle(s) }, null) { m -> PaperSwatch(s, m, dark, looks[s.name], com.tali.notes.canvas.PaperRenderer.weightOf(s, null)) } }
       } +
         customs.map { cp ->
           val on = cp.id == customId
@@ -261,6 +261,9 @@ private fun PatternSwatch(cp: CustomPaper, modifier: Modifier, dark: Boolean = f
     drawRoundRect(if (dark) Color(com.tali.notes.canvas.PaperRenderer.DARK_PAPER) else Color(cp.paperColor), cornerRadius = CornerRadius(8.dp.toPx()))
     val step = size.width * cp.spacingMm / 60f
     val line = Color(cp.faded(if (dark) (com.tali.notes.ink.Brushes.onDarkPaper(cp.lineColor) and 0x00FFFFFF) or 0x70000000 else cp.lineColor))
+    // Her line thickness, toned down for the small picture (Normal draws as before).
+    val weight = (cp.lineWeight ?: com.tali.notes.canvas.PaperRenderer.lineWeight).coerceIn(0.3f, 5f)
+    val w = 0.5f + 0.5f * weight
     if (step >= 2f) {
       when (cp.pattern) {
         PaperStyle.BLANK -> Unit
@@ -269,7 +272,7 @@ private fun PatternSwatch(cp: CustomPaper, modifier: Modifier, dark: Boolean = f
           while (y < size.height) {
             var x = step
             while (x < size.width) {
-              drawCircle(line, maxOf(1f, step / 9f), Offset(x, y))
+              drawCircle(line, maxOf(1f, step / 9f) * (0.6f + 0.4f * weight.coerceAtMost(3f)), Offset(x, y))
               x += step
             }
             y += step
@@ -278,20 +281,20 @@ private fun PatternSwatch(cp: CustomPaper, modifier: Modifier, dark: Boolean = f
         else -> {
           var y = step
           while (y < size.height) {
-            drawLine(line, Offset(0f, y), Offset(size.width, y), density)
+            drawLine(line, Offset(0f, y), Offset(size.width, y), density * w)
             y += step
           }
           if (cp.pattern != PaperStyle.LINES) {
             var x = step
             while (x < size.width) {
-              drawLine(line, Offset(x, 0f), Offset(x, size.height), density)
+              drawLine(line, Offset(x, 0f), Offset(x, size.height), density * w)
               x += step
             }
           }
         }
       }
     }
-    if (cp.margin) drawLine(Color(cp.faded(0xFFF0A0B4.toInt())), Offset(size.width * 0.2f, 0f), Offset(size.width * 0.2f, size.height), 1.2f * density)
+    if (cp.margin) drawLine(Color(cp.faded(0xFFF0A0B4.toInt())), Offset(size.width * 0.2f, 0f), Offset(size.width * 0.2f, size.height), 1.2f * density * w)
     drawRoundRect(Color(0x22000000), cornerRadius = CornerRadius(8.dp.toPx()), style = Stroke(density * 0.6f))
   }
 }
@@ -503,7 +506,7 @@ fun BuiltInPaperDialog(
     Spacer(Modifier.height(16.dp))
     Row(verticalAlignment = Alignment.Top) {
       Box(Modifier.width(110.dp).aspectRatio(1322f / 1871f).clip(RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))) {
-        PaperSwatch(style, Modifier.fillMaxSize(), look = look)
+        PaperSwatch(style, Modifier.fillMaxSize(), look = look, weight = weight)
       }
       Spacer(Modifier.width(20.dp))
       Column(Modifier.weight(1f)) {
