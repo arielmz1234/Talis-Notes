@@ -47,6 +47,27 @@ class SnapTest {
   }
 
   @Test
+  fun sameSizeBoxesShowEveryLineThatLinesUp() {
+    val a = rect(0f, 0f, 100f, 50f).snapFeatures()
+    val b = rect(300f, 4f, 400f, 54f).snapFeatures()
+    val r = Snap.move(b, listOf(a), tol = 8f)
+    assertEquals(-4f, r.offset.y, 0.01f)
+    // Top, middle and bottom all line up.
+    assertEquals(3, r.guides.filterIsInstance<SnapGuide.Align>().count { !it.vertical })
+  }
+
+  @Test
+  fun resizingLinesUpTheFarSide() {
+    val target = rect(0f, 0f, 200f, 50f).snapFeatures()
+    // A box beside it, being resized from its top-left corner.
+    val box = Rect(300f, 0f, 400f, 48f)
+    val (s, guides) = Snap.scale(box, Pt(300f, 0f), 1.02f, listOf(target), tol = 4f)
+    // Its bottom (48 × 1.02 = 49) locks to the target's bottom at 50.
+    assertEquals(50f / 48f, s, 0.001f)
+    assertTrue(guides.any { it is SnapGuide.Align && !it.vertical && it.at == 50f })
+  }
+
+  @Test
   fun nothingNearbyMeansNoNudge() {
     val a = rect(0f, 0f, 100f, 50f).snapFeatures()
     val b = rect(300f, 120f, 360f, 170f).snapFeatures()

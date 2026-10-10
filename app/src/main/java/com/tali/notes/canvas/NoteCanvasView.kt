@@ -570,6 +570,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * slid along with the screen and then jumped back. They're taken onto the page now instead.
    */
   private fun handOffFinished() {
+    // Strokes written but not handed over yet (none while a stroke is still being written).
+    if (strokePens.isEmpty() || mode == Mode.INK || mode == Mode.LIVE_SHAPE) return
+    // Ink finishes a stroke on its own thread a moment after the pen lifts, so the stroke may not
+    // be ready to take yet (the first fix only took ready ones, and the stroke still slid). flush()
+    // waits for it, briefly, and hands it over through onStrokesFinished.
+    runCatching { inProgress.flush(HANDOFF_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
     val done = runCatching { inProgress.getFinishedStrokes() }.getOrNull() ?: return
     if (done.isNotEmpty()) onStrokesFinished(done)
   }
@@ -704,6 +710,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       tiles.invalidateAll()
     }
     erasePieces.values.forEach { itemRenderer.draw(canvas, it, camera.worldToScreen) }
+    // A thickness being slid in the selection menu, shown live (rebuilt at most once a frame).
+    pendingThickness?.let { size ->
+      pendingThickness = null
+      val dd = doc
+      if (dd != null) restylePreview = selection.mapNotNull { dd[it.id] }.map { item ->
+        when (item) {
+          is InkItem -> item.restyled(size, item.line)
+          is ShapeItem -> item.restyled(size, item.line)
+          else -> item
+        }
+      }
+    }
+    restylePreview?.let { itemRenderer.drawAll(canvas, it, camera.worldToScreen) }
     if (mode == Mode.LIVE_SHAPE) updateLiveShape()
     liveShape?.let { drawShapePreview(canvas, it) }
     straightPreview?.let { preview ->
@@ -956,7 +975,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val sb = selectionBounds ?: return false
     val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
     if (canRotateSelection() && rotateHandle(r).dist(screen) < hit) return true
-    return resizeChip(r).dist(screen) < hit || r.contains(screen.x, screen.y)
+    return resizeChip(r).dist(screen) < hit || moveChip(r).dist(screen) < hit || r.contains(screen.x, screen.y)
   }
 
   private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem || it is TextItem }
@@ -981,7 +1000,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       // The shape's own dots move its corners; add the rotate handle and the resize chip.
       val r = screenRect(b, Affine.IDENTITY).apply { inset(-pad, -pad) }
       drawRotateHandle(canvas, r)
-      if (mode != Mode.HANDLE_DRAG && mode != Mode.MOVE_SELECTION) drawResizeChip(canvas, resizeChip(r))
+      if (mode != Mode.HANDLE_DRAG && mode != Mode.MOVE_SELECTION) {
+        drawResizeChip(canvas, resizeChip(r))
+        drawMoveChip(canvas, moveChip(r))
+      }
       return
     }
     if (mode == Mode.ROTATE_SELECTION) {
@@ -994,6 +1016,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     r.set(Math.round(r.left) + 0.5f, Math.round(r.top) + 0.5f, Math.round(r.right) + 0.5f, Math.round(r.bottom) + 0.5f)
     canvas.drawRoundRect(r, 6f * density, 6f * density, selectionPaint)
     if (mode != Mode.MOVE_SELECTION) drawResizeChip(canvas, resizeChip(r))
+    if (mode != Mode.MOVE_SELECTION && mode != Mode.SCALE_SELECTION) drawMoveChip(canvas, moveChip(r))
     drawRotateHandle(canvas, r)
   }
 
@@ -1157,6 +1180,48 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     strokeJoin = Paint.Join.ROUND
   }
   private val resizePath = android.graphics.Path()
+
+  /** The move chip sits just off the selection's bottom-left corner, mirroring the resize chip. */
+  private fun moveChip(r: RectF) = Pt(r.left - RESIZE_CHIP_OFFSET_DP * density, r.bottom + RESIZE_CHIP_OFFSET_DP * density)
+
+  /**
+   * A round chip with a four-way arrow: hold and drag it to move the selection. Handy for shapes
+   * that are mostly dots and lines, where grabbing the shape itself is fiddly.
+   */
+  private fun drawMoveChip(canvas: Canvas, at: Pt) {
+    val d = density
+    val back = ((SystemClock.uptimeMillis() - chipBackAt) / CHIP_BACK_MS.toFloat()).coerceIn(0f, 1f)
+    val fading = back < 1f
+    if (fading) {
+      val a = easeOut(back)
+      canvas.saveLayerAlpha(at.x - 16f * d, at.y - 16f * d, at.x + 16f * d, at.y + 16f * d, (a * 255).toInt())
+      canvas.scale(0.85f + 0.15f * a, 0.85f + 0.15f * a, at.x, at.y)
+    }
+    canvas.drawCircle(at.x, at.y, 13f * d, handleFill)
+    canvas.drawCircle(at.x, at.y, 13f * d, handleStroke)
+    resizeArrow.color = handleStroke.color
+    resizeArrow.strokeWidth = 1.6f * d
+    val a = 7.2f * d
+    val h = 2.1f * d
+    resizePath.rewind()
+    resizePath.moveTo(at.x - a, at.y)
+    resizePath.lineTo(at.x + a, at.y)
+    resizePath.moveTo(at.x, at.y - a)
+    resizePath.lineTo(at.x, at.y + a)
+    // An arrowhead on each of the four ends.
+    for ((dx, dy) in listOf(1f to 0f, -1f to 0f, 0f to 1f, 0f to -1f)) {
+      val tx = at.x + dx * a
+      val ty = at.y + dy * a
+      resizePath.moveTo(tx - dx * h - dy * h, ty - dy * h - dx * h)
+      resizePath.lineTo(tx, ty)
+      resizePath.lineTo(tx - dx * h + dy * h, ty - dy * h + dx * h)
+    }
+    canvas.drawPath(resizePath, resizeArrow)
+    if (fading) {
+      canvas.restore()
+      postInvalidateOnAnimation()
+    }
+  }
 
   /** When a move or a dot drag ended: the resize chip (hidden meanwhile) fades back in from then. */
   private var chipBackAt = 0L
@@ -1392,15 +1457,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val screen = Pt(e.getX(idx), e.getY(idx))
     eraserOverride = e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
 
-    // 0. The resize chip wins over everything (it sits clear of the shape's own dots).
+    // 0. The resize and move chips win over everything (they sit clear of the shape's own dots).
     selectionBounds?.let { sb ->
       if (eraserOverride) return@let
       val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
-      if (resizeChip(r).dist(screen) < HANDLE_HIT_DP * density) {
+      val resizing = resizeChip(r).dist(screen) < HANDLE_HIT_DP * density
+      if (resizing || moveChip(r).dist(screen) < HANDLE_HIT_DP * density) {
         dragStart = p
         dragTransform = Affine.IDENTITY
         tiles.hidden = selection.map { it.id }.toSet()
-        mode = Mode.SCALE_SELECTION
+        startMoveSnap()
+        mode = if (resizing) Mode.SCALE_SELECTION else Mode.MOVE_SELECTION
         host.onSelectionChanged(null)
         invalidate()
         return
@@ -1581,7 +1648,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val b = selectionBounds ?: return
         val anchor = Pt(b.left, b.top)
         val corner = Pt(b.right, b.bottom)
-        val s = (world(e, idx).dist(anchor) / max(1f, dragStart.dist(anchor))).coerceIn(0.1f, 10f)
+        var s = (world(e, idx).dist(anchor) / max(1f, dragStart.dist(anchor))).coerceIn(0.1f, 10f)
+        // Its far side or middle lines up with nearby shapes as it grows or shrinks.
+        snapMoving?.box?.let { box ->
+          val (snapped, guides) = Snap.scale(box, anchor, s, snapTargets, snapTol())
+          s = snapped.coerceIn(0.1f, 10f)
+          showSnap(guides)
+        }
         dragTransform = Affine.scaleAround(anchor, s)
         if (corner.dist(anchor) * s < 4f) dragTransform = Affine.IDENTITY
         invalidate()
@@ -1611,7 +1684,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       Mode.SHAPE_CREATE -> {
         val raw = world(e, idx)
-        if (camera.toScreen(raw).dist(camera.toScreen(shapeStart)) < touchSlop) return
+        // Nothing until the pen has slid a little: a touch alone never drops a shape.
+        if (shapePreview == null && camera.toScreen(raw).dist(camera.toScreen(shapeStart)) < SHAPE_START_DP * density) return
         val line = customShape == null && (shapeKind == ShapeKind.LINE || shapeKind == ShapeKind.ARROW || shapeKind == ShapeKind.DOUBLE_ARROW || shapeKind == ShapeKind.DIMENSION)
         val stuck = if (line) lineEndAt(shapeStart, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snapTol())
         shapePreview = buildShape(shapeStart, stuck ?: raw, keepEnd = stuck != null)
@@ -1831,10 +1905,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (camera.toScreen(at).dist(camera.toScreen(shapeStart)) < touchSlop * 2) fillAt(shapeStart)
       }
       Mode.SHAPE_CREATE -> {
-        val tapped = if (shapePreview == null) hitTest(shapeStart, pages = false) { true } as? ShapeItem else null
+        val preview = shapePreview
+        val tapped = if (preview == null) hitTest(shapeStart, pages = false) { true } as? ShapeItem else null
         if (tapped != null) selectShape(tapped)
-        else if (d != null) {
-          val preview = shapePreview ?: buildShape(shapeStart - Pt(60f, 40f), shapeStart + Pt(60f, 40f))
+        else if (preview == null) {
+          // A tap draws nothing (it used to drop a shape on every touch); it only lets go of a selection.
+          host.onTip("shape-drag", "Drag on the page to draw the shape")
+        } else if (d != null) {
           val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry, fill = preview.fill, line = preview.line)
           d.commit(Change(emptyList(), listOf(shape)))
           // Picked up straight away, so it can be adjusted right after drawing.
@@ -1988,11 +2065,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
       }
       is SnapGuide.Touch -> {
+        // A small cross where they meet, on a soft white halo so it reads over any line.
         val s = camera.toScreen(g.at)
+        val k = 4.5f * d
         guideLine.pathEffect = null
+        guideLine.strokeCap = Paint.Cap.ROUND
+        guideLine.color = 0xE6FFFFFF.toInt()
+        guideLine.strokeWidth = 4.5f * d
+        canvas.drawLine(s.x - k, s.y - k, s.x + k, s.y + k, guideLine)
+        canvas.drawLine(s.x - k, s.y + k, s.x + k, s.y - k, guideLine)
+        guideLine.color = accentColor
         guideLine.strokeWidth = 2f * d
-        canvas.drawCircle(s.x, s.y, 5.5f * d, handleFill)
-        canvas.drawCircle(s.x, s.y, 5.5f * d, guideLine)
+        canvas.drawLine(s.x - k, s.y - k, s.x + k, s.y + k, guideLine)
+        canvas.drawLine(s.x - k, s.y + k, s.x + k, s.y - k, guideLine)
       }
     }
   }
@@ -2506,8 +2591,26 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }.onFailure { com.tali.notes.CrashLog.recovered(context, it) }.getOrNull()
       post {
         shooting = false
-        if (file != null) host.onScreenshot(file) else host.onHint("Couldn't take the screenshot")
+        if (file != null) {
+          shotAreas[file.path] = area
+          host.onScreenshot(file)
+        } else host.onHint("Couldn't take the screenshot")
       }
+    }
+  }
+
+  /** Where each screenshot was taken from, so a copy pastes back at the same size. */
+  private val shotAreas = HashMap<String, Rect>()
+
+  /**
+   * Copy on a screenshot: the picture also goes on the app's own clipboard, so holding on the page
+   * pastes it there like anything copied (at the size it was taken, in this notebook or another).
+   */
+  fun copyScreenshot(file: java.io.File) {
+    val area = shotAreas[file.path] ?: return
+    fillWorker.execute {
+      val name = runCatching { android.graphics.BitmapFactory.decodeFile(file.path)?.let { bmp -> images.save(bmp, "shot-") } }.getOrNull()
+      post { if (name != null) Clipboard.items = listOf(ImageItem("clip", 0, name, Rect(0f, 0f, area.width, area.height), front = true)) }
     }
   }
 
@@ -2689,6 +2792,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   fun clearSelection() {
+    endThicknessPreview()
     val had = selection.isNotEmpty() || activeShapeId != null
     selection = emptyList()
     selectionBounds = null
@@ -2889,8 +2993,31 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * Changes how the selected writing and shapes are drawn: [size] thick and/or in [line] style
    * (null leaves that as it is). Pictures and text keep theirs.
    */
+  /** The selection as it looks at a thickness still being slid (not saved until the slider is let go). */
+  private var restylePreview: List<CanvasItem>? = null
+  private var pendingThickness: Float? = null
+
+  /** The selection menu's thickness slider is moving: show the selection [size] thick straight away. */
+  fun previewThickness(size: Float) {
+    if (selection.isEmpty()) return
+    pendingThickness = size
+    tiles.hidden = selection.map { it.id }.toSet()
+    invalidate()
+  }
+
+  private fun endThicknessPreview() {
+    if (restylePreview == null && pendingThickness == null) return
+    restylePreview = null
+    pendingThickness = null
+    tiles.hidden = emptySet()
+    invalidate()
+  }
+
   fun restyleSelection(size: Float? = null, line: LineStyle? = null) {
+    endThicknessPreview()
     val d = doc ?: return
+    // Slid back to where it was: nothing to save.
+    if (size == null && line == null) return
     val changed =
       selection.map {
         when (it) {
@@ -3224,8 +3351,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun fingerDown(e: MotionEvent) {
-    // Fingers usually move the page next: hand the last strokes over now (see [handOffFinished]).
-    runCatching { inProgress.requestHandoff() }
+    // Fingers usually move the page next: hand the last strokes over now, before it moves (see [handOffFinished]).
+    handOffFinished()
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
       velocity = VelocityTracker.obtain().also { it.addMovement(e) }
@@ -3897,6 +4024,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val LOOP_CLOSE_DP = 40f
     /** How far (dp, each way) the resize chip sits out from the selection's padded corner. */
     private const val RESIZE_CHIP_OFFSET_DP = 14f
+    /** How long a finger landing right after writing waits for Ink to hand the last strokes over. */
+    private const val HANDOFF_WAIT_MS = 120L
+    /** How far (dp on screen) the Shapes tool has to be dragged before a shape appears; a tap draws nothing. */
+    private const val SHAPE_START_DP = 12f
     /** How long the resize chip takes to come back after a move or a dot drag. */
     private const val CHIP_BACK_MS = 160L
     /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */

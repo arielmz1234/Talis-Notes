@@ -52,10 +52,10 @@ import kotlinx.coroutines.withContext
 
 /**
  * A screenshot taken with the screenshot lasso: a preview, then save it to the gallery (Pictures ›
- * Tali's Notes), share it to any app, or copy it to paste somewhere else.
+ * Tali's Notes), share it to any app, or copy it to paste on the page (hold to paste) or in another app.
  */
 @Composable
-fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit) {
+fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit, onCopy: () -> Unit = {}) {
   val c = Tali.colors
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -75,7 +75,11 @@ fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
       QuietButton("Close", onClick = onDone)
       QuietButton("Copy") {
-        if (copyImage(context, file)) onHint("Copied — paste it in another app")
+        // Onto the page (hold anywhere to paste it) and into other apps alike.
+        onCopy()
+        copyImage(context, file)
+        onHint("Copied — hold on the page to paste it, or paste it in another app")
+        onDone()
       }
       QuietButton(if (saved) "Saved" else "Save to gallery") {
         if (saved) return@QuietButton

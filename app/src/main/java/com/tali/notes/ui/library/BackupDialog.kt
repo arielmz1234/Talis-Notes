@@ -42,6 +42,7 @@ import com.tali.notes.backup.BackupArchive
 import com.tali.notes.backup.DriveBackup
 import com.tali.notes.data.NotesRepository
 import com.tali.notes.theme.Tali
+import com.tali.notes.ui.library.CardBody
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.ToggleRow
@@ -103,6 +104,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
   DialogCard(onDismiss, width = 560) {
     Text("Backups", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(16.dp))
+    CardBody {
     BackupCard(Icons.Outlined.TabletAndroid, "On this tablet", "Every stroke is saved the moment you write it, even without internet.")
     Spacer(Modifier.height(10.dp))
     BackupCard(Icons.Outlined.FolderZip, "Backup file", "Everything in one file: notebooks, pictures, pens, colours and your shapes. Keep it in Files, on a computer, or send it to yourself.") {
@@ -121,6 +123,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
       style = MaterialTheme.typography.bodySmall,
       color = if (busy != null || message != null) c.blue else c.inkFaint,
     )
+    }
     Spacer(Modifier.height(18.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Done", onClick = onDismiss) }
   }

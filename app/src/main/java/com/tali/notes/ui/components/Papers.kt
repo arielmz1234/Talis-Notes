@@ -75,6 +75,7 @@ import com.tali.notes.model.CustomPaper
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.talisApp
 import com.tali.notes.theme.Tali
+import com.tali.notes.ui.library.CardBody
 import com.tali.notes.ui.library.ConfirmDialog
 import com.tali.notes.ui.library.DialogCard
 import com.tali.notes.ui.library.TitleField
@@ -334,12 +335,23 @@ internal fun LineWeightRow(value: Float, onChange: (Float) -> Unit) {
   }
 }
 
+/** Width of the labels beside the paper card's controls. */
+private val LABEL_W = 84.dp
+
+/** The five line thicknesses as one gliding choice, with no label of its own. */
+@Composable
+internal fun LineWeightChoice(value: Float, modifier: Modifier = Modifier, onChange: (Float) -> Unit) {
+  val choices = listOf(0.6f, 1f, 2f, 3.5f, 5f)
+  val names = listOf("Thin", "Normal", "Bold", "Bolder", "Heavy")
+  Segmented(choices, choices.minBy { abs(it - value) }, { names[choices.indexOf(it)] }, onChange, modifier)
+}
+
 /** How strongly the lines or picture show over the page, as a percentage slider. */
 @Composable
 private fun OpacityRow(value: Float, onChange: (Float) -> Unit) {
   val c = Tali.colors
   Row(verticalAlignment = Alignment.CenterVertically) {
-    SectionLabel("Opacity", Modifier.width(76.dp))
+    SectionLabel("Opacity", Modifier.width(LABEL_W))
     Slider(
       value = value,
       // Whole 5% steps, never so faint that the lines disappear.
@@ -391,16 +403,22 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
     val fallback = if (picture) "My picture" else "My ${draft.pattern.label.lowercase()}"
     onSave(shown.copy(name = name.text.trim().ifBlank { fallback }))
   }
-  DialogCard(onDismiss, width = 640) {
-    Text(if (editing != null) "Edit paper" else "Your own paper", style = MaterialTheme.typography.titleLarge, color = c.ink)
-    Spacer(Modifier.height(4.dp))
-    Text(if (editing != null) "Changes show in every notebook that uses it." else "Saved with your papers, so every notebook can use it.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
-    Spacer(Modifier.height(16.dp))
+  // Laid out to fit a landscape tablet without scrolling (on Tali's tablet the buttons were cut
+  // off): the name sits beside the title and the labels beside their controls. The middle still
+  // scrolls on a screen too short for it, so Save is never out of reach.
+  DialogCard(onDismiss, width = 680) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text(if (editing != null) "Edit paper" else "Your own paper", style = MaterialTheme.typography.titleLarge, color = c.ink)
+      Spacer(Modifier.width(20.dp))
+      Box(Modifier.weight(1f)) { TitleField(name, { name = it }, if (picture) "Name, e.g. Weekly planner" else "Name, e.g. Wide lines", autoFocus = false) { save() } }
+    }
+    Spacer(Modifier.height(14.dp))
     Segmented(listOf(false, true), picture, { if (it) "From a picture" else "Design a pattern" }, { picture = it }, Modifier.fillMaxWidth())
-    Spacer(Modifier.height(18.dp))
+    Spacer(Modifier.height(14.dp))
+    CardBody {
     Row {
       // An A4 page in miniature.
-      Box(Modifier.width(150.dp).aspectRatio(1322f / 1871f).clip(RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))) {
+      Box(Modifier.width(140.dp).aspectRatio(1322f / 1871f).clip(RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))) {
         if (picture && draft.image == null) {
           Box(Modifier.fillMaxSize().background(c.sunken), contentAlignment = Alignment.Center) {
             Icon(Icons.Outlined.Image, null, tint = c.inkFaint, modifier = Modifier.size(36.dp))
@@ -431,13 +449,14 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
             Text("Fainter pictures keep your writing easy to read.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
           }
         } else {
-          SectionLabel("Pattern")
-          Spacer(Modifier.height(8.dp))
-          Segmented(listOf(PaperStyle.LINES, PaperStyle.GRID, PaperStyle.DOTS, PaperStyle.BLANK), draft.pattern, { it.label }, { draft = draft.copy(pattern = it) }, Modifier.fillMaxWidth())
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel("Pattern", Modifier.width(LABEL_W))
+            Segmented(listOf(PaperStyle.LINES, PaperStyle.GRID, PaperStyle.DOTS, PaperStyle.BLANK), draft.pattern, { it.label }, { draft = draft.copy(pattern = it) }, Modifier.weight(1f))
+          }
           if (draft.pattern != PaperStyle.BLANK) {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-              SectionLabel("Spacing", Modifier.width(76.dp))
+              SectionLabel("Spacing", Modifier.width(LABEL_W))
               Slider(
                 value = draft.spacingMm,
                 onValueChange = { draft = draft.copy(spacingMm = (it * 2).toInt() / 2f) },
@@ -447,35 +466,35 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
               )
               Text("${draft.spacingMm.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }} mm", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(52.dp).padding(start = 8.dp))
             }
-            Spacer(Modifier.height(6.dp))
+            OpacityRow(draft.opacity) { draft = draft.copy(opacity = it) }
             Row(verticalAlignment = Alignment.CenterVertically) {
-              SectionLabel("Lines", Modifier.width(76.dp))
+              SectionLabel("Thickness", Modifier.width(LABEL_W))
+              LineWeightChoice(draft.lineWeight ?: com.tali.notes.canvas.PaperRenderer.lineWeight, Modifier.weight(1f)) { draft = draft.copy(lineWeight = it) }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              SectionLabel("Lines", Modifier.width(LABEL_W))
               val lineRing = rememberSlidingSelection()
               Row(Modifier.colorRing(lineRing, Color(draft.lineColor))) {
                 LINE_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.lineColor, size = 26.dp, selection = lineRing) { draft = draft.copy(lineColor = col) } }
               }
             }
-            Spacer(Modifier.height(2.dp))
-            OpacityRow(draft.opacity) { draft = draft.copy(opacity = it) }
-            LineWeightRow(draft.lineWeight ?: com.tali.notes.canvas.PaperRenderer.lineWeight) { draft = draft.copy(lineWeight = it) }
           }
-          Spacer(Modifier.height(6.dp))
           Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel("Paper", Modifier.width(76.dp))
+            SectionLabel("Paper", Modifier.width(LABEL_W))
             val paperRing = rememberSlidingSelection()
             Row(Modifier.colorRing(paperRing, Color(draft.paperColor))) {
               PAPER_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.paperColor, size = 26.dp, selection = paperRing) { draft = draft.copy(paperColor = col) } }
             }
           }
-          Spacer(Modifier.height(4.dp))
           ToggleRow("Margin line", draft.margin, { draft = draft.copy(margin = it) }, detail = "A red line down the left, like an exercise book")
         }
       }
     }
-    Spacer(Modifier.height(18.dp))
-    TitleField(name, { name = it }, if (picture) "Name, e.g. Weekly planner" else "Name, e.g. Wide lines", autoFocus = false) { save() }
-    Spacer(Modifier.height(22.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    }
+    Spacer(Modifier.height(16.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+      Text(if (editing != null) "Changes show in every notebook that uses it." else "Saved with your papers, for every notebook.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.weight(1f))
       QuietButton("Cancel", onClick = onDismiss)
       if (canSave) PrimaryButton(if (editing != null) "Save changes" else "Save paper") { save() }
       else PrimaryButton("Choose a picture") { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }

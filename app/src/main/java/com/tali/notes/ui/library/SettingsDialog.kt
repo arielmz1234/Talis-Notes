@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.tali.notes.data.AppSettings
 import com.tali.notes.data.ThemeMode
 import com.tali.notes.theme.Tali
+import com.tali.notes.ui.library.CardBody
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.SectionLabel
 import com.tali.notes.ui.components.Segmented
@@ -25,6 +26,7 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinima
   DialogCard(onDismiss, width = 520) {
     Text("Settings", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(18.dp))
+    CardBody {
     SectionLabel("Theme")
     Spacer(Modifier.height(8.dp))
     Segmented(
@@ -45,6 +47,7 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinima
       style = MaterialTheme.typography.bodySmall,
       color = c.inkMuted,
     )
+    }
     Spacer(Modifier.height(22.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
       PrimaryButton("Done", onClick = onDismiss)

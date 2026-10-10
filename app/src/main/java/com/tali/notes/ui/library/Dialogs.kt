@@ -321,3 +321,13 @@ fun ConfirmDialog(title: String, body: String, confirm: String, destructive: Boo
     }
   }
 }
+
+/**
+ * The middle of a card, between its title and its buttons. Cards are laid out to fit the screen
+ * without scrolling; on a screen too short for one, this part scrolls, so the buttons under it
+ * are never cut off.
+ */
+@Composable
+fun androidx.compose.foundation.layout.ColumnScope.CardBody(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+  Column(Modifier.weight(1f, fill = false).verticalScroll(androidx.compose.foundation.rememberScrollState()), content = content)
+}

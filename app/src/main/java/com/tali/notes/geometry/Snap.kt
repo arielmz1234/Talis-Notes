@@ -53,14 +53,48 @@ object Snap {
   private const val TOUCH_BIAS = 0.75f
   private const val POINT_BIAS = 0.5f
 
-  private class Best(var score: Float = Float.MAX_VALUE, var delta: Float = 0f, var guide: SnapGuide? = null) {
+  /**
+   * The ways one direction could lock on. The nearest wins; every other one that lands on the same
+   * place shows too (a box beside one the same size lines up at the top, middle and bottom at once).
+   */
+  private class Best {
+    private class Option(val score: Float, val delta: Float, val guide: SnapGuide)
+
+    private val options = ArrayList<Option>()
+    private var best: Option? = null
+
     fun offer(score: Float, delta: Float, guide: SnapGuide) {
-      if (score < this.score) {
-        this.score = score
-        this.delta = delta
-        this.guide = guide
-      }
+      val o = Option(score, delta, guide)
+      options += o
+      if (score < (best?.score ?: Float.MAX_VALUE)) best = o
     }
+
+    val score: Float
+      get() = best?.score ?: Float.MAX_VALUE
+    val delta: Float
+      get() = best?.delta ?: 0f
+
+    /** The winner's guides: touches when it's a touch (shown as a cross where they meet), else every lining-up at the same place. */
+    fun guides(): List<SnapGuide> {
+      val win = best ?: return emptyList()
+      val touch = win.guide is SnapGuide.Touch
+      val same = options.filter { abs(it.delta - win.delta) < SAME && (it.guide is SnapGuide.Touch) == touch }.map { it.guide }
+      return if (touch) same.distinct() else mergeAligns(same.filterIsInstance<SnapGuide.Align>())
+    }
+  }
+
+  /** Two snaps this close (world units) land on the same place. */
+  private const val SAME = 0.05f
+
+  /** Lining-up guides along the same line become one, reaching across everything lined up on it. */
+  private fun mergeAligns(all: List<SnapGuide.Align>): List<SnapGuide> {
+    val out = ArrayList<SnapGuide.Align>()
+    for (g in all.sortedBy { it.at }) {
+      val last = out.lastOrNull()
+      if (last != null && last.vertical == g.vertical && abs(last.at - g.at) < SAME) out[out.size - 1] = last.copy(from = min(last.from, g.from), to = max(last.to, g.to))
+      else out += g
+    }
+    return out
   }
 
   private class Best2(var score: Float = Float.MAX_VALUE, var offset: Pt = Pt.ZERO, var guide: SnapGuide? = null)
@@ -117,13 +151,46 @@ object Snap {
       for ((a, b) in t.segments) for (p in moving.points) touch(p, a, b, tol, bx, by, two, sign = 1f)
       for ((a, b) in moving.segments) for (q in t.points) touch(q, a, b, tol, bx, by, two, sign = -1f)
     }
-    val gx = bx.guide
-    val gy = by.guide
+    val gx = bx.guides()
+    val gy = by.guides()
     // One snap that fixes both ways (an end on an end, or on a slanted edge) wins if it's the nearest.
     val axisBest = min(bx.score, by.score)
     if (two.guide != null && two.score <= axisBest) return SnapResult(two.offset, listOf(two.guide!!))
-    if (gx == null && gy == null) return SnapResult.NONE
-    return SnapResult(Pt(if (gx != null) bx.delta else 0f, if (gy != null) by.delta else 0f), listOfNotNull(gx, gy))
+    if (gx.isEmpty() && gy.isEmpty()) return SnapResult.NONE
+    return SnapResult(Pt(if (gx.isNotEmpty()) bx.delta else 0f, if (gy.isNotEmpty()) by.delta else 0f), gx + gy)
+  }
+
+  /**
+   * Resizing from the corner opposite [anchor]: the scale [s] of [box] (as it was) nudged so its far
+   * side or middle lines up with something in [targets], within [tol] of where it is now. Returns
+   * the scale to use and the guides of everything lined up.
+   */
+  fun scale(box: Rect, anchor: Pt, s: Float, targets: List<SnapFeatures>, tol: Float): Pair<Float, List<SnapGuide>> {
+    fun at(v: Float, a: Float, k: Float) = a + (v - a) * k
+    val now = Rect(at(box.left, anchor.x, s), at(box.top, anchor.y, s), at(box.right, anchor.x, s), at(box.bottom, anchor.y, s))
+    var bestErr = tol
+    var bestS = s
+    for (t in targets) {
+      val tb = t.box ?: continue
+      // The far side and the middle move with the size; the near side stays at the anchor.
+      for (v in floatArrayOf(tb.left, tb.center.x, tb.right)) {
+        for ((edge, base) in listOf(now.right to box.right, now.center.x to box.center.x)) {
+          val err = abs(v - edge)
+          if (err < bestErr && abs(base - anchor.x) > 1e-3f) { bestErr = err; bestS = (v - anchor.x) / (base - anchor.x) }
+        }
+      }
+      for (v in floatArrayOf(tb.top, tb.center.y, tb.bottom)) {
+        for ((edge, base) in listOf(now.bottom to box.bottom, now.center.y to box.center.y)) {
+          val err = abs(v - edge)
+          if (err < bestErr && abs(base - anchor.y) > 1e-3f) { bestErr = err; bestS = (v - anchor.y) / (base - anchor.y) }
+        }
+      }
+    }
+    if (bestS == s || bestS <= 0f) return s to emptyList()
+    // Everything that lines up at that size.
+    val moved = SnapFeatures(emptyList(), emptyList(), Rect(at(box.left, anchor.x, bestS), at(box.top, anchor.y, bestS), at(box.right, anchor.x, bestS), at(box.bottom, anchor.y, bestS)))
+    val lined = move(moved, targets.map { SnapFeatures(emptyList(), emptyList(), it.box) }, SAME * 4)
+    return bestS to lined.guides
   }
 
   /**

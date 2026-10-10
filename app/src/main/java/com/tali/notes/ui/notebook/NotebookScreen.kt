@@ -127,6 +127,7 @@ import androidx.compose.material.icons.automirrored.outlined.Redo
 import com.tali.notes.model.PaperStyle
 import com.tali.notes.model.Tool
 import com.tali.notes.theme.Tali
+import com.tali.notes.ui.library.CardBody
 import com.tali.notes.theme.TaliColorsScope
 import com.tali.notes.theme.notebookColors
 import androidx.compose.material.icons.outlined.AutoStories
@@ -689,7 +690,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
     }
 
-    screenshot?.let { file -> ScreenshotSheet(file, onDone = { screenshot = null }, onHint = vm::showHint) }
+    screenshot?.let { file -> ScreenshotSheet(file, onDone = { screenshot = null }, onHint = vm::showHint, onCopy = { holder.view?.copyScreenshot(file) }) }
 
     vm.selection?.let { sel ->
       if (vm.panel == null) {
@@ -703,6 +704,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onCut = { holder.view?.runSafely { cutSelection() } },
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
           onRestyle = { size, line -> holder.view?.runSafely { restyleSelection(size, line) } },
+          onThicknessLive = { size -> holder.view?.previewThickness(size) },
           onSaveShape = { savingShape = holder.view?.selectionGeometry() },
           onEditText = { id -> holder.view?.runSafely { editText(id) } },
           onArrange = { front -> holder.view?.runSafely { arrangeSelection(front) } },
@@ -1165,7 +1167,7 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
 }
 
 @Composable
-internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit) {
+internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit, onThicknessLive: (Float) -> Unit = {}) {
   val c = Tali.colors
   val density = LocalDensity.current
   // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
@@ -1243,7 +1245,7 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
       if (more) {
         when (extra) {
           SelectionExtra.COLOUR -> SelectionColours(sel, colors, with(density) { rowWidth.toDp() }, onColor)
-          SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, sel.line, with(density) { rowWidth.toDp() }, onRestyle) }
+          SelectionExtra.THICKNESS -> sel.lineSize?.let { SelectionThickness(it, sel.line, with(density) { rowWidth.toDp() }, onRestyle, onThicknessLive) }
           null -> {}
         }
       }
@@ -1271,13 +1273,14 @@ private fun SelectionColours(sel: SelectionInfo, colors: List<Int>, width: Dp, o
 
 /** Thickness and line style of selected writing and shapes, opened from the thickness button: side by side when the menu is wide enough, else one above the other. */
 @Composable
-private fun SelectionThickness(size: Float, line: LineStyle?, width: Dp, onRestyle: (Float?, LineStyle?) -> Unit) {
+private fun SelectionThickness(size: Float, line: LineStyle?, width: Dp, onRestyle: (Float?, LineStyle?) -> Unit, onLive: (Float) -> Unit = {}) {
   val c = Tali.colors
   // Follows the finger here and changes the writing once let go (one undo step).
   var value by remember(size) { mutableFloatStateOf(size) }
   val slider = @Composable { modifier: Modifier ->
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-      StepSlider(value, 0.5f..40f, 0.5f, { value = it }, Modifier.weight(1f), onChangeFinished = { if (value != size) onRestyle(value, null) })
+      // The drawing follows the slider as it moves; the change is saved (one undo step) when it's let go.
+      StepSlider(value, 0.5f..40f, 0.5f, { value = it; onLive(it) }, Modifier.weight(1f), onChangeFinished = { onRestyle(if (value != size) value else null, null) })
       Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
   }
@@ -1356,6 +1359,7 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
   DialogCard(onDismiss, width = 560) {
     Text("Export PDF", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(16.dp))
+    CardBody {
     if (pageLayouts.size > 1 && choice != ExportChoice.LONG) {
       Segmented(pageLayouts, pagesLayout, { if (it == PdfLayout.PDF_PAGES) "Slides' own pages" else "A4 pages" }, { pagesLayout = it }, Modifier.fillMaxWidth())
       Spacer(Modifier.height(14.dp))
@@ -1376,6 +1380,7 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
       color = c.inkMuted,
       minLines = 2,
     )
+    }
     Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton("Cancel", onClick = onDismiss)
