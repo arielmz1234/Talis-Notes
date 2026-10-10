@@ -148,7 +148,8 @@ class ShapeItem(
 
   fun withGeometry(g: ShapeGeometry) = ShapeItem(id, z, pen, color, size, g, fill = fill, line = line)
 
-  fun recolored(color: Int) = ShapeItem(id, z, pen, color, size, geometry, fill = fill, line = line)
+  /** Another colour; a see-through shape stays as see-through. */
+  fun recolored(color: Int) = ShapeItem(id, z, pen, if (this.color ushr 24 in 1..0xFE) (color and 0x00FFFFFF) or (this.color and 0xFF000000.toInt()) else color, size, geometry, fill = fill, line = line)
 
   fun filled(color: Int?) = ShapeItem(id, z, pen, this.color, size, geometry, bounds, color, built, line)
 

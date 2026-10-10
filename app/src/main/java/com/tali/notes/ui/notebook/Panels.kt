@@ -467,9 +467,6 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
     Spacer(Modifier.height(4.dp))
     if (styling) {
       ShapeStylePicker(settings, vm)
-      Spacer(Modifier.height(10.dp))
-      ToggleRow("Snap to other shapes", settings.snapShapes, vm::setSnapShapes, detail = "Ends and edges lock on when they touch, and shapes line up with each other's sides and middles.")
-      ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a pen stroke and it snaps into a clean line or shape.")
     } else {
       ShapeGroup.entries.forEach { group ->
         Spacer(Modifier.height(12.dp))
@@ -492,71 +489,95 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
 }
 
 /**
- * The Shapes tool's own look, apart from the pen she writes with: a small preview, then outline
- * colour, thickness, line style and fill (closed shapes only; None leaves them see-through).
+ * The Shapes tool's own look, apart from the pen she writes with, in two columns that fill the
+ * panel (so it all fits a landscape tablet without scrolling): a preview, the outline colours and
+ * the fill colours on the left; size, the two opacities (the outline's and the fill's, the shape's
+ * own, not the fill tool's), the line style and the shape switches on the right.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
   val look = settings.shapeLook
+  val outline = look.color or (0xFF shl 24)
+  val fill = look.fill?.let { it or (0xFF shl 24) }
   Spacer(Modifier.height(12.dp))
-  Row(verticalAlignment = Alignment.CenterVertically) {
-    ShapeStylePreview(look, Modifier.size(132.dp, 84.dp))
-    Spacer(Modifier.width(16.dp))
+  Row(verticalAlignment = Alignment.Top) {
+    // Left: how it looks, and its colours.
     Column(Modifier.weight(1f)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
-        StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, 0.5f, { v -> vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
-        Text(String.format(java.util.Locale.US, "%.1f", look.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
-      }
+      ShapeStylePreview(look, Modifier.fillMaxWidth().height(104.dp))
+      Spacer(Modifier.height(12.dp))
+      SectionLabel("Outline colour")
       Spacer(Modifier.height(6.dp))
-      CompactLineStylePicker(look.line, { l -> vm.updateShapeStyle { it.copy(line = l) } }, Modifier.fillMaxWidth())
-    }
-  }
-  Spacer(Modifier.height(12.dp))
-  Text("Outline", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
-  Spacer(Modifier.height(6.dp))
-  val ring = rememberSlidingSelection()
-  FlowRow(Modifier.colorRing(ring, Color(look.color)), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-    settings.savedColors.forEach { col -> ColorDot(Color(col), selected = col == look.color, selection = ring) { vm.updateShapeStyle { it.copy(color = col) } } }
-  }
-  Spacer(Modifier.height(10.dp))
-  Text("Fill", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
-  Spacer(Modifier.height(6.dp))
-  val fillRing = rememberSlidingSelection()
-  // The fill keeps exactly the colour picked, at the fill tool's opacity.
-  val opaque = look.fill?.let { it or (0xFF shl 24) }
-  FlowRow(Modifier.colorRing(fillRing, opaque?.let { Color(it) } ?: NO_FILL), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-    NoneDot(fillRing, "No fill") { vm.updateShapeStyle { it.copy(fill = null) } }
-    settings.savedColors.forEach { col ->
-      ColorDot(Color(col), selected = col == opaque, selection = fillRing) {
-        val alpha = (255 * settings.fillOpacity.coerceIn(0.15f, 1f)).toInt()
-        vm.updateShapeStyle { it.copy(fill = (alpha shl 24) or (col and 0x00FFFFFF)) }
+      val ring = rememberSlidingSelection()
+      FlowRow(Modifier.colorRing(ring, Color(outline)), horizontalArrangement = Arrangement.spacedBy(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        settings.savedColors.forEach { col -> ColorDot(Color(col), selected = (col or (0xFF shl 24)) == outline, size = 26.dp, selection = ring) { vm.updateShapeStyle { it.copy(color = col or (0xFF shl 24)) } } }
       }
+      Spacer(Modifier.height(10.dp))
+      SectionLabel("Fill")
+      Spacer(Modifier.height(6.dp))
+      val fillRing = rememberSlidingSelection()
+      FlowRow(Modifier.colorRing(fillRing, fill?.let { Color(it) } ?: NO_FILL), horizontalArrangement = Arrangement.spacedBy(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        NoneDot(fillRing, "No fill", dot = 34.dp) { vm.updateShapeStyle { it.copy(fill = null) } }
+        settings.savedColors.forEach { col -> ColorDot(Color(col), selected = (col or (0xFF shl 24)) == fill, size = 26.dp, selection = fillRing) { vm.updateShapeStyle { it.copy(fill = col or (0xFF shl 24)) } } }
+      }
+    }
+    Spacer(Modifier.width(20.dp))
+    // Right: thickness, opacities, line style, then the switches.
+    Column(Modifier.weight(1.15f)) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
+        StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, 0.5f, { v -> vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
+        Text(String.format(java.util.Locale.US, "%.1f", look.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
+      }
+      OpacitySlider("Opacity", look.opacity, enabled = true) { v -> vm.updateShapeStyle { it.copy(opacity = v) } }
+      OpacitySlider("Fill opacity", look.fillOpacity, enabled = fill != null) { v -> vm.updateShapeStyle { it.copy(fillOpacity = v) } }
+      Spacer(Modifier.height(4.dp))
+      CompactLineStylePicker(look.line, { l -> vm.updateShapeStyle { it.copy(line = l) } }, Modifier.fillMaxWidth())
+      Spacer(Modifier.height(8.dp))
+      ToggleRow("Snap to other shapes", settings.snapShapes, vm::setSnapShapes, detail = "Ends and edges lock on; shapes line up.")
+      ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a pen stroke.")
     }
   }
 }
 
-/** A box and an arrow drawn in the shape style, so each change shows at once. */
+/** An opacity from 10% to 100% in 5% steps, with its percentage; faded while it has nothing to act on. */
+@Composable
+private fun OpacitySlider(label: String, value: Float, enabled: Boolean, onChange: (Float) -> Unit) {
+  val c = Tali.colors
+  Row(Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.4f }, verticalAlignment = Alignment.CenterVertically) {
+    Text(label, style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
+    Slider(
+      value = value,
+      onValueChange = { onChange((Math.round(it * 20) / 20f).coerceIn(com.tali.notes.model.ShapeStyle.MIN_OPACITY, 1f)) },
+      valueRange = com.tali.notes.model.ShapeStyle.MIN_OPACITY..1f,
+      enabled = enabled,
+      colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
+      modifier = Modifier.weight(1f),
+    )
+    Text("${Math.round(value * 100)}%", style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
+  }
+}
+
+/** A box and an arrow drawn in the shape style (opacities too), so each change shows at once. */
 @Composable
 private fun ShapeStylePreview(look: com.tali.notes.model.ShapeStyle, modifier: Modifier) {
   val c = Tali.colors
   Canvas(modifier.clip(RoundedCornerShape(14.dp)).background(c.paper).border(1.dp, c.line, RoundedCornerShape(14.dp))) {
-    val w = (look.size * density * 0.75f).coerceAtLeast(1f)
+    val w = (look.size * density * 0.9f).coerceAtLeast(1f)
     val pattern = look.line.pattern
     val effect = if (pattern.isEmpty()) null else PathEffect.dashPathEffect(pattern.mapIndexed { i, v -> if (i % 2 == 0) maxOf((v - 1f) * w, 0.01f) else (v + 1f) * w }.toFloatArray())
     val stroke = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round, pathEffect = effect)
-    val ink = Color(look.color)
-    val box = androidx.compose.ui.geometry.Rect(size.width * 0.12f, size.height * 0.2f, size.width * 0.52f, size.height * 0.8f)
-    look.fill?.let { drawRect(Color(it), box.topLeft, box.size) }
+    val ink = Color(look.color or (0xFF shl 24)).copy(alpha = look.opacity)
+    val box = androidx.compose.ui.geometry.Rect(size.width * 0.1f, size.height * 0.2f, size.width * 0.52f, size.height * 0.8f)
+    look.fill?.let { drawRect(Color(it or (0xFF shl 24)).copy(alpha = look.fillOpacity), box.topLeft, box.size) }
     drawRect(ink, box.topLeft, box.size, style = stroke)
-    val a = Offset(size.width * 0.62f, size.height * 0.72f)
-    val b = Offset(size.width * 0.88f, size.height * 0.28f)
+    val a = Offset(size.width * 0.62f, size.height * 0.74f)
+    val b = Offset(size.width * 0.9f, size.height * 0.26f)
     drawLine(ink, a, b, w, cap = androidx.compose.ui.graphics.StrokeCap.Round, pathEffect = effect)
     // The arrowhead stays solid, as on the page.
     val dir = (b - a) / (b - a).getDistance()
-    val head = maxOf(9.dp.toPx(), w * 3.5f)
+    val head = maxOf(10.dp.toPx(), w * 3.5f)
     fun barb(turn: Float) = Offset(dir.x * kotlin.math.cos(turn) - dir.y * kotlin.math.sin(turn), dir.x * kotlin.math.sin(turn) + dir.y * kotlin.math.cos(turn)) * -head
     drawLine(ink, b, b + barb(0.52f), w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
     drawLine(ink, b, b + barb(-0.52f), w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
@@ -565,14 +586,14 @@ private fun ShapeStylePreview(look: com.tali.notes.model.ShapeStyle, modifier: M
 
 /** The "none" choice in a colour ring: an empty circle with a red slash. */
 @Composable
-private fun NoneDot(ring: com.tali.notes.ui.components.SlidingSelection, label: String, onClick: () -> Unit) {
+private fun NoneDot(ring: com.tali.notes.ui.components.SlidingSelection, label: String, dot: androidx.compose.ui.unit.Dp = 38.dp, onClick: () -> Unit) {
   val c = Tali.colors
   Box(
-    Modifier.slidingOption(ring, NO_FILL).size(38.dp).clip(CircleShape)
+    Modifier.slidingOption(ring, NO_FILL).size(dot).clip(CircleShape)
       .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = label, onClick = onClick),
     contentAlignment = Alignment.Center,
   ) {
-    Canvas(Modifier.size(30.dp)) {
+    Canvas(Modifier.size(dot - 8.dp)) {
       drawCircle(c.surface)
       drawCircle(c.line, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
       drawLine(c.danger, Offset(size.width * 0.22f, size.height * 0.78f), Offset(size.width * 0.78f, size.height * 0.22f), 2.dp.toPx())

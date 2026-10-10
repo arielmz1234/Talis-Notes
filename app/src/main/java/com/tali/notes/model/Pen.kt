@@ -33,14 +33,32 @@ enum class PenType(val label: String, val defaultSize: Float, val minSize: Float
 
 /**
  * How the Shapes tool draws, set in its own panel (not borrowed from the pen in use): outline
- * colour, thickness and line style, and a fill for closed shapes (null = none; stored with its
- * opacity).
+ * colour, thickness, line style and [opacity], and a fill colour for closed shapes (null = none)
+ * with its own [fillOpacity]. Colours are kept opaque; the opacities are applied when drawing.
  */
 @Serializable
-data class ShapeStyle(val color: Int, val size: Float, val line: LineStyle = LineStyle.SOLID, val fill: Int? = null) {
+data class ShapeStyle(
+  val color: Int,
+  val size: Float,
+  val line: LineStyle = LineStyle.SOLID,
+  val fill: Int? = null,
+  val opacity: Float = 1f,
+  val fillOpacity: Float = 0.5f,
+) {
+  /** The outline colour with its opacity. */
+  val outlineArgb: Int
+    get() = withOpacity(color, opacity)
+
+  /** The fill with its opacity, or null for none. */
+  val fillArgb: Int?
+    get() = fill?.let { withOpacity(it, fillOpacity) }
+
   companion object {
     const val MIN_SIZE = 0.5f
     const val MAX_SIZE = 12f
+    const val MIN_OPACITY = 0.1f
+
+    fun withOpacity(color: Int, opacity: Float): Int = ((255 * opacity.coerceIn(MIN_OPACITY, 1f)).toInt() shl 24) or (color and 0x00FFFFFF)
   }
 }
 

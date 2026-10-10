@@ -1697,7 +1697,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     }
     val color = if (darkPaper) Brushes.onDarkPaper(item.color) else item.color
-    previewPaint.color = Brushes.inkColor(item.pen, color)
+    previewPaint.color = Brushes.shapeInk(item.pen, color)
     previewPaint.strokeWidth = item.size
     val pattern = item.line.pattern
     previewPaint.pathEffect =
@@ -1752,8 +1752,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val snapped = ShapeRecognizer.snappedLine(geometry.a, geometry.b)
       geometry = geometry.copy(b = snapped.b)
     }
-    val shape = ShapeItem("preview", 0, PenType.FINELINER, look.color, look.size, geometry, line = look.line)
-    return if (look.fill != null && shape.closed) shape.filled(look.fill) else shape
+    val shape = ShapeItem("preview", 0, PenType.FINELINER, look.outlineArgb, look.size, geometry, line = look.line)
+    val fill = look.fillArgb
+    return if (fill != null && shape.closed) shape.filled(fill) else shape
   }
 
   private fun endDraw(e: MotionEvent) {
@@ -2679,7 +2680,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         selection.any { it !is ImageItem && it !is TextItem },
         canRotateSelection(),
         textId = (selection.singleOrNull() as? TextItem)?.id,
-        color = selection.firstNotNullOfOrNull { (it as? InkItem)?.color ?: (it as? ShapeItem)?.color ?: (it as? TextItem)?.color },
+        color = selection.firstNotNullOfOrNull { (it as? InkItem)?.color ?: (it as? ShapeItem)?.color?.or(0xFF shl 24) ?: (it as? TextItem)?.color },
         lineSize = selection.firstNotNullOfOrNull { (it as? InkItem)?.size ?: (it as? ShapeItem)?.size },
         line = selection.firstNotNullOfOrNull { (it as? InkItem)?.line ?: (it as? ShapeItem)?.line },
         locked = selection.all { it.locked },

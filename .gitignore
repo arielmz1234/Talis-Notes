@@ -19,3 +19,6 @@ local.properties
 
 # Emulator screenshots
 /tools/emulator/shots/
+
+# Test APKs handed out from the project folder
+/*.apk

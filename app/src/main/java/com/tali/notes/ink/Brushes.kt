@@ -213,8 +213,30 @@ object Brushes {
   fun brush(type: PenType, color: Int, size: Float, style: LineStyle = LineStyle.SOLID, square: Boolean = false): Brush =
     Brush.createWithColorIntArgb(writingFamily(type, style, square), inkColor(type, color), size, EPSILON)
 
-  fun shapeBrush(type: PenType, color: Int, size: Float): Brush =
-    Brush.createWithColorIntArgb(shapeFamily(type), inkColor(type, color), size, SHAPE_EPSILON)
+  fun shapeBrush(type: PenType, color: Int, size: Float): Brush {
+    val ink = shapeInk(type, color)
+    // A see-through outline mustn't darken where it crosses itself (a closed shape's first corner).
+    val family = if (ink ushr 24 < 0xFF && !type.isHighlighter) translucentShapes else shapeFamily(type)
+    return Brush.createWithColorIntArgb(family, ink, size, SHAPE_EPSILON)
+  }
+
+  /**
+   * A shape's outline colour as drawn: shapes keep the opacity they were given (the Shapes tool's
+   * opacity); a colour saved without any alpha is opaque. The highlighter adds its own as usual.
+   */
+  fun shapeInk(type: PenType, color: Int): Int =
+    when {
+      type.isHighlighter -> inkColor(type, color)
+      color ushr 24 == 0 -> color or (0xFF shl 24)
+      else -> color
+    }
+
+  /** The shapes' even marker tip, painting each stroke's own overlaps only once. */
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  private val translucentShapes: BrushFamily by lazy {
+    val marker = StockBrushes.marker()
+    runCatching { marker.copy(coats = marker.coats.map { BrushCoat(it.tip, BrushPaint(emptyList(), emptyList(), SelfOverlap.DISCARD)) }, clientBrushFamilyId = "tali:shape-translucent") }.getOrDefault(marker)
+  }
 
   /** Opaque colour of a brush, as shown in the palette. */
   fun displayColor(brush: Brush): Int = brush.colorIntArgb or (0xFF shl 24)
