@@ -1,5 +1,8 @@
 package com.tali.notes.ui.components
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.ui.layout.onSizeChanged
 import android.net.Uri
 import androidx.compose.material.icons.outlined.Edit
@@ -170,7 +173,7 @@ fun PaperPicker(
     val all: List<Pair<String, @Composable () -> Unit>> =
       PaperStyle.entries.map { s ->
         val on = customId == null && s == style
-        s.name to @Composable { tile(s, s.label, on, { if (on && onEditCurrent != null) onEditCurrent() else onStyle(s) }, null) { m -> PaperSwatch(s, m, dark, looks[s.name], com.tali.notes.canvas.PaperRenderer.weightOf(s, null)) } }
+        s.name to @Composable { tile(s, stringResource(s.nameRes), on, { if (on && onEditCurrent != null) onEditCurrent() else onStyle(s) }, null) { m -> PaperSwatch(s, m, dark, looks[s.name], com.tali.notes.canvas.PaperRenderer.weightOf(s, null)) } }
       } +
         customs.map { cp ->
           val on = cp.id == customId
@@ -181,7 +184,7 @@ fun PaperPicker(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), maxItemsInEachRow = fit) {
       folded.forEach { name -> all.firstOrNull { it.first == name }?.second?.invoke() }
       val turn = animateFloatAsState(if (expanded) 180f else 0f, tween(PAPERS_OPEN_MS, easing = EaseOutStrong), label = "moreArrow")
-      tile("more", if (expanded) "Fewer" else "More", false, { expanded = !expanded }, null) { m ->
+      tile("more", if (expanded) stringResource(R.string.fewer) else stringResource(R.string.more), false, { expanded = !expanded }, null) { m ->
         Box(m.clip(RoundedCornerShape(8.dp)).background(c.sunken), contentAlignment = Alignment.Center) {
           Icon(
             Icons.Outlined.KeyboardArrowDown,
@@ -209,7 +212,7 @@ fun PaperPicker(
         maxItemsInEachRow = fit,
       ) {
         val items = rest.map { it.second } + @Composable {
-          tile("own", "Your own", false, onAdd, null) { m ->
+          tile("own", stringResource(R.string.your_own), false, onAdd, null) { m ->
             Box(m.clip(RoundedCornerShape(8.dp)).border(1.dp, c.line, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
               Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(18.dp))
             }
@@ -227,9 +230,9 @@ fun PaperPicker(
   }
   removing?.let { cp ->
     ConfirmDialog(
-      title = "Remove “${cp.name}”?",
-      body = "It disappears from the paper choices. Notebooks using it switch to blank paper; your writing stays.",
-      confirm = "Remove",
+      title = stringResource(R.string.remove_n, cp.name),
+      body = stringResource(R.string.it_disappears_from_the_paper_choices),
+      confirm = stringResource(R.string.remove),
       destructive = true,
       onDismiss = { removing = null },
     ) {
@@ -327,9 +330,9 @@ fun rememberPaperImage(file: String, maxPx: Int): ImageBitmap? {
 internal fun LineWeightRow(value: Float, onChange: (Float) -> Unit) {
   val c = Tali.colors
   val choices = listOf(0.6f, 1f, 2f, 3.5f, 5f)
-  val names = listOf("Thin", "Normal", "Bold", "Bolder", "Heavy")
+  val names = listOf(stringResource(R.string.thin), stringResource(R.string.normal), stringResource(R.string.bold), stringResource(R.string.bolder), stringResource(R.string.heavy))
   Column(Modifier.padding(top = 10.dp)) {
-    Text("Line thickness", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
+    Text(stringResource(R.string.line_thickness), style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
     Spacer(Modifier.height(6.dp))
     Segmented(choices, choices.minBy { abs(it - value) }, { names[choices.indexOf(it)] }, onChange, Modifier.fillMaxWidth())
   }
@@ -342,7 +345,7 @@ private val LABEL_W = 84.dp
 @Composable
 internal fun LineWeightChoice(value: Float, modifier: Modifier = Modifier, onChange: (Float) -> Unit) {
   val choices = listOf(0.6f, 1f, 2f, 3.5f, 5f)
-  val names = listOf("Thin", "Normal", "Bold", "Bolder", "Heavy")
+  val names = listOf(stringResource(R.string.thin), stringResource(R.string.normal), stringResource(R.string.bold), stringResource(R.string.bolder), stringResource(R.string.heavy))
   Segmented(choices, choices.minBy { abs(it - value) }, { names[choices.indexOf(it)] }, onChange, modifier)
 }
 
@@ -351,7 +354,7 @@ internal fun LineWeightChoice(value: Float, modifier: Modifier = Modifier, onCha
 private fun OpacityRow(value: Float, onChange: (Float) -> Unit) {
   val c = Tali.colors
   Row(verticalAlignment = Alignment.CenterVertically) {
-    SectionLabel("Opacity", Modifier.width(LABEL_W))
+    SectionLabel(stringResource(R.string.opacity), Modifier.width(LABEL_W))
     Slider(
       value = value,
       // Whole 5% steps, never so faint that the lines disappear.
@@ -360,7 +363,7 @@ private fun OpacityRow(value: Float, onChange: (Float) -> Unit) {
       colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
       modifier = Modifier.weight(1f),
     )
-    Text("${(value * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(52.dp).padding(start = 8.dp))
+    Text(stringResource(R.string.n, (value * 100).roundToInt()), style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(52.dp).padding(start = 8.dp))
   }
 }
 
@@ -400,7 +403,7 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
   val canSave = !picture || draft.image != null
   fun save() {
     if (!canSave) return
-    val fallback = if (picture) "My picture" else "My ${draft.pattern.label.lowercase()}"
+    val fallback = if (picture) tr(R.string.my_picture) else tr(R.string.my_n, tr(draft.pattern.nameRes).lowercase())
     onSave(shown.copy(name = name.text.trim().ifBlank { fallback }))
   }
   // Laid out to fit a landscape tablet without scrolling (on Tali's tablet the buttons were cut
@@ -408,12 +411,12 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
   // scrolls on a screen too short for it, so Save is never out of reach.
   DialogCard(onDismiss, width = 680) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Text(if (editing != null) "Edit paper" else "Your own paper", style = MaterialTheme.typography.titleLarge, color = c.ink)
+      Text(if (editing != null) stringResource(R.string.edit_paper) else stringResource(R.string.your_own_paper), style = MaterialTheme.typography.titleLarge, color = c.ink)
       Spacer(Modifier.width(20.dp))
-      Box(Modifier.weight(1f)) { TitleField(name, { name = it }, if (picture) "Name, e.g. Weekly planner" else "Name, e.g. Wide lines", autoFocus = false) { save() } }
+      Box(Modifier.weight(1f)) { TitleField(name, { name = it }, if (picture) stringResource(R.string.name_e_g_weekly_planner) else stringResource(R.string.name_e_g_wide_lines), autoFocus = false) { save() } }
     }
     Spacer(Modifier.height(14.dp))
-    Segmented(listOf(false, true), picture, { if (it) "From a picture" else "Design a pattern" }, { picture = it }, Modifier.fillMaxWidth())
+    Segmented(listOf(false, true), picture, { if (it) tr(R.string.from_a_picture) else tr(R.string.design_a_pattern) }, { picture = it }, Modifier.fillMaxWidth())
     Spacer(Modifier.height(14.dp))
     CardBody {
     Row {
@@ -431,32 +434,32 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
       Column(Modifier.weight(1f)) {
         if (picture) {
           Text(
-            "The picture fills each A4 page, under your writing. Good for planner pages, timetables and printed worksheets.",
+            stringResource(R.string.the_picture_fills_each_a4_page),
             style = MaterialTheme.typography.bodyMedium,
             color = c.inkMuted,
           )
           Spacer(Modifier.height(16.dp))
-          QuietButton(if (loading) "Opening…" else if (draft.image == null) "Choose a picture" else "Choose another picture") {
+          QuietButton(if (loading) stringResource(R.string.opening) else if (draft.image == null) stringResource(R.string.choose_a_picture) else stringResource(R.string.choose_another_picture)) {
             picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
           }
           if (failed) {
             Spacer(Modifier.height(8.dp))
-            Text("That picture couldn't be opened.", style = MaterialTheme.typography.bodySmall, color = c.danger)
+            Text(stringResource(R.string.that_picture_couldn_t_be_opened), style = MaterialTheme.typography.bodySmall, color = c.danger)
           }
           if (draft.image != null) {
             Spacer(Modifier.height(14.dp))
             OpacityRow(draft.opacity) { draft = draft.copy(opacity = it) }
-            Text("Fainter pictures keep your writing easy to read.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+            Text(stringResource(R.string.fainter_pictures_keep_your_writing_easy), style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
           }
         } else {
           Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel("Pattern", Modifier.width(LABEL_W))
-            Segmented(listOf(PaperStyle.LINES, PaperStyle.GRID, PaperStyle.DOTS, PaperStyle.BLANK), draft.pattern, { it.label }, { draft = draft.copy(pattern = it) }, Modifier.weight(1f))
+            SectionLabel(stringResource(R.string.pattern), Modifier.width(LABEL_W))
+            Segmented(listOf(PaperStyle.LINES, PaperStyle.GRID, PaperStyle.DOTS, PaperStyle.BLANK), draft.pattern, { tr(it.nameRes) }, { draft = draft.copy(pattern = it) }, Modifier.weight(1f))
           }
           if (draft.pattern != PaperStyle.BLANK) {
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-              SectionLabel("Spacing", Modifier.width(LABEL_W))
+              SectionLabel(stringResource(R.string.spacing), Modifier.width(LABEL_W))
               Slider(
                 value = draft.spacingMm,
                 onValueChange = { draft = draft.copy(spacingMm = (it * 2).toInt() / 2f) },
@@ -464,16 +467,16 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
                 colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
                 modifier = Modifier.weight(1f),
               )
-              Text("${draft.spacingMm.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }} mm", style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(52.dp).padding(start = 8.dp))
+              Text(stringResource(R.string.n_mm, draft.spacingMm.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }), style = MaterialTheme.typography.labelMedium, color = c.inkMuted, modifier = Modifier.width(52.dp).padding(start = 8.dp))
             }
             OpacityRow(draft.opacity) { draft = draft.copy(opacity = it) }
             Row(verticalAlignment = Alignment.CenterVertically) {
-              SectionLabel("Thickness", Modifier.width(LABEL_W))
+              SectionLabel(stringResource(R.string.thickness), Modifier.width(LABEL_W))
               LineWeightChoice(draft.lineWeight ?: com.tali.notes.canvas.PaperRenderer.lineWeight, Modifier.weight(1f)) { draft = draft.copy(lineWeight = it) }
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-              SectionLabel("Lines", Modifier.width(LABEL_W))
+              SectionLabel(stringResource(R.string.lines), Modifier.width(LABEL_W))
               val lineRing = rememberSlidingSelection()
               Row(Modifier.colorRing(lineRing, Color(draft.lineColor))) {
                 LINE_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.lineColor, size = 26.dp, selection = lineRing) { draft = draft.copy(lineColor = col) } }
@@ -481,23 +484,23 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
             }
           }
           Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel("Paper", Modifier.width(LABEL_W))
+            SectionLabel(stringResource(R.string.paper), Modifier.width(LABEL_W))
             val paperRing = rememberSlidingSelection()
             Row(Modifier.colorRing(paperRing, Color(draft.paperColor))) {
               PAPER_COLORS.forEach { col -> ColorDot(Color(col), selected = col == draft.paperColor, size = 26.dp, selection = paperRing) { draft = draft.copy(paperColor = col) } }
             }
           }
-          ToggleRow("Margin line", draft.margin, { draft = draft.copy(margin = it) }, detail = "A red line down the left, like an exercise book")
+          ToggleRow(stringResource(R.string.margin_line), draft.margin, { draft = draft.copy(margin = it) }, detail = stringResource(R.string.a_red_line_down_the_left))
         }
       }
     }
     }
     Spacer(Modifier.height(16.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      Text(if (editing != null) "Changes show in every notebook that uses it." else "Saved with your papers, for every notebook.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.weight(1f))
-      QuietButton("Cancel", onClick = onDismiss)
-      if (canSave) PrimaryButton(if (editing != null) "Save changes" else "Save paper") { save() }
-      else PrimaryButton("Choose a picture") { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+      Text(if (editing != null) stringResource(R.string.changes_show_in_every_notebook_that) else stringResource(R.string.saved_with_your_papers_for_every), style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.weight(1f))
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
+      if (canSave) PrimaryButton(if (editing != null) stringResource(R.string.save_changes) else stringResource(R.string.save_paper)) { save() }
+      else PrimaryButton(stringResource(R.string.choose_a_picture)) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     }
   }
 }
@@ -519,9 +522,9 @@ fun BuiltInPaperDialog(
   val c = Tali.colors
   val current = look ?: com.tali.notes.model.PaperLook()
   DialogCard(onDismiss, width = 520) {
-    Text(style.label, style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(style.nameRes), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(4.dp))
-    Text("Changes show in every notebook on this paper.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    Text(stringResource(R.string.changes_show_in_every_notebook_on), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(16.dp))
     Row(verticalAlignment = Alignment.Top) {
       Box(Modifier.width(110.dp).aspectRatio(1322f / 1871f).clip(RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))) {
@@ -531,7 +534,7 @@ fun BuiltInPaperDialog(
       Column(Modifier.weight(1f)) {
         if (style != PaperStyle.BLANK) {
           Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel("Lines", Modifier.width(64.dp))
+            SectionLabel(stringResource(R.string.lines), Modifier.width(64.dp))
             val lineRing = rememberSlidingSelection()
             val line = current.line ?: LINE_COLORS.first()
             Row(Modifier.colorRing(lineRing, Color(line))) {
@@ -541,7 +544,7 @@ fun BuiltInPaperDialog(
           Spacer(Modifier.height(8.dp))
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-          SectionLabel("Paper", Modifier.width(64.dp))
+          SectionLabel(stringResource(R.string.paper), Modifier.width(64.dp))
           val paperRing = rememberSlidingSelection()
           val paper = current.paper ?: PAPER_COLORS.first()
           Row(Modifier.colorRing(paperRing, Color(paper))) {
@@ -553,8 +556,8 @@ fun BuiltInPaperDialog(
     }
     Spacer(Modifier.height(20.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      if (look != null) QuietButton("Reset") { onLook(com.tali.notes.model.PaperLook()) }
-      PrimaryButton("Done", onClick = onDismiss)
+      if (look != null) QuietButton(stringResource(R.string.reset)) { onLook(com.tali.notes.model.PaperLook()) }
+      PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
     }
   }
 }

@@ -3,6 +3,9 @@ package com.tali.notes.ui.library
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+// Robolectric: the words come from the app's strings.
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [35], application = android.app.Application::class)
 class GreetingTest {
   @Test fun followsTheClock() {
     assertEquals("Good night", greetingFor(0))

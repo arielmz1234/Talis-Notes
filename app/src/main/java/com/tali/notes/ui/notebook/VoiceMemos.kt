@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -278,7 +281,7 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
                   },
                 )
               }
-              .clickable(enabled = !open, onClickLabel = "Open voice memo", role = Role.Button) { vm.openMemo = memo.id },
+              .clickable(enabled = !open, onClickLabel = stringResource(R.string.open_voice_memo), role = Role.Button) { vm.openMemo = memo.id },
             contentAlignment = Alignment.Center,
           ) {
             if (playingThis) {
@@ -294,8 +297,8 @@ private fun MemoBubble(memo: AudioItem, centres: () -> Map<String, Pt>, vm: Note
           Box(Modifier.revealInPlace { grows[0] }.graphicsLayer { alpha = ((openness.value - 0.45f) / 0.55f).coerceIn(0f, 1f) }) {
             if (openness.value > 0.01f) {
               PlayRow(memo, voice, openness::value, MEMO_BAR, MEMO_SIZE) {
-                Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClickLabel = "Delete voice memo", role = Role.Button) { leaving = true }, contentAlignment = Alignment.Center) {
-                  Icon(Icons.Outlined.DeleteOutline, "Delete voice memo", tint = c.inkFaint, modifier = Modifier.size(20.dp))
+                Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.delete_voice_memo), role = Role.Button) { leaving = true }, contentAlignment = Alignment.Center) {
+                  Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.delete_voice_memo), tint = c.inkFaint, modifier = Modifier.size(20.dp))
                 }
               }
             }
@@ -399,7 +402,7 @@ private fun MemoTitle(title: String, editing: Boolean, onEdit: () -> Unit, onDon
     BackHandler(onBack = done)
     Row(chip.padding(start = 10.dp, end = 4.dp, top = 3.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
       Box(Modifier.widthIn(min = 120.dp, max = 220.dp)) {
-        if (value.text.isEmpty()) Text("Name this memo", style = MaterialTheme.typography.labelLarge, color = c.inkFaint)
+        if (value.text.isEmpty()) Text(stringResource(R.string.name_this_memo), style = MaterialTheme.typography.labelLarge, color = c.inkFaint)
         BasicTextField(
           value,
           { value = it },
@@ -411,19 +414,19 @@ private fun MemoTitle(title: String, editing: Boolean, onEdit: () -> Unit, onDon
           modifier = Modifier.focusRequester(focus),
         )
       }
-      Box(Modifier.size(28.dp).clip(CircleShape).clickable(onClickLabel = "Save the name", role = Role.Button) { done() }, contentAlignment = Alignment.Center) {
-        Icon(Icons.Rounded.Check, "Save the name", tint = c.accent, modifier = Modifier.size(18.dp))
+      Box(Modifier.size(28.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.save_the_name), role = Role.Button) { done() }, contentAlignment = Alignment.Center) {
+        Icon(Icons.Rounded.Check, stringResource(R.string.save_the_name), tint = c.accent, modifier = Modifier.size(18.dp))
       }
     }
   } else if (title.isNotBlank()) {
-    Row(chip.clickable(onClickLabel = "Rename voice memo", role = Role.Button, onClick = onEdit).padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(chip.clickable(onClickLabel = stringResource(R.string.rename_voice_memo), role = Role.Button, onClick = onEdit).padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
       Text(title, style = MaterialTheme.typography.labelLarge, color = c.ink.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
       Spacer(Modifier.width(6.dp))
       Icon(Icons.Outlined.Edit, null, tint = c.inkFaint.copy(alpha = 0.7f), modifier = Modifier.size(13.dp))
     }
   } else {
-    Box(chip.size(28.dp).clickable(onClickLabel = "Name this memo", role = Role.Button, onClick = onEdit), contentAlignment = Alignment.Center) {
-      Icon(Icons.Outlined.Edit, "Name this memo", tint = c.inkFaint.copy(alpha = 0.75f), modifier = Modifier.size(14.dp))
+    Box(chip.size(28.dp).clickable(onClickLabel = stringResource(R.string.name_this_memo), role = Role.Button, onClick = onEdit), contentAlignment = Alignment.Center) {
+      Icon(Icons.Outlined.Edit, stringResource(R.string.name_this_memo), tint = c.inkFaint.copy(alpha = 0.75f), modifier = Modifier.size(14.dp))
     }
   }
 }
@@ -447,7 +450,7 @@ private fun PlayRow(memo: AudioItem, voice: VoiceRecorder, openness: () -> Float
   Row(Modifier.requiredWidth(width).height(height).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
     // Play / pause: a filled accent circle, the bar's one strong mark.
     Box(
-      Modifier.size(36.dp).clip(CircleShape).background(c.accent).clickable(onClickLabel = if (playing) "Pause" else "Play", role = Role.Button) {
+      Modifier.size(36.dp).clip(CircleShape).background(c.accent).clickable(onClickLabel = if (playing) stringResource(R.string.pause) else stringResource(R.string.play), role = Role.Button) {
         if (playing) voice.pause() else voice.play(memo)
       },
       contentAlignment = Alignment.Center,
@@ -474,7 +477,7 @@ private fun PlayRow(memo: AudioItem, voice: VoiceRecorder, openness: () -> Float
     )
     Spacer(Modifier.width(10.dp))
     Text(
-      if (here) "${clock(voice.positionMs)} / ${clock(memo.durationMs)}" else clock(memo.durationMs),
+      if (here) stringResource(R.string.n_n_3, clock(voice.positionMs), clock(memo.durationMs)) else clock(memo.durationMs),
       style = MaterialTheme.typography.labelMedium.merge(TextStyle(fontFeatureSettings = "tnum")),
       color = c.inkMuted,
       maxLines = 1,
@@ -535,12 +538,12 @@ fun RecorderPanel(vm: NotebookViewModel, anchor: () -> LayoutCoordinates?, onAdd
             label = "recorder",
           ) { review ->
             val trash: @Composable () -> Unit = {
-              Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClickLabel = "Delete the recording", role = Role.Button) {
+              Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.delete_the_recording), role = Role.Button) {
                 if (voice.recording) voice.cancel()
                 voice.stopPlayback()
                 leaving = true
               }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.DeleteOutline, "Delete the recording", tint = c.inkFaint, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.delete_the_recording), tint = c.inkFaint, modifier = Modifier.size(20.dp))
               }
             }
             val memo = shownDraft
@@ -549,12 +552,12 @@ fun RecorderPanel(vm: NotebookViewModel, anchor: () -> LayoutCoordinates?, onAdd
                 trash()
                 Spacer(Modifier.width(4.dp))
                 Row(
-                  Modifier.height(38.dp).clip(RoundedCornerShape(19.dp)).background(c.accent).clickable(onClickLabel = "Add to the page", role = Role.Button, onClick = onAdd).padding(horizontal = 14.dp),
+                  Modifier.height(38.dp).clip(RoundedCornerShape(19.dp)).background(c.accent).clickable(onClickLabel = stringResource(R.string.add_to_the_page), role = Role.Button, onClick = onAdd).padding(horizontal = 14.dp),
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
                   Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
                   Spacer(Modifier.width(6.dp))
-                  Text("Add", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                  Text(stringResource(R.string.add), style = MaterialTheme.typography.labelLarge, color = Color.White)
                 }
               }
             } else {
@@ -579,10 +582,10 @@ private fun RecordingRow(voice: VoiceRecorder, width: Dp, onDone: () -> Unit, tr
         drawCircle(c.danger.copy(alpha = 0.28f * (1f - pulse)), radius = r * (0.78f + 0.4f * pulse))
       }
       Box(
-        Modifier.size(34.dp).clip(CircleShape).background(c.danger).clickable(onClickLabel = "Done recording", role = Role.Button, onClick = onDone),
+        Modifier.size(34.dp).clip(CircleShape).background(c.danger).clickable(onClickLabel = stringResource(R.string.done_recording), role = Role.Button, onClick = onDone),
         contentAlignment = Alignment.Center,
       ) {
-        Icon(Icons.Rounded.Stop, "Done recording", tint = Color.White, modifier = Modifier.size(20.dp))
+        Icon(Icons.Rounded.Stop, stringResource(R.string.done_recording), tint = Color.White, modifier = Modifier.size(20.dp))
       }
     }
     Spacer(Modifier.width(10.dp))
@@ -634,5 +637,5 @@ private fun Wave(levels: () -> List<Float>, played: () -> Float, alive: Boolean,
 
 private fun clock(ms: Long): String {
   val s = (ms / 1000).coerceAtLeast(0)
-  return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+  return tr(R.string.n_n_4, s / 60, (s % 60).toString().padStart(2, '0'))
 }

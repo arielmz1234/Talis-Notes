@@ -4,6 +4,9 @@ import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+// Robolectric: the words come from the app's strings.
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [35], application = android.app.Application::class)
 class BackedUpAtTest {
   private fun at(day: Int, hour: Int, minute: Int): Long =
     Calendar.getInstance().apply {

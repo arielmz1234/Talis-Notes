@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.ui.components.nameRes
+import com.tali.notes.tr
+import com.tali.notes.R
 import android.app.Application
 import android.graphics.Bitmap
 import android.net.Uri
@@ -87,7 +90,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   /** Keeps the PDF she was looking at as one of her notebooks, called [title]. */
   fun saveAsNotebook(title: String) {
-    repo.saveDraft(notebookId, title.trim().ifBlank { "Untitled" })
+    repo.saveDraft(notebookId, title.trim().ifBlank { tr(R.string.untitled) })
     savedNow = true
     store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
   }
@@ -187,7 +190,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     if (document == null || voice.recording) return false
     discardDraft()
     if (!voice.start()) {
-      showHint("The microphone couldn't start. Try again in a moment.")
+      showHint(tr(R.string.the_microphone_couldn_t_start_try))
       return false
     }
     openMemo = null
@@ -200,7 +203,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val r = voice.stop()
     if (r == null) {
       recordingAt = null
-      showHint("Too short to keep")
+      showHint(tr(R.string.too_short_to_keep))
       return
     }
     draft = r
@@ -250,7 +253,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     if (voice.current == id) voice.stopPlayback()
     if (openMemo == id) openMemo = null
     d.commit(Change(listOf(m), emptyList()))
-    showHint("Voice memo deleted (undo brings it back)")
+    showHint(tr(R.string.voice_memo_deleted_undo_brings_it))
   }
 
   override fun onCleared() {
@@ -291,8 +294,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       // A first-time nudge towards the app's best trick.
       kotlinx.coroutines.delay(1500)
       // One tip per visit, in this order, each shown once.
-      if ("hold" !in settings.value.seenTips) tip("hold", "Tip: at the end of a line or shape, hold the pen still and it snaps clean")
-      else tip("spen", "Tip: hold the S Pen's side button to erase, and let go to keep writing")
+      if ("hold" !in settings.value.seenTips) tip("hold", tr(R.string.tip_at_the_end_of_a))
+      else tip("spen", tr(R.string.tip_hold_the_s_pen_s))
     }
   }
 
@@ -398,7 +401,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   }
 
   fun saveCustomShape(name: String, geometry: ShapeGeometry) {
-    val shape = CustomShape(UUID.randomUUID().toString().take(8), name.trim().ifBlank { "My shape" }, geometry)
+    val shape = CustomShape(UUID.randomUUID().toString().take(8), name.trim().ifBlank { tr(R.string.my_shape) }, geometry)
     store.update { it.copy(customShapes = it.customShapes + shape) }
   }
 
@@ -479,8 +482,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     if (on) {
       val count = settings.value.pens.count { it.starred }
       showHint(
-        if (count < 2) "Starred. Star another pen, then double-press the S Pen button to switch to the next starred pen, or triple-press to go back"
-        else "Starred. Double-press the S Pen button to switch to the next starred pen, or triple-press to go back"
+        if (count < 2) tr(R.string.starred_star_another_pen_then_double)
+        else tr(R.string.starred_double_press_the_s_pen)
       )
     }
   }
@@ -502,7 +505,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     tool = Tool.PEN
     panel = null
     // With the toolbars hidden she can't see which pen is up, so say it.
-    if (focus) showHint(next.type.label)
+    if (focus) showHint(tr(next.type.nameRes))
   }
 
   /** Switches the active pen to its [i]th thickness. */
@@ -607,7 +610,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   val pageLayout: com.tali.notes.canvas.Pages
     get() = com.tali.notes.canvas.Pages.of(meta.value?.landscape == true)
 
-  fun rename(title: String) = repo.rename(notebookId, title.ifBlank { "Untitled" })
+  fun rename(title: String) = repo.rename(notebookId, title.ifBlank { tr(R.string.untitled) })
 
   /** A number of A4 pages, or null to make it an endless canvas. */
   fun setPages(count: Int?) {
@@ -639,14 +642,14 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   /** Renders a PDF's pages to pictures, showing progress in the hint. Returns null (with a message) on failure. */
   suspend fun importPdf(uri: Uri): List<NotesRepository.ImportedPage>? =
     try {
-      hint = "Opening PDF…"
-      repo.importPdf(uri) { done, total -> hint = "Adding pages… $done of $total" }.ifEmpty { null }.also { if (it == null) hint = "That PDF has no pages" }
+      hint = tr(R.string.opening_pdf)
+      repo.importPdf(uri) { done, total -> hint = tr(R.string.adding_pages_n_of_n, done, total) }.ifEmpty { null }.also { if (it == null) hint = tr(R.string.that_pdf_has_no_pages) }
     } catch (e: NotesRepository.PdfImportException) {
       hint = e.message
       null
     } catch (t: Throwable) {
       com.tali.notes.CrashLog.recovered(getApplication(), t)
-      hint = "Couldn't read that PDF"
+      hint = tr(R.string.couldn_t_read_that_pdf)
       null
     }
 
@@ -704,7 +707,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, settings.value.paperLineWeight, settings.value.paperWeights, settings.value.paperLooks).joinToString("|")
       exported[key]?.takeIf { it.exists() }?.let { return@withLock it }
       val items = doc.all.toList()
-      val title = (m?.title ?: "Notebook").replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { "Notebook" }
+      val title = (m?.title ?: tr(R.string.notebook)).replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { tr(R.string.notebook) }
       withContext(Dispatchers.Default) {
         // One folder per choice, so the file she shares is still called after the notebook.
         val out = File(File(File(getApplication<Application>().cacheDir, "exports"), "${layout.name}-${quality.name}"), "$title.pdf")

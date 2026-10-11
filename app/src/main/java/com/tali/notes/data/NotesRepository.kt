@@ -1,5 +1,7 @@
 package com.tali.notes.data
 
+import com.tali.notes.tr
+import com.tali.notes.R
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
@@ -563,15 +565,15 @@ class NotesRepository(private val context: Context) {
    */
   suspend fun importPdf(uri: Uri, onProgress: (done: Int, total: Int) -> Unit): List<ImportedPage> =
     withContext(Dispatchers.IO) {
-      val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: throw PdfImportException("Couldn't open that file.")
+      val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: throw PdfImportException(tr(R.string.couldn_t_open_that_file))
       pfd.use { fd ->
         val renderer =
           try {
             PdfRenderer(fd)
           } catch (e: SecurityException) {
-            throw PdfImportException("This PDF is password-protected. Remove the password and try again.")
+            throw PdfImportException(tr(R.string.this_pdf_is_password_protected_remove))
           } catch (e: java.io.IOException) {
-            throw PdfImportException("That file isn't a PDF this tablet can read.")
+            throw PdfImportException(tr(R.string.that_file_isn_t_a_pdf))
           }
         renderer.use { r ->
           val count = r.pageCount.coerceAtMost(MAX_PDF_PAGES)
@@ -705,7 +707,7 @@ private object SQLiteConflict {
  */
 fun numberedName(name: String, taken: Collection<String>): String {
   val used = taken.map { it.trim().lowercase() }.toSet()
-  val base = name.trim().ifEmpty { "Untitled" }
+  val base = name.trim().ifEmpty { tr(R.string.untitled) }
   if (base.lowercase() !in used) return base
   val stem = Regex("""^(.*\S)\s*\(\d+\)$""").find(base)?.groupValues?.get(1) ?: base
   var n = 1

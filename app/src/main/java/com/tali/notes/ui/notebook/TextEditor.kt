@@ -1,5 +1,7 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.material.icons.outlined.OpenWith
 
 import androidx.compose.ui.layout.layout
@@ -205,7 +207,7 @@ fun TextEditorOverlay(
     val chip = with(density) { 30.dp.toPx() }
     val chipGap = with(density) { 10.dp.toPx() }
     // The resize chip at the bottom-right corner: the corner follows the finger.
-    EditorChip(Icons.Outlined.OpenInFull, "Resize the text box", { boxLeft + boxW + chipGap - chip / 2 }, { boxTop + boxH + chipGap - chip / 2 }, rotate = 90f) {
+    EditorChip(Icons.Outlined.OpenInFull, stringResource(R.string.resize_the_text_box), { boxLeft + boxW + chipGap - chip / 2 }, { boxTop + boxH + chipGap - chip / 2 }, rotate = 90f) {
       var total = Offset.Zero
       var start = latest
       var startContent = 0f
@@ -223,7 +225,7 @@ fun TextEditorOverlay(
       }
     }
     // The move chip at the bottom-left corner: drags the whole box.
-    EditorChip(Icons.Outlined.OpenWith, "Move the text box", { boxLeft - chipGap - chip / 2 }, { boxTop + boxH + chipGap - chip / 2 }) {
+    EditorChip(Icons.Outlined.OpenWith, stringResource(R.string.move_the_text_box), { boxLeft - chipGap - chip / 2 }, { boxTop + boxH + chipGap - chip / 2 }) {
       var start = latest
       var total = Offset.Zero
       detectDragGestures(onDragStart = {
@@ -248,11 +250,11 @@ fun TextEditorOverlay(
           colors.take(6).forEach { col -> ColorDot(Color(col), selected = col == edit.color, size = 24.dp, selection = ring) { onChange(edit.copy(color = col)) } }
         }
         Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(24.dp).background(c.line))
-        ToolButton(Icons.Outlined.DeleteOutline, "Delete text") {
+        ToolButton(Icons.Outlined.DeleteOutline, stringResource(R.string.delete_text)) {
           keyboard?.hide()
           onDone("")
         }
-        ToolButton(Icons.Outlined.Check, "Done", onClick = finish)
+        ToolButton(Icons.Outlined.Check, stringResource(R.string.done), onClick = finish)
       }
     }
   }
@@ -340,7 +342,7 @@ private fun SideDot(x: Float, y: Float, latest: () -> TextEdit, change: (TextEdi
 @Composable
 private fun SizeButton(label: String, onClick: () -> Unit) {
   val c = Tali.colors
-  Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = if (label == "A+") "Bigger text" else "Smaller text", onClick = onClick), contentAlignment = Alignment.Center) {
+  Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = if (label == "A+") stringResource(R.string.bigger_text) else stringResource(R.string.smaller_text), onClick = onClick), contentAlignment = Alignment.Center) {
     Text(label, style = MaterialTheme.typography.labelLarge, color = c.ink)
   }
 }

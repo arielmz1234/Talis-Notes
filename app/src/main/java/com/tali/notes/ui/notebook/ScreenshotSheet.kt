@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -69,9 +72,9 @@ fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit, on
   DialogCard(onDone, width = 560) {
     // Close sits in the corner, so the three things to do with it are centred under the picture.
     Box(Modifier.fillMaxWidth()) {
-      Text("Screenshot", style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.align(Alignment.CenterStart))
+      Text(stringResource(R.string.screenshot), style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.align(Alignment.CenterStart))
       IconButton(onClick = onDone, modifier = Modifier.align(Alignment.CenterEnd).size(40.dp)) {
-        Icon(Icons.Outlined.Close, "Close", tint = c.inkMuted)
+        Icon(Icons.Outlined.Close, stringResource(R.string.close), tint = c.inkMuted)
       }
     }
     Spacer(Modifier.height(10.dp))
@@ -79,26 +82,26 @@ fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit, on
       Modifier.fillMaxWidth().heightIn(min = 120.dp, max = maxPreview).clip(RoundedCornerShape(12.dp)).background(c.sunken).border(1.dp, c.line, RoundedCornerShape(12.dp)),
       contentAlignment = Alignment.Center,
     ) {
-      image?.let { Image(it, "The screenshot", contentScale = ContentScale.Fit, modifier = Modifier.padding(6.dp)) }
+      image?.let { Image(it, stringResource(R.string.the_screenshot), contentScale = ContentScale.Fit, modifier = Modifier.padding(6.dp)) }
     }
     Spacer(Modifier.height(18.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-      QuietButton("Copy") {
+      QuietButton(stringResource(R.string.copy)) {
         // Onto the page (hold anywhere to paste it) and into other apps alike.
         onCopy()
         copyImage(context, file)
-        onHint("Copied — hold on the page to paste it, or paste it in another app")
+        onHint(tr(R.string.copied_hold_on_the_page_to))
         onDone()
       }
-      QuietButton(if (saved) "Saved" else "Save to gallery") {
+      QuietButton(if (saved) stringResource(R.string.saved) else stringResource(R.string.save_to_gallery)) {
         if (saved) return@QuietButton
         scope.launch {
           val ok = withContext(Dispatchers.IO) { runCatching { saveToGallery(context, file) }.getOrDefault(false) }
           saved = ok
-          onHint(if (ok) "Saved to your gallery (Pictures › Tali's Notes)" else "Couldn't save the picture")
+          onHint(if (ok) tr(R.string.saved_to_your_gallery_pictures_tali) else tr(R.string.couldn_t_save_the_picture))
         }
       }
-      PrimaryButton("Share", Icons.Outlined.Share) { shareImage(context, file) }
+      PrimaryButton(stringResource(R.string.share), Icons.Outlined.Share) { shareImage(context, file) }
     }
   }
 }
@@ -113,13 +116,13 @@ private fun shareImage(context: Context, file: File) {
     clipData = ClipData.newRawUri("", uri)
     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
   }
-  context.startActivity(Intent.createChooser(send, "Share screenshot"))
+  context.startActivity(Intent.createChooser(send, tr(R.string.share_screenshot)))
 }
 
 private fun copyImage(context: Context, file: File): Boolean =
   runCatching {
     val cm = context.getSystemService(ClipboardManager::class.java)
-    cm.setPrimaryClip(ClipData.newUri(context.contentResolver, "Screenshot", uriOf(context, file)))
+    cm.setPrimaryClip(ClipData.newUri(context.contentResolver, tr(R.string.screenshot), uriOf(context, file)))
     true
   }.getOrDefault(false)
 
@@ -128,7 +131,7 @@ private fun saveToGallery(context: Context, file: File): Boolean {
   val values = ContentValues().apply {
     put(MediaStore.Images.Media.DISPLAY_NAME, file.name)
     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Tali's Notes")
+    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + tr(R.string.tali_s_notes_2))
     put(MediaStore.Images.Media.IS_PENDING, 1)
   }
   val resolver = context.contentResolver

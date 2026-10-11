@@ -1,5 +1,7 @@
 package com.tali.notes.backup
 
+import com.tali.notes.tr
+import com.tali.notes.R
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -128,7 +130,7 @@ object DriveBackup {
 
   private fun AuthorizationResult.toAuth(): Auth {
     val pending = pendingIntent
-    return if (hasResolution() && pending != null) Auth.NeedsConsent(pending) else Auth.Token(accessToken ?: throw IOException("Google didn't return a token"))
+    return if (hasResolution() && pending != null) Auth.NeedsConsent(pending) else Auth.Token(accessToken ?: throw IOException(tr(R.string.google_didn_t_return_a_token)))
   }
 
   fun enable(context: Context) {
@@ -175,7 +177,7 @@ object DriveBackup {
       return try {
         when (val auth = authorize(ctx)) {
           is Auth.NeedsConsent -> {
-            save(ctx) { it.copy(error = "Google needs you to sign in again") }
+            save(ctx) { it.copy(error = tr(R.string.google_needs_you_to_sign_in)) }
             Result.success()
           }
           is Auth.Token -> {
@@ -184,11 +186,11 @@ object DriveBackup {
           }
         }
       } catch (e: IOException) {
-        save(ctx) { it.copy(error = "Couldn't reach Google Drive, will try again", running = false) }
+        save(ctx) { it.copy(error = tr(R.string.couldn_t_reach_google_drive_will), running = false) }
         Result.retry()
       } catch (t: Throwable) {
         CrashLog.recovered(ctx, t)
-        save(ctx) { it.copy(error = "Backup failed: ${t.message ?: t.javaClass.simpleName}", running = false) }
+        save(ctx) { it.copy(error = tr(R.string.backup_failed_n, t.message ?: t.javaClass.simpleName), running = false) }
         Result.success()
       }
     }
@@ -328,7 +330,7 @@ object DriveBackup {
       val remote = folder?.let { listFolder(token, it) }.orEmpty()
       val parts = remote.filter { it.kind == SETTINGS } + remote.filter { it.kind == NOTEBOOK }
       val files = parts.map { it.id }.ifEmpty { listOfNotNull(findBackup(token)) }
-      if (files.isEmpty()) throw BackupArchive.InvalidBackup("There's no backup in this Google Drive yet.")
+      if (files.isEmpty()) throw BackupArchive.InvalidBackup(tr(R.string.there_s_no_backup_in_this))
       var total = NotesRepository.MergeResult(0, 0, 0, emptySet())
       for (id in files) {
         val conn = open("$API/files/$id?alt=media", token)
@@ -352,8 +354,8 @@ object DriveBackup {
   private fun check(conn: HttpURLConnection) {
     val code = conn.responseCode
     if (code == 404) throw NotFound()
-    if (code == 401 || code == 403) throw IllegalStateException("Google Drive refused access ($code)")
-    if (code !in 200..299) throw IOException("Google Drive error $code")
+    if (code == 401 || code == 403) throw IllegalStateException(tr(R.string.google_drive_refused_access_n, code))
+    if (code !in 200..299) throw IOException(tr(R.string.google_drive_error_n, code))
   }
 
   private fun readJson(conn: HttpURLConnection): JsonObject = json.parseToJsonElement(conn.inputStream.use { it.readBytes().decodeToString() }).jsonObject
@@ -438,7 +440,7 @@ object DriveBackup {
     if (existingId == null) fields["parents"] = JsonArray(listOf(JsonPrimitive(folderId)))
     start.outputStream.use { it.write(JsonObject(fields).toString().encodeToByteArray()) }
     check(start)
-    val session = start.getHeaderField("Location") ?: throw IOException("Google Drive didn't start the upload")
+    val session = start.getHeaderField(tr(R.string.location)) ?: throw IOException(tr(R.string.google_drive_didn_t_start_the))
     val put = (URL(session).openConnection() as HttpURLConnection).apply {
       requestMethod = "PUT"
       doOutput = true

@@ -1,5 +1,7 @@
 package com.tali.notes.canvas
 
+import com.tali.notes.tr
+import com.tali.notes.R
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -790,7 +792,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     ghostText.textAlign = Paint.Align.CENTER
     ghostText.textSize = 12f * density
     ghostText.color = color
-    canvas.drawText(if (ready) "Release to add a page" else "Drag for a new page", cx, cy + r + 18f * density, ghostText)
+    canvas.drawText(if (ready) tr(R.string.release_to_add_a_page) else tr(R.string.drag_for_a_new_page), cx, cy + r + 18f * density, ghostText)
   }
 
   private fun deskIsDark() = android.graphics.Color.luminance(deskColor) < 0.3f
@@ -949,7 +951,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // 2. A fill picture already there: taken away, or replaced by the new colour below.
     val oldFills = d.all.filter { it is ImageItem && it.file.startsWith(FILL_PREFIX) && it.rect.contains(p) && fillCovers(it, p) }
     if (colour == null) {
-      if (oldFills.isEmpty()) host.onHint("Tap a filled shape or area to take its fill away")
+      if (oldFills.isEmpty()) host.onHint(tr(R.string.tap_a_filled_shape_or_area_2))
       else d.commit(Change(oldFills, emptyList()))
       return
     }
@@ -968,7 +970,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val dd = doc ?: return@post
         if (dd !== d) return@post
         if (made == null) {
-          host.onHint(if (walls.isEmpty()) "Draw around an area first, or tap inside a shape" else "That area isn't closed. Close the gap and try again")
+          host.onHint(if (walls.isEmpty()) tr(R.string.draw_around_an_area_first_or) else tr(R.string.that_area_isn_t_closed_close))
           return@post
         }
         val (file, rect, outline) = made
@@ -1512,7 +1514,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       com.tali.notes.CrashLog.recovered(context, t)
       runCatching { abortDrawing() }
       mode = Mode.NONE
-      host.onHint("That didn't work. Try again.")
+      host.onHint(tr(R.string.that_didn_t_work_try_again))
     }
     return true
   }
@@ -2164,13 +2166,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (tapped != null) selectShape(tapped)
         else if (preview == null) {
           // A tap draws nothing (it used to drop a shape on every touch); it only lets go of a selection.
-          host.onTip("shape-drag", "Drag on the page to draw the shape")
+          host.onTip("shape-drag", tr(R.string.drag_on_the_page_to_draw))
         } else if (d != null) {
           val shape = ShapeItem(d.newId(), d.nextZ(), preview.pen, preview.color, preview.size, preview.geometry, fill = preview.fill, line = preview.line)
           d.commit(Change(emptyList(), listOf(shape)))
           // Picked up straight away, so it can be adjusted right after drawing.
           selectShape(shape, soft = true)
-          if (shape.geometry is SectorShape) host.onTip("part-circle", "Drag an end dot to choose how much of a circle: it shows the %")
+          if (shape.geometry is SectorShape) host.onTip("part-circle", tr(R.string.drag_an_end_dot_to_choose))
         }
         shapePreview = null
       }
@@ -2873,7 +2875,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         ((loop && item.bounds.intersects(area) && lassoTouches(item, pts)) || (free && touchedBy(item, pts, reach)))
     })
     setSelection(picked)
-    if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) "Drag to move · corner dot to resize · bottom dot to rotate" else "Drag to move · corner dot to resize")
+    if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) tr(R.string.drag_to_move_corner_dot_to) else tr(R.string.drag_to_move_corner_dot_to_2))
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
   }
 
@@ -2923,7 +2925,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (file != null) {
           shotAreas[file.path] = area
           host.onScreenshot(file)
-        } else host.onHint("Couldn't take the screenshot")
+        } else host.onHint(tr(R.string.couldn_t_take_the_screenshot))
       }
     }
   }
@@ -3044,7 +3046,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun selectShape(shape: ShapeItem, soft: Boolean = false) {
     selectSingle(shape)
     softSelection = soft
-    host.onTip("shape-tap", "Drag a dot to reshape it · the menu changes its colour, thickness and line")
+    host.onTip("shape-tap", tr(R.string.drag_a_dot_to_reshape_it))
   }
 
   /** Picks up [item], with the fill it outlines or the outline around it if it's a fill. */
@@ -3164,13 +3166,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val n = selection.size
     Clipboard.items = selection
     deleteSelection()
-    host.onHint(if (n == 1) "Cut \u2014 hold anywhere to paste it" else "Cut $n items \u2014 hold anywhere to paste them")
+    host.onHint(if (n == 1) tr(R.string.cut_hold_anywhere_to_paste_it_2) else tr(R.string.cut_n_items_hold_anywhere_to, n))
   }
 
   fun copySelection() {
     if (selection.isEmpty()) return
     Clipboard.items = selection
-    host.onHint(if (selection.size == 1) "Copied \u2014 hold anywhere to paste it" else "Copied ${selection.size} items \u2014 hold anywhere to paste them")
+    host.onHint(if (selection.size == 1) tr(R.string.copied_hold_anywhere_to_paste_it) else tr(R.string.copied_n_items_hold_anywhere_to, selection.size))
   }
 
   /** Starts waiting for a hold at [screen] ([p] in the world) to offer Paste, if something's copied and it isn't on a locked item. */
@@ -3290,7 +3292,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       if (toFront) sel.none { it is ImageItem && !it.front } && others.none { it.z > sel.first().z && !(it is ImageItem && !it.front) }
       else sel.none { it is ImageItem && it.front } && others.none { it.z < sel.last().z }
     if (alreadyThere) {
-      host.onHint(if (toFront) "Already in front" else "Already at the back")
+      host.onHint(if (toFront) tr(R.string.already_in_front) else tr(R.string.already_at_the_back))
       return
     }
     val bottom = all.firstOrNull()?.z ?: 0L
@@ -3301,7 +3303,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     d.commit(Change(sel, moved))
     setSelection(moved)
-    host.onHint(if (toFront) "Brought to the front" else "Sent to the back")
+    host.onHint(if (toFront) tr(R.string.brought_to_the_front) else tr(R.string.sent_to_the_back))
   }
 
   fun recolorSelection(color: Int) {
@@ -3681,7 +3683,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // The padlock that filled up over it now plays the same unlock as the menu's, from the snap on.
     lockCue = LockCue(holdAt, locking = false, start = SystemClock.uptimeMillis() - CUE_APPEAR_MS, fromHold = true)
     postInvalidateOnAnimation()
-    host.onHint("Unlocked \u2014 it can be picked up and erased again")
+    host.onHint(tr(R.string.unlocked_it_can_be_picked_up))
   }
 
   /** Locks the selection in place: the lasso, taps and the eraser leave it alone. */
@@ -3694,14 +3696,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       d.commit(Change(selection, unlocked))
       setSelection(unlocked)
       selectionBounds?.let { playLockCue(it.center, locking = false) }
-      host.onHint(if (unlocked.size == 1) "Unlocked" else "${unlocked.size} items unlocked")
+      host.onHint(if (unlocked.size == 1) tr(R.string.unlocked) else tr(R.string.n_items_unlocked, unlocked.size))
       return
     }
     selectionBounds?.let { playLockCue(it.center, locking = true) }
     val locked = selection.map { it.withLocked(true) }
     d.commit(Change(selection, locked))
     clearSelection()
-    host.onHint(if (locked.size == 1) "Locked \u2014 hold it to unlock" else "${locked.size} items locked \u2014 hold one to unlock it")
+    host.onHint(if (locked.size == 1) tr(R.string.locked_hold_it_to_unlock) else tr(R.string.n_items_locked_hold_one_to, locked.size))
   }
 
   /** How many things in this notebook are locked. */
@@ -3713,7 +3715,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val locked = d.all.filter { it.locked }
     if (locked.isEmpty()) return
     d.commit(Change(locked, locked.map { it.withLocked(false) }))
-    host.onHint(if (locked.size == 1) "1 item unlocked" else "${locked.size} items unlocked")
+    host.onHint(if (locked.size == 1) tr(R.string.t_1_item_unlocked) else tr(R.string.n_items_unlocked, locked.size))
   }
 
   private fun fingerDown(e: MotionEvent) {
@@ -4315,7 +4317,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       action()
     } catch (t: Throwable) {
       com.tali.notes.CrashLog.recovered(context, t)
-      host.onHint("That didn't work. Try again.")
+      host.onHint(tr(R.string.that_didn_t_work_try_again))
       invalidate()
     }
   }

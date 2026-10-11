@@ -1,5 +1,8 @@
 package com.tali.notes.ui.library
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -71,10 +74,10 @@ fun BackupDialog(onDismiss: () -> Unit) {
 
   fun describe(r: NotesRepository.MergeResult): String {
     val parts = buildList {
-      if (r.added > 0) add(if (r.added == 1) "1 notebook added" else "${r.added} notebooks added")
-      if (r.updated > 0) add(if (r.updated == 1) "1 notebook updated" else "${r.updated} notebooks updated")
+      if (r.added > 0) add(if (r.added == 1) tr(R.string.t_1_notebook_added) else tr(R.string.n_notebooks_added, r.added))
+      if (r.updated > 0) add(if (r.updated == 1) tr(R.string.t_1_notebook_updated) else tr(R.string.n_notebooks_updated, r.updated))
     }
-    return if (parts.isEmpty()) "Everything in the backup was already here." else parts.joinToString(", ") + "."
+    return if (parts.isEmpty()) tr(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
   }
 
   fun run(label: String, from: String = "file", block: suspend () -> String) {
@@ -90,7 +93,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
           e.message
         } catch (t: Throwable) {
           CrashLog.recovered(context, t)
-          "Something went wrong: ${t.message ?: t.javaClass.simpleName}"
+          tr(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
         }
       busy = null
     }
@@ -98,26 +101,26 @@ fun BackupDialog(onDismiss: () -> Unit) {
 
   val saveFile =
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { uri ->
-      if (uri != null) run("Saving backup…") {
-        context.contentResolver.openOutputStream(uri)?.use { BackupArchive.write(context, it) } ?: error("Couldn't open the file")
-        "Backup saved."
+      if (uri != null) run(tr(R.string.saving_backup)) {
+        context.contentResolver.openOutputStream(uri)?.use { BackupArchive.write(context, it) } ?: error(tr(R.string.couldn_t_open_the_file))
+        tr(R.string.backup_saved)
       }
     }
   val openFiles =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-      if (uris.isNotEmpty()) run("Restoring…") { describe(RestoreFiles.restore(context, uris)) }
+      if (uris.isNotEmpty()) run(tr(R.string.restoring)) { describe(RestoreFiles.restore(context, uris)) }
     }
   val openFolder =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-      if (tree != null) run("Restoring…") { describe(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
+      if (tree != null) run(tr(R.string.restoring)) { describe(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
     }
   val note = busy ?: message
 
   DialogCard(onDismiss, width = 560) {
-    Text("Backups", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(R.string.backups), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(16.dp))
     CardBody {
-    BackupCard(Icons.Outlined.TabletAndroid, "On this tablet", "Every stroke is saved the moment you write it, even without internet.")
+    BackupCard(Icons.Outlined.TabletAndroid, stringResource(R.string.on_this_tablet), stringResource(R.string.every_stroke_is_saved_the_moment))
     // With Google Drive set up, it's the main automatic backup; saving into a file she picked stays
     // as the way for OneDrive, Dropbox or the tablet.
     if (DriveBackup.available) {
@@ -127,26 +130,26 @@ fun BackupDialog(onDismiss: () -> Unit) {
     Spacer(Modifier.height(10.dp))
     AutoCard(onRun = { l, b -> run(l, "auto", b) }, compact = DriveBackup.available, note = note.takeIf { source == "auto" })
     Spacer(Modifier.height(10.dp))
-    BackupCard(Icons.Outlined.FolderZip, "Backup file", "Everything in one file: notebooks, pictures, pens, colours and your shapes. Keep it in Files, on a computer, or send it to yourself.") {
+    BackupCard(Icons.Outlined.FolderZip, stringResource(R.string.backup_file), stringResource(R.string.everything_in_one_file_notebooks_pictures)) {
       @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
       androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The one to set up is the automatic backup above; this is the extra copy.
         // Saving and restoring wear their own colours so they're not mistaken for each other.
-        QuietButton("Save backup file", color = c.blue) { saveFile.launch(BackupArchive.fileName()) }
-        QuietButton("Restore files", color = restoreColor()) { openFiles.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream")) }
-        QuietButton("Restore folder", color = restoreColor()) { openFolder.launch(null) }
+        QuietButton(stringResource(R.string.save_backup_file), color = c.blue) { saveFile.launch(BackupArchive.fileName()) }
+        QuietButton(stringResource(R.string.restore_files), color = restoreColor()) { openFiles.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream")) }
+        QuietButton(stringResource(R.string.restore_folder), color = restoreColor()) { openFolder.launch(null) }
       }
     }
     Spacer(Modifier.height(14.dp))
     val fileNote = note.takeIf { source == "file" }
     WorkingText(
-      fileNote ?: "Restoring never deletes anything: notebooks from a backup are added, and if a notebook is in both places, the newest version is kept. To bring back every notebook at once, pick several files or the folder they're in.",
+      fileNote ?: stringResource(R.string.restoring_never_deletes_anything_notebooks_from),
       style = MaterialTheme.typography.bodySmall,
       color = if (fileNote != null) c.blue else c.inkFaint,
     )
     }
     Spacer(Modifier.height(18.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Done", onClick = onDismiss) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton(stringResource(R.string.done), onClick = onDismiss) }
   }
 }
 
@@ -181,7 +184,7 @@ fun backedUpAt(millis: Long, now: Long = System.currentTimeMillis()): String {
       same(day, yesterday) -> "yesterday"
       else -> java.text.SimpleDateFormat("d MMM", java.util.Locale.UK).format(java.util.Date(millis))
     }
-  return "$date, $time"
+  return tr(R.string.n_n, date, time)
 }
 
 /** The backup that saves itself into one file she picked once (her Drive, OneDrive, the tablet…). */
@@ -192,7 +195,7 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
   val status by AutoBackup.status(context).collectAsState()
   val pick =
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { uri ->
-      if (uri != null) onRun("Saving backup…") { AutoBackup.choose(context, uri) }
+      if (uri != null) onRun(tr(R.string.saving_backup)) { AutoBackup.choose(context, uri) }
     }
   if (compact && !status.enabled) {
     // Google Drive already backs up by itself: this is just the other way, kept to one line.
@@ -203,40 +206,48 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
       Icon(Icons.Outlined.CloudSync, null, tint = c.blue, modifier = Modifier.size(22.dp))
       Spacer(Modifier.width(14.dp))
       Column(Modifier.weight(1f)) {
-        Text("Or back up by itself into a file", style = MaterialTheme.typography.titleSmall, color = c.ink)
-        Text("For OneDrive, Dropbox or the tablet", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+        Text(stringResource(R.string.or_back_up_by_itself_into), style = MaterialTheme.typography.titleSmall, color = c.ink)
+        Text(stringResource(R.string.for_onedrive_dropbox_or_the_tablet), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
       }
       Spacer(Modifier.width(10.dp))
-      QuietButton("Choose") { pick.launch(AutoBackup.FILE_NAME) }
+      QuietButton(stringResource(R.string.choose)) { pick.launch(AutoBackup.FILE_NAME) }
     }
     return
   }
   BackupCard(
     if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudSync,
-    "Back up by itself",
-    if (status.enabled) "Saves a fresh backup a couple of minutes after you finish, and once a day, into “${status.fileName ?: AutoBackup.FILE_NAME}” ${if (status.place == "this tablet") "on" else "in"} ${status.place ?: "the place you chose"}."
-    else "Choose a place once and the app keeps one backup file there up to date by itself. For Google Drive, tap ☰ at the top left of the next screen. Picking an old backup file brings its notebooks back.",
+    stringResource(R.string.back_up_by_itself),
+    if (status.enabled) {
+      val file = status.fileName ?: AutoBackup.FILE_NAME
+      // The place is kept as "this tablet" or the storage app's own name (Google Drive, OneDrive…).
+      when (val place = status.place) {
+        null -> stringResource(R.string.auto_backup_into_file_somewhere, file)
+        "this tablet" -> stringResource(R.string.auto_backup_into_file_on_tablet, file)
+        else -> stringResource(R.string.auto_backup_into_file_in_place, file, place)
+      }
+    }
+    else stringResource(R.string.choose_a_place_once_and_the),
   ) {
     if (status.enabled) {
       WorkingText(
         when {
           note != null -> note
-          status.running -> "Backing up now…"
+          status.running -> stringResource(R.string.backing_up_now)
           status.error != null -> status.error!!
-          status.lastSuccess > 0 -> "Last backed up: ${backedUpAt(status.lastSuccess)}"
-          else -> "No backup yet"
+          status.lastSuccess > 0 -> stringResource(R.string.last_backed_up_n, backedUpAt(status.lastSuccess))
+          else -> stringResource(R.string.no_backup_yet)
         },
         style = MaterialTheme.typography.bodySmall,
         color = if (note != null) c.blue else if (status.error != null) c.danger else c.inkFaint,
       )
       Spacer(Modifier.height(10.dp))
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuietButton("Back up now", color = c.blue) { onRun("Backing up…") { if (AutoBackup.backupNow(context)) "Backed up." else AutoBackup.status(context).value.error ?: "Couldn't save the backup" } }
-        QuietButton("Change place") { pick.launch(AutoBackup.FILE_NAME) }
-        QuietButton("Turn off") { AutoBackup.turnOff(context) }
+        QuietButton(stringResource(R.string.back_up_now), color = c.blue) { onRun(tr(R.string.backing_up)) { if (AutoBackup.backupNow(context)) tr(R.string.backed_up) else AutoBackup.status(context).value.error ?: tr(R.string.couldn_t_save_the_backup) } }
+        QuietButton(stringResource(R.string.change_place)) { pick.launch(AutoBackup.FILE_NAME) }
+        QuietButton(stringResource(R.string.turn_off)) { AutoBackup.turnOff(context) }
       }
     } else {
-      PrimaryButton("Choose where to save") { pick.launch(AutoBackup.FILE_NAME) }
+      PrimaryButton(stringResource(R.string.choose_where_to_save)) { pick.launch(AutoBackup.FILE_NAME) }
     }
   }
 }
@@ -265,7 +276,7 @@ internal fun rememberDriveAuth(onRun: (String, suspend () -> String) -> Unit): (
         is DriveBackup.Auth.NeedsConsent -> {
           afterConsent = { token -> onRun(label) { then(token) } }
           consent.launch(IntentSenderRequest.Builder(auth.intent).build())
-          "Choose your Google account to continue."
+          tr(R.string.choose_your_google_account_to_continue)
         }
       }
     }
@@ -283,29 +294,29 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
   val status by DriveBackup.status(context).collectAsState()
   val withToken = rememberDriveAuth(onRun)
 
-  BackupCard(if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload, "Google Drive", "Backs up by itself a couple of minutes after you finish writing: one file per notebook in a “Tali's Notes” folder in your Drive, sending only the notebooks that changed. The app can only see its own files, nothing else in your Drive.") {
-    ToggleRow("Back up automatically", status.enabled, { on ->
-      if (on) withToken("Backing up to Drive…") { token ->
+  BackupCard(if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload, stringResource(R.string.google_drive), stringResource(R.string.backs_up_by_itself_a_couple)) {
+    ToggleRow(stringResource(R.string.back_up_automatically), status.enabled, { on ->
+      if (on) withToken(tr(R.string.backing_up_to_drive)) { token ->
         DriveBackup.enable(context)
         DriveBackup.backupNow(context, token)
-        "Backed up to Google Drive."
+        tr(R.string.backed_up_to_google_drive)
       } else DriveBackup.disable(context)
     })
     if (status.enabled) {
       val settings by context.talisApp.settings.settings.collectAsState()
-      ToggleRow("Also keep a PDF of each notebook", settings.drivePdf, { on ->
+      ToggleRow(stringResource(R.string.also_keep_a_pdf_of_each), settings.drivePdf, { on ->
         context.talisApp.settings.update { it.copy(drivePdf = on) }
         DriveBackup.markDirty(context)
         DriveBackup.backupSoon(context, delayMinutes = 0)
-      }, detail = "Opens on any computer or phone, without the app. Uses more space and takes longer.")
+      }, detail = stringResource(R.string.opens_on_any_computer_or_phone))
     }
     WorkingText(
       when {
         note != null -> note
-        status.running -> "Backing up now…"
+        status.running -> stringResource(R.string.backing_up_now)
         status.error != null -> status.error!!
-        status.lastSuccess > 0 -> "Last backup ${relativeTime(status.lastSuccess)}"
-        else -> "No backup yet"
+        status.lastSuccess > 0 -> stringResource(R.string.last_backup_n, relativeTime(status.lastSuccess))
+        else -> stringResource(R.string.no_backup_yet)
       },
       style = MaterialTheme.typography.bodySmall,
       color = if (note != null) c.blue else if (status.error != null) c.danger else c.inkFaint,
@@ -313,15 +324,15 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
     Spacer(Modifier.height(10.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
       if (status.enabled) {
-        QuietButton("Back up now", color = c.blue) {
-          withToken("Backing up to Drive…") { token ->
+        QuietButton(stringResource(R.string.back_up_now), color = c.blue) {
+          withToken(tr(R.string.backing_up_to_drive)) { token ->
             DriveBackup.backupNow(context, token)
-            "Backed up to Google Drive."
+            tr(R.string.backed_up_to_google_drive)
           }
         }
       }
-      QuietButton("Restore from Drive", color = restoreColor()) {
-        withToken("Restoring from Drive…") { token -> describe(DriveBackup.restore(context, token)) }
+      QuietButton(stringResource(R.string.restore_from_drive), color = restoreColor()) {
+        withToken(tr(R.string.restoring_from_drive)) { token -> describe(DriveBackup.restore(context, token)) }
       }
     }
   }

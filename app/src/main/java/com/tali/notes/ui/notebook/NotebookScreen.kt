@@ -1,5 +1,10 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.ui.components.detailRes
+import com.tali.notes.ui.components.nameRes
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.Fullscreen
@@ -273,7 +278,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       if (uri != null) {
         scope.launch {
           val result = vm.importImage(uri)
-          if (result == null) vm.showHint("That image couldn't be opened") else holder.view?.runSafely { insertImage(result.first, result.second) }
+          if (result == null) vm.showHint(tr(R.string.that_image_couldn_t_be_opened)) else holder.view?.runSafely { insertImage(result.first, result.second) }
         }
       }
     }
@@ -285,7 +290,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       if (taken && uri != null) {
         scope.launch {
           val result = vm.importImage(uri)
-          if (result == null) vm.showHint("That photo couldn't be opened") else holder.view?.runSafely { insertImage(result.first, result.second) }
+          if (result == null) vm.showHint(tr(R.string.that_photo_couldn_t_be_opened)) else holder.view?.runSafely { insertImage(result.first, result.second) }
         }
       }
     }
@@ -298,7 +303,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   }
   val micPermission =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-      if (granted) startMemo() else vm.showHint("To record voice memos, allow the microphone for Tali's Notes in the tablet's settings")
+      if (granted) startMemo() else vm.showHint(tr(R.string.to_record_voice_memos_allow_the))
     }
   val pdfPicker =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -306,7 +311,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         scope.launch {
           val pages = vm.importPdf(uri) ?: return@launch
           holder.view?.runSafely { insertPages(pages) }
-          vm.showHint(if (pages.size == 1) "Added 1 page — write right on it" else "Added ${pages.size} pages — write right on them")
+          vm.showHint(if (pages.size == 1) tr(R.string.added_1_page_write_right_on) else tr(R.string.added_n_pages_write_right_on, pages.size))
         }
       }
     }
@@ -318,12 +323,12 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         for (uri in uris) {
           val pages = vm.importPdf(uri) ?: continue
           canvas.runSafely { insertPages(pages) }
-          vm.showHint(if (pages.size == 1) "Added 1 page — write right on it" else "Added ${pages.size} pages — write right on them")
+          vm.showHint(if (pages.size == 1) tr(R.string.added_1_page_write_right_on) else tr(R.string.added_n_pages_write_right_on, pages.size))
         }
       com.tali.notes.Incoming.Kind.IMAGE ->
         uris.forEachIndexed { i, uri ->
           val result = vm.importImage(uri)
-          if (result == null) vm.showHint("That picture couldn't be opened") else canvas.runSafely { insertImage(result.first, result.second, at, i) }
+          if (result == null) vm.showHint(tr(R.string.that_picture_couldn_t_be_opened_2)) else canvas.runSafely { insertImage(result.first, result.second, at, i) }
         }
       // A backup dropped on the page asks to restore it, as when it's opened with the app.
       com.tali.notes.Incoming.Kind.BACKUP -> com.tali.notes.Incoming.offer.value = com.tali.notes.Incoming.Files(kind, uris, uris.firstOrNull()?.let { com.tali.notes.Incoming.nameOf(context, it) })
@@ -344,8 +349,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       val file = pendingPdf
       if (uri != null && file != null) {
         runCatching { context.contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } } }
-          .onSuccess { vm.showHint("PDF saved") }
-          .onFailure { vm.showHint("Couldn't save the PDF. Try another folder.") }
+          .onSuccess { vm.showHint(tr(R.string.pdf_saved)) }
+          .onFailure { vm.showHint(tr(R.string.couldn_t_save_the_pdf_try)) }
       }
       pendingPdf = null
     }
@@ -417,7 +422,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                     return
                   }
                   val files = com.tali.notes.Incoming.classify(context, drop.uris)
-                  if (files == null) vm.showHint("That can't go on a page") else scope.launch { addFiles(files.kind, files.uris, drop.at) }
+                  if (files == null) vm.showHint(tr(R.string.that_can_t_go_on_a)) else scope.launch { addFiles(files.kind, files.uris, drop.at) }
                 }
 
                 override fun onScreenshot(file: java.io.File) {
@@ -473,7 +478,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         modifier = Modifier.fillMaxSize(),
       )
     } else {
-      Text("Opening…", style = MaterialTheme.typography.bodyLarge, color = c.inkFaint, modifier = Modifier.align(Alignment.Center))
+      Text(stringResource(R.string.opening), style = MaterialTheme.typography.bodyLarge, color = c.inkFaint, modifier = Modifier.align(Alignment.Center))
     }
 
     // Voice memos beside the pages, over the canvas and under the toolbars.
@@ -587,7 +592,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               val file = File(File(context.cacheDir, "camera").apply { mkdirs() }, "photo.jpg")
               val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
               photoUri = uri
-              runCatching { takePhoto.launch(uri) }.onFailure { vm.showHint("No camera app found") }
+              runCatching { takePhoto.launch(uri) }.onFailure { vm.showHint(tr(R.string.no_camera_app_found)) }
             },
             onKeyboard = {
               vm.panel = null
@@ -640,7 +645,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           NamePill(meta?.title ?: "", Modifier.weight(1f, fill = false)) { renaming = true }
           Spacer(Modifier.width(10.dp))
           FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
-            ToolButton(Icons.Outlined.VisibilityOff, "Hide toolbars") {
+            ToolButton(Icons.Outlined.VisibilityOff, stringResource(R.string.hide_toolbars)) {
               vm.panel = null
               vm.focus = true
             }
@@ -651,7 +656,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onPages = { pagesOpen = true },
               onEndless = { endless ->
                 if (endless) vm.setPages(null) else holder.view?.runSafely { convertToPages() }
-                vm.showHint(if (endless) "Endless canvas: write anywhere" else "A4 pages")
+                vm.showHint(if (endless) tr(R.string.endless_canvas_write_anywhere) else tr(R.string.a4_pages))
               },
               paperPicker = { close ->
                 PaperPicker(
@@ -812,14 +817,14 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       vm.saveCustomShape(name, geometry)
       savingShape = null
       holder.view?.runSafely { clearSelection() }
-      vm.showHint("Saved to My shapes — hold the pen at the end of a stroke to snap to it")
+      vm.showHint(tr(R.string.saved_to_my_shapes_hold_the))
     }
   }
   savingPdf?.let { then ->
     SavePdfDialog(meta?.title ?: "", onDismiss = { savingPdf = null }) { name ->
       vm.saveAsNotebook(name)
       savingPdf = null
-      vm.showHint("Saved to your notebooks")
+      vm.showHint(tr(R.string.saved_to_your_notebooks))
       then()
     }
   }
@@ -863,7 +868,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       },
       onDelete = { index ->
         holder.view?.runSafely { deletePage(index) }
-        vm.showHint("Page ${index + 1} deleted \u2014 undo brings the writing back")
+        vm.showHint(tr(R.string.page_n_deleted_undo_brings_the, index + 1))
       },
     )
   }
@@ -883,7 +888,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     NewPaperDialog(onDismiss = { makingPaper = false }, importImage = vm::importPaperImage) {
       vm.addCustomPaper(it)
       makingPaper = false
-      vm.showHint("“${it.name}” saved to your papers")
+      vm.showHint(tr(R.string.n_saved_to_your_papers, it.name))
     }
   }
   if (exporting) {
@@ -894,11 +899,11 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       prepare = vm::exportPdf,
       onExport = { layout, quality, share ->
         exporting = false
-        vm.showHint("Preparing PDF…")
+        vm.showHint(tr(R.string.preparing_pdf))
         scope.launch {
           val file = vm.exportPdf(layout, quality)
           if (file == null) {
-            vm.showHint("Couldn't create the PDF")
+            vm.showHint(tr(R.string.couldn_t_create_the_pdf))
             return@launch
           }
           vm.hint = null
@@ -909,7 +914,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               putExtra(Intent.EXTRA_STREAM, uri)
               addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(send, "Share PDF"))
+            context.startActivity(Intent.createChooser(send, tr(R.string.share_pdf)))
           } else {
             pendingPdf = file
             savePdf.launch(file.name)
@@ -925,14 +930,14 @@ private fun TitlePill(onBack: () -> Unit, canUndo: Boolean, canRedo: Boolean, on
   // Back on a little cloud of its own, quick open on another, then undo and redo.
   Row(verticalAlignment = Alignment.CenterVertically) {
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE) {
-      ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back to notebooks", onClick = onBack)
+      ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back_to_notebooks), onClick = onBack)
     }
     Spacer(Modifier.width(10.dp))
     quickOpen()
     Spacer(Modifier.width(10.dp))
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
-      ToolButton(Icons.AutoMirrored.Outlined.Undo, "Undo", enabled = canUndo, onClick = onUndo)
-      ToolButton(Icons.AutoMirrored.Outlined.Redo, "Redo", enabled = canRedo, onClick = onRedo)
+      ToolButton(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.undo), enabled = canUndo, onClick = onUndo)
+      ToolButton(Icons.AutoMirrored.Outlined.Redo, stringResource(R.string.redo), enabled = canRedo, onClick = onRedo)
     }
   }
 }
@@ -980,14 +985,14 @@ private fun PdfViewerBar(
     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp)) {
       Row(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalAlignment = Alignment.CenterVertically) {
         FloatingBar(Modifier.height(52.dp).arrive(0), crown = CloudCrown.LITTLE) {
-          ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onClick = onBack)
+          ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), onClick = onBack)
         }
         Spacer(Modifier.width(10.dp))
         FloatingBar(Modifier.height(52.dp).widthIn(max = 380.dp).arrive(1), crown = CloudCrown.NONE) {
           Column(Modifier.padding(horizontal = 10.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-              listOfNotNull(pages?.let { if (it == 1) "1 page" else "$it pages" }, "Not saved").joinToString(" · "),
+              listOfNotNull(pages?.let { if (it == 1) stringResource(R.string.t_1_page) else stringResource(R.string.n_pages, it) }, stringResource(R.string.not_saved)).joinToString(" · "),
               style = MaterialTheme.typography.bodySmall,
               color = c.inkFaint,
               maxLines = 1,
@@ -995,15 +1000,15 @@ private fun PdfViewerBar(
           }
         }
         Spacer(Modifier.weight(1f).widthIn(min = 10.dp))
-        PrimaryButton("Save", icon = Icons.Outlined.Save, modifier = Modifier.height(52.dp).arrive(2), onClick = onSave)
+        PrimaryButton(stringResource(R.string.save), icon = Icons.Outlined.Save, modifier = Modifier.height(52.dp).arrive(2), onClick = onSave)
         Spacer(Modifier.width(10.dp))
         Box(Modifier.arrive(3)) {
           var open by remember { mutableStateOf(false) }
-          FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) { ToolButton(Icons.Outlined.MoreHoriz, "More") { open = true } }
+          FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) { ToolButton(Icons.Outlined.MoreHoriz, stringResource(R.string.more)) { open = true } }
           DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
             if (onPages != null) {
               DropdownMenuItem(
-                text = { Text("All pages") },
+                text = { Text(stringResource(R.string.all_pages)) },
                 leadingIcon = { Icon(Icons.Outlined.GridView, null) },
                 onClick = {
                   open = false
@@ -1012,7 +1017,7 @@ private fun PdfViewerBar(
               )
             }
             DropdownMenuItem(
-              text = { Text("Fit to screen") },
+              text = { Text(stringResource(R.string.fit_to_screen)) },
               leadingIcon = { Icon(Icons.Outlined.FitScreen, null) },
               onClick = {
                 open = false
@@ -1020,7 +1025,7 @@ private fun PdfViewerBar(
               },
             )
             DropdownMenuItem(
-              text = { Text("Dark paper") },
+              text = { Text(stringResource(R.string.dark_paper)) },
               leadingIcon = { Icon(Icons.Outlined.DarkMode, null) },
               trailingIcon = { if (darkPaper) Icon(Icons.Outlined.Check, null, tint = c.accent) },
               onClick = { onDarkPaper(!darkPaper) },
@@ -1039,15 +1044,15 @@ private fun SavePdfDialog(title: String, onDismiss: () -> Unit, onSave: (String)
   val c = Tali.colors
   var name by remember { mutableStateOf(TextFieldValue(title, androidx.compose.ui.text.TextRange(0, title.length))) }
   com.tali.notes.ui.library.DialogCard(onDismiss, width = 460) {
-    Text("Save to your notebooks", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(R.string.save_to_your_notebooks), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(6.dp))
-    Text("It goes into your notebooks, ready to write on.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+    Text(stringResource(R.string.it_goes_into_your_notebooks_ready), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
     Spacer(Modifier.height(16.dp))
-    TitleField(name, { name = it }, placeholder = "Notebook name") { onSave(name.text) }
+    TitleField(name, { name = it }, placeholder = stringResource(R.string.notebook_name)) { onSave(name.text) }
     Spacer(Modifier.height(20.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-      QuietButton("Cancel", onClick = onDismiss)
-      PrimaryButton("Save") { onSave(name.text) }
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
+      PrimaryButton(stringResource(R.string.save)) { onSave(name.text) }
     }
   }
 }
@@ -1057,19 +1062,19 @@ private fun SavePdfDialog(title: String, onDismiss: () -> Unit, onSave: (String)
 private fun LeavePdfDialog(title: String, onStay: () -> Unit, onSave: () -> Unit, onLeave: () -> Unit) {
   val c = Tali.colors
   com.tali.notes.ui.library.DialogCard(onStay, width = 500) {
-    Text("Leave without saving?", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(R.string.leave_without_saving), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(10.dp))
     Text(
-      "“$title” isn't in your notebooks. Save it to keep it and write on it, or leave and it won't be kept.",
+      stringResource(R.string.n_isn_t_in_your_notebooks, title),
       style = MaterialTheme.typography.bodyMedium,
       color = c.inkMuted,
     )
     Spacer(Modifier.height(22.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-      QuietButton("Keep looking", onClick = onStay)
+      QuietButton(stringResource(R.string.keep_looking), onClick = onStay)
       Spacer(Modifier.weight(1f))
-      QuietButton("Leave without saving", color = c.danger, onClick = onLeave)
-      PrimaryButton("Save", onClick = onSave)
+      QuietButton(stringResource(R.string.leave_without_saving_2), color = c.danger, onClick = onLeave)
+      PrimaryButton(stringResource(R.string.save), onClick = onSave)
     }
   }
 }
@@ -1080,12 +1085,12 @@ private fun NamePill(title: String, modifier: Modifier = Modifier, onRename: () 
   val c = Tali.colors
   FloatingBar(modifier.height(44.dp), crown = CloudCrown.NONE) {
     Row(
-      Modifier.weight(1f, fill = false).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Rename", onClick = onRename).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+      Modifier.weight(1f, fill = false).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = stringResource(R.string.rename), onClick = onRename).padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 200.dp))
       Spacer(Modifier.width(8.dp))
-      Icon(Icons.Outlined.Edit, "Rename", tint = c.inkFaint, modifier = Modifier.size(16.dp))
+      Icon(Icons.Outlined.Edit, stringResource(R.string.rename), tint = c.inkFaint, modifier = Modifier.size(16.dp))
     }
   }
 }
@@ -1132,13 +1137,13 @@ private fun QuickOpen(recent: List<com.tali.notes.data.NotebookMeta>, thumbnail:
     // Two puffs, not the back button's three, so the two little clouds side by side don't match.
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE_TWIN) {
       // No highlight while the menu is open: the menu itself shows it.
-      ToolButton(TaliIcons.RecentNotebook, "Recent notebooks") { open = true }
+      ToolButton(TaliIcons.RecentNotebook, stringResource(R.string.recent_notebooks)) { open = true }
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = roomBelow.max - 6.dp), shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
-      Text("Recent notebooks", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp))
+      Text(stringResource(R.string.recent_notebooks), style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp))
       if (recent.isEmpty()) {
         Text(
-          "Notebooks you open show up here, a tap away.",
+          stringResource(R.string.notebooks_you_open_show_up_here),
           style = MaterialTheme.typography.bodySmall,
           color = c.inkMuted,
           modifier = Modifier.widthIn(max = 260.dp).padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
@@ -1157,7 +1162,7 @@ private fun QuickOpen(recent: List<com.tali.notes.data.NotebookMeta>, thumbnail:
               translationY = (1f - shown.value) * -10.dp.toPx()
             }
             .widthIn(min = 260.dp, max = 340.dp)
-            .clickable(onClickLabel = "Open ${nb.title}") {
+            .clickable(onClickLabel = stringResource(R.string.open_n, nb.title)) {
               open = false
               onOpen(nb.id)
             }
@@ -1172,8 +1177,8 @@ private fun QuickOpen(recent: List<com.tali.notes.data.NotebookMeta>, thumbnail:
           }
           Spacer(Modifier.width(12.dp))
           Column(Modifier.weight(1f, fill = false)) {
-            Text(nb.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Edited " + com.tali.notes.ui.components.relativeTime(nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1)
+            Text(nb.title.ifBlank { stringResource(R.string.untitled) }, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(R.string.edited) + com.tali.notes.ui.components.relativeTime(nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1)
           }
         }
       }
@@ -1210,14 +1215,14 @@ private fun MoreMenu(
   val locked = remember(open) { if (open) lockedCount() else 0 }
   val roomBelow = rememberRoomBelow()
   Box(Modifier.onGloballyPositioned { roomBelow.anchor(it) }) {
-    ToolButton(Icons.Outlined.MoreHoriz, "More") { open = true }
+    ToolButton(Icons.Outlined.MoreHoriz, stringResource(R.string.more)) { open = true }
     // Kept to the room under the button (it scrolls): taller, the menu was moved up over the button.
     DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = roomBelow.max), shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
       // Kept compact so it fits under the button on a landscape tablet: the actions as one row of
       // tiles, the paper choices as chips, and the settings as one-line switches.
       Column(Modifier.width(330.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
         if (locked > 0) {
-          MenuSwitchRow(Icons.Outlined.LockOpen, "Unlock all (${if (locked == 1) "1 item" else "$locked items"})", checked = null) {
+          MenuSwitchRow(Icons.Outlined.LockOpen, if (locked == 1) stringResource(R.string.unlock_all_one) else stringResource(R.string.unlock_all_n, locked), checked = null) {
             open = false
             onUnlockAll()
           }
@@ -1225,33 +1230,33 @@ private fun MoreMenu(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
           if (paged) {
-            MenuTile(Icons.Outlined.AutoStories, "Pages", Modifier.weight(1f)) {
+            MenuTile(Icons.Outlined.AutoStories, stringResource(R.string.pages), Modifier.weight(1f)) {
               open = false
               onPages()
             }
           }
-          MenuTile(Icons.Outlined.FitScreen, if (paged) "Whole page" else "Everything", Modifier.weight(1f)) {
+          MenuTile(Icons.Outlined.FitScreen, if (paged) stringResource(R.string.whole_page) else stringResource(R.string.everything), Modifier.weight(1f)) {
             open = false
             onFit()
           }
-          MenuTile(Icons.Outlined.IosShare, "Export PDF", Modifier.weight(1f)) {
+          MenuTile(Icons.Outlined.IosShare, stringResource(R.string.export_pdf), Modifier.weight(1f)) {
             open = false
             onExport()
           }
         }
-        Text("Paper", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 6.dp, top = 10.dp, bottom = 6.dp))
+        Text(stringResource(R.string.paper), style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 6.dp, top = 10.dp, bottom = 6.dp))
         Box(Modifier.padding(horizontal = 2.dp)) { paperPicker { open = false } }
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-          MenuChip(Icons.Outlined.DarkMode, "Dark paper", darkPaper, Modifier.weight(1f)) { onDarkPaper(!darkPaper) }
-          MenuChip(Icons.Outlined.AllInclusive, "Endless canvas", !paged, Modifier.weight(1f)) { onEndless(paged) }
+          MenuChip(Icons.Outlined.DarkMode, stringResource(R.string.dark_paper), darkPaper, Modifier.weight(1f)) { onDarkPaper(!darkPaper) }
+          MenuChip(Icons.Outlined.AllInclusive, stringResource(R.string.endless_canvas), !paged, Modifier.weight(1f)) { onEndless(paged) }
         }
         HorizontalDivider(color = c.line, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
         val fingerLabel = when (fingerDraws) {
-          null -> "Auto"
-          true -> "On"
-          false -> "Off"
+          null -> stringResource(R.string.auto)
+          true -> stringResource(R.string.on)
+          false -> stringResource(R.string.off)
         }
-        MenuSwitchRow(Icons.Outlined.TouchApp, "Draw with finger", checked = null, value = fingerLabel) {
+        MenuSwitchRow(Icons.Outlined.TouchApp, stringResource(R.string.draw_with_finger), checked = null, value = fingerLabel) {
           onFingerDraws(
             when (fingerDraws) {
               null -> true
@@ -1260,10 +1265,10 @@ private fun MoreMenu(
             }
           )
         }
-        MenuSwitchRow(Icons.AutoMirrored.Outlined.Undo, "Tap 2 fingers to undo, 3 to redo", smartUndo) { onSmartUndo(!smartUndo) }
-        if (paged) MenuSwitchRow(Icons.Outlined.VerticalAlignCenter, "Write between pages", inkBetweenPages) { onInkBetweenPages(!inkBetweenPages) }
-        else MenuSwitchRow(Icons.Outlined.Description, "A4 page guides", pageGuides) { onPageGuides(!pageGuides) }
-        MenuSwitchRow(Icons.Outlined.Fullscreen, "Full screen", hideNavBar) { onHideNavBar(!hideNavBar) }
+        MenuSwitchRow(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.tap_2_fingers_to_undo_3), smartUndo) { onSmartUndo(!smartUndo) }
+        if (paged) MenuSwitchRow(Icons.Outlined.VerticalAlignCenter, stringResource(R.string.write_between_pages), inkBetweenPages) { onInkBetweenPages(!inkBetweenPages) }
+        else MenuSwitchRow(Icons.Outlined.Description, stringResource(R.string.a4_page_guides), pageGuides) { onPageGuides(!pageGuides) }
+        MenuSwitchRow(Icons.Outlined.Fullscreen, stringResource(R.string.full_screen), hideNavBar) { onHideNavBar(!hideNavBar) }
       }
     }
   }
@@ -1322,9 +1327,9 @@ private fun MenuSwitchRow(icon: ImageVector, label: String, checked: Boolean?, v
 private fun ZoomChip(zoom: Float, modifier: Modifier = Modifier, onReset: () -> Unit) {
   val c = Tali.colors
   Box(
-    modifier.cloudSurface(12.dp, shadowDepth = 3.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Reset zoom", onClick = onReset).padding(horizontal = 12.dp, vertical = 7.dp)
+    modifier.cloudSurface(12.dp, shadowDepth = 3.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = stringResource(R.string.reset_zoom), onClick = onReset).padding(horizontal = 12.dp, vertical = 7.dp)
   ) {
-    Text("${(zoom * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
+    Text(stringResource(R.string.n, (zoom * 100).roundToInt()), style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
   }
 }
 
@@ -1333,14 +1338,14 @@ private fun ZoomChip(zoom: Float, modifier: Modifier = Modifier, onReset: () -> 
 private fun PageChip(page: Int, count: Int, onOverview: (() -> Unit)?, onGo: (Int) -> Unit) {
   val c = Tali.colors
   Row(Modifier.cloudSurface(12.dp, shadowDepth = 3.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-    PageArrow(Icons.Outlined.KeyboardArrowUp, "Previous page", enabled = page > 0) { onGo(page - 1) }
+    PageArrow(Icons.Outlined.KeyboardArrowUp, stringResource(R.string.previous_page), enabled = page > 0) { onGo(page - 1) }
     Text(
-      "${page + 1} / $count",
+      stringResource(R.string.n_n_3, page + 1, count),
       style = MaterialTheme.typography.labelMedium,
       color = c.inkMuted,
-      modifier = Modifier.clip(RoundedCornerShape(8.dp)).then(if (onOverview != null) Modifier.clickable(onClickLabel = "All pages", onClick = onOverview) else Modifier).padding(horizontal = 6.dp, vertical = 6.dp),
+      modifier = Modifier.clip(RoundedCornerShape(8.dp)).then(if (onOverview != null) Modifier.clickable(onClickLabel = stringResource(R.string.all_pages), onClick = onOverview) else Modifier).padding(horizontal = 6.dp, vertical = 6.dp),
     )
-    PageArrow(Icons.Outlined.KeyboardArrowDown, "Next page", enabled = page < count - 1) { onGo(page + 1) }
+    PageArrow(Icons.Outlined.KeyboardArrowDown, stringResource(R.string.next_page), enabled = page < count - 1) { onGo(page + 1) }
   }
 }
 
@@ -1407,7 +1412,7 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
       FloatingBar(Modifier.height(48.dp)) {
         Row(Modifier.fillMaxHeight().clip(RoundedCornerShape(18.dp)).clickable(onClick = onPaste).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
           Icon(Icons.Outlined.ContentPaste, null, tint = c.ink, modifier = Modifier.size(20.dp))
-          Text(if (offer.count == 1) "Paste" else "Paste ${offer.count} items", color = c.ink, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp, end = 2.dp))
+          Text(if (offer.count == 1) stringResource(R.string.paste) else stringResource(R.string.paste_n_items, offer.count), color = c.ink, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp, end = 2.dp))
         }
       }
     }
@@ -1456,38 +1461,38 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
       // One row: ⋯ adds the rest straight after itself (scrolls sideways only if the screen is too narrow).
       Row(Modifier.height(44.dp).onSizeChanged { rowWidth = it.width }.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.onSizeChanged { foldedWidth = it.width }, verticalAlignment = Alignment.CenterVertically) {
-          ToolButton(Icons.Outlined.ContentCopy, "Copy (hold anywhere to paste it, here or in any notebook)", onClick = onCopy)
-          ToolButton(Icons.Outlined.ContentCut, "Cut (hold anywhere to paste it, here or in any notebook)", onClick = onCut)
-          ToolButton(Icons.Outlined.LibraryAdd, "Duplicate", onClick = onDuplicate)
-          ToolButton(Icons.Outlined.DeleteOutline, "Delete", onClick = onDelete)
+          ToolButton(Icons.Outlined.ContentCopy, stringResource(R.string.copy_hold_anywhere_to_paste_it), onClick = onCopy)
+          ToolButton(Icons.Outlined.ContentCut, stringResource(R.string.cut_hold_anywhere_to_paste_it), onClick = onCut)
+          ToolButton(Icons.Outlined.LibraryAdd, stringResource(R.string.duplicate), onClick = onDuplicate)
+          ToolButton(Icons.Outlined.DeleteOutline, stringResource(R.string.delete), onClick = onDelete)
           Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
           // Like the toolbar's chevron: > opens the rest to its right, and turns round into < to fold them away.
           val turn by androidx.compose.animation.core.animateFloatAsState(if (more) 180f else 0f, androidx.compose.animation.core.tween(220, easing = com.tali.notes.ui.components.EaseOutStrong), label = "moreArrow")
           Box(
             Modifier.size(30.dp, 44.dp).clip(RoundedCornerShape(10.dp))
-              .clickable(onClickLabel = if (more) "Fewer options" else "More options", role = Role.Button) { more = !more; extra = null },
+              .clickable(onClickLabel = if (more) stringResource(R.string.fewer_options) else stringResource(R.string.more_options), role = Role.Button) { more = !more; extra = null },
             contentAlignment = Alignment.Center,
           ) {
-            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, if (more) "Fewer options" else "More options", tint = c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, if (more) stringResource(R.string.fewer_options) else stringResource(R.string.more_options), tint = c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
           }
         }
         if (more) {
           // The rest of what the menu always had, as plain buttons; colour and thickness each open their own row.
           if (!sel.hasImage || sel.count > 1) {
-            ToolButton(Icons.Outlined.Palette, "Colour", selected = extra == SelectionExtra.COLOUR) { extra = if (extra == SelectionExtra.COLOUR) null else SelectionExtra.COLOUR }
+            ToolButton(Icons.Outlined.Palette, stringResource(R.string.colour), selected = extra == SelectionExtra.COLOUR) { extra = if (extra == SelectionExtra.COLOUR) null else SelectionExtra.COLOUR }
           }
           if (sel.lineSize != null) {
-            ToolButton(Icons.Outlined.LineWeight, "Thickness", selected = extra == SelectionExtra.THICKNESS) { extra = if (extra == SelectionExtra.THICKNESS) null else SelectionExtra.THICKNESS }
+            ToolButton(Icons.Outlined.LineWeight, stringResource(R.string.thickness), selected = extra == SelectionExtra.THICKNESS) { extra = if (extra == SelectionExtra.THICKNESS) null else SelectionExtra.THICKNESS }
           }
-          ToolButton(Icons.Outlined.FlipToFront, "Bring to front") { onArrange(true) }
-          ToolButton(Icons.Outlined.FlipToBack, "Send to back") { onArrange(false) }
+          ToolButton(Icons.Outlined.FlipToFront, stringResource(R.string.bring_to_front)) { onArrange(true) }
+          ToolButton(Icons.Outlined.FlipToBack, stringResource(R.string.send_to_back)) { onArrange(false) }
           // Writing and shapes flip; pictures and text keep facing the right way.
-          ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorHorizontal, "Mirror left to right") { onMirror(true) }
-          ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorVertical, "Mirror upside down") { onMirror(false) }
+          ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorHorizontal, stringResource(R.string.mirror_left_to_right)) { onMirror(true) }
+          ToolButton(com.tali.notes.ui.components.TaliIcons.MirrorVertical, stringResource(R.string.mirror_upside_down)) { onMirror(false) }
           // Locked things stay put: the lasso, taps and the eraser leave them alone.
-          if (sel.locked) ToolButton(Icons.Outlined.LockOpen, "Unlock", onClick = onLock) else ToolButton(Icons.Outlined.Lock, "Lock in place", onClick = onLock)
-          sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, "Edit text") { onEditText(id) } }
-          if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, "Save as shape", onClick = onSaveShape)
+          if (sel.locked) ToolButton(Icons.Outlined.LockOpen, stringResource(R.string.unlock), onClick = onLock) else ToolButton(Icons.Outlined.Lock, stringResource(R.string.lock_in_place), onClick = onLock)
+          sel.textId?.let { id -> ToolButton(Icons.Outlined.EditNote, stringResource(R.string.edit_text)) { onEditText(id) } }
+          if (sel.hasDrawing) ToolButton(Icons.Outlined.AutoAwesome, stringResource(R.string.save_as_shape), onClick = onSaveShape)
         }
       }
       if (more) {
@@ -1559,34 +1564,40 @@ private fun SaveShapeDialog(geometry: ShapeGeometry, onDismiss: () -> Unit, onSa
       }
       Spacer(Modifier.width(18.dp))
       Column(Modifier.weight(1f)) {
-        Text("Save as shape", style = MaterialTheme.typography.titleLarge, color = c.ink)
+        Text(stringResource(R.string.save_as_shape), style = MaterialTheme.typography.titleLarge, color = c.ink)
         Spacer(Modifier.height(4.dp))
-        Text("It will appear in Shapes under My shapes, and holding the pen at the end of a similar stroke will snap to it.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+        Text(stringResource(R.string.it_will_appear_in_shapes_under), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
       }
     }
     Spacer(Modifier.height(18.dp))
-    TitleField(value, { value = it }, "Name, e.g. I-beam") { onSave(value.text) }
+    TitleField(value, { value = it }, stringResource(R.string.name_e_g_i_beam)) { onSave(value.text) }
     Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      QuietButton("Cancel", onClick = onDismiss)
-      PrimaryButton("Save shape") { onSave(value.text) }
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
+      PrimaryButton(stringResource(R.string.save_shape)) { onSave(value.text) }
     }
   }
 }
 
 /** What the export dialog's main choice can be: a quality, or the whole canvas on one long page. */
-private enum class ExportChoice(val label: String, val quality: PdfQuality, val detail: String) {
-  BEST("Best", PdfQuality.BEST, PdfQuality.BEST.detail),
-  BALANCED("Balanced", PdfQuality.BALANCED, PdfQuality.BALANCED.detail),
-  LIGHT("Light", PdfQuality.LIGHT, PdfQuality.LIGHT.detail),
-  LONG("One long page", PdfQuality.BEST, "Everything on one long page, sized to fit, instead of A4 pages."),
+private enum class ExportChoice(private val labelRes: Int, val quality: PdfQuality, private val detailRes: Int) {
+  BEST(PdfQuality.BEST.nameRes, PdfQuality.BEST, PdfQuality.BEST.detailRes),
+  BALANCED(PdfQuality.BALANCED.nameRes, PdfQuality.BALANCED, PdfQuality.BALANCED.detailRes),
+  LIGHT(PdfQuality.LIGHT.nameRes, PdfQuality.LIGHT, PdfQuality.LIGHT.detailRes),
+  LONG(R.string.one_long_page, PdfQuality.BEST, R.string.everything_on_one_long_page_sized);
+
+  // Read when shown, so they're in the language of the moment.
+  val label: String
+    get() = tr(labelRes)
+  val detail: String
+    get() = tr(detailRes)
 }
 
 private fun sizeLabel(bytes: Long): String =
   when {
-    bytes >= 1_000_000 -> String.format(java.util.Locale.UK, "File size: %.1f MB", bytes / 1_000_000.0)
-    bytes >= 1_000 -> "File size: ${(bytes / 1_000.0).roundToInt()} KB"
-    else -> "File size: under 1 KB"
+    bytes >= 1_000_000 -> String.format(java.util.Locale.UK, tr(R.string.file_size_1f_mb), bytes / 1_000_000.0)
+    bytes >= 1_000 -> tr(R.string.file_size_n_kb, (bytes / 1_000.0).roundToInt())
+    else -> tr(R.string.file_size_under_1_kb)
   }
 
 /**
@@ -1605,24 +1616,24 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
   val key = "$layout-${choice.quality}"
   LaunchedEffect(key) { prepare(layout, choice.quality)?.let { sizes[key] = it.length() } }
   DialogCard(onDismiss, width = 560) {
-    Text("Export PDF", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(R.string.export_pdf), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(16.dp))
     CardBody {
     if (pageLayouts.size > 1 && choice != ExportChoice.LONG) {
-      Segmented(pageLayouts, pagesLayout, { if (it == PdfLayout.PDF_PAGES) "Slides' own pages" else "A4 pages" }, { pagesLayout = it }, Modifier.fillMaxWidth())
+      Segmented(pageLayouts, pagesLayout, { if (it == PdfLayout.PDF_PAGES) tr(R.string.slides_own_pages) else tr(R.string.a4_pages) }, { pagesLayout = it }, Modifier.fillMaxWidth())
       Spacer(Modifier.height(14.dp))
     }
     Segmented(ExportChoice.entries, choice, { it.label }, { choice = it }, Modifier.fillMaxWidth())
     Spacer(Modifier.height(12.dp))
     val size = sizes[key]
-    Text(size?.let(::sizeLabel) ?: "Making the PDF to measure it…", style = MaterialTheme.typography.titleSmall, color = if (size != null) c.ink else c.inkFaint)
+    Text(size?.let(::sizeLabel) ?: stringResource(R.string.making_the_pdf_to_measure_it), style = MaterialTheme.typography.titleSmall, color = if (size != null) c.ink else c.inkFaint)
     Spacer(Modifier.height(2.dp))
     Text(
       when {
         choice == ExportChoice.LONG -> choice.detail
-        layout == PdfLayout.PDF_PAGES -> "Each slide you imported comes back as its own page, with your writing on it. " + choice.detail
-        paged -> "Every page of the notebook as an A4 page. " + choice.detail
-        else -> "The canvas cut into A4 pages; empty areas are skipped. " + choice.detail
+        layout == PdfLayout.PDF_PAGES -> stringResource(R.string.each_slide_you_imported_comes_back) + choice.detail
+        paged -> stringResource(R.string.every_page_of_the_notebook_as) + choice.detail
+        else -> stringResource(R.string.the_canvas_cut_into_a4_pages) + choice.detail
       },
       style = MaterialTheme.typography.bodyMedium,
       color = c.inkMuted,
@@ -1631,9 +1642,9 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
     }
     Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      QuietButton("Cancel", onClick = onDismiss)
-      QuietButton("Save to Files") { onExport(layout, choice.quality, false) }
-      PrimaryButton("Share") { onExport(layout, choice.quality, true) }
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
+      QuietButton(stringResource(R.string.save_to_files)) { onExport(layout, choice.quality, false) }
+      PrimaryButton(stringResource(R.string.share)) { onExport(layout, choice.quality, true) }
     }
   }
 }
@@ -1658,10 +1669,10 @@ private fun ShowToolbarsButton(visible: Boolean, modifier: Modifier = Modifier, 
         .clip(CircleShape)
         .background(c.surface.copy(alpha = 0.72f))
         .border(1.dp, c.line, CircleShape)
-        .clickable(onClickLabel = "Show toolbars", onClick = onShow),
+        .clickable(onClickLabel = stringResource(R.string.show_toolbars), onClick = onShow),
       contentAlignment = Alignment.Center,
     ) {
-      Icon(Icons.Outlined.Visibility, "Show toolbars", tint = c.inkMuted, modifier = Modifier.size(20.dp))
+      Icon(Icons.Outlined.Visibility, stringResource(R.string.show_toolbars), tint = c.inkMuted, modifier = Modifier.size(20.dp))
     }
   }
 }

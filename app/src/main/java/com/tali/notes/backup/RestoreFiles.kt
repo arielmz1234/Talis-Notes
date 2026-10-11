@@ -1,5 +1,7 @@
 package com.tali.notes.backup
 
+import com.tali.notes.tr
+import com.tali.notes.R
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -46,7 +48,7 @@ object RestoreFiles {
   suspend fun restore(context: Context, uris: List<Uri>): NotesRepository.MergeResult {
     val named = withContext(Dispatchers.IO) { uris.map { it to nameOf(context, it) } }
     val ordered = named.filterNot { (_, n) -> n.endsWith(".pdf", ignoreCase = true) }.sortedBy { (_, n) -> if (n.contains("settings", ignoreCase = true)) 0 else 1 }
-    if (ordered.isEmpty()) throw BackupArchive.InvalidBackup("There's no backup file there. Backups end in .zip.")
+    if (ordered.isEmpty()) throw BackupArchive.InvalidBackup(tr(R.string.there_s_no_backup_file_there))
     var total = NotesRepository.MergeResult(0, 0, 0, emptySet())
     var restored = 0
     var lastProblem: BackupArchive.InvalidBackup? = null
@@ -62,7 +64,7 @@ object RestoreFiles {
         CrashLog.recovered(context, t)
       }
     }
-    if (restored == 0) throw lastProblem ?: BackupArchive.InvalidBackup("Those files couldn't be restored.")
+    if (restored == 0) throw lastProblem ?: BackupArchive.InvalidBackup(tr(R.string.those_files_couldn_t_be_restored))
     return total
   }
 

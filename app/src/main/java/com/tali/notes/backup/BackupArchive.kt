@@ -1,5 +1,7 @@
 package com.tali.notes.backup
 
+import com.tali.notes.tr
+import com.tali.notes.R
 import android.content.Context
 import com.tali.notes.data.ItemCodec
 import com.tali.notes.data.NotesDb
@@ -184,8 +186,8 @@ object BackupArchive {
             if (entry.isDirectory || base.isEmpty() || base.startsWith(".") || name.contains("..")) continue
             when {
               name == MANIFEST_ENTRY -> {
-                val m = runCatching { ItemCodec.json.decodeFromString(Manifest.serializer(), zip.readBytes().decodeToString()) }.getOrNull() ?: throw InvalidBackup("This file isn't a Tali's Notes backup.")
-                if (m.format > FORMAT) throw InvalidBackup("This backup was made by a newer version of Tali's Notes. Update the app first.")
+                val m = runCatching { ItemCodec.json.decodeFromString(Manifest.serializer(), zip.readBytes().decodeToString()) }.getOrNull() ?: throw InvalidBackup(tr(R.string.this_file_isn_t_a_tali))
+                if (m.format > FORMAT) throw InvalidBackup(tr(R.string.this_backup_was_made_by_a))
                 sawManifest = true
               }
               name == DB_ENTRY -> File(work, DB_ENTRY).outputStream().use { zip.copyTo(it) }
@@ -197,10 +199,10 @@ object BackupArchive {
           }
         }
         val dbFile = File(work, DB_ENTRY)
-        if (!sawManifest || !dbFile.exists()) throw InvalidBackup("This file isn't a Tali's Notes backup.")
+        if (!sawManifest || !dbFile.exists()) throw InvalidBackup(tr(R.string.this_file_isn_t_a_tali))
         // Bring an older backup's tables up to date before merging.
         runCatching { NotesDb(context, dbFile.path).use { it.writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c -> c.moveToFirst() } } }
-          .onFailure { throw InvalidBackup("This backup was made by a newer version of Tali's Notes. Update the app first.") }
+          .onFailure { throw InvalidBackup(tr(R.string.this_backup_was_made_by_a)) }
         val result = repo.mergeFrom(dbFile)
         // Previews for notebooks that came from the backup.
         work.listFiles()?.filter { it.name.startsWith("thumb-") }?.forEach { t ->

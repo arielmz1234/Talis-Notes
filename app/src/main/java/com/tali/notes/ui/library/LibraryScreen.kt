@@ -1,5 +1,9 @@
 package com.tali.notes.ui.library
 
+import com.tali.notes.ui.components.nameRes
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.animation.fadeOut
@@ -242,19 +246,19 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             Breadcrumb(path, onSelect = { vm.selectedFolder.value = it })
             Spacer(Modifier.height(4.dp))
           }
-          Text(if (inTrash) "Recently deleted" else currentFolder?.name ?: "All notebooks", style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(if (inTrash) stringResource(R.string.recently_deleted) else currentFolder?.name ?: stringResource(R.string.all_notebooks), style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Spacer(Modifier.height(6.dp))
           val today = remember { SimpleDateFormat("EEEE, d MMMM", Locale.UK).format(Date()) }
           val count = if (currentFolder == null) all.size else all.count { it.folderId == currentFolder.id }
           val inside = if (currentFolder == null) 0 else folders.count { it.parentId == currentFolder.id }
-          val counts = (if (count == 1) "1 notebook" else "$count notebooks") + when (inside) {
+          val counts = (if (count == 1) stringResource(R.string.t_1_notebook) else stringResource(R.string.n_notebooks, count)) + when (inside) {
             0 -> ""
-            1 -> " · 1 folder"
-            else -> " · $inside folders"
+            1 -> stringResource(R.string.t_1_folder)
+            else -> stringResource(R.string.n_folders, inside)
           }
           Text(
-            if (inTrash) "Notebooks stay here for ${NotesRepository.TRASH_DAYS} days, then they're deleted for good"
-            else "$counts · $today",
+            if (inTrash) stringResource(R.string.notebooks_stay_here_for_n_days, NotesRepository.TRASH_DAYS)
+            else stringResource(R.string.n_n_2, counts, today),
             style = MaterialTheme.typography.bodyLarge,
             color = c.inkMuted,
           )
@@ -287,13 +291,13 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                 SortButton(settings.librarySort, settings.librarySortReversed, vm::sortBy)
               }
               Spacer(Modifier.width(12.dp))
-              if (inTrash) QuietButton("Empty", color = c.danger) { emptyingTrash = true }
+              if (inTrash) QuietButton(stringResource(R.string.empty), color = c.danger) { emptyingTrash = true }
               else {
                 if (notebooks.isNotEmpty()) {
-                  QuietButton("Select") { picked = emptySet() }
+                  QuietButton(stringResource(R.string.select)) { picked = emptySet() }
                   Spacer(Modifier.width(8.dp))
                 }
-                PrimaryButton("New notebook", Icons.Outlined.Add) { creating = true }
+                PrimaryButton(stringResource(R.string.new_notebook), Icons.Outlined.Add) { creating = true }
               }
             }
           }
@@ -316,10 +320,10 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
           onSend = {
             val send = Intent(Intent.ACTION_SEND).apply {
               type = "text/plain"
-              putExtra(Intent.EXTRA_SUBJECT, "Tali's Notes crash report")
+              putExtra(Intent.EXTRA_SUBJECT, tr(R.string.tali_s_notes_crash_report))
               putExtra(Intent.EXTRA_TEXT, report)
             }
-            context.startActivity(Intent.createChooser(send, "Send crash report"))
+            context.startActivity(Intent.createChooser(send, tr(R.string.send_crash_report)))
             CrashLog.dismiss(context)
             crashReport = null
           },
@@ -337,7 +341,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       val subfolders = if (currentFolder == null || query.isNotBlank()) emptyList() else folders.filter { it.parentId == currentFolder.id }
       when {
         all.isEmpty() && !inTrash && folders.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
-        notebooks.isEmpty() && query.isNotBlank() -> Text("No notebooks match “$query”.", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
+        notebooks.isEmpty() && query.isNotBlank() -> Text(stringResource(R.string.no_notebooks_match_n, query), style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
         notebooks.isEmpty() && subfolders.isEmpty() && currentFolder != null -> EmptyFolder(onCreate = { creating = true }, onNewFolder = { newFolder = NewFolderRequest(currentFolder.id) })
         notebooks.isEmpty() && subfolders.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
         else -> {
@@ -348,7 +352,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             contentPadding = PaddingValues(bottom = 40.dp),
           ) {
             if (currentFolder != null && !inTrash && query.isBlank()) {
-              item(key = "folders-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel("Folders") }
+              item(key = "folders-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(stringResource(R.string.folders)) }
               items(subfolders, key = { "folder-" + it.id }) { f ->
                 PuffBox(leaving = f.id in vanishing, appearing = f.id in freshFolders) {
                 FolderTile(
@@ -369,11 +373,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             if (notebooks.isNotEmpty()) {
               item(key = "notebooks-label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(
                   when {
-                    inTrash -> "Tap a notebook to bring it back"
-                    currentFolder != null -> "Notebooks"
-                    settings.librarySort == LibrarySort.EDITED && !settings.librarySortReversed -> "Recent"
-                    settings.librarySort == LibrarySort.OPENED && !settings.librarySortReversed -> "Recently opened"
-                    else -> "Notebooks"
+                    inTrash -> stringResource(R.string.tap_a_notebook_to_bring_it)
+                    currentFolder != null -> stringResource(R.string.notebooks)
+                    settings.librarySort == LibrarySort.EDITED && !settings.librarySortReversed -> stringResource(R.string.recent)
+                    settings.librarySort == LibrarySort.OPENED && !settings.librarySortReversed -> stringResource(R.string.recently_opened)
+                    else -> stringResource(R.string.notebooks)
                   }
                 )
               }
@@ -430,9 +434,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   if (deletingPicked) {
     val ids = picked.orEmpty()
     ConfirmDialog(
-      title = if (ids.size == 1) "Delete 1 notebook?" else "Delete ${ids.size} notebooks?",
-      body = "They move to Recently deleted, where you can bring them back for ${NotesRepository.TRASH_DAYS} days.",
-      confirm = "Delete",
+      title = if (ids.size == 1) stringResource(R.string.delete_1_notebook) else stringResource(R.string.delete_n_notebooks, ids.size),
+      body = stringResource(R.string.they_move_to_recently_deleted_where, NotesRepository.TRASH_DAYS),
+      confirm = stringResource(R.string.delete),
       destructive = true,
       onDismiss = { deletingPicked = false },
     ) {
@@ -443,9 +447,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   }
   deleting?.let { nb ->
     ConfirmDialog(
-      title = "Delete “${nb.title}”?",
-      body = "It moves to Recently deleted, where you can bring it back for ${NotesRepository.TRASH_DAYS} days.",
-      confirm = "Delete",
+      title = stringResource(R.string.delete_n, nb.title),
+      body = stringResource(R.string.it_moves_to_recently_deleted_where, NotesRepository.TRASH_DAYS),
+      confirm = stringResource(R.string.delete),
       destructive = true,
       onDismiss = { deleting = null },
     ) {
@@ -472,17 +476,19 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       Spacer(Modifier.height(8.dp))
       val left = NotesRepository.TRASH_DAYS - ((System.currentTimeMillis() - (nb.deleted ?: 0L)) / 86_400_000L).toInt()
       Text(
-        "Deleted ${relativeTime(nb.deleted ?: 0L).replaceFirstChar { it.lowercase() }}. It will be deleted for good in ${left.coerceAtLeast(1)} ${if (left == 1) "day" else "days"}.",
+        relativeTime(nb.deleted ?: 0L).replaceFirstChar { it.lowercase() }.let { whenDeleted ->
+          if (left <= 1) stringResource(R.string.deleted_when_for_good_in_one_day, whenDeleted) else stringResource(R.string.deleted_when_for_good_in_days, whenDeleted, left)
+        },
         style = MaterialTheme.typography.bodyMedium,
         color = c.inkMuted,
       )
       Spacer(Modifier.height(24.dp))
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-        QuietButton("Delete forever", color = c.danger) {
+        QuietButton(stringResource(R.string.delete_forever), color = c.danger) {
           vm.deleteForever(nb.id)
           trashAction = null
         }
-        PrimaryButton("Restore") {
+        PrimaryButton(stringResource(R.string.restore)) {
           vm.restoreFromTrash(nb.id)
           trashAction = null
         }
@@ -491,9 +497,9 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   }
   if (emptyingTrash) {
     ConfirmDialog(
-      title = "Empty Recently deleted?",
-      body = if (trash.size == 1) "1 notebook will be deleted for good. This can't be undone." else "${trash.size} notebooks will be deleted for good. This can't be undone.",
-      confirm = "Delete forever",
+      title = stringResource(R.string.empty_recently_deleted),
+      body = if (trash.size == 1) stringResource(R.string.t_1_notebook_will_be_deleted_for) else stringResource(R.string.n_notebooks_will_be_deleted_for, trash.size),
+      confirm = stringResource(R.string.delete_forever),
       destructive = true,
       onDismiss = { emptyingTrash = false },
     ) {
@@ -505,7 +511,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     val parentId = request.parentId
     val parentName = folders.firstOrNull { it.id == parentId }?.name
     NewFolderDialog(
-      title = if (parentName != null) "New folder in $parentName" else "New folder",
+      title = if (parentName != null) stringResource(R.string.new_folder_in_n, parentName) else stringResource(R.string.new_folder),
       placeholder = remember(request) { vm.freeFolderName(parentId) },
       initialColor = remember(request) { vm.nextFolderColor(parentId) },
       onDismiss = { newFolder = null },
@@ -521,19 +527,19 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     }
   }
   renamingFolder?.let { f ->
-    NameDialog(title = "Rename folder", initial = f.name, placeholder = "Folder name", confirm = "Rename", onDismiss = { renamingFolder = null }) {
+    NameDialog(title = stringResource(R.string.rename_folder), initial = f.name, placeholder = stringResource(R.string.folder_name), confirm = stringResource(R.string.rename), onDismiss = { renamingFolder = null }) {
       vm.renameFolder(f.id, it)
       renamingFolder = null
     }
   }
   deletingFolder?.let { f ->
     ConfirmDialog(
-      title = "Delete the “${f.name}” folder?",
+      title = stringResource(R.string.delete_the_n_folder, f.name),
       body = folders.firstOrNull { it.id == f.parentId }.let { parent ->
-        if (parent != null) "Nothing inside is deleted. Its notebooks and folders move up into “${parent.name}”."
-        else "Nothing inside is deleted. Its notebooks move back to All notebooks, and its folders to the top level."
+        if (parent != null) stringResource(R.string.nothing_inside_is_deleted_its_notebooks, parent.name)
+        else stringResource(R.string.nothing_inside_is_deleted_its_notebooks_2)
       },
-      confirm = "Delete folder",
+      confirm = stringResource(R.string.delete_folder),
       destructive = true,
       onDismiss = { deletingFolder = null },
     ) {
@@ -551,12 +557,12 @@ private fun CrashBanner(onSend: () -> Unit, onDismiss: () -> Unit) {
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Column(Modifier.weight(1f)) {
-      Text("Tali's Notes closed unexpectedly last time", style = MaterialTheme.typography.titleSmall, color = c.ink)
-      Text("Your notebooks are saved. Sending the report helps fix what went wrong.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+      Text(stringResource(R.string.tali_s_notes_closed_unexpectedly_last), style = MaterialTheme.typography.titleSmall, color = c.ink)
+      Text(stringResource(R.string.your_notebooks_are_saved_sending_the), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
     }
-    Text("Dismiss", style = MaterialTheme.typography.labelLarge, color = c.inkMuted, modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onDismiss).padding(10.dp))
+    Text(stringResource(R.string.dismiss), style = MaterialTheme.typography.labelLarge, color = c.inkMuted, modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onDismiss).padding(10.dp))
     Spacer(Modifier.width(4.dp))
-    PrimaryButton("Send report", onClick = onSend)
+    PrimaryButton(stringResource(R.string.send_report), onClick = onSend)
   }
 }
 
@@ -595,7 +601,7 @@ private fun Sidebar(
     Spacer(Modifier.height(30.dp))
     NavRow(
       icon = { Icon(Icons.Outlined.AutoStories, null, tint = if (selected == null) c.blue else c.inkMuted, modifier = Modifier.size(20.dp)) },
-      label = "All notebooks",
+      label = stringResource(R.string.all_notebooks),
       count = notebooks.size,
       selected = selected == null,
       nav = nav,
@@ -604,25 +610,25 @@ private fun Sidebar(
     )
     Spacer(Modifier.height(22.dp))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
-      SectionLabel("Folders", Modifier.weight(1f))
+      SectionLabel(stringResource(R.string.folders), Modifier.weight(1f))
       Box(
-        Modifier.size(30.dp).clip(CircleShape).clickable(onClickLabel = "New folder") { onNewFolder(null) },
+        Modifier.size(30.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.new_folder)) { onNewFolder(null) },
         contentAlignment = Alignment.Center,
       ) {
-        Icon(Icons.Outlined.Add, "New folder", tint = c.inkMuted, modifier = Modifier.size(18.dp))
+        Icon(Icons.Outlined.Add, stringResource(R.string.new_folder), tint = c.inkMuted, modifier = Modifier.size(18.dp))
       }
     }
     Spacer(Modifier.height(6.dp))
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
       if (folders.isEmpty()) {
         Text(
-          "Make a folder for each course or subject.",
+          stringResource(R.string.make_a_folder_for_each_course),
           style = MaterialTheme.typography.bodySmall,
           color = c.inkFaint,
           modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
         )
         Text(
-          "New folder",
+          stringResource(R.string.new_folder),
           style = MaterialTheme.typography.labelLarge,
           color = c.accent,
           modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onNewFolder(null) }.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -655,7 +661,7 @@ private fun Sidebar(
             trailing = if (!hasChildren) null else {
               {
                 Box(
-                  Modifier.size(28.dp).clip(CircleShape).clickable(onClickLabel = if (expanded) "Fold" else "Unfold") {
+                  Modifier.size(28.dp).clip(CircleShape).clickable(onClickLabel = if (expanded) stringResource(R.string.fold) else stringResource(R.string.unfold)) {
                     collapsed = if (f.id in collapsed) collapsed - f.id else collapsed + f.id
                   },
                   contentAlignment = Alignment.Center,
@@ -682,7 +688,7 @@ private fun Sidebar(
     if (trashCount > 0) {
       NavRow(
         icon = { Icon(Icons.Outlined.DeleteOutline, null, tint = if (selected == LibraryViewModel.TRASH) c.blue else c.inkMuted, modifier = Modifier.size(20.dp)) },
-        label = "Recently deleted",
+        label = stringResource(R.string.recently_deleted),
         count = trashCount,
         selected = selected == LibraryViewModel.TRASH,
         nav = nav,
@@ -693,18 +699,18 @@ private fun Sidebar(
     }
     // Settings: theme and style.
     Row(
-      Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Settings", onClick = onSettings).padding(horizontal = 10.dp, vertical = 10.dp),
+      Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = stringResource(R.string.settings), onClick = onSettings).padding(horizontal = 10.dp, vertical = 10.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Icon(Icons.Outlined.Settings, null, tint = c.inkMuted, modifier = Modifier.size(18.dp))
       Spacer(Modifier.width(10.dp))
-      Text("Settings", style = MaterialTheme.typography.labelLarge, color = c.inkMuted)
+      Text(stringResource(R.string.settings), style = MaterialTheme.typography.labelLarge, color = c.inkMuted)
     }
     val context = LocalContext.current
     val drive by DriveBackup.status(context).collectAsState()
     val auto by com.tali.notes.backup.AutoBackup.status(context).collectAsState()
     Row(
-      Modifier.padding(bottom = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Backups", onClick = onBackup).padding(horizontal = 10.dp, vertical = 10.dp),
+      Modifier.padding(bottom = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = stringResource(R.string.backups), onClick = onBackup).padding(horizontal = 10.dp, vertical = 10.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       val onDrive = DriveBackup.available && drive.enabled
@@ -716,9 +722,9 @@ private fun Sidebar(
       Column(Modifier.weight(1f)) {
         Text(
           when {
-            onDrive -> "Backed up to Google Drive"
-            onAuto -> "Backs up by itself"
-            else -> "Saved on this tablet"
+            onDrive -> stringResource(R.string.backed_up_to_google_drive_2)
+            onAuto -> stringResource(R.string.backs_up_by_itself)
+            else -> stringResource(R.string.saved_on_this_tablet)
           },
           style = MaterialTheme.typography.labelMedium,
           color = c.inkMuted,
@@ -726,18 +732,18 @@ private fun Sidebar(
         com.tali.notes.ui.components.WorkingText(
           when {
             error != null -> error
-            onDrive && drive.running -> "Backing up…"
-            onAuto && auto.running -> "Backing up…"
-            onDrive && drive.lastSuccess > 0 -> "Last backup ${relativeTime(drive.lastSuccess)}"
-            onAuto && auto.lastSuccess > 0 -> "Last: ${backedUpAt(auto.lastSuccess)}"
-            else -> "Tap for backups"
+            onDrive && drive.running -> stringResource(R.string.backing_up)
+            onAuto && auto.running -> stringResource(R.string.backing_up)
+            onDrive && drive.lastSuccess > 0 -> stringResource(R.string.last_backup_n, relativeTime(drive.lastSuccess))
+            onAuto && auto.lastSuccess > 0 -> stringResource(R.string.last_n, backedUpAt(auto.lastSuccess))
+            else -> stringResource(R.string.tap_for_backups)
           },
           style = MaterialTheme.typography.bodySmall,
           color = if (error != null) c.danger else c.inkFaint,
           maxLines = 2,
         )
       }
-      Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Backups", tint = c.inkFaint, modifier = Modifier.size(18.dp))
+      Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, stringResource(R.string.backups), tint = c.inkFaint, modifier = Modifier.size(18.dp))
     }
   }
   }
@@ -761,7 +767,7 @@ private fun Wordmark(modifier: Modifier = Modifier) {
       }
       drawPath(path, Brush.horizontalGradient(listOf(if (c.isDark) c.lilac else Lilac.L300, if (c.isDark) c.sky else Sky.S200), startX = left, endX = size.width))
     }
-    Text("Tali's Notes", style = MaterialTheme.typography.headlineMedium, color = c.ink)
+    Text(stringResource(R.string.tali_s_notes), style = MaterialTheme.typography.headlineMedium, color = c.ink)
   }
 }
 
@@ -790,13 +796,13 @@ private fun NewFolderDialog(title: String, placeholder: String, initialColor: In
     Spacer(Modifier.height(18.dp))
     TitleField(name, { name = it }, placeholder) { onCreate(name.text.ifBlank { placeholder }, color) }
     Spacer(Modifier.height(16.dp))
-    SectionLabel("Colour")
+    SectionLabel(stringResource(R.string.colour))
     Spacer(Modifier.height(6.dp))
     Box(Modifier.offset(x = (-12).dp)) { CoverSwatches(current = color) { color = it } }
     Spacer(Modifier.height(22.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      QuietButton("Cancel", onClick = onDismiss)
-      PrimaryButton("Create") { onCreate(name.text.ifBlank { placeholder }, color) }
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
+      PrimaryButton(stringResource(R.string.create)) { onCreate(name.text.ifBlank { placeholder }, color) }
     }
   }
 }
@@ -857,26 +863,26 @@ private fun SortButton(sort: LibrarySort, reversed: Boolean, onSort: (LibrarySor
   Box {
     Box(
       Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp))
-        .clickable(onClickLabel = "Sort notebooks", role = Role.Button) { open = true },
+        .clickable(onClickLabel = stringResource(R.string.sort_notebooks), role = Role.Button) { open = true },
       contentAlignment = Alignment.Center,
     ) {
-      Icon(Icons.AutoMirrored.Outlined.Sort, "Sort notebooks", tint = c.inkMuted, modifier = Modifier.size(22.dp))
+      Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.sort_notebooks), tint = c.inkMuted, modifier = Modifier.size(22.dp))
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
-      Text("Sort by", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp))
+      Text(stringResource(R.string.sort_by), style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp))
       LibrarySort.entries.forEach { s ->
         val on = s == sort
         val way =
           when {
-            s == LibrarySort.NAME -> if (on && reversed) "Z to A" else "A to Z"
-            on && reversed -> "Oldest first"
-            else -> "Newest first"
+            s == LibrarySort.NAME -> if (on && reversed) stringResource(R.string.z_to_a) else stringResource(R.string.a_to_z)
+            on && reversed -> stringResource(R.string.oldest_first)
+            else -> stringResource(R.string.newest_first)
           }
         DropdownMenuItem(
           text = {
             Column {
-              Text(s.label, color = if (on) c.accent else c.ink)
-              if (on) Text("$way · tap again to turn it round", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+              Text(stringResource(s.nameRes), color = if (on) c.accent else c.ink)
+              if (on) Text(stringResource(R.string.n_tap_again_to_turn_it, way), style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
             }
           },
           trailingIcon = {
@@ -900,7 +906,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
     Icon(Icons.Outlined.Search, null, tint = c.inkFaint, modifier = Modifier.size(20.dp))
     Spacer(Modifier.width(10.dp))
     Box(Modifier.weight(1f)) {
-      if (value.isEmpty()) Text("Search notebooks", style = MaterialTheme.typography.bodyMedium, color = c.inkFaint)
+      if (value.isEmpty()) Text(stringResource(R.string.search_notebooks), style = MaterialTheme.typography.bodyMedium, color = c.inkFaint)
       BasicTextField(
         value,
         onChange,
@@ -911,7 +917,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
       )
     }
     if (value.isNotEmpty()) {
-      Icon(Icons.Outlined.Close, "Clear search", tint = c.inkMuted, modifier = Modifier.size(18.dp).clickable { onChange("") })
+      Icon(Icons.Outlined.Close, stringResource(R.string.clear_search), tint = c.inkMuted, modifier = Modifier.size(18.dp).clickable { onChange("") })
     }
   }
 }
@@ -985,16 +991,16 @@ private fun NotebookCard(
           Modifier.size(28.dp).shadow(3.dp, CircleShape).clip(CircleShape).background(fill).border(1.5.dp, if (picked) c.accent else c.inkFaint, CircleShape),
           contentAlignment = Alignment.Center,
         ) {
-          if (picked) Icon(Icons.Outlined.Check, "Picked", tint = Color.White, modifier = Modifier.size(18.dp))
+          if (picked) Icon(Icons.Outlined.Check, stringResource(R.string.picked), tint = Color.White, modifier = Modifier.size(18.dp))
         }
       }
       DropdownMenu(expanded = menu, onDismissRequest = { menu = false; moving = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
         if (!moving) {
-          DropdownMenuItem(text = { Text("Select") }, leadingIcon = { Icon(Icons.Outlined.CheckCircle, null) }, onClick = { menu = false; onPick() })
-          DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
-          DropdownMenuItem(text = { Text("Duplicate") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; onDuplicate() })
+          DropdownMenuItem(text = { Text(stringResource(R.string.select)) }, leadingIcon = { Icon(Icons.Outlined.CheckCircle, null) }, onClick = { menu = false; onPick() })
+          DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
+          DropdownMenuItem(text = { Text(stringResource(R.string.duplicate)) }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; onDuplicate() })
           DropdownMenuItem(
-            text = { Text("Move to folder") },
+            text = { Text(stringResource(R.string.move_to_folder)) },
             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) },
             onClick = { moving = true },
           )
@@ -1003,11 +1009,11 @@ private fun NotebookCard(
             menu = false
           }
           HorizontalDivider(color = c.line)
-          DropdownMenuItem(text = { Text("Delete", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = { menu = false; onDelete() })
+          DropdownMenuItem(text = { Text(stringResource(R.string.delete), color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = { menu = false; onDelete() })
         } else {
-          Text("Move to", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+          Text(stringResource(R.string.move_to), style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
           DropdownMenuItem(
-            text = { Text("No folder") },
+            text = { Text(stringResource(R.string.no_folder)) },
             leadingIcon = { Icon(Icons.Outlined.AutoStories, null, tint = c.inkMuted) },
             onClick = { onMove(null); menu = false; moving = false },
           )
@@ -1020,14 +1026,14 @@ private fun NotebookCard(
             )
           }
           if (folders.isEmpty()) {
-            Text("No folders yet. Add one from the sidebar.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted, modifier = Modifier.padding(16.dp))
+            Text(stringResource(R.string.no_folders_yet_add_one_from), style = MaterialTheme.typography.bodySmall, color = c.inkMuted, modifier = Modifier.padding(16.dp))
           }
         }
       }
     }
     Spacer(Modifier.height(10.dp))
     Text(nb.title, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp))
-    Text((if (inTrash) "Deleted " else "Edited ") + relativeTime(if (inTrash) nb.deleted ?: nb.updated else nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.padding(start = 2.dp))
+    Text((if (inTrash) stringResource(R.string.deleted) else stringResource(R.string.edited)) + relativeTime(if (inTrash) nb.deleted ?: nb.updated else nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.padding(start = 2.dp))
   }
 }
 
@@ -1045,11 +1051,11 @@ private fun EmptyLibrary(onCreate: () -> Unit) {
     }
     }
     Spacer(Modifier.height(20.dp))
-    Text("Start your first notebook", style = MaterialTheme.typography.headlineMedium, color = c.ink)
+    Text(stringResource(R.string.start_your_first_notebook), style = MaterialTheme.typography.headlineMedium, color = c.ink)
     Spacer(Modifier.height(8.dp))
-    Text("A4 pages that keep coming as you write. Everything saves as you go.", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
+    Text(stringResource(R.string.a4_pages_that_keep_coming_as), style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
-    PrimaryButton("New notebook", Icons.Outlined.Add, onClick = onCreate)
+    PrimaryButton(stringResource(R.string.new_notebook), Icons.Outlined.Add, onClick = onCreate)
   }
 }
 
@@ -1062,13 +1068,13 @@ private fun EmptyFolder(onCreate: () -> Unit, onNewFolder: () -> Unit) {
       DriftingCloud(Modifier.offset(x = 34.dp, y = (-22).dp), width = 72.dp, variant = 2, driftDp = 6f)
     }
     Spacer(Modifier.height(16.dp))
-    Text("This folder is empty", style = MaterialTheme.typography.headlineMedium, color = c.ink)
+    Text(stringResource(R.string.this_folder_is_empty), style = MaterialTheme.typography.headlineMedium, color = c.ink)
     Spacer(Modifier.height(8.dp))
-    Text("Create a notebook here, or move one in from its menu (press and hold a notebook).", style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
+    Text(stringResource(R.string.create_a_notebook_here_or_move), style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-      QuietButton("Folder inside", onClick = onNewFolder)
-      PrimaryButton("New notebook", Icons.Outlined.Add, onClick = onCreate)
+      QuietButton(stringResource(R.string.folder_inside), onClick = onNewFolder)
+      PrimaryButton(stringResource(R.string.new_notebook), Icons.Outlined.Add, onClick = onCreate)
     }
   }
 }
@@ -1094,7 +1100,7 @@ private fun Breadcrumb(path: List<Folder>, onSelect: (String?) -> Unit) {
       )
       Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = c.inkFaint, modifier = Modifier.size(16.dp))
     }
-    crumb("All notebooks", null)
+    crumb(stringResource(R.string.all_notebooks), null)
     path.forEach { crumb(it.name, it.id) }
   }
 }
@@ -1112,15 +1118,15 @@ private fun FolderMenu(
 ) {
   val c = Tali.colors
   DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-    DropdownMenuItem(text = { Text("New folder inside") }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) }, onClick = {
+    DropdownMenuItem(text = { Text(stringResource(R.string.new_folder_inside)) }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) }, onClick = {
       onDismiss()
       onNewFolder()
     })
-    DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = {
+    DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = {
       onDismiss()
       onRename()
     })
-    DropdownMenuItem(text = { Text("Move to…") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) }, onClick = {
+    DropdownMenuItem(text = { Text(stringResource(R.string.move_to_2)) }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) }, onClick = {
       onDismiss()
       onMove()
     })
@@ -1129,7 +1135,7 @@ private fun FolderMenu(
       onDismiss()
     }
     HorizontalDivider(color = c.line)
-    DropdownMenuItem(text = { Text("Delete folder", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = {
+    DropdownMenuItem(text = { Text(stringResource(R.string.delete_folder), color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = {
       onDismiss()
       onDelete()
     })
@@ -1178,11 +1184,11 @@ private fun FolderTile(
         Text(f.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
           listOfNotNull(
-              if (count == 1) "1 notebook" else "$count notebooks",
+              if (count == 1) stringResource(R.string.t_1_notebook) else stringResource(R.string.n_notebooks, count),
               when (inner) {
                 0 -> null
-                1 -> "1 folder"
-                else -> "$inner folders"
+                1 -> stringResource(R.string.t_1_folder_2)
+                else -> stringResource(R.string.n_folders_2, inner)
               },
             )
             .joinToString(" · "),
@@ -1210,13 +1216,13 @@ private fun NewFolderTile(onClick: () -> Unit) {
           style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))),
         )
       }
-      .clickable(onClickLabel = "New folder", onClick = onClick)
+      .clickable(onClickLabel = stringResource(R.string.new_folder), onClick = onClick)
       .padding(horizontal = 16.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Icon(Icons.Outlined.CreateNewFolder, null, tint = c.inkMuted, modifier = Modifier.size(26.dp))
     Spacer(Modifier.width(12.dp))
-    Text("New folder", style = MaterialTheme.typography.titleSmall, color = c.inkMuted)
+    Text(stringResource(R.string.new_folder), style = MaterialTheme.typography.titleSmall, color = c.inkMuted)
   }
 }
 
@@ -1226,16 +1232,16 @@ private fun MoveFolderDialog(f: Folder, folders: List<Folder>, onDismiss: () -> 
   val c = Tali.colors
   val blocked = remember(f, folders) { descendants(folders, f.id) + f.id }
   DialogCard(onDismiss, width = 460) {
-    Text("Move “${f.name}”", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(R.string.move_n, f.name), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(12.dp))
     Column(Modifier.weight(1f, fill = false).heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-      MoveTarget("Top level", Icons.Outlined.AutoStories, c.inkMuted, depth = 0, current = f.parentId == null) { onMove(null) }
+      MoveTarget(stringResource(R.string.top_level), Icons.Outlined.AutoStories, c.inkMuted, depth = 0, current = f.parentId == null) { onMove(null) }
       folderTree(folders).filter { it.first.id !in blocked }.forEach { (target, depth) ->
         MoveTarget(target.name, Icons.Outlined.Folder, Color(target.color), depth = depth + 1, current = target.id == f.parentId) { onMove(target.id) }
       }
     }
     Spacer(Modifier.height(16.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Cancel", onClick = onDismiss) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton(stringResource(R.string.cancel), onClick = onDismiss) }
   }
 }
 
@@ -1254,7 +1260,7 @@ private fun MoveTarget(label: String, icon: ImageVector, tint: Color, depth: Int
     Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
     Spacer(Modifier.width(12.dp))
     Text(label, style = MaterialTheme.typography.titleSmall, color = if (current) c.inkFaint else c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-    if (current) Text("Here now", style = MaterialTheme.typography.labelMedium, color = c.inkFaint)
+    if (current) Text(stringResource(R.string.here_now), style = MaterialTheme.typography.labelMedium, color = c.inkFaint)
   }
 }
 
@@ -1276,9 +1282,9 @@ private fun PickBar(
   val c = Tali.colors
   var moving by remember { mutableStateOf(false) }
   Row(verticalAlignment = Alignment.CenterVertically) {
-    Text(if (count == 1) "1 selected" else "$count selected", style = MaterialTheme.typography.titleMedium, color = c.ink)
+    Text(if (count == 1) stringResource(R.string.t_1_selected) else stringResource(R.string.n_selected, count), style = MaterialTheme.typography.titleMedium, color = c.ink)
     Spacer(Modifier.width(12.dp))
-    QuietButton(if (allPicked) "Select none" else "Select all", onClick = onAll)
+    QuietButton(if (allPicked) stringResource(R.string.select_none) else stringResource(R.string.select_all), onClick = onAll)
     Spacer(Modifier.width(10.dp))
     // The actions together in one frosted pill, so they read as a group on the sky.
     Row(
@@ -1286,10 +1292,10 @@ private fun PickBar(
       verticalAlignment = Alignment.CenterVertically,
     ) {
     Box {
-      com.tali.notes.ui.components.ToolButton(Icons.AutoMirrored.Outlined.DriveFileMove, "Move to folder", enabled = count > 0) { moving = true }
+      com.tali.notes.ui.components.ToolButton(Icons.AutoMirrored.Outlined.DriveFileMove, stringResource(R.string.move_to_folder), enabled = count > 0) { moving = true }
       DropdownMenu(expanded = moving, onDismissRequest = { moving = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-        Text("Move to", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-        DropdownMenuItem(text = { Text("No folder") }, leadingIcon = { Icon(Icons.Outlined.AutoStories, null, tint = c.inkMuted) }, onClick = { moving = false; onMove(null) })
+        Text(stringResource(R.string.move_to), style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        DropdownMenuItem(text = { Text(stringResource(R.string.no_folder)) }, leadingIcon = { Icon(Icons.Outlined.AutoStories, null, tint = c.inkMuted) }, onClick = { moving = false; onMove(null) })
         folderTree(folders).forEach { (f, depth) ->
           DropdownMenuItem(
             text = { Text(f.name) },
@@ -1300,21 +1306,21 @@ private fun PickBar(
         }
       }
     }
-    com.tali.notes.ui.components.ToolButton(Icons.Outlined.ContentCopy, "Duplicate", enabled = count > 0, onClick = onDuplicate)
-    com.tali.notes.ui.components.ToolButton(Icons.Outlined.DeleteOutline, "Delete", enabled = count > 0, onClick = onDelete)
+    com.tali.notes.ui.components.ToolButton(Icons.Outlined.ContentCopy, stringResource(R.string.duplicate), enabled = count > 0, onClick = onDuplicate)
+    com.tali.notes.ui.components.ToolButton(Icons.Outlined.DeleteOutline, stringResource(R.string.delete), enabled = count > 0, onClick = onDelete)
     }
     Spacer(Modifier.width(10.dp))
-    PrimaryButton("Done", onClick = onDone)
+    PrimaryButton(stringResource(R.string.done), onClick = onDone)
   }
 }
 
 /** Which part of the day [hour] (0-23) is, as a greeting. */
 internal fun greetingFor(hour: Int): String =
   when (hour) {
-    in 5..11 -> "Good morning"
-    in 12..16 -> "Good afternoon"
-    in 17..20 -> "Good evening"
-    else -> "Good night"
+    in 5..11 -> tr(R.string.good_morning)
+    in 12..16 -> tr(R.string.good_afternoon)
+    in 17..20 -> tr(R.string.good_evening)
+    else -> tr(R.string.good_night)
   }
 
 /** "Good morning" by the tablet's clock, above the heading; it changes on its own as the day goes on. */

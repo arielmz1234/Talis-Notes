@@ -20,8 +20,12 @@ class TalisApp : Application() {
   lateinit var settings: SettingsStore
     private set
 
+  // Before Android 13, the language chosen in Settings applies to the whole app (see AppLanguage).
+  override fun attachBaseContext(base: Context) = super.attachBaseContext(AppLanguage.wrap(base))
+
   override fun onCreate() {
     super.onCreate()
+    instance = this
     CrashLog.install(this)
     Brushes.init(resources)
     repository = NotesRepository(this)
@@ -38,3 +42,16 @@ class TalisApp : Application() {
 
 val Context.talisApp: TalisApp
   get() = applicationContext as TalisApp
+
+private lateinit var instance: TalisApp
+
+/**
+ * Text from the app's strings in the language she chose, for code outside the screens (hints from
+ * the canvas, backup messages, shape names). On screen, prefer `stringResource`.
+ */
+fun tr(@androidx.annotation.StringRes id: Int, vararg args: Any): String = appContext().getString(id, *args)
+
+// The app; or, where it isn't Tali's Notes' own (tests), whichever application is running.
+private fun appContext(): Context =
+  if (::instance.isInitialized) instance
+  else Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null) as Context

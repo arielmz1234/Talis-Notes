@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.ui.components.nameRes
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.togetherWith
@@ -117,7 +120,7 @@ fun MainToolbar(
         Box(
           Modifier.width(34.dp)
             .height(56.dp)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = slot.type.label) { onPen(slot) },
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = stringResource(slot.type.nameRes)) { onPen(slot) },
           contentAlignment = Alignment.TopCenter,
         ) {
           // On dark paper the pens show the colour they really write in there.
@@ -126,7 +129,7 @@ fun MainToolbar(
           if (slot.starred) {
             Icon(
               androidx.compose.material.icons.Icons.Filled.Star,
-              "Starred",
+              stringResource(R.string.starred),
               tint = Color(0xFFF5B83D),
               modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = lift + 1.dp).size(10.dp),
             )
@@ -138,10 +141,10 @@ fun MainToolbar(
     val turn by animateFloatAsState(if (penSettingsOpen) 180f else 0f, label = "turn")
     val arrowWash by animateColorAsState(if (penSettingsOpen) c.accentSoft else Color.Transparent, tween(200), label = "arrowWash")
     Box(
-      Modifier.size(28.dp, 44.dp).clip(RoundedCornerShape(10.dp)).background(arrowWash).clickable(onClickLabel = "Pen settings", role = Role.Button, onClick = onPenSettings),
+      Modifier.size(28.dp, 44.dp).clip(RoundedCornerShape(10.dp)).background(arrowWash).clickable(onClickLabel = stringResource(R.string.pen_settings), role = Role.Button, onClick = onPenSettings),
       contentAlignment = Alignment.Center,
     ) {
-      Icon(Icons.Outlined.KeyboardArrowDown, "Pen settings", tint = if (penSettingsOpen) c.accent else c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
+      Icon(Icons.Outlined.KeyboardArrowDown, stringResource(R.string.pen_settings), tint = if (penSettingsOpen) c.accent else c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
     }
     // Her first few saved colours (as many as she chose, in her order): switch the pen's colour
     // without opening its settings. The ring glides between them.
@@ -174,55 +177,55 @@ fun MainToolbar(
     // Eraser, lasso and shapes share one highlight that glides between them.
     val tools = rememberSlidingSelection()
     val toolKey = when (tool) {
-      Tool.ERASER -> "Eraser"
-      Tool.LASSO -> "Lasso"
-      Tool.SHAPE -> "Shapes"
-      Tool.FILL -> "Fill"
-      Tool.LASER -> "Laser"
+      Tool.ERASER -> stringResource(R.string.eraser)
+      Tool.LASSO -> stringResource(R.string.lasso)
+      Tool.SHAPE -> stringResource(R.string.shapes)
+      Tool.FILL -> stringResource(R.string.fill)
+      Tool.LASER -> stringResource(R.string.laser)
       else -> null
     }
     val items: List<Pair<String, @Composable () -> Unit>> = listOf(
-      "Eraser" to { ToolButton(TaliIcons.Eraser, "Eraser", selected = tool == Tool.ERASER, blue = true, selection = tools) { onTool(Tool.ERASER) } },
-      "Lasso" to {
+      stringResource(R.string.eraser) to { ToolButton(TaliIcons.Eraser, stringResource(R.string.eraser), selected = tool == Tool.ERASER, blue = true, selection = tools) { onTool(Tool.ERASER) } },
+      stringResource(R.string.lasso) to {
         when {
-          settings.lassoShot -> ToolButton(Icons.Outlined.Screenshot, "Screenshot lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
-          else -> ToolButton(if (settings.lassoFree) TaliIcons.FreeSelect else TaliIcons.LassoDotted, if (settings.lassoFree) "Free-form select" else "Lasso", selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
+          settings.lassoShot -> ToolButton(Icons.Outlined.Screenshot, stringResource(R.string.screenshot_lasso), selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
+          else -> ToolButton(if (settings.lassoFree) TaliIcons.FreeSelect else TaliIcons.LassoDotted, if (settings.lassoFree) stringResource(R.string.free_form_select) else stringResource(R.string.lasso), selected = tool == Tool.LASSO, blue = true, selection = tools) { onTool(Tool.LASSO) }
         }
       },
-      "Fill" to { ToolButton(Icons.Outlined.FormatColorFill, "Fill", selected = tool == Tool.FILL, blue = true, selection = tools) { onTool(Tool.FILL) } },
-      "Laser" to { ToolButton(TaliIcons.Laser, "Laser", selected = tool == Tool.LASER, blue = true, selection = tools) { onTool(Tool.LASER) } },
-      "Shapes" to {
+      stringResource(R.string.fill) to { ToolButton(Icons.Outlined.FormatColorFill, stringResource(R.string.fill), selected = tool == Tool.FILL, blue = true, selection = tools) { onTool(Tool.FILL) } },
+      stringResource(R.string.laser) to { ToolButton(TaliIcons.Laser, stringResource(R.string.laser), selected = tool == Tool.LASER, blue = true, selection = tools) { onTool(Tool.LASER) } },
+      stringResource(R.string.shapes) to {
         // While the shape tool is on, its button shows which shape it will draw.
         Box(
-          Modifier.slidingOption(tools, "Shapes").size(44.dp).clip(RoundedCornerShape(14.dp))
-            .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = "Shapes") { onTool(Tool.SHAPE) },
+          Modifier.slidingOption(tools, stringResource(R.string.shapes)).size(44.dp).clip(RoundedCornerShape(14.dp))
+            .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = stringResource(R.string.shapes)) { onTool(Tool.SHAPE) },
           contentAlignment = Alignment.Center,
         ) {
           when {
-            tool != Tool.SHAPE -> Icon(Icons.Outlined.Category, "Shapes", tint = c.ink, modifier = Modifier.size(22.dp))
+            tool != Tool.SHAPE -> Icon(Icons.Outlined.Category, stringResource(R.string.shapes), tint = c.ink, modifier = Modifier.size(22.dp))
             customShape != null -> GeometryIcon(customShape.geometry, c.blue, size = 26.dp)
             packShape != null -> GeometryIcon(packShape.icon, c.blue, size = 26.dp)
             else -> ShapeIcon(shapeKind, c.blue, size = 26.dp)
           }
         }
       },
-      "Insert" to {
+      stringResource(R.string.insert) to {
         Box {
           var inserting by remember { mutableStateOf(false) }
-          ToolButton(Icons.Outlined.AddPhotoAlternate, "Insert") { inserting = true }
+          ToolButton(Icons.Outlined.AddPhotoAlternate, stringResource(R.string.insert)) { inserting = true }
           DropdownMenu(expanded = inserting, onDismissRequest = { inserting = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
             DropdownMenuItem(
-              text = { Column { Text("Picture"); Text("From your photos or files", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              text = { Column { Text(stringResource(R.string.picture)); Text(stringResource(R.string.from_your_photos_or_files), style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
               leadingIcon = { Icon(Icons.Outlined.Image, null, tint = c.blue) },
               onClick = { inserting = false; onImage() },
             )
             DropdownMenuItem(
-              text = { Column { Text("Take a photo"); Text("The board, a textbook page, a sketch", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              text = { Column { Text(stringResource(R.string.take_a_photo)); Text(stringResource(R.string.the_board_a_textbook_page_a), style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
               leadingIcon = { Icon(Icons.Outlined.PhotoCamera, null, tint = c.blue) },
               onClick = { inserting = false; onCamera() },
             )
             DropdownMenuItem(
-              text = { Column { Text("PDF pages"); Text("Lecture slides or a problem sheet to write on", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
+              text = { Column { Text(stringResource(R.string.pdf_pages)); Text(stringResource(R.string.lecture_slides_or_a_problem_sheet), style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
               leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null, tint = c.blue) },
               onClick = { inserting = false; onPdf() },
             )
@@ -230,13 +233,13 @@ fun MainToolbar(
         }
       },
       // A voice memo, kept beside the page; pressed again while recording, it stops.
-      "Voice" to {
+      stringResource(R.string.voice) to {
         androidx.compose.foundation.layout.Box(Modifier.onGloballyPositioned(onVoiceAnchor)) {
-          ToolButton(Icons.Outlined.Mic, if (recording) "Voice memo" else "Record a voice memo", selected = recording, blue = true, onClick = onVoice)
+          ToolButton(Icons.Outlined.Mic, if (recording) stringResource(R.string.voice_memo) else stringResource(R.string.record_a_voice_memo), selected = recording, blue = true, onClick = onVoice)
         }
       },
       // Typing: a text block where the next line would go.
-      "Keyboard" to { ToolButton(Icons.Outlined.Keyboard, "Type text", blue = true, onClick = onKeyboard) },
+      stringResource(R.string.keyboard) to { ToolButton(Icons.Outlined.Keyboard, stringResource(R.string.type_text), blue = true, onClick = onKeyboard) },
     )
     ToolStrip(items, toolKey, tools)
   }
@@ -289,10 +292,10 @@ private fun ToolStrip(items: List<Pair<String, @Composable () -> Unit>>, selecte
       val turn by animateFloatAsState(if (last) 180f else 0f, tween(220, easing = EaseOutStrong), label = "toolArrow")
       Box(
         Modifier.size(arrow, 44.dp).clip(RoundedCornerShape(10.dp))
-          .clickable(onClickLabel = if (last) "First tools" else "More tools", role = Role.Button) { page = if (last) 0 else page + 1 },
+          .clickable(onClickLabel = if (last) stringResource(R.string.first_tools) else stringResource(R.string.more_tools), role = Role.Button) { page = if (last) 0 else page + 1 },
         contentAlignment = Alignment.Center,
       ) {
-        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, if (last) "First tools" else "More tools", tint = c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, if (last) stringResource(R.string.first_tools) else stringResource(R.string.more_tools), tint = c.inkMuted, modifier = Modifier.size(22.dp).rotate(turn))
       }
     }
   }
@@ -328,7 +331,7 @@ private fun QuickSizes(slot: PenSlot, onPick: (Int) -> Unit, onSet: (Int, Float)
       Box {
         Box(
           Modifier.slidingOption(glide, i).size(28.dp, 36.dp).clip(RoundedCornerShape(12.dp))
-            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = "Thickness ${i + 1}") {
+            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = stringResource(R.string.thickness_n, i + 1)) {
               if (i == current) editing = i else onPick(i)
             },
           contentAlignment = Alignment.Center,
@@ -337,7 +340,7 @@ private fun QuickSizes(slot: PenSlot, onPick: (Int) -> Unit, onSet: (Int, Float)
         }
         DropdownMenu(expanded = editing == i, onDismissRequest = { editing = null }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
           Column(Modifier.width(280.dp).padding(horizontal = 14.dp, vertical = 4.dp)) {
-            Text("Thickness ${i + 1}", style = MaterialTheme.typography.titleSmall, color = c.ink)
+            Text(stringResource(R.string.thickness_n, i + 1), style = MaterialTheme.typography.titleSmall, color = c.ink)
             Row(verticalAlignment = Alignment.CenterVertically) {
               com.tali.notes.ui.components.StepSlider(sizes[i], slot.type.minSize..slot.type.maxSize, 0.5f, { onSet(i, it) }, Modifier.weight(1f))
               Text(String.format(java.util.Locale.US, "%.1f", sizes[i]), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))

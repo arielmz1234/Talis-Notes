@@ -1,5 +1,8 @@
 package com.tali.notes.ui.library
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -85,13 +88,13 @@ fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) ->
   var busy by remember { mutableStateOf(false) }
 
   DialogCard(onDismiss, width = 480) {
-    Text("Add ${if (files.uris.size > 1) what else "the picture"}", style = MaterialTheme.typography.titleLarge, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Text(if (files.uris.size > 1) stringResource(R.string.add_these, what) else stringResource(R.string.add_the_picture), style = MaterialTheme.typography.titleLarge, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
     Spacer(Modifier.height(4.dp))
-    Text("Into which notebook?", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+    Text(stringResource(R.string.into_which_notebook), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
     Spacer(Modifier.height(14.dp))
     CardBody {
       Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        ChoiceRow(0, "New notebook", "Called “$what”", leading = {
+        ChoiceRow(0, stringResource(R.string.new_notebook), stringResource(R.string.called_n, what), leading = {
           Box(Modifier.size(width = 52.dp, height = 38.dp).clip(RoundedCornerShape(7.dp)).background(c.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
             Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(22.dp))
           }
@@ -106,12 +109,12 @@ fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) ->
           }
         }
         choices.forEachIndexed { i, nb ->
-          ChoiceRow(i + 1, nb.title.ifBlank { "Untitled" }, if (nb.id == openNotebook) "Open now" else "Edited " + relativeTime(nb.updated).replaceFirstChar { it.lowercase() }, leading = { Thumb(app, nb) }) { if (!busy) onGo(nb.id) }
+          ChoiceRow(i + 1, nb.title.ifBlank { stringResource(R.string.untitled) }, if (nb.id == openNotebook) stringResource(R.string.open_now) else stringResource(R.string.edited) + relativeTime(nb.updated).replaceFirstChar { it.lowercase() }, leading = { Thumb(app, nb) }) { if (!busy) onGo(nb.id) }
         }
       }
     }
     Spacer(Modifier.height(16.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Cancel", onClick = onDismiss) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton(stringResource(R.string.cancel), onClick = onDismiss) }
   }
 }
 
@@ -196,10 +199,10 @@ private fun Thumb(app: TalisApp, nb: NotebookMeta) {
 /** "2 notebooks added, 1 notebook updated." for what a restore did. */
 fun describeRestore(r: com.tali.notes.data.NotesRepository.MergeResult): String {
   val parts = buildList {
-    if (r.added > 0) add(if (r.added == 1) "1 notebook added" else "${r.added} notebooks added")
-    if (r.updated > 0) add(if (r.updated == 1) "1 notebook updated" else "${r.updated} notebooks updated")
+    if (r.added > 0) add(if (r.added == 1) tr(R.string.t_1_notebook_added) else tr(R.string.n_notebooks_added, r.added))
+    if (r.updated > 0) add(if (r.updated == 1) tr(R.string.t_1_notebook_updated) else tr(R.string.n_notebooks_updated, r.updated))
   }
-  return if (parts.isEmpty()) "Everything in the backup was already here." else parts.joinToString(", ") + "."
+  return if (parts.isEmpty()) tr(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
 }
 
 /**
@@ -227,7 +230,7 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
           e.message
         } catch (t: Throwable) {
           CrashLog.recovered(context, t)
-          "Something went wrong: ${t.message ?: t.javaClass.simpleName}"
+          tr(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
         }
       busy = null
     }
@@ -242,23 +245,23 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
   val drive = rememberDriveAuth(::run)
   val files =
     androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-      if (uris.isNotEmpty()) run("Restoring…") {
+      if (uris.isNotEmpty()) run(tr(R.string.restoring)) {
         val r = RestoreFiles.restore(context, uris)
         // One whole-app backup file: keep backing up into it, as before.
         val kept = uris.size == 1 && com.tali.notes.backup.AutoBackup.adopt(context, uris.first())
-        finished(r, if (kept) " It'll keep backing up into that file by itself." else "")
+        finished(r, if (kept) tr(R.string.it_ll_keep_backing_up_into) else "")
       }
     }
   val folder =
     androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { tree ->
-      if (tree != null) run("Restoring…") { finished(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
+      if (tree != null) run(tr(R.string.restoring)) { finished(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
     }
 
   DialogCard({ if (busy == null) onDismiss() }, width = 640) {
-    Text(if (restored) "Welcome back" else "Welcome to Tali's Notes", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(if (restored) stringResource(R.string.welcome_back) else stringResource(R.string.welcome_to_tali_s_notes), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(10.dp))
     com.tali.notes.ui.components.WorkingText(
-      busy ?: result ?: "New tablet, or the app installed again? If you have a backup, you can bring all your notebooks back now. You can also do it later from Backups, at the bottom left.",
+      busy ?: result ?: stringResource(R.string.new_tablet_or_the_app_installed),
       style = MaterialTheme.typography.bodyMedium,
       color = if (busy != null || result != null) c.blue else c.inkMuted,
     )
@@ -266,25 +269,25 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
       Spacer(Modifier.height(18.dp))
       Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).graphicsLayer { alpha = if (busy != null) 0.5f else 1f }, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (DriveBackup.available) {
-          RestoreChoice(Icons.Outlined.CloudDownload, "Google Drive", "Every notebook the app backed up there. It keeps backing up there too.") {
-            drive("Restoring from Drive…") { token ->
+          RestoreChoice(Icons.Outlined.CloudDownload, stringResource(R.string.google_drive), stringResource(R.string.every_notebook_the_app_backed_up)) {
+            drive(tr(R.string.restoring_from_drive)) { token ->
               val r = DriveBackup.restore(context, token)
               DriveBackup.enable(context)
-              finished(r, " Google Drive will keep backing up from now on.")
+              finished(r, tr(R.string.google_drive_will_keep_backing_up))
             }
           }
         }
-        RestoreChoice(Icons.Outlined.Description, "Backup files", "Pick one, or select several to bring them all back.") {
+        RestoreChoice(Icons.Outlined.Description, stringResource(R.string.backup_files), stringResource(R.string.pick_one_or_select_several_to)) {
           if (busy == null) files.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream"))
         }
-        RestoreChoice(Icons.Outlined.Folder, "A folder", "Every backup in a folder on the tablet or a memory card.") {
+        RestoreChoice(Icons.Outlined.Folder, stringResource(R.string.a_folder), stringResource(R.string.every_backup_in_a_folder_on)) {
           if (busy == null) folder.launch(null)
         }
       }
     }
     Spacer(Modifier.height(20.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-      if (restored) PrimaryButton("Done", onClick = onDismiss) else QuietButton("Start fresh") { if (busy == null) onDismiss() }
+      if (restored) PrimaryButton(stringResource(R.string.done), onClick = onDismiss) else QuietButton(stringResource(R.string.start_fresh)) { if (busy == null) onDismiss() }
     }
   }
 }
@@ -322,38 +325,38 @@ private fun RestoreCard(files: Incoming.Files, onDismiss: () -> Unit) {
   var busy by remember { mutableStateOf(false) }
   var result by remember { mutableStateOf<String?>(null) }
   DialogCard({ if (!busy) onDismiss() }, width = 480) {
-    Text(if (result != null) "Backup restored" else "Restore this backup?", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(if (result != null) stringResource(R.string.backup_restored) else stringResource(R.string.restore_this_backup), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(4.dp))
-    Text(files.name ?: "Backup file", style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(files.name ?: stringResource(R.string.backup_file), style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
     Spacer(Modifier.height(14.dp))
     com.tali.notes.ui.components.WorkingText(
-      result ?: if (busy) "Restoring…" else "Nothing on this tablet is deleted: notebooks from the backup are added, and if a notebook is in both places, the newest version is kept.",
+      result ?: if (busy) stringResource(R.string.restoring) else stringResource(R.string.nothing_on_this_tablet_is_deleted),
       style = MaterialTheme.typography.bodyMedium,
       color = if (result != null || busy) c.blue else c.inkMuted,
     )
     Spacer(Modifier.height(20.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
       if (result != null) {
-        PrimaryButton("Done", onClick = onDismiss)
+        PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
       } else {
-        QuietButton("Cancel") { if (!busy) onDismiss() }
-        PrimaryButton("Restore") {
+        QuietButton(stringResource(R.string.cancel)) { if (!busy) onDismiss() }
+        PrimaryButton(stringResource(R.string.restore)) {
           if (busy) return@PrimaryButton
           busy = true
           scope.launch {
             result =
               try {
-                val r = context.contentResolver.openInputStream(files.uris.first())?.use { BackupArchive.restore(context, it) } ?: error("Couldn't open the file")
+                val r = context.contentResolver.openInputStream(files.uris.first())?.use { BackupArchive.restore(context, it) } ?: error(tr(R.string.couldn_t_open_the_file))
                 val parts = buildList {
-                  if (r.added > 0) add(if (r.added == 1) "1 notebook added" else "${r.added} notebooks added")
-                  if (r.updated > 0) add(if (r.updated == 1) "1 notebook updated" else "${r.updated} notebooks updated")
+                  if (r.added > 0) add(if (r.added == 1) tr(R.string.t_1_notebook_added) else tr(R.string.n_notebooks_added, r.added))
+                  if (r.updated > 0) add(if (r.updated == 1) tr(R.string.t_1_notebook_updated) else tr(R.string.n_notebooks_updated, r.updated))
                 }
-                if (parts.isEmpty()) "Everything in the backup was already here." else parts.joinToString(", ") + "."
+                if (parts.isEmpty()) tr(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
               } catch (e: BackupArchive.InvalidBackup) {
                 e.message
               } catch (t: Throwable) {
                 CrashLog.recovered(context, t)
-                "Something went wrong: ${t.message ?: t.javaClass.simpleName}"
+                tr(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
               }
             busy = false
           }

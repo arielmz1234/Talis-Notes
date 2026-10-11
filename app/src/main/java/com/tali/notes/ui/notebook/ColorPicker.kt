@@ -1,5 +1,7 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Paint
@@ -149,7 +151,7 @@ fun ColorPicker(initial: Int, onChange: (Int) -> Unit, onSave: (Int) -> Unit) {
       androidx.compose.foundation.layout.Box(Modifier.size(34.dp).clip(CircleShape).background(Color(current)).border(1.dp, c.line, CircleShape))
       Spacer(Modifier.width(12.dp))
       Text(String.format("#%06X", current and 0xFFFFFF), style = MaterialTheme.typography.titleSmall, color = c.inkMuted, modifier = Modifier.weight(1f))
-      PrimaryButton("Save colour") { onSave(Color(current).toArgb()) }
+      PrimaryButton(stringResource(R.string.save_colour)) { onSave(Color(current).toArgb()) }
     }
   }
 }

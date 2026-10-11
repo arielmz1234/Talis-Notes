@@ -1,5 +1,7 @@
 package com.tali.notes.ui.notebook
 
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.ui.components.nameRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -57,13 +59,13 @@ fun LineStylePicker(selected: LineStyle, onPick: (LineStyle) -> Unit, modifier: 
               .weight(1f)
               .clip(RoundedCornerShape(14.dp))
               .border(1.dp, edge, RoundedCornerShape(14.dp))
-              .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = style.label) { onPick(style) }
+              .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = stringResource(style.nameRes)) { onPick(style) }
               .padding(vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
           ) {
             LineSample(style, ink)
             Spacer(Modifier.height(4.dp))
-            Text(style.label, style = MaterialTheme.typography.labelSmall, color = label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
+            Text(stringResource(style.nameRes), style = MaterialTheme.typography.labelSmall, color = label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
           }
         }
       }
@@ -111,7 +113,7 @@ fun CompactLineStylePicker(selected: LineStyle, onPick: (LineStyle) -> Unit, mod
           .weight(1f)
           .height(30.dp)
           .clip(RoundedCornerShape(10.dp))
-          .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = style.label) { onPick(style) }
+          .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = stringResource(style.nameRes)) { onPick(style) }
       ) {
         val w = 2.dp.toPx()
         val y = size.height / 2

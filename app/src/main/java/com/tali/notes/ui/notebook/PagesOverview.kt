@@ -1,5 +1,8 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Check
@@ -210,7 +213,7 @@ fun PagesOverview(
       settling = true
       val pages = order.toList()
       picked = null
-      onRearrange(pages, if (block.size > 1) "${block.size} pages moved" else "Page ${held + 1} moved to ${pages.indexOf(held) + 1}")
+      onRearrange(pages, if (block.size > 1) tr(R.string.n_pages_moved, block.size) else tr(R.string.page_n_moved_to_n, held + 1, pages.indexOf(held) + 1))
     }
   }
   Dialog(onDismissRequest = { if (peek != null) peek = null else if (picked != null) picked = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -226,10 +229,10 @@ fun PagesOverview(
       ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Column(Modifier.weight(1f)) {
-            Text("Pages", style = MaterialTheme.typography.titleLarge, color = c.ink)
+            Text(stringResource(R.string.pages), style = MaterialTheme.typography.titleLarge, color = c.ink)
             Text(
-              if (picked != null) "Tap pages to pick them"
-              else (if (count == 1) "1 page" else "$count pages") + " · tap a page to look closer, hold and drag to move it",
+              if (picked != null) stringResource(R.string.tap_pages_to_pick_them)
+              else (if (count == 1) stringResource(R.string.t_1_page) else stringResource(R.string.n_pages, count)) + stringResource(R.string.tap_a_page_to_look_closer),
               style = MaterialTheme.typography.bodyMedium,
               color = c.inkMuted,
             )
@@ -242,25 +245,25 @@ fun PagesOverview(
             Row(verticalAlignment = Alignment.CenterVertically) {
               if (picking) {
                 val chosen = picked.orEmpty()
-                Text(if (chosen.size == 1) "1 selected" else "${chosen.size} selected", style = MaterialTheme.typography.titleMedium, color = c.ink)
+                Text(if (chosen.size == 1) stringResource(R.string.t_1_selected) else stringResource(R.string.n_selected, chosen.size), style = MaterialTheme.typography.titleMedium, color = c.ink)
                 Spacer(Modifier.width(12.dp))
-                QuietButton(if (chosen.size == count) "Select none" else "Select all") { picked = if (chosen.size == count) emptySet() else (0 until count).toSet() }
+                QuietButton(if (chosen.size == count) stringResource(R.string.select_none) else stringResource(R.string.select_all)) { picked = if (chosen.size == count) emptySet() else (0 until count).toSet() }
                 Spacer(Modifier.width(10.dp))
                 Row(Modifier.clip(RoundedCornerShape(16.dp)).background(c.sunken.copy(alpha = 0.7f)).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                  com.tali.notes.ui.components.ToolButton(Icons.Outlined.ContentCopy, "Duplicate", enabled = chosen.isNotEmpty()) {
-                    onRearrange(com.tali.notes.canvas.Pages.withCopies(count, chosen), if (chosen.size == 1) "Page duplicated" else "${chosen.size} pages duplicated")
+                  com.tali.notes.ui.components.ToolButton(Icons.Outlined.ContentCopy, stringResource(R.string.duplicate), enabled = chosen.isNotEmpty()) {
+                    onRearrange(com.tali.notes.canvas.Pages.withCopies(count, chosen), if (chosen.size == 1) tr(R.string.page_duplicated) else tr(R.string.n_pages_duplicated, chosen.size))
                     picked = null
                   }
-                  com.tali.notes.ui.components.ToolButton(Icons.Outlined.DeleteOutline, "Delete", enabled = chosen.isNotEmpty()) { deletingPicked = true }
+                  com.tali.notes.ui.components.ToolButton(Icons.Outlined.DeleteOutline, stringResource(R.string.delete), enabled = chosen.isNotEmpty()) { deletingPicked = true }
                 }
                 Spacer(Modifier.width(10.dp))
-                PrimaryButton("Done") { picked = null }
+                PrimaryButton(stringResource(R.string.done)) { picked = null }
               } else {
                 if (count > 1) {
-                  QuietButton("Select") { picked = emptySet() }
+                  QuietButton(stringResource(R.string.select)) { picked = emptySet() }
                   Spacer(Modifier.width(8.dp))
                 }
-                QuietButton("Done", onClick = onDismiss)
+                QuietButton(stringResource(R.string.done), onClick = onDismiss)
               }
             }
           }
@@ -325,9 +328,9 @@ fun PagesOverview(
       val gone = picked.orEmpty()
       val all = gone.size == count
       com.tali.notes.ui.library.ConfirmDialog(
-        title = if (all) "Clear every page?" else if (gone.size == 1) "Delete 1 page?" else "Delete ${gone.size} pages?",
-        body = if (all) "Everything on them is removed and one empty page stays. Undo brings it back." else "They go with everything on them, and the pages after move up. Undo brings them back.",
-        confirm = if (all) "Clear pages" else "Delete",
+        title = if (all) stringResource(R.string.clear_every_page) else if (gone.size == 1) stringResource(R.string.delete_1_page) else stringResource(R.string.delete_n_pages, gone.size),
+        body = if (all) stringResource(R.string.everything_on_them_is_removed_and) else stringResource(R.string.they_go_with_everything_on_them),
+        confirm = if (all) stringResource(R.string.clear_pages) else stringResource(R.string.delete),
         destructive = true,
         onDismiss = { deletingPicked = false },
       ) {
@@ -335,15 +338,15 @@ fun PagesOverview(
         picked = null
         // The pages lift away in a puff together, then go.
         vanishing = gone
-        pendingOrder = com.tali.notes.canvas.Pages.withoutPages(count, gone) to (if (all) "Pages cleared \u2014 undo brings them back" else if (gone.size == 1) "Page deleted \u2014 undo brings it back" else "${gone.size} pages deleted \u2014 undo brings them back")
+        pendingOrder = com.tali.notes.canvas.Pages.withoutPages(count, gone) to (if (all) tr(R.string.pages_cleared_undo_brings_them_back) else if (gone.size == 1) tr(R.string.page_deleted_undo_brings_it_back) else tr(R.string.n_pages_deleted_undo_brings_them, gone.size))
       }
     }
     confirming?.let { i ->
       val single = count == 1
       com.tali.notes.ui.library.ConfirmDialog(
-        title = if (single) "Clear this page?" else "Delete page ${i + 1}?",
-        body = if (single) "Everything on it is removed. Undo brings it back." else "The page and everything on it go, and the pages after it move up. Undo brings it back.",
-        confirm = if (single) "Clear page" else "Delete page",
+        title = if (single) stringResource(R.string.clear_this_page) else stringResource(R.string.delete_page_n, i + 1),
+        body = if (single) stringResource(R.string.everything_on_it_is_removed_undo) else stringResource(R.string.the_page_and_everything_on_it),
+        confirm = if (single) stringResource(R.string.clear_page) else stringResource(R.string.delete_page),
         destructive = true,
         onDismiss = { confirming = null },
       ) {
@@ -402,7 +405,7 @@ private fun PageTile(
         .clip(shape)
         .background(Color.White)
         .border(if (selected || picked) 2.5.dp else 1.dp, if (selected || picked) c.accent else c.line, shape)
-        .clickable(onClickLabel = if (picking) "Pick page $number" else "Look at page $number", onClick = onClick)
+        .clickable(onClickLabel = if (picking) stringResource(R.string.pick_page_n, number) else stringResource(R.string.look_at_page_n, number), onClick = onClick)
     ) {
       if (image != null) Image(image, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
       // While picking, a check circle in the corner: filled when picked.
@@ -417,7 +420,7 @@ private fun PageTile(
           Modifier.size(26.dp).shadow(3.dp, CircleShape).clip(CircleShape).background(fill).border(1.5.dp, if (picked) c.accent else c.inkFaint, CircleShape),
           contentAlignment = Alignment.Center,
         ) {
-          if (picked) Icon(Icons.Outlined.Check, "Picked", tint = Color.White, modifier = Modifier.size(16.dp))
+          if (picked) Icon(Icons.Outlined.Check, stringResource(R.string.picked), tint = Color.White, modifier = Modifier.size(16.dp))
         }
       }
     }
@@ -448,13 +451,13 @@ private fun AddPageTile(onAdd: () -> Unit) {
             style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))),
           )
         }
-        .clickable(onClickLabel = "Add a page", onClick = onAdd),
+        .clickable(onClickLabel = stringResource(R.string.add_a_page), onClick = onAdd),
       contentAlignment = Alignment.Center,
     ) {
       Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(30.dp))
     }
     Spacer(Modifier.height(8.dp))
-    Text("Add page", style = MaterialTheme.typography.labelLarge, color = c.inkMuted, modifier = Modifier.padding(vertical = 2.dp))
+    Text(stringResource(R.string.add_page), style = MaterialTheme.typography.labelLarge, color = c.inkMuted, modifier = Modifier.padding(vertical = 2.dp))
   }
 }
 
@@ -484,10 +487,10 @@ private fun PagePeek(
     val pageWidth = minOf((maxHeight - 72.dp) * 0.92f * PAGE_ASPECT, maxWidth * 0.8f)
     Column(Modifier.width(pageWidth)) {
       Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-        Text("Page ${index + 1}", style = MaterialTheme.typography.titleMedium, color = c.inkFaint, modifier = Modifier.weight(1f).padding(start = 2.dp))
-        PeekButton(Icons.Outlined.DeleteOutline, if (single) "Clear page" else "Delete page", c.danger, onDelete)
+        Text(stringResource(R.string.page_n, index + 1), style = MaterialTheme.typography.titleMedium, color = c.inkFaint, modifier = Modifier.weight(1f).padding(start = 2.dp))
+        PeekButton(Icons.Outlined.DeleteOutline, if (single) stringResource(R.string.clear_page) else stringResource(R.string.delete_page), c.danger, onDelete)
         Spacer(Modifier.width(10.dp))
-        PeekButton(Icons.Outlined.ArrowOutward, "Go to page", c.accent, onGo)
+        PeekButton(Icons.Outlined.ArrowOutward, stringResource(R.string.go_to_page), c.accent, onGo)
       }
       Box(
         Modifier.fillMaxWidth()
@@ -498,7 +501,7 @@ private fun PagePeek(
           .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
       ) {
         // The small picture stands in until the sharp one is ready.
-        (large ?: small)?.let { Image(it, "Page ${index + 1}", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+        (large ?: small)?.let { Image(it, stringResource(R.string.page_n, index + 1), contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
       }
     }
   }

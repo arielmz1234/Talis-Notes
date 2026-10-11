@@ -1,5 +1,8 @@
 package com.tali.notes.ui.library
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,43 +27,63 @@ import com.tali.notes.ui.components.Segmented
 fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onDismiss: () -> Unit) {
   val c = Tali.colors
   DialogCard(onDismiss, width = 520) {
-    Text("Settings", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(18.dp))
     CardBody {
-    SectionLabel("Theme")
+    // The app's language: the tablet's, or one of its own. Each language is named in itself.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val language = androidx.compose.runtime.remember { com.tali.notes.AppLanguage.current(context) }
+    SectionLabel(stringResource(R.string.language))
+    Spacer(Modifier.height(8.dp))
+    Segmented(
+      listOf("") + com.tali.notes.AppLanguage.available,
+      language ?: "",
+      { tag -> if (tag.isEmpty()) tr(R.string.system_default) else com.tali.notes.AppLanguage.nativeName(tag) },
+      { tag -> context.findActivity()?.let { com.tali.notes.AppLanguage.set(it, tag.ifEmpty { null }) } },
+      Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(18.dp))
+    SectionLabel(stringResource(R.string.theme))
     Spacer(Modifier.height(8.dp))
     Segmented(
       listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK),
       settings.themeMode,
-      { when (it) { ThemeMode.SYSTEM -> "System default"; ThemeMode.LIGHT -> "Light"; ThemeMode.DARK -> "Dark" } },
+      { when (it) { ThemeMode.SYSTEM -> tr(R.string.system_default); ThemeMode.LIGHT -> tr(R.string.light); ThemeMode.DARK -> tr(R.string.dark) } },
       { com.tali.notes.ui.components.ThemeFade.beforeChange(); onTheme(it) },
       Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.height(18.dp))
-    SectionLabel("Style")
+    SectionLabel(stringResource(R.string.style))
     Spacer(Modifier.height(8.dp))
-    Segmented(listOf(false, true), settings.minimal, { if (it) "Minimal" else "Cloudy" }, { com.tali.notes.ui.components.ThemeFade.beforeChange(); onMinimal(it) }, Modifier.fillMaxWidth())
+    Segmented(listOf(false, true), settings.minimal, { if (it) tr(R.string.minimal) else tr(R.string.cloudy) }, { com.tali.notes.ui.components.ThemeFade.beforeChange(); onMinimal(it) }, Modifier.fillMaxWidth())
     Spacer(Modifier.height(6.dp))
     Text(
-      if (settings.minimal) "Clean edges on bars and cards, no clouds in the sky, and more room at the top."
-      else "Soft cloud edges on bars and cards, and clouds drifting across the sky.",
+      if (settings.minimal) stringResource(R.string.clean_edges_on_bars_and_cards)
+      else stringResource(R.string.soft_cloud_edges_on_bars_and),
       style = MaterialTheme.typography.bodySmall,
       color = c.inkMuted,
     )
     Spacer(Modifier.height(18.dp))
-    SectionLabel("PDFs from other apps")
+    SectionLabel(stringResource(R.string.pdfs_from_other_apps))
     Spacer(Modifier.height(4.dp))
     com.tali.notes.ui.components.ToggleRow(
-      "Add them to my notebooks",
+      stringResource(R.string.add_them_to_my_notebooks),
       settings.pdfsToLibrary,
       onPdfsToLibrary,
-      detail = if (settings.pdfsToLibrary) "A PDF you open with Tali's Notes goes straight into your notebooks, ready to write on."
-      else "A PDF you open with Tali's Notes opens just for looking. Tap Save to keep it and write on it.",
+      detail = if (settings.pdfsToLibrary) stringResource(R.string.a_pdf_you_open_with_tali)
+      else stringResource(R.string.a_pdf_you_open_with_tali_2),
     )
     }
     Spacer(Modifier.height(22.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-      PrimaryButton("Done", onClick = onDismiss)
+      PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
     }
   }
 }
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? =
+  when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+  }

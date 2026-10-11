@@ -1,5 +1,8 @@
 package com.tali.notes.ui.components
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.ui.graphics.graphicsLayer
 import android.graphics.BitmapFactory
 import android.text.format.DateUtils
@@ -63,10 +66,10 @@ fun relativeTime(millis: Long): String {
   val now = System.currentTimeMillis()
   val diff = now - millis
   return when {
-    diff < DateUtils.MINUTE_IN_MILLIS -> "Just now"
-    diff < DateUtils.HOUR_IN_MILLIS -> "${diff / DateUtils.MINUTE_IN_MILLIS} min ago"
-    diff < DateUtils.DAY_IN_MILLIS -> "${diff / DateUtils.HOUR_IN_MILLIS} h ago"
-    diff < 2 * DateUtils.DAY_IN_MILLIS -> "Yesterday"
+    diff < DateUtils.MINUTE_IN_MILLIS -> tr(R.string.just_now)
+    diff < DateUtils.HOUR_IN_MILLIS -> tr(R.string.n_min_ago, diff / DateUtils.MINUTE_IN_MILLIS)
+    diff < DateUtils.DAY_IN_MILLIS -> tr(R.string.n_h_ago, diff / DateUtils.HOUR_IN_MILLIS)
+    diff < 2 * DateUtils.DAY_IN_MILLIS -> tr(R.string.yesterday)
     else -> DateUtils.formatDateTime(null, millis, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH or DateUtils.FORMAT_NO_YEAR)
   }
 }

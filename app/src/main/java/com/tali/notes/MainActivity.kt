@@ -14,6 +14,9 @@ import com.tali.notes.backup.DriveBackup
 import com.tali.notes.theme.TaliTheme
 
 class MainActivity : ComponentActivity() {
+  // Before Android 13, the language chosen in Settings is applied here (see AppLanguage).
+  override fun attachBaseContext(newBase: android.content.Context) = super.attachBaseContext(AppLanguage.wrap(newBase))
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()

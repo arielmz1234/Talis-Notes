@@ -1,5 +1,7 @@
 package com.tali.notes.ui.library
 
+import com.tali.notes.tr
+import com.tali.notes.R
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -52,11 +54,11 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
    */
   fun freeNotebookName(): String {
     val folder = selectedFolder.value?.takeIf { it != TRASH }
-    return nextFreeName("New notebook", repo.notebooks.value.filter { it.folderId == folder }.map { it.title })
+    return nextFreeName(tr(R.string.new_notebook), repo.notebooks.value.filter { it.folderId == folder }.map { it.title })
   }
 
   /** The same for a new folder, among the folders beside it. */
-  fun freeFolderName(parentId: String?): String = nextFreeName("New folder", folders.value.filter { it.parentId == parentId }.map { it.name })
+  fun freeFolderName(parentId: String?): String = nextFreeName(tr(R.string.new_folder), folders.value.filter { it.parentId == parentId }.map { it.name })
 
   fun create(n: NewNotebook, onCreated: (String) -> Unit) {
     viewModelScope.launch {
@@ -91,7 +93,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   suspend fun importImage(uri: android.net.Uri): String? = repo.importImage(uri)
 
-  fun rename(id: String, title: String) = repo.rename(id, title.ifBlank { "Untitled" })
+  fun rename(id: String, title: String) = repo.rename(id, title.ifBlank { tr(R.string.untitled) })
 
   fun setCover(id: String, color: Int) = repo.setCover(id, color)
 
@@ -138,7 +140,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     repo.moveFolder(id, parentId)
   }
 
-  fun renameFolder(id: String, name: String) = repo.renameFolder(id, name.ifBlank { "Folder" })
+  fun renameFolder(id: String, name: String) = repo.renameFolder(id, name.ifBlank { tr(R.string.folder) })
 
   fun recolorFolder(id: String, color: Int) = repo.recolorFolder(id, color)
 

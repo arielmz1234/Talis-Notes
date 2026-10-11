@@ -1,5 +1,8 @@
 package com.tali.notes.ui.library
 
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -158,7 +161,7 @@ fun NewNotebookDialog(
   settings: AppSettings,
   folderName: String? = null,
   /** What it's called if she leaves the name empty (shown as the hint). */
-  suggestedName: String = "New notebook",
+  suggestedName: String = stringResource(R.string.new_notebook),
   defaultCover: Int,
   onDismiss: () -> Unit,
   importImage: suspend (android.net.Uri) -> String?,
@@ -181,10 +184,10 @@ fun NewNotebookDialog(
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
       Row(verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
-          Text("New notebook", style = MaterialTheme.typography.titleLarge, color = c.ink)
+          Text(stringResource(R.string.new_notebook), style = MaterialTheme.typography.titleLarge, color = c.ink)
           if (folderName != null) {
             Spacer(Modifier.height(4.dp))
-            Text("In $folderName", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+            Text(stringResource(R.string.in_n, folderName), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
           }
         }
         com.tali.notes.ui.components.DriftingCloud(width = 64.dp, variant = 2, driftDp = 4f)
@@ -200,7 +203,7 @@ fun NewNotebookDialog(
       }
       // Laid out compactly so the whole card fits lying down without scrolling.
       Spacer(Modifier.height(14.dp))
-      SectionLabel("Paper")
+      SectionLabel(stringResource(R.string.paper))
       Spacer(Modifier.height(4.dp))
       PaperPicker(
         style = paper,
@@ -226,32 +229,32 @@ fun NewNotebookDialog(
       // its place, so nothing below jumps.
       Row {
         Column(Modifier.weight(1f)) {
-          SectionLabel("Pages")
+          SectionLabel(stringResource(R.string.pages))
           Spacer(Modifier.height(6.dp))
-          Segmented(listOf(true, false), paged, { if (it) "A4 pages" else "Endless" }, { paged = it }, Modifier.fillMaxWidth())
+          Segmented(listOf(true, false), paged, { if (it) tr(R.string.a4_pages) else tr(R.string.endless) }, { paged = it }, Modifier.fillMaxWidth())
         }
         Spacer(Modifier.width(14.dp))
         val shown by androidx.compose.animation.core.animateFloatAsState(if (paged) 1f else 0f, androidx.compose.animation.core.tween(if (paged) 200 else 140), label = "orientation")
         Column(Modifier.weight(1f).graphicsLayer { alpha = shown }) {
-          SectionLabel("Orientation")
+          SectionLabel(stringResource(R.string.orientation))
           Spacer(Modifier.height(6.dp))
-          Segmented(listOf(false, true), landscape, { if (it) "Landscape" else "Portrait" }, { if (paged) landscape = it }, Modifier.fillMaxWidth())
+          Segmented(listOf(false, true), landscape, { if (it) tr(R.string.landscape) else tr(R.string.portrait) }, { if (paged) landscape = it }, Modifier.fillMaxWidth())
         }
       }
       Spacer(Modifier.height(6.dp))
       Text(
         when {
-          !paged -> "One page that goes on forever in every direction, for big drawings and mind maps."
-          landscape -> "Wide A4 pages on their side, one under the other: good for slides and wide diagrams."
-          else -> "Upright A4 pages one under the other, like a real notebook. Exports page by page."
+          !paged -> stringResource(R.string.one_page_that_goes_on_forever)
+          landscape -> stringResource(R.string.wide_a4_pages_on_their_side)
+          else -> stringResource(R.string.upright_a4_pages_one_under_the)
         },
         style = MaterialTheme.typography.bodySmall,
         color = c.inkMuted,
       )
       Spacer(Modifier.height(6.dp))
-      ToggleRow("Dark paper", dark, { dark = it }, detail = "A black page; your pens switch to light colours")
+      ToggleRow(stringResource(R.string.dark_paper), dark, { dark = it }, detail = stringResource(R.string.a_black_page_your_pens_switch))
       Spacer(Modifier.height(8.dp))
-      SectionLabel("Cover")
+      SectionLabel(stringResource(R.string.cover))
       Spacer(Modifier.height(6.dp))
       val ring = rememberSlidingSelection()
       androidx.compose.foundation.layout.FlowRow(
@@ -272,8 +275,8 @@ fun NewNotebookDialog(
     }
     Spacer(Modifier.height(16.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      QuietButton("Cancel", onClick = onDismiss)
-      PrimaryButton("Create") { create() }
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
+      PrimaryButton(stringResource(R.string.create)) { create() }
     }
   }
   if (makingPaper) {
@@ -287,7 +290,7 @@ fun NewNotebookDialog(
 
 @Composable
 fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> Unit) =
-  NameDialog(title = "Rename notebook", initial = current, placeholder = "Notebook name", confirm = "Rename", onDismiss = onDismiss, onConfirm = onRename)
+  NameDialog(title = stringResource(R.string.rename_notebook), initial = current, placeholder = stringResource(R.string.notebook_name), confirm = stringResource(R.string.rename), onDismiss = onDismiss, onConfirm = onRename)
 
 /** A dialog with one name field, used for renaming and for new folders. */
 @Composable
@@ -300,7 +303,7 @@ fun NameDialog(title: String, initial: String, placeholder: String, confirm: Str
     TitleField(value, { value = it }, placeholder) { onConfirm(value.text) }
     Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      QuietButton("Cancel", onClick = onDismiss)
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       PrimaryButton(confirm) { onConfirm(value.text) }
     }
   }
@@ -316,7 +319,7 @@ fun ConfirmDialog(title: String, body: String, confirm: String, destructive: Boo
     Text(body, style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-      QuietButton("Cancel", onClick = onDismiss)
+      QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       if (destructive) QuietButton(confirm, color = c.danger, onClick = onConfirm) else PrimaryButton(confirm, onClick = onConfirm)
     }
   }

@@ -1,5 +1,7 @@
 package com.tali.notes.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -59,7 +61,7 @@ fun StepSlider(
   fun snap(v: Float) = ((v / step).roundToInt() * step).coerceIn(range.start, range.endInclusive)
   val current by rememberUpdatedState(value)
   Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-    StepButton(Icons.Outlined.Remove, "Thinner", enabled = value > range.start + step / 2, onStep = { onChange(snap(current - step)) }, onDone = { onChangeFinished?.invoke() })
+    StepButton(Icons.Outlined.Remove, stringResource(R.string.thinner), enabled = value > range.start + step / 2, onStep = { onChange(snap(current - step)) }, onDone = { onChangeFinished?.invoke() })
     Slider(
       value = value,
       onValueChange = { onChange(snap(it)) },
@@ -68,7 +70,7 @@ fun StepSlider(
       colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
       modifier = Modifier.weight(1f),
     )
-    StepButton(Icons.Outlined.Add, "Thicker", enabled = value < range.endInclusive - step / 2, onStep = { onChange(snap(current + step)) }, onDone = { onChangeFinished?.invoke() })
+    StepButton(Icons.Outlined.Add, stringResource(R.string.thicker), enabled = value < range.endInclusive - step / 2, onStep = { onChange(snap(current + step)) }, onDone = { onChangeFinished?.invoke() })
   }
 }
 

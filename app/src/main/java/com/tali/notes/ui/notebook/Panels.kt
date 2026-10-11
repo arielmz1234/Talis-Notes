@@ -1,5 +1,10 @@
 package com.tali.notes.ui.notebook
 
+import com.tali.notes.ui.components.title
+import com.tali.notes.ui.components.nameRes
+import com.tali.notes.tr
+import androidx.compose.ui.res.stringResource
+import com.tali.notes.R
 import androidx.compose.ui.graphics.Brush
 import android.content.res.Resources
 import androidx.compose.runtime.LaunchedEffect
@@ -168,7 +173,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
           Modifier.slidingOption(types, type)
             .size(58.dp, 66.dp)
             .clip(RoundedCornerShape(14.dp))
-            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = type.label) { vm.setPenType(type) },
+            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = stringResource(type.nameRes)) { vm.setPenType(type) },
           contentAlignment = Alignment.BottomCenter,
         ) {
           PenGlyph(type, ink, Modifier.padding(bottom = 0.dp), line = if (type.takesLineStyle) slot.line else LineStyle.SOLID)
@@ -177,7 +182,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     }
     Spacer(Modifier.height(10.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Text(slot.type.label, style = MaterialTheme.typography.titleMedium, color = c.ink, modifier = Modifier.weight(1f))
+      Text(stringResource(slot.type.nameRes), style = MaterialTheme.typography.titleMedium, color = c.ink, modifier = Modifier.weight(1f))
       // Only with a pen that has a button to press.
       if (vm.hasStylus) StarToggle(slot.starred, onToggle = vm::toggleStar)
     }
@@ -188,29 +193,29 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Segmented(listOf(0, 1, 2), slot.sizeSlot.coerceIn(0, 2), { i -> String.format(java.util.Locale.US, "%.1f", slot.presetSizes[i]) }, vm::pickPenSize, Modifier.fillMaxWidth())
     Spacer(Modifier.height(8.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
+      Text(stringResource(R.string.size), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
       StepSlider(slot.size, slot.type.minSize..slot.type.maxSize, 0.5f, { v -> vm.updateActivePen { it.withSize(v) } }, Modifier.weight(1f))
       Text(String.format(java.util.Locale.US, "%.1f", slot.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
     if (slot.type.takesLineStyle) {
       Spacer(Modifier.height(10.dp))
-      SectionLabel("Line")
+      SectionLabel(stringResource(R.string.line))
       Spacer(Modifier.height(8.dp))
       LineStylePicker(slot.lineStyle, vm::setPenLine)
     }
     if (slot.type.isHighlighter) {
       // The highlighter's own choices, in the same gliding switches as everywhere else.
       Spacer(Modifier.height(12.dp))
-      SectionLabel("Draws")
+      SectionLabel(stringResource(R.string.draws))
       Spacer(Modifier.height(8.dp))
-      Segmented(listOf(true, false), slot.straight, { if (it) "Straight lines" else "Freehand" }, { straight -> vm.updateActivePen { it.copy(freehand = !straight) } }, Modifier.fillMaxWidth())
+      Segmented(listOf(true, false), slot.straight, { if (it) tr(R.string.straight_lines) else tr(R.string.freehand) }, { straight -> vm.updateActivePen { it.copy(freehand = !straight) } }, Modifier.fillMaxWidth())
       Spacer(Modifier.height(12.dp))
-      SectionLabel("Tip")
+      SectionLabel(stringResource(R.string.tip))
       Spacer(Modifier.height(8.dp))
-      Segmented(listOf(false, true), slot.square, { if (it) "Square" else "Round" }, { square -> vm.updateActivePen { it.copy(squareTip = square) } }, Modifier.fillMaxWidth())
+      Segmented(listOf(false, true), slot.square, { if (it) tr(R.string.square) else tr(R.string.round) }, { square -> vm.updateActivePen { it.copy(squareTip = square) } }, Modifier.fillMaxWidth())
     }
     Spacer(Modifier.height(10.dp))
-    SectionLabel(if (slot.type.isHighlighter) "Highlighter colours" else "Colours")
+    SectionLabel(if (slot.type.isHighlighter) stringResource(R.string.highlighter_colours) else stringResource(R.string.colours))
     Spacer(Modifier.height(8.dp))
     ReorderableColors(
       colors = settings.paletteFor(slot),
@@ -225,12 +230,12 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     // The first few colours above sit in the toolbar beside the pens, for every notebook.
     Row(verticalAlignment = Alignment.CenterVertically) {
       Column(Modifier.weight(1f)) {
-        Text("In the toolbar with this pen", style = MaterialTheme.typography.bodyMedium, color = c.ink)
-        Text("The colours before the line · hold one and drag to move it", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+        Text(stringResource(R.string.in_the_toolbar_with_this_pen), style = MaterialTheme.typography.bodyMedium, color = c.ink)
+        Text(stringResource(R.string.the_colours_before_the_line_hold), style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
       }
     }
     Spacer(Modifier.height(8.dp))
-    Segmented((0..6).toList(), settings.toolbarColorsFor(slot), { if (it == 0) "None" else "$it" }, vm::setToolbarColors, Modifier.fillMaxWidth())
+    Segmented((0..6).toList(), settings.toolbarColorsFor(slot), { if (it == 0) tr(R.string.none) else "$it" }, vm::setToolbarColors, Modifier.fillMaxWidth())
     if (picking) {
       Spacer(Modifier.height(12.dp))
       ColorPicker(
@@ -244,14 +249,14 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
       )
     }
     Spacer(Modifier.height(14.dp))
-    SectionLabel("This pen and other tools")
+    SectionLabel(stringResource(R.string.this_pen_and_other_tools))
     Spacer(Modifier.height(4.dp))
-    ToggleRow("Eraser can erase it", settings.eraserHits(slot.type), { vm.setEraserAffects(slot.type, it) })
-    ToggleRow("Lasso can pick it up", settings.lassoHits(slot.type), { vm.setLassoAffects(slot.type, it) })
+    ToggleRow(stringResource(R.string.eraser_can_erase_it), settings.eraserHits(slot.type), { vm.setEraserAffects(slot.type, it) })
+    ToggleRow(stringResource(R.string.lasso_can_pick_it_up), settings.lassoHits(slot.type), { vm.setLassoAffects(slot.type, it) })
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      QuietButton("Add a pen", onClick = vm::addPen)
-      if (settings.pens.size > 1) QuietButton("Remove this pen", color = c.danger, onClick = vm::removeActivePen)
+      QuietButton(stringResource(R.string.add_a_pen), onClick = vm::addPen)
+      if (settings.pens.size > 1) QuietButton(stringResource(R.string.remove_this_pen), color = c.danger, onClick = vm::removeActivePen)
     }
   }
 }
@@ -261,7 +266,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
  * starred (from 85%, a quick spring) and its colour fades.
  */
 @Composable
-private fun StarToggle(on: Boolean, starLabel: String = "Star this pen", unstarLabel: String = "Unstar this pen", onToggle: () -> Unit) {
+private fun StarToggle(on: Boolean, starLabel: String = stringResource(R.string.star_this_pen), unstarLabel: String = stringResource(R.string.unstar_this_pen), onToggle: () -> Unit) {
   val c = Tali.colors
   val pop = remember { androidx.compose.animation.core.Animatable(1f) }
   var first by remember { mutableStateOf(true) }
@@ -280,7 +285,7 @@ private fun StarToggle(on: Boolean, starLabel: String = "Star this pen", unstarL
   ) {
     Icon(
       if (on) Icons.Filled.Star else Icons.Outlined.StarBorder,
-      if (on) "Starred" else "Not starred",
+      if (on) stringResource(R.string.starred) else stringResource(R.string.not_starred),
       tint = tint,
       modifier = Modifier.size(24.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value },
     )
@@ -319,11 +324,11 @@ fun StrokePreview(type: PenType, color: Int, size: Float, line: LineStyle = Line
 fun EraserPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
   PanelColumn(340) {
-    PanelTitle("Eraser")
-    Segmented(listOf(EraserMode.STROKE, EraserMode.AREA), settings.eraserMode, { if (it == EraserMode.STROKE) "Whole strokes" else "Precise" }, vm::setEraserMode, Modifier.fillMaxWidth())
+    PanelTitle(stringResource(R.string.eraser))
+    Segmented(listOf(EraserMode.STROKE, EraserMode.AREA), settings.eraserMode, { if (it == EraserMode.STROKE) tr(R.string.whole_strokes) else tr(R.string.precise) }, vm::setEraserMode, Modifier.fillMaxWidth())
     Spacer(Modifier.height(14.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
+      Text(stringResource(R.string.size), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
       StepSlider(settings.eraserSize, 6f..64f, 1f, vm::setEraserSize, Modifier.weight(1f))
       Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size((settings.eraserSize.coerceAtMost(40f)).dp)) {
@@ -333,14 +338,14 @@ fun EraserPanel(settings: AppSettings, vm: NotebookViewModel) {
       }
     }
     Spacer(Modifier.height(10.dp))
-    SectionLabel("Erases")
+    SectionLabel(stringResource(R.string.erases))
     Spacer(Modifier.height(4.dp))
     Spacer(Modifier.height(4.dp))
     FilterChips {
-      PenType.offered.forEach { type -> FilterChip(type.label, settings.eraserHits(type)) { vm.setEraserAffects(type, it) } }
+      PenType.offered.forEach { type -> FilterChip(stringResource(type.nameRes), settings.eraserHits(type)) { vm.setEraserAffects(type, it) } }
     }
     Spacer(Modifier.height(14.dp))
-    Text("Tip: hold the S Pen button to erase with any tool.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+    Text(stringResource(R.string.tip_hold_the_s_pen_button), style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
   }
 }
 
@@ -385,10 +390,10 @@ private fun FilterChip(label: String, on: Boolean, onChange: (Boolean) -> Unit) 
 fun FillPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
   PanelColumn(360) {
-    PanelTitle("Fill")
-    Text("Tap inside a shape, or inside an area you've drawn around, to fill it with colour. Your writing stays on top.", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+    PanelTitle(stringResource(R.string.fill))
+    Text(stringResource(R.string.tap_inside_a_shape_or_inside), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(14.dp))
-    SectionLabel("Colour")
+    SectionLabel(stringResource(R.string.colour))
     Spacer(Modifier.height(8.dp))
     val ring = rememberSlidingSelection()
     FlowRow(Modifier.colorRing(ring, settings.fillColor?.let { Color(it) } ?: NO_FILL), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -396,7 +401,7 @@ fun FillPanel(settings: AppSettings, vm: NotebookViewModel) {
       // No fill: taps take a fill away.
       Box(
         Modifier.slidingOption(ring, NO_FILL).size(38.dp).clip(CircleShape)
-          .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = "No fill") { vm.setFillColor(null) },
+          .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClickLabel = stringResource(R.string.no_fill)) { vm.setFillColor(null) },
         contentAlignment = Alignment.Center,
       ) {
         Canvas(Modifier.size(30.dp)) {
@@ -409,13 +414,13 @@ fun FillPanel(settings: AppSettings, vm: NotebookViewModel) {
     if (settings.fillColor != null) {
       Spacer(Modifier.height(12.dp))
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Opacity", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(64.dp))
+        Text(stringResource(R.string.opacity), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(64.dp))
         TaliSlider(settings.fillOpacity, 0.15f..1f, { vm.setFillOpacity(Math.round(it * 20) / 20f) }, Modifier.weight(1f))
-        Text("${Math.round(settings.fillOpacity * 100)}%", style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
+        Text(stringResource(R.string.n, Math.round(settings.fillOpacity * 100)), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
       }
     } else {
       Spacer(Modifier.height(10.dp))
-      Text("Tap a filled shape or area to take its fill away.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+      Text(stringResource(R.string.tap_a_filled_shape_or_area), style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
     }
   }
 }
@@ -427,31 +432,31 @@ private val NO_FILL = Color(0x00FF00FF)
 fun LassoPanel(settings: AppSettings, vm: NotebookViewModel) {
   val c = Tali.colors
   PanelColumn(340) {
-    PanelTitle("Select")
+    PanelTitle(stringResource(R.string.select))
     // The classic lasso loop, or free form: trace over or touch things (circling still works).
-    Segmented(listOf(false, true), settings.lassoFree, { if (it) "Free form" else "Lasso" }, vm::setLassoFree, Modifier.fillMaxWidth())
+    Segmented(listOf(false, true), settings.lassoFree, { if (it) tr(R.string.free_form) else tr(R.string.lasso) }, vm::setLassoFree, Modifier.fillMaxWidth())
     Spacer(Modifier.height(10.dp))
     Text(
       when {
-        settings.lassoShot -> "Draw around anything to take a picture of it: save it to your gallery, share it or copy it."
-        settings.lassoFree -> "Trace over or touch anything to pick it up, or circle a group. Then move, resize, recolour or copy it."
-        else -> "Circle anything to move, resize, recolour or copy it. Tap a single item with the lasso to pick just that one."
+        settings.lassoShot -> stringResource(R.string.draw_around_anything_to_take_a)
+        settings.lassoFree -> stringResource(R.string.trace_over_or_touch_anything_to)
+        else -> stringResource(R.string.circle_anything_to_move_resize_recolour)
       },
       style = MaterialTheme.typography.bodyMedium,
       color = c.inkMuted,
     )
     Spacer(Modifier.height(6.dp))
-    ToggleRow("Screenshot", settings.lassoShot, vm::setLassoShot, detail = "The lasso takes a picture of the rectangle around what you draw, instead of picking it up.")
+    ToggleRow(stringResource(R.string.screenshot), settings.lassoShot, vm::setLassoShot, detail = stringResource(R.string.the_lasso_takes_a_picture_of))
     Spacer(Modifier.height(14.dp))
-    SectionLabel("Picks up")
+    SectionLabel(stringResource(R.string.picks_up))
     Spacer(Modifier.height(4.dp))
     Spacer(Modifier.height(4.dp))
     FilterChips {
-      PenType.offered.forEach { type -> FilterChip(type.label, settings.lassoHits(type)) { vm.setLassoAffects(type, it) } }
-      FilterChip("Images", settings.lassoSelectsImages, vm::setLassoImages)
+      PenType.offered.forEach { type -> FilterChip(stringResource(type.nameRes), settings.lassoHits(type)) { vm.setLassoAffects(type, it) } }
+      FilterChip(stringResource(R.string.images), settings.lassoSelectsImages, vm::setLassoImages)
     }
     Spacer(Modifier.height(10.dp))
-    ToggleRow("Pick up locked items", settings.lassoLocked, vm::setLassoLocked, detail = "To move them or unlock them. Off, the lasso leaves locked items alone.")
+    ToggleRow(stringResource(R.string.pick_up_locked_items), settings.lassoLocked, vm::setLassoLocked, detail = stringResource(R.string.to_move_them_or_unlock_them))
   }
 }
 
@@ -463,8 +468,8 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
   var styling by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
   PanelColumn(588) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Text("Shapes", style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.weight(1f))
-      Segmented(listOf(false, true), styling, { if (it) "Style" else "Choose" }, { styling = it }, Modifier.width(220.dp))
+      Text(stringResource(R.string.shapes), style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.weight(1f))
+      Segmented(listOf(false, true), styling, { if (it) tr(R.string.style) else tr(R.string.choose) }, { styling = it }, Modifier.width(220.dp))
     }
     Spacer(Modifier.height(4.dp))
     if (styling) {
@@ -472,25 +477,25 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
     } else {
       // The standard shapes, then the subjects she starred, then hers; every subject is under More shapes.
       Spacer(Modifier.height(12.dp))
-      SectionLabel(ShapeGroup.BASIC.label)
+      SectionLabel(stringResource(ShapeGroup.BASIC.nameRes))
       Spacer(Modifier.height(8.dp))
       FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ShapeKind.offered.filter { it.group == ShapeGroup.BASIC }.forEach { kind ->
           val on = kind == current && vm.customShapeId == null && vm.packShapeId == null && vm.tool == com.tali.notes.model.Tool.SHAPE
-          ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
+          ShapeTile(stringResource(kind.nameRes), on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
         }
       }
       com.tali.notes.model.ShapePacks.all.filter { it.id in settings.starredPacks }.forEach { pack ->
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(Modifier.weight(1f)) { SectionLabel(pack.name) }
-          StarToggle(true, unstarLabel = "Take ${pack.name} out of the Shapes panel") { vm.toggleStarPack(pack.id) }
+          Box(Modifier.weight(1f)) { SectionLabel(pack.title()) }
+          StarToggle(true, unstarLabel = stringResource(R.string.take_n_out_of_the_shapes, pack.title())) { vm.toggleStarPack(pack.id) }
         }
         PackTiles(pack, current, vm)
       }
       if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null && vm.packShapeId == null) {
         Spacer(Modifier.height(10.dp))
-        Text("Part circle: drag from the centre outwards; it starts as a half. Then drag an end dot to make it any % of a circle.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+        Text(stringResource(R.string.part_circle_drag_from_the_centre), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
       }
       MyShapes(settings.customShapes, vm)
       var browsing by remember { mutableStateOf(false) }
@@ -502,8 +507,8 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
         Icon(Icons.Outlined.Category, null, tint = c.accent, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-          Text("More shapes", style = MaterialTheme.typography.titleSmall, color = c.ink)
-          Text("Shapes for each subject: engineering, law, health, economics and more", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+          Text(stringResource(R.string.more_shapes), style = MaterialTheme.typography.titleSmall, color = c.ink)
+          Text(stringResource(R.string.shapes_for_each_subject_engineering_law), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
         }
         Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = c.accent)
       }
@@ -522,7 +527,7 @@ private fun PackTiles(pack: com.tali.notes.model.ShapePack, current: ShapeKind, 
       val shapeTool = vm.tool == com.tali.notes.model.Tool.SHAPE
       val kind = shape.kind
       val on = shapeTool && vm.customShapeId == null && (if (kind != null) vm.packShapeId == null && kind == current else vm.packShapeId == shape.id)
-      ShapeTile(shape.label, on, onClick = {
+      ShapeTile(shape.title(), on, onClick = {
         vm.pickPackShape(shape)
         onPicked()
       }) { tint -> if (kind != null) ShapeIcon(kind, tint, size = 30.dp) else GeometryIcon(shape.icon, tint, size = 30.dp) }
@@ -541,9 +546,9 @@ private fun ShapePacksDialog(settings: AppSettings, current: ShapeKind, vm: Note
   var shown by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(packs.firstOrNull { it.id in settings.starredPacks }?.id ?: packs.first().id) }
   val pack = packs.first { it.id == shown }
   com.tali.notes.ui.library.DialogCard(onDismiss, width = 860) {
-    Text("More shapes", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Text(stringResource(R.string.more_shapes), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(4.dp))
-    Text("Star a subject to keep its shapes in the Shapes panel; holding the pen at the end of a stroke snaps to them too.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+    Text(stringResource(R.string.star_a_subject_to_keep_its), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
     Spacer(Modifier.height(14.dp))
     Row(Modifier.weight(1f, fill = false)) {
       // The subjects.
@@ -555,17 +560,17 @@ private fun ShapePacksDialog(settings: AppSettings, current: ShapeKind, vm: Note
             Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(12.dp)).background(wash).clickable { shown = p.id }.padding(start = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
           ) {
-            Text(p.name, style = MaterialTheme.typography.bodyMedium, color = if (on) c.accent else c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            StarToggle(p.id in settings.starredPacks, starLabel = "Add ${p.name} to the Shapes panel", unstarLabel = "Take ${p.name} out of the Shapes panel") { vm.toggleStarPack(p.id) }
+            Text(p.title(), style = MaterialTheme.typography.bodyMedium, color = if (on) c.accent else c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            StarToggle(p.id in settings.starredPacks, starLabel = stringResource(R.string.add_n_to_the_shapes_panel, p.title()), unstarLabel = stringResource(R.string.take_n_out_of_the_shapes, p.title())) { vm.toggleStarPack(p.id) }
           }
         }
       }
       Spacer(Modifier.width(18.dp))
       // Its shapes.
       Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-        Text(pack.name, style = MaterialTheme.typography.titleMedium, color = c.ink)
+        Text(pack.title(), style = MaterialTheme.typography.titleMedium, color = c.ink)
         Text(
-          if (pack.id in settings.starredPacks) "In your Shapes panel" else "Tap the star to keep these in your Shapes panel",
+          if (pack.id in settings.starredPacks) stringResource(R.string.in_your_shapes_panel) else stringResource(R.string.tap_the_star_to_keep_these),
           style = MaterialTheme.typography.bodySmall,
           color = c.inkFaint,
         )
@@ -573,7 +578,7 @@ private fun ShapePacksDialog(settings: AppSettings, current: ShapeKind, vm: Note
       }
     }
     Spacer(Modifier.height(16.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Done", onClick = onDismiss) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton(stringResource(R.string.done), onClick = onDismiss) }
   }
 }
 
@@ -599,18 +604,18 @@ private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
     Column(Modifier.weight(1f)) {
       ShapeStylePreview(look, Modifier.fillMaxWidth().height(88.dp))
       Spacer(Modifier.height(12.dp))
-      SectionLabel("Outline colour")
+      SectionLabel(stringResource(R.string.outline_colour))
       Spacer(Modifier.height(6.dp))
       val ring = rememberSlidingSelection()
       FlowRow(resting.colorRing(ring, Color(outline)), horizontalArrangement = Arrangement.spacedBy(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
         settings.savedColors.forEach { col -> ColorDot(Color(col), selected = (col or (0xFF shl 24)) == outline, size = 26.dp, selection = ring) { if (own) vm.updateShapeStyle { it.copy(color = col or (0xFF shl 24)) } } }
       }
       Spacer(Modifier.height(10.dp))
-      SectionLabel("Fill")
+      SectionLabel(stringResource(R.string.fill))
       Spacer(Modifier.height(6.dp))
       val fillRing = rememberSlidingSelection()
       FlowRow(Modifier.colorRing(fillRing, fill?.let { Color(it) } ?: NO_FILL), horizontalArrangement = Arrangement.spacedBy(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        NoneDot(fillRing, "No fill", dot = 34.dp) { vm.updateShapeStyle { it.copy(fill = null) } }
+        NoneDot(fillRing, stringResource(R.string.no_fill), dot = 34.dp) { vm.updateShapeStyle { it.copy(fill = null) } }
         settings.savedColors.forEach { col -> ColorDot(Color(col), selected = (col or (0xFF shl 24)) == fill, size = 26.dp, selection = fillRing) { vm.updateShapeStyle { it.copy(fill = col or (0xFF shl 24)) } } }
       }
     }
@@ -619,22 +624,22 @@ private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
     Column(Modifier.weight(1.15f)) {
       // Its own style stays the same whatever pen she picks; or it can follow the pen in use.
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Style", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
-        Segmented(listOf(false, true), settings.shapeFollowsPen, { if (it) "Like the pen" else "Its own" }, vm::setShapeFollowsPen, Modifier.weight(1f))
+        Text(stringResource(R.string.style), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
+        Segmented(listOf(false, true), settings.shapeFollowsPen, { if (it) tr(R.string.like_the_pen) else tr(R.string.its_own) }, vm::setShapeFollowsPen, Modifier.weight(1f))
       }
       Spacer(Modifier.height(6.dp))
       Row(resting, verticalAlignment = Alignment.CenterVertically) {
-        Text("Size", style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
+        Text(stringResource(R.string.size), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
         StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, 0.5f, { v -> if (own) vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
         Text(String.format(java.util.Locale.US, "%.1f", look.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
       }
-      OpacitySlider("Opacity", look.opacity, enabled = true) { v -> vm.updateShapeStyle { it.copy(opacity = v) } }
-      OpacitySlider("Fill opacity", look.fillOpacity, enabled = fill != null) { v -> vm.updateShapeStyle { it.copy(fillOpacity = v) } }
+      OpacitySlider(stringResource(R.string.opacity), look.opacity, enabled = true) { v -> vm.updateShapeStyle { it.copy(opacity = v) } }
+      OpacitySlider(stringResource(R.string.fill_opacity), look.fillOpacity, enabled = fill != null) { v -> vm.updateShapeStyle { it.copy(fillOpacity = v) } }
       Spacer(Modifier.height(4.dp))
       CompactLineStylePicker(look.line, { l -> if (own) vm.updateShapeStyle { it.copy(line = l) } }, resting.fillMaxWidth())
       Spacer(Modifier.height(8.dp))
-      ToggleRow("Snap to other shapes", settings.snapShapes, vm::setSnapShapes, detail = "Ends and edges lock on; shapes line up.")
-      ToggleRow("Hold to perfect shapes", settings.holdToShape, vm::setHoldToShape, detail = "Pause at the end of a pen stroke.")
+      ToggleRow(stringResource(R.string.snap_to_other_shapes), settings.snapShapes, vm::setSnapShapes, detail = stringResource(R.string.ends_and_edges_lock_on_shapes))
+      ToggleRow(stringResource(R.string.hold_to_perfect_shapes), settings.holdToShape, vm::setHoldToShape, detail = stringResource(R.string.pause_at_the_end_of_a))
     }
   }
 }
@@ -653,7 +658,7 @@ private fun OpacitySlider(label: String, value: Float, enabled: Boolean, onChang
       colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.sunken),
       modifier = Modifier.weight(1f),
     )
-    Text("${Math.round(value * 100)}%", style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
+    Text(stringResource(R.string.n, Math.round(value * 100)), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
   }
 }
 
@@ -708,7 +713,7 @@ private fun MyShapes(shapes: List<CustomShape>, vm: NotebookViewModel) {
   var renaming by remember { mutableStateOf<CustomShape?>(null) }
   var deleting by remember { mutableStateOf<CustomShape?>(null) }
   Spacer(Modifier.height(12.dp))
-  SectionLabel("My shapes")
+  SectionLabel(stringResource(R.string.my_shapes))
   Spacer(Modifier.height(8.dp))
   if (shapes.isEmpty()) {
     Row(
@@ -718,7 +723,7 @@ private fun MyShapes(shapes: List<CustomShape>, vm: NotebookViewModel) {
       Icon(Icons.Outlined.AutoAwesome, null, tint = c.blue, modifier = Modifier.size(20.dp))
       Spacer(Modifier.width(10.dp))
       Text(
-        "Draw a shape you use a lot, circle it with the lasso and tap “Save as shape”. Holding the pen at the end of a stroke will then snap to it too.",
+        stringResource(R.string.draw_a_shape_you_use_a),
         style = MaterialTheme.typography.bodySmall,
         color = c.inkMuted,
       )
@@ -731,22 +736,22 @@ private fun MyShapes(shapes: List<CustomShape>, vm: NotebookViewModel) {
       Box {
         ShapeTile(shape.name, on, onClick = { vm.pickCustomShape(shape) }, onLongClick = { menuFor = shape.id }) { tint -> GeometryIcon(shape.geometry, tint, size = 30.dp) }
         DropdownMenu(expanded = menuFor == shape.id, onDismissRequest = { menuFor = null }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-          DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menuFor = null; renaming = shape })
-          DropdownMenuItem(text = { Text("Delete", color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = { menuFor = null; deleting = shape })
+          DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menuFor = null; renaming = shape })
+          DropdownMenuItem(text = { Text(stringResource(R.string.delete), color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = { menuFor = null; deleting = shape })
         }
       }
     }
   }
   Spacer(Modifier.height(6.dp))
-  Text("Press and hold a shape to rename or delete it.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+  Text(stringResource(R.string.press_and_hold_a_shape_to), style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
   renaming?.let { shape ->
-    NameDialog("Rename shape", shape.name, "Shape name", "Rename", onDismiss = { renaming = null }) {
+    NameDialog(stringResource(R.string.rename_shape), shape.name, stringResource(R.string.shape_name), stringResource(R.string.rename), onDismiss = { renaming = null }) {
       vm.renameCustomShape(shape.id, it)
       renaming = null
     }
   }
   deleting?.let { shape ->
-    ConfirmDialog("Delete “${shape.name}”?", "It will no longer be offered here or recognised when you hold the pen. Shapes already on your pages stay.", "Delete", destructive = true, onDismiss = { deleting = null }) {
+    ConfirmDialog(stringResource(R.string.delete_n, shape.name), stringResource(R.string.it_will_no_longer_be_offered), stringResource(R.string.delete), destructive = true, onDismiss = { deleting = null }) {
       vm.deleteCustomShape(shape.id)
       deleting = null
     }
@@ -853,7 +858,7 @@ private fun ReorderableColors(
       ) {
         ColorDot(Color(col), selected = col == selected, selection = ring) { onPick(col) }
         DropdownMenu(expanded = removeTarget == col, onDismissRequest = { removeTarget = null }) {
-          DropdownMenuItem(text = { Text("Remove colour") }, onClick = {
+          DropdownMenuItem(text = { Text(stringResource(R.string.remove_colour)) }, onClick = {
             onRemove(col)
             removeTarget = null
           })
@@ -870,7 +875,7 @@ private fun ReorderableColors(
       }
     }
     Box(
-      Modifier.size(38.dp).clip(CircleShape).clickable(onClickLabel = "Add a colour", onClick = onAdd),
+      Modifier.size(38.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.add_a_colour), onClick = onAdd),
       contentAlignment = Alignment.Center,
     ) {
       Canvas(Modifier.size(30.dp)) { dashedCircle(c.inkFaint, size.width / 2 - 2f) }
