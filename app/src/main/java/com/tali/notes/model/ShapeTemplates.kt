@@ -158,12 +158,22 @@ class ShapeTemplate internal constructor(
       }
     }
 
-  /** For the panel's tile and hold-to-shape: drawn at its usual size. */
+  /** For hold-to-shape: drawn at its usual size. */
   val icon: ShapeGeometry by lazy {
     when (mode) {
       Mode.LINE -> render(Frame(naturalW, 0f, defaults))
       else -> render(Frame(naturalW, naturalH, defaults))
     }
+  }
+
+  /**
+   * For the panel's tile: drawn in a frame that suits a small square ([ShapeTemplates.tileFrames]):
+   * shorter leads, so a resistor is a resistor and not a line, and fewer cells, nodes or rows, so a
+   * tree or a Gantt chart doesn't turn into a smudge.
+   */
+  val tile: ShapeGeometry by lazy {
+    val (w, h) = ShapeTemplates.tileFrames[id] ?: return@lazy icon
+    render(Frame(w, if (mode == Mode.LINE) 0f else h, defaults))
   }
 }
 
@@ -188,6 +198,9 @@ private fun sizeJoints(f: Frame, minW: Float, minH: Float) = listOf(widthJoint(f
 /** A circle's size: one dot on its right that sets its diameter. */
 private fun diameterJoint(f: Frame, min: Float) = Joint(Pt(min(f.w, f.h), min(f.w, f.h) / 2f)) { g, p -> max(p.x, min).let { d -> g.sized(w = d, h = d) } }
 
+/** A round shape's size from its box's bottom-right corner: off the circle, clear of dots on it. */
+private fun cornerSizeJoint(f: Frame, min: Float) = min(f.w, f.h).let { d -> Joint(Pt(d, d)) { g, p -> max(max(p.x, p.y), min).let { s -> g.sized(w = s, h = s) } } }
+
 private fun clampF(x: Float, lo: Float, hi: Float) = x.coerceIn(lo, hi)
 
 private fun count(x: Float, lo: Int, hi: Int) = x.roundToInt().coerceIn(lo, hi)
@@ -196,6 +209,38 @@ private fun deg(d: Float) = (d * PI / 180.0).toFloat()
 
 object ShapeTemplates {
   private val all = mutableMapOf<String, ShapeTemplate>()
+
+  /** Frames (width, height) the panel's tiles draw these in; the rest use their usual size. */
+  internal val tileFrames: Map<String, Pair<Float, Float>> =
+    mapOf(
+      // Line-like symbols: shorter leads so the symbol fills the tile.
+      "timeline" to (100f to 0f),
+      "heartbeat" to (110f to 0f),
+      "syringe" to (74f to 0f),
+      "spring" to (96f to 0f),
+      "damper" to (100f to 0f),
+      "shaft" to (100f to 0f),
+      "resistor" to (76f to 0f),
+      "capacitor" to (66f to 0f),
+      "inductor" to (80f to 0f),
+      "diode" to (70f to 0f),
+      "battery" to (76f to 0f),
+      "ac-source" to (76f to 0f),
+      "switch" to (80f to 0f),
+      "lamp" to (76f to 0f),
+      "pencil" to (96f to 0f),
+      "linked-list" to (138f to 0f),
+      // Long or busy ones: fewer cells, nodes or rows.
+      "array" to (112f to 28f),
+      "neuron" to (100f to 70f),
+      "binary-tree" to (110f to 80f),
+      "graph" to (100f to 90f),
+      "gantt" to (130f to 76f),
+      "org-chart" to (130f to 90f),
+      "coins" to (90f to 56f),
+      "database" to (90f to 84f),
+      "indifference" to (100f to 72f),
+    )
 
   fun get(id: String): ShapeTemplate? = all[id]
 
@@ -335,7 +380,9 @@ object ShapeTemplates {
       round = true, joints = { f ->
         val r = min(f.w, f.h) / 2f
         val c = Pt(f.w / 2f, f.h / 2f)
-        f.v.indices.map { i -> Joint(c + Pt.polar(r, deg(f.v[i]))) { g, p -> g.set(i, (atan2(p.y - c.y, p.x - c.x) * 180.0 / PI).toFloat()) } } + Joint(Pt(f.w / 2f, f.h)) { g, p -> max(p.y, 30f).let { d -> g.sized(w = d, h = d) } }
+        f.v.indices.map { i -> Joint(c + Pt.polar(r, deg(f.v[i]))) { g, p -> g.set(i, (atan2(p.y - c.y, p.x - c.x) * 180.0 / PI).toFloat()) } } +
+          // The size dot sits off the circle, so a slice's edge never lands on it.
+          cornerSizeJoint(f, 30f)
       },
     ) { f ->
       val r = min(f.w, f.h) / 2f
@@ -829,7 +876,7 @@ object ShapeTemplates {
   val lever =
     sized(
       "lever", 160f, 70f, 60f, 30f, listOf(0.5f),
-      joints = { f -> listOf(Joint(Pt(f.v(0, 0.5f) * f.w, f.h * 0.55f + f.h * 0.3f)) { g, p -> g.set(0, clampF(p.x / g.w, 0.08f, 0.92f)) }) + sizeJoints(f, 60f, 30f) },
+      joints = { f -> listOf(Joint(Pt(f.v(0, 0.5f) * f.w, f.h * 0.55f + f.h * 0.3f)) { g, p -> g.set(0, clampF(p.x / g.w, 0.08f, 0.92f)) }) + widthJoint(f, 60f) + topJoint(f, 30f, x = f.w * 0.04f) },
     ) { f ->
       val by = f.h * 0.55f
       val s = f.h * 0.3f
@@ -1144,7 +1191,7 @@ object ShapeTemplates {
             val a = ((atan2(p.y - c.y, p.x - c.x) * 180.0 / PI).toFloat() + 90f + 360f) % 360f
             g.set(0, (360f / max(a / 0.85f, 30f)).roundToInt().coerceIn(2, 8).toFloat())
           },
-          diameterJoint(f, 40f),
+          cornerSizeJoint(f, 40f),
         )
       },
     ) { f ->
@@ -1238,8 +1285,9 @@ object ShapeTemplates {
       val n = count(min(f.w, f.h) / 36f, 1, 7)
       for (k in 0 until n) {
         val s = 0.3f + 0.6f * (k + 1) / n
-        val a = Pt(0.08f * f.w + 0.1f * s * f.w, f.h - s * f.h * 0.95f)
-        val b = Pt(s * f.w * 0.95f, f.h - 0.08f * f.h - 0.1f * s * f.h)
+        // Each curve further out than the last at its ends too, so they never bunch together.
+        val a = Pt(0.04f * f.w + 0.24f * s * f.w, f.h - s * f.h * 0.95f)
+        val b = Pt(s * f.w * 0.95f, f.h - 0.04f * f.h - 0.24f * s * f.h)
         val corner = Pt(a.x, b.y)
         bentCurve(f, a, b, corner, 0.55f)
       }

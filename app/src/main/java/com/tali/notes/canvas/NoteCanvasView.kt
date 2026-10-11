@@ -1087,8 +1087,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun canRotateSelection() = selection.isNotEmpty() && selection.none { it is ImageItem || it is TextItem }
 
-  /** The rotate handle hangs below the middle of the selection (the menu sits above it). */
-  private fun rotateHandle(r: RectF) = Pt(r.centerX(), r.bottom + 30f * density)
+  /**
+   * The rotate handle hangs below the middle of the selection (the menu sits above it), and lower
+   * still when one of the shape's own dots sits under the middle (a lever's fulcrum, a neuron's
+   * axon), so the two never sit on each other.
+   */
+  private fun rotateHandle(r: RectF): Pt {
+    var y = r.bottom + ROTATE_DROP_DP * density
+    val shape = currentActiveShape()
+    if (shape != null && selection.size == 1 && shapeScreenSize(shape) >= TINY_SHAPE_DP * density) {
+      shape.geometry.handles().map(camera::toScreen)
+        .filter { abs(it.x - r.centerX()) < HANDLE_HIT_DP * 1.5f * density && it.y > r.bottom - HANDLE_HIT_DP * density }
+        .maxOfOrNull { it.y }
+        ?.let { y = max(y, it + ROTATE_DROP_DP * density) }
+    }
+    return Pt(r.centerX(), y)
+  }
 
   private fun drawRotateHandle(canvas: Canvas, r: RectF) {
     if (!canRotateSelection() || mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.HANDLE_DRAG) return
@@ -1319,6 +1333,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (dists[i] >= reach) return -1
     val area = screenRect(shape.bounds, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
     if (area.contains(screen.x, screen.y) && camera.toScreen(shape.bounds.center).dist(screen) < dists[i]) return -1
+    // A dot beside the rotate handle or a chip (a bar chart's corner, a Gantt row's end): the
+    // nearer of the two takes the touch, so the chips stay easy to grab.
+    if (shape.id == activeShapeId) {
+      selectionBounds?.let { sb ->
+        val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
+        val chips = listOfNotNull(resizeChip(r), moveChip(r), rotateHandle(r).takeIf { canRotateSelection() })
+        if (chips.any { it.dist(screen) < dists[i] }) return -1
+      }
+    }
     return i
   }
 
@@ -4367,6 +4390,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val LOOP_CLOSE_DP = 40f
     /** How far (dp, each way) the resize chip sits out from the selection's padded corner. */
     private const val RESIZE_CHIP_OFFSET_DP = 14f
+    /** How far below the selection (or the lowest dot under its middle) the rotate handle hangs. */
+    private const val ROTATE_DROP_DP = 30f
 
     /** How far (dp on screen) the Shapes tool has to be dragged before a shape appears; a tap draws nothing. */
     private const val SHAPE_START_DP = 12f

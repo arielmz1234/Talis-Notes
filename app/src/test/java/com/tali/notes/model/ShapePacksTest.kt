@@ -72,6 +72,17 @@ class ShapePacksTest {
     }
   }
 
+  @Test
+  fun noTwoJointsSitOnEachOther() {
+    for (s in shapes.filter { it.template != null }) {
+      for ((p0, p1) in listOf(Pt(40f, 60f) to Pt(240f, 200f), Pt(0f, 0f) to Pt(90f, 70f))) {
+        val g = if (s.mode == PackMode.LINE) s.create(p0, Pt(p1.x, p0.y)) else s.create(p0, p1)
+        val hs = g.handles()
+        for (i in hs.indices) for (j in i + 1 until hs.size) assertTrue("${s.label} joints $i and $j", hs[i].dist(hs[j]) >= 14f)
+      }
+    }
+  }
+
   private fun cells(g: ShapeGeometry) = ((g as ParamShape).drawn() as GroupShape).parts.count { it is PolyShape && it.closed }
 
   @Test

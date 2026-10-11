@@ -46,7 +46,7 @@ class PackShape(val id: String, val label: String, val mode: PackMode, private v
 
   /** For the panel's tile. */
   val icon: ShapeGeometry
-    get() = design ?: template?.icon ?: kind!!.inBox(Pt(0f, 0f), Pt(100f, 100f))
+    get() = design ?: template?.tile ?: kind!!.inBox(Pt(0f, 0f), Pt(100f, 100f))
 
   val drawnAsLine: Boolean
     get() = kind?.drawnAsLine ?: (mode == PackMode.LINE)
