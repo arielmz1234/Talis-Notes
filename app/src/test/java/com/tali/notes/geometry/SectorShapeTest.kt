@@ -87,4 +87,22 @@ class SectorShapeTest {
     val b = arc.withHandle(1, Pt.polar(100f, PI.toFloat() + 1.25f * tau)) as ArcShape
     assertEquals(90, b.degrees)
   }
+
+  @Test
+  fun arcEndsKeepItsSizeAndTheMiddleDotResizes() {
+    val arc = ArcShape(Pt(0f, 0f), 100f, 0f, PI.toFloat() / 2)
+    // An end dragged far out or close in only slides round: same centre, same size.
+    val far = arc.withHandle(1, Pt.polar(260f, PI.toFloat())) as ArcShape
+    assertEquals(100f, far.radius, 1e-4f)
+    assertEquals(Pt(0f, 0f), far.center)
+    assertEquals(180, far.degrees)
+    val near = arc.withHandle(0, Pt.polar(20f, -PI.toFloat() / 2)) as ArcShape
+    assertEquals(100f, near.radius, 1e-4f)
+    assertEquals(180, near.degrees)
+    // The middle dot: bigger, same turn.
+    assertEquals(3, arc.handles().size)
+    val big = arc.withHandle(2, Pt.polar(150f, PI.toFloat() / 4)) as ArcShape
+    assertEquals(150f, big.radius, 1e-3f)
+    assertEquals(90, big.degrees)
+  }
 }

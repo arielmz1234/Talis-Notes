@@ -250,8 +250,9 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
   // Mirrored, it runs the other way round from its (mirrored) start.
   override fun transformed(m: Affine) = copy(center = m.apply(center), radius = radius * m.scaleFactor(), start = m.mapAngle(start), sweep = if (m.mirrors) -sweep else sweep)
 
-  // A moment (the arc with an arrow) keeps its form: no end dots, only the resize chip.
-  override fun handles() = if (arrowEnd) emptyList() else listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep))
+  // A moment (the arc with an arrow) keeps its form: no end dots, only the resize chip. An arc has
+  // its two ends and, like a part circle, a dot in the middle of the curve.
+  override fun handles() = if (arrowEnd) emptyList() else listOf(center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep), center + Pt.polar(radius, start + sweep / 2))
 
   /** How far round the arc goes, in whole degrees (always positive). */
   val degrees: Int
@@ -259,16 +260,19 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
 
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
     val ang = (p - center).angle()
-    val r = max(4f, p.dist(center))
-    // The arc keeps its direction, and the turn wraps: going past a full circle starts again from
-    // nothing (361° is 1°), so an end can be dragged round either way without getting stuck.
+    // An end slides round the same circle, like a part circle's: the size stays put and only how
+    // far round it goes changes. The arc keeps its direction, and the turn wraps: going past a full
+    // circle starts again from nothing (361° is 1°), so an end can be dragged round either way.
     val dir = if (sweep < 0f) -1f else 1f
-    return if (index == 0) {
-      val end = start + sweep
-      val s = snapArc(positiveTurn(dir * (end - ang))) * dir
-      copy(start = end - s, sweep = s, radius = r)
-    } else {
-      copy(sweep = snapArc(positiveTurn(dir * (ang - start))) * dir, radius = r)
+    return when (index) {
+      0 -> {
+        val end = start + sweep
+        val s = snapArc(positiveTurn(dir * (end - ang))) * dir
+        copy(start = end - s, sweep = s)
+      }
+      1 -> copy(sweep = snapArc(positiveTurn(dir * (ang - start))) * dir)
+      // The middle: size and direction, keeping the same turn.
+      else -> copy(radius = max(4f, p.dist(center)), start = ang - sweep / 2)
     }
   }
 

@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -265,7 +266,7 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
       Spacer(Modifier.height(18.dp))
       Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).graphicsLayer { alpha = if (busy != null) 0.5f else 1f }, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (DriveBackup.available) {
-          RestoreChoice(Icons.Outlined.CloudDownload, "Google Drive", "Every notebook the app backed up there. It keeps backing up there too.", primary = true) {
+          RestoreChoice(Icons.Outlined.CloudDownload, "Google Drive", "Every notebook the app backed up there. It keeps backing up there too.") {
             drive("Restoring from Drive…") { token ->
               val r = DriveBackup.restore(context, token)
               DriveBackup.enable(context)
@@ -288,14 +289,21 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
   }
 }
 
-/** One way to restore: a tile with an icon, a name and a line about it. */
+/**
+ * One way to restore: a tile with an icon, a name and a line about it. All three look the same until
+ * touched (none is picked for her); pressed, a tile washes lilac and sinks in a little.
+ */
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.RestoreChoice(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, primary: Boolean = false, onClick: () -> Unit) {
+private fun androidx.compose.foundation.layout.RowScope.RestoreChoice(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, onClick: () -> Unit) {
   val c = Tali.colors
-  val tint = if (primary) c.accent else Color(if (c.isDark) 0xFF6FD3B5 else 0xFF1C8466)
+  val tint = Color(if (c.isDark) 0xFF6FD3B5 else 0xFF1C8466)
+  val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+  val pressed by press.collectIsPressedAsState()
+  val wash by androidx.compose.animation.animateColorAsState(if (pressed) c.accentSoft else c.surface.copy(alpha = 0.7f), tween(if (pressed) 90 else 220), label = "wash")
+  val sink by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.97f else 1f, tween(if (pressed) 90 else 220), label = "sink")
   Column(
-    Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp)).background(if (primary) c.accentSoft else c.surface.copy(alpha = 0.7f))
-      .border(1.dp, if (primary) tint.copy(alpha = 0.35f) else c.line, RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(14.dp),
+    Modifier.weight(1f).fillMaxHeight().graphicsLayer { scaleX = sink; scaleY = sink }.clip(RoundedCornerShape(18.dp)).background(wash)
+      .border(1.dp, c.line, RoundedCornerShape(18.dp)).clickable(interactionSource = press, indication = null, onClick = onClick).padding(14.dp),
   ) {
     Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
     Spacer(Modifier.height(8.dp))
