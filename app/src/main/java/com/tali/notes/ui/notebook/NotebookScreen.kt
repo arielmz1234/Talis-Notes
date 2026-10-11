@@ -307,6 +307,35 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
     }
+  // PDFs and pictures from other apps (opened with, shared to, or dragged onto the app).
+  suspend fun addFiles(kind: com.tali.notes.Incoming.Kind, uris: List<android.net.Uri>, at: com.tali.notes.geometry.Pt?) {
+    val canvas = holder.view ?: return
+    when (kind) {
+      com.tali.notes.Incoming.Kind.PDF ->
+        for (uri in uris) {
+          val pages = vm.importPdf(uri) ?: continue
+          canvas.runSafely { insertPages(pages) }
+          vm.showHint(if (pages.size == 1) "Added 1 page — write right on it" else "Added ${pages.size} pages — write right on them")
+        }
+      com.tali.notes.Incoming.Kind.IMAGE ->
+        uris.forEachIndexed { i, uri ->
+          val result = vm.importImage(uri)
+          if (result == null) vm.showHint("That picture couldn't be opened") else canvas.runSafely { insertImage(result.first, result.second, at, i) }
+        }
+      // A backup dropped on the page asks to restore it, as when it's opened with the app.
+      com.tali.notes.Incoming.Kind.BACKUP -> com.tali.notes.Incoming.offer.value = com.tali.notes.Incoming.Files(kind, uris, uris.firstOrNull()?.let { com.tali.notes.Incoming.nameOf(context, it) })
+    }
+  }
+  val incoming by com.tali.notes.Incoming.forNotebook.collectAsState()
+  val waiting = incoming[vm.notebookId] != null
+  LaunchedEffect(waiting, holder.view, doc != null) {
+    val canvas = holder.view
+    if (!waiting || doc == null || canvas == null) return@LaunchedEffect
+    while (canvas.width == 0) delay(16)
+    val files = com.tali.notes.Incoming.take(vm.notebookId) ?: return@LaunchedEffect
+    // Not in this effect: taking the files restarts it.
+    scope.launch { addFiles(files.kind, files.uris, null) }
+  }
   val savePdf =
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
       val file = pendingPdf
@@ -367,6 +396,16 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 
                 override fun onPasteOffer(offer: com.tali.notes.canvas.PasteOffer?) {
                   pasteOffer = offer
+                }
+
+                override fun onDropped(drop: NoteCanvasView.Dropped) {
+                  val text = drop.text
+                  if (text != null) {
+                    holder.view?.runSafely { insertText(text, drop.at, settings.activeSlot.color) }
+                    return
+                  }
+                  val files = com.tali.notes.Incoming.classify(context, drop.uris)
+                  if (files == null) vm.showHint("That can't go on a page") else scope.launch { addFiles(files.kind, files.uris, drop.at) }
                 }
 
                 override fun onScreenshot(file: java.io.File) {

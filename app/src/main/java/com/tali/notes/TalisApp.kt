@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.tali.notes.data.NotesRepository
 import com.tali.notes.data.SettingsStore
+import com.tali.notes.backup.AutoBackup
 import com.tali.notes.backup.DriveBackup
 import com.tali.notes.ink.Brushes
 import kotlinx.coroutines.CoroutineScope
@@ -25,8 +26,13 @@ class TalisApp : Application() {
     Brushes.init(resources)
     repository = NotesRepository(this)
     settings = SettingsStore(this)
-    // Every saved edit means the Drive backup has something new to upload.
-    CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { repository.revision.drop(1).collect { DriveBackup.markDirty(this@TalisApp) } }
+    // Every saved edit means the backups have something new to save.
+    CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+      repository.revision.drop(1).collect {
+        DriveBackup.markDirty(this@TalisApp)
+        AutoBackup.markDirty(this@TalisApp)
+      }
+    }
   }
 }
 

@@ -689,23 +689,37 @@ private fun Sidebar(
     }
     val context = LocalContext.current
     val drive by DriveBackup.status(context).collectAsState()
+    val auto by com.tali.notes.backup.AutoBackup.status(context).collectAsState()
     Row(
       Modifier.padding(bottom = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Backups", onClick = onBackup).padding(horizontal = 10.dp, vertical = 10.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       val onDrive = DriveBackup.available && drive.enabled
-      Icon(if (onDrive) Icons.Outlined.CloudDone else Icons.Outlined.CheckCircle, null, tint = c.blue, modifier = Modifier.size(16.dp))
+      // Backing up by itself into her own file shows the same way, with when it last saved.
+      val onAuto = !onDrive && auto.enabled
+      val error = if (onDrive) drive.error else if (onAuto) auto.error else null
+      Icon(if (onDrive || onAuto) Icons.Outlined.CloudDone else Icons.Outlined.CheckCircle, null, tint = c.blue, modifier = Modifier.size(16.dp))
       Spacer(Modifier.width(8.dp))
       Column(Modifier.weight(1f)) {
-        Text(if (onDrive) "Backed up to Google Drive" else "Saved on this tablet", style = MaterialTheme.typography.labelMedium, color = c.inkMuted)
         Text(
           when {
-            onDrive && drive.error != null -> drive.error!!
+            onDrive -> "Backed up to Google Drive"
+            onAuto -> "Backs up by itself"
+            else -> "Saved on this tablet"
+          },
+          style = MaterialTheme.typography.labelMedium,
+          color = c.inkMuted,
+        )
+        Text(
+          when {
+            error != null -> error
             onDrive && drive.lastSuccess > 0 -> "Last backup ${relativeTime(drive.lastSuccess)}"
+            onAuto && auto.lastSuccess > 0 -> "Last: ${backedUpAt(auto.lastSuccess)}"
             else -> "Tap for backups"
           },
           style = MaterialTheme.typography.bodySmall,
-          color = if (onDrive && drive.error != null) c.danger else c.inkFaint,
+          color = if (error != null) c.danger else c.inkFaint,
+          maxLines = 2,
         )
       }
       Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Backups", tint = c.inkFaint, modifier = Modifier.size(18.dp))

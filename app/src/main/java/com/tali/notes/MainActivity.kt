@@ -17,6 +17,8 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    // Opened with a PDF, picture or backup (not again when the screen turns).
+    if (savedInstanceState == null) Incoming.receive(this, intent)
     setContent {
       // Light, dark or following the tablet, and the cloudy or minimal look, from Settings.
       val s by talisApp.settings.settings.collectAsState()
@@ -58,6 +60,13 @@ class MainActivity : ComponentActivity() {
     }
   }
 
+  // A PDF, picture or backup opened with or shared to the app while it was already open.
+  override fun onNewIntent(intent: android.content.Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    Incoming.receive(this, intent)
+  }
+
   // The S Pen's hover and button events go to the notebook canvas from here (see PenEvents).
   override fun dispatchGenericMotionEvent(ev: android.view.MotionEvent): Boolean {
     com.tali.notes.canvas.PenEvents.dispatch(ev)
@@ -68,5 +77,6 @@ class MainActivity : ComponentActivity() {
     super.onStop()
     // She put the tablet down or switched apps: a good moment to back up.
     DriveBackup.backupSoon(this)
+    com.tali.notes.backup.AutoBackup.backupSoon(this)
   }
 }

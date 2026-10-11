@@ -12,6 +12,8 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import androidx.compose.runtime.collectAsState
+import com.tali.notes.ui.library.IncomingCard
 import com.tali.notes.ui.library.LibraryScreen
 import com.tali.notes.ui.notebook.NotebookScreen
 import kotlinx.serialization.Serializable
@@ -27,6 +29,26 @@ fun MainNavigation() {
   // The library always stays at the bottom: Back there leaves the app, and a quick double tap on a
   // notebook's back arrow can't pop it too (an empty stack would crash).
   val back: () -> Unit = { if (backStack.size > 1) backStack.removeLastOrNull() else activity?.finish() }
+  // A PDF, pictures or a backup from another app: she picks where they go, then that notebook opens
+  // (in place of one already open, so Back still goes to the library) and adds them.
+  val offer = Incoming.offer.collectAsState().value
+  if (offer != null) {
+    val open = (backStack.lastOrNull() as? Notebook)?.id
+    IncomingCard(
+      offer,
+      openNotebook = open,
+      onGo = { id ->
+        Incoming.offer.value = null
+        Incoming.sendTo(id, offer)
+        when {
+          id == open -> Unit
+          open != null -> backStack[backStack.lastIndex] = Notebook(id)
+          else -> backStack.add(Notebook(id))
+        }
+      },
+      onDismiss = { Incoming.offer.value = null },
+    )
+  }
   NavDisplay(
     backStack = backStack,
     onBack = back,

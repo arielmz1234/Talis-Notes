@@ -104,6 +104,9 @@ interface CanvasHost {
 
   /** A hold on the page with something copied: offer to paste it there (null takes the offer away). */
   fun onPasteOffer(offer: PasteOffer?) = Unit
+
+  /** Something was dragged in from another app and let go on the page. */
+  fun onDropped(drop: NoteCanvasView.Dropped) = Unit
 }
 
 /** Paste offered at [screenX], [screenY] (pixels in the canvas), which is [at] in the world. */
@@ -424,6 +427,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Ink sets up its front-buffered drawing surface on the first stroke unless asked earlier,
     // which made the first stroke on a page lag or only appear once the pen lifted.
     doOnAttach { inProgress.eagerInit() }
+    // Pictures, PDFs and text dragged over from another app side by side.
+    setOnDragListener { _, e ->
+      when (e.action) {
+        android.view.DragEvent.ACTION_DRAG_STARTED -> doc != null && droppable(e.clipDescription)
+        android.view.DragEvent.ACTION_DROP -> {
+          runCatching { acceptDrop(e) }.onFailure { com.tali.notes.CrashLog.recovered(context, it) }
+          true
+        }
+        else -> true
+      }
+    }
   }
 
   /**
@@ -3296,7 +3310,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   /** Puts a picture in the middle of the current view, sized to fit comfortably. */
-  fun insertImage(file: String, bitmap: android.graphics.Bitmap) {
+  /**
+   * Adds a picture in the middle of the view, or centred on [at] (where it was dropped). [index]
+   * steps each of several pictures added at once a little down and right, so none hides another.
+   */
+  fun insertImage(file: String, bitmap: android.graphics.Bitmap, at: Pt? = null, index: Int = 0) {
     val d = doc ?: return
     val view = camera.visibleWorld(width, height)
     val maxW = view.width * 0.6f
@@ -3304,7 +3322,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val s = minOf(maxW / bitmap.width, maxH / bitmap.height, 1f / density * 2f)
     val w = bitmap.width * s
     val h = bitmap.height * s
-    val c = view.center
+    val step = index * 36f / camera.zoom
+    val c = (at ?: view.center).let { Pt(it.x + step, it.y + step) }
     images.put(file, bitmap)
     val placed = ImageItem(d.newId(), d.nextZ(), file, Rect(c.x - w / 2, c.y - h / 2, c.x + w / 2, c.y + h / 2))
     // On A4 pages it lands on the page in view, not half in a gap.
@@ -3462,6 +3481,37 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     showForTyping(edit.origin.y)
     host.onEditText(edit)
+  }
+
+  /** Text dragged in from another app (split screen) becomes a text box where it was dropped. */
+  fun insertText(text: String, at: Pt, color: Int) {
+    val d = doc ?: return
+    val trimmed = text.trim().ifEmpty { return }
+    val view = camera.visibleWorld(width, height)
+    val w = minOf(view.width * 0.5f, 700f)
+    val placed = TextItem(d.newId(), d.nextZ(), trimmed, Pt(at.x - w / 2f, at.y), w, TEXT_SIZE, color)
+    val item = pageNudge(listOf(placed))?.let { placed.transformed(it) } ?: placed
+    d.commit(Change(emptyList(), listOf(item)))
+    selectSingle(item)
+  }
+
+  /** What was dragged in from another app: files (with their types) or plain text, and where it was let go. */
+  class Dropped(val uris: List<android.net.Uri>, val text: String?, val at: Pt)
+
+  private fun droppable(desc: android.content.ClipDescription?): Boolean =
+    desc != null && listOf("image/*", "application/pdf", "application/zip", "text/plain", "text/html").any { desc.hasMimeType(it) }
+
+  /** Takes a drop from another app side by side (split screen): pictures, PDFs or text. */
+  private fun acceptDrop(e: android.view.DragEvent) {
+    val clip = e.clipData ?: return
+    var ctx = context
+    while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) ctx = ctx.baseContext
+    // Without this the other app's files can't be read.
+    (ctx as? android.app.Activity)?.requestDragAndDropPermissions(e)
+    val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+    val text = if (uris.isEmpty()) (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).coerceToText(context)?.toString() }.joinToString("\n").ifBlank { null } else null
+    if (uris.isEmpty() && text == null) return
+    host.onDropped(Dropped(uris, text, camera.toWorld(e.x, e.y)))
   }
 
   /** Picks up an existing text block in the editor (a second tap types); it's hidden here while the editor shows it. */

@@ -38,6 +38,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tali.notes.CrashLog
+import androidx.compose.material.icons.outlined.CloudSync
+import com.tali.notes.backup.AutoBackup
 import com.tali.notes.backup.BackupArchive
 import com.tali.notes.backup.DriveBackup
 import com.tali.notes.data.NotesRepository
@@ -107,9 +109,12 @@ fun BackupDialog(onDismiss: () -> Unit) {
     CardBody {
     BackupCard(Icons.Outlined.TabletAndroid, "On this tablet", "Every stroke is saved the moment you write it, even without internet.")
     Spacer(Modifier.height(10.dp))
+    AutoCard(onRun = ::run)
+    Spacer(Modifier.height(10.dp))
     BackupCard(Icons.Outlined.FolderZip, "Backup file", "Everything in one file: notebooks, pictures, pens, colours and your shapes. Keep it in Files, on a computer, or send it to yourself.") {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PrimaryButton("Save backup file") { saveFile.launch(BackupArchive.fileName()) }
+        // The one to set up is the automatic backup above; this is the extra copy.
+        QuietButton("Save backup file") { saveFile.launch(BackupArchive.fileName()) }
         QuietButton("Restore from file") { openFile.launch(arrayOf(BackupArchive.MIME, "application/octet-stream")) }
       }
     }
@@ -143,6 +148,61 @@ private fun BackupCard(icon: ImageVector, title: String, body: String, actions: 
         Spacer(Modifier.height(12.dp))
         actions()
       }
+    }
+  }
+}
+
+/** "Today, 14:20", "Yesterday, 09:05" or "12 Oct, 18:40": when the last automatic backup was saved. */
+fun backedUpAt(millis: Long, now: Long = System.currentTimeMillis()): String {
+  val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.UK).format(java.util.Date(millis))
+  val day = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+  val today = java.util.Calendar.getInstance().apply { timeInMillis = now }
+  fun same(a: java.util.Calendar, b: java.util.Calendar) = a.get(java.util.Calendar.YEAR) == b.get(java.util.Calendar.YEAR) && a.get(java.util.Calendar.DAY_OF_YEAR) == b.get(java.util.Calendar.DAY_OF_YEAR)
+  val yesterday = (today.clone() as java.util.Calendar).apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+  val date =
+    when {
+      same(day, today) -> "today"
+      same(day, yesterday) -> "yesterday"
+      else -> java.text.SimpleDateFormat("d MMM", java.util.Locale.UK).format(java.util.Date(millis))
+    }
+  return "$date, $time"
+}
+
+/** The backup that saves itself into one file she picked once (her Drive, OneDrive, the tablet…). */
+@Composable
+private fun AutoCard(onRun: (String, suspend () -> String) -> Unit) {
+  val c = Tali.colors
+  val context = LocalContext.current
+  val status by AutoBackup.status(context).collectAsState()
+  val pick =
+    rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { uri ->
+      if (uri != null) onRun("Saving backup…") { AutoBackup.choose(context, uri) }
+    }
+  BackupCard(
+    if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudSync,
+    "Back up by itself",
+    if (status.enabled) "Saves a fresh backup a couple of minutes after you finish, and once a day, into “${status.fileName ?: AutoBackup.FILE_NAME}” ${if (status.place == "this tablet") "on" else "in"} ${status.place ?: "the place you chose"}."
+    else "Choose a place once (Google Drive is a good one) and the app keeps one backup file there up to date by itself. Free, no sign-in.",
+  ) {
+    if (status.enabled) {
+      Text(
+        when {
+          status.running -> "Backing up now…"
+          status.error != null -> status.error!!
+          status.lastSuccess > 0 -> "Last backed up: ${backedUpAt(status.lastSuccess)}"
+          else -> "No backup yet"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = if (status.error != null) c.danger else c.inkFaint,
+      )
+      Spacer(Modifier.height(10.dp))
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        QuietButton("Back up now") { onRun("Backing up…") { if (AutoBackup.backupNow(context)) "Backed up." else AutoBackup.status(context).value.error ?: "Couldn't save the backup" } }
+        QuietButton("Change place") { pick.launch(AutoBackup.FILE_NAME) }
+        QuietButton("Turn off") { AutoBackup.turnOff(context) }
+      }
+    } else {
+      PrimaryButton("Choose where to save") { pick.launch(AutoBackup.FILE_NAME) }
     }
   }
 }
