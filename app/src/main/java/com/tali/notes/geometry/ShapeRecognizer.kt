@@ -25,6 +25,8 @@ import kotlin.math.sqrt
  */
 object ShapeRecognizer {
   private const val DEG = (PI / 180).toFloat()
+  /** A bend gentler than 130° that sticks out less than this share of the shape's size is her hand, not a corner. */
+  private const val GENTLE_BEND = 0.14f
 
   /**
    * Like [recognize], but also tries her own saved shapes. A straight line always stays a line (so
@@ -248,23 +250,34 @@ object ShapeRecognizer {
     return if (poly.size in 3..12) poly else null
   }
 
+  /**
+   * Takes away corners that aren't really corners, weakest first: nearly straight ones, ones on a
+   * tiny edge, and gentle bends that stick out only a little from the line between their neighbours
+   * (a side that drifts up partway, or a small bump: her hand, not a corner she meant). A real
+   * corner of a pentagon or hexagon sticks out a quarter or more of the shape's size.
+   */
   private fun mergeFlatCorners(input: List<Pt>, minEdge: Float): List<Pt> {
+    val diag = minEdge * 10f
     val poly = input.toMutableList()
-    var changed = true
-    while (changed && poly.size > 3) {
-      changed = false
+    while (poly.size > 3) {
+      var weakest = -1
+      var weakestHeight = Float.MAX_VALUE
       for (i in poly.indices) {
         val prev = poly[(i - 1 + poly.size) % poly.size]
         val cur = poly[i]
         val next = poly[(i + 1) % poly.size]
-        val flat = Geo.interiorAngle(prev, cur, next) > 155f * DEG
+        val angle = Geo.interiorAngle(prev, cur, next)
+        val height = Geo.distToSegment(cur, prev, next)
+        val flat = angle > 155f * DEG
         val tiny = cur.dist(next) < minEdge * 0.5f
-        if (flat || tiny) {
-          poly.removeAt(i)
-          changed = true
-          break
+        val gentle = angle > 130f * DEG && height < GENTLE_BEND * diag
+        if ((flat || tiny || gentle) && height < weakestHeight) {
+          weakest = i
+          weakestHeight = height
         }
       }
+      if (weakest < 0) break
+      poly.removeAt(weakest)
     }
     return poly
   }

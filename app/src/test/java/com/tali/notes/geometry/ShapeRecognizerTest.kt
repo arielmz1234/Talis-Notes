@@ -139,6 +139,26 @@ class ShapeRecognizerTest {
   }
 
   @Test
+  fun aSideThatDriftsUpPartwayIsStillOneSide() {
+    // The top side drifts up a little halfway along (her hand moving up a bit): a rectangle, not a
+    // five- or six-cornered shape.
+    val step = wobbly(Pt(0f, 0f), Pt(150f, 0f), Pt(175f, -22f), Pt(320f, -26f), Pt(322f, 160f), Pt(-2f, 162f), Pt(0f, 0f))
+    val a = ShapeRecognizer.recognize(step)
+    assertTrue("got $a", a is PolyShape && a.closed && a.points.size == 4)
+    // A bump in a side.
+    val bump = wobbly(Pt(0f, 0f), Pt(300f, 0f), Pt(302f, 80f), Pt(322f, 100f), Pt(300f, 120f), Pt(300f, 200f), Pt(0f, 200f), Pt(0f, 0f))
+    val b = ShapeRecognizer.recognize(bump)
+    assertTrue("got $b", b is PolyShape && b.closed && b.points.size == 4)
+  }
+
+  @Test
+  fun pentagonKeepsItsCorners() {
+    val corners = List(6) { i -> Pt(100f * cos(-PI / 2 + 2 * PI * i / 5).toFloat(), 100f * sin(-PI / 2 + 2 * PI * i / 5).toFloat()) }
+    val shape = ShapeRecognizer.recognize(wobbly(*corners.toTypedArray(), jitter = 2f))
+    assertTrue("got $shape", shape is PolyShape && shape.points.size == 5)
+  }
+
+  @Test
   fun hexagonIsNotMistakenForCircle() {
     val corners = List(7) { i -> Pt(100f * cos(2 * PI * i / 6).toFloat(), 100f * sin(2 * PI * i / 6).toFloat()) }
     val shape = ShapeRecognizer.recognize(wobbly(*corners.toTypedArray(), jitter = 2f))

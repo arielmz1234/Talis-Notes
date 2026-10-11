@@ -222,8 +222,18 @@ class SettingsStore(context: Context) {
     PaperRenderer.lineWeight = next.paperLineWeight
     PaperRenderer.weights = next.paperWeights
     PaperRenderer.looks = next.paperLooks
-    prefs.edit().putString("json", ItemCodec.json.encodeToString(AppSettings.serializer(), next)).apply()
+    // Turning all her settings (saved shapes, papers, colours…) into text and writing them takes a
+    // while, so it's done off the main thread: done there, a colour picked in the pen panel froze the
+    // ring's glide for long enough that it jumped. Only the newest settings are written.
+    pending.set(next)
+    writer.execute {
+      val latest = pending.getAndSet(null) ?: return@execute
+      prefs.edit().putString("json", ItemCodec.json.encodeToString(AppSettings.serializer(), latest)).apply()
+    }
   }
+
+  private val pending = java.util.concurrent.atomic.AtomicReference<AppSettings?>(null)
+  private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "settings-writer").apply { isDaemon = true } }
 
   fun exportJson(): String = ItemCodec.json.encodeToString(AppSettings.serializer(), _settings.value)
 

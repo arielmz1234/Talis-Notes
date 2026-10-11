@@ -663,9 +663,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     val custom = customPaperOf(meta.value, settings.value)
     viewModelScope.launch(Dispatchers.Default) {
       if (pages != null) {
-        // A paged notebook previews the top of the page she was on, like a notebook lying open.
-        val layout = pageLayout
-        val page = layout.rect(layout.indexAt(visible.top + visible.height * 0.4f).coerceIn(0, pages - 1))
+        // A paged notebook previews the top of its first page, like a notebook's cover page (it
+        // still opens where she left off: that's the saved viewport, not the preview).
+        val page = pageLayout.rect(0)
         val region = Rect(page.left, page.top, page.right, minOf(page.bottom, page.top + page.width / 1.32f))
         val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page, clip = pageClip()) }.getOrNull() ?: return@launch
         repo.saveThumbnail(notebookId, bmp)

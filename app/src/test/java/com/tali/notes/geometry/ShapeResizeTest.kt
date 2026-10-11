@@ -39,8 +39,9 @@ class ShapeResizeTest {
   }
 
   @Test
-  fun diamondCornerMovesOnItsOwn() {
-    val d = ShapeKind.DIAMOND.create(Pt(0f, 0f), Pt(100f, 60f)) as PolyShape
+  fun anOlderPolygonsCornerMovesOnItsOwn() {
+    // A polygon without a form (drawn before forms, or recognised from her drawing) keeps free corners.
+    val d = (ShapeKind.DIAMOND.create(Pt(0f, 0f), Pt(100f, 60f)) as PolyShape).copy(form = null)
     val out = d.withHandle(0, Pt(70f, -60f)) as PolyShape
     assertTrue(out.points[0].near(Pt(70f, -60f)))
     for (i in 1 until d.points.size) assertTrue(out.points[i].near(d.points[i]))
@@ -55,12 +56,10 @@ class ShapeResizeTest {
   }
 
   @Test
-  fun starPointMovesOnItsOwn() {
+  fun aStarKeepsItsForm() {
     val s = ShapeKind.STAR.create(Pt(0f, 0f), Pt(100f, 100f)) as PolyShape
-    val target = s.points[0] + Pt(10f, -50f)
-    val out = s.withHandle(0, target) as PolyShape
-    assertTrue(out.points[0].near(target))
-    for (i in 1 until s.points.size) assertTrue(out.points[i].near(s.points[i]))
+    assertTrue(s.handles().isEmpty())
+    assertEquals(s, s.withHandle(0, s.points[0] + Pt(10f, -50f)))
     assertTrue(abs(PI) > 0)
   }
 }

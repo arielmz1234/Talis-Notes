@@ -92,6 +92,11 @@ data class PolyShape(
   val rotation: Float = 0f,
   /** A hand-drawn line (from a saved shape): drawn as a smooth curve through its points, not straight bits. */
   val smooth: Boolean = false,
+  /**
+   * Which basic shape it was drawn as, so it keeps that form: only the dots that make sense for it
+   * (null: an older shape or one recognised from her drawing, whose corners each move freely).
+   */
+  val form: PolyForm? = null,
 ) : ShapeGeometry {
   override fun paths(penSize: Float) = listOf(if (closed) points + points.first() else if (smooth) Geo.smooth(points) else points)
 
@@ -103,6 +108,9 @@ data class PolyShape(
   override fun handles() =
     when {
       smooth -> emptyList()
+      form == PolyForm.REGULAR -> emptyList()
+      form == PolyForm.DIAMOND && points.size == 4 -> listOf(points[1], points[2])
+      (form == PolyForm.PARALLELOGRAM || form == PolyForm.TRAPEZOID) && points.size == 4 -> listOf(points[0])
       isRect() -> points.indices.map { i -> (points[i] + points[(i + 1) % 4]) * 0.5f }
       else -> points
     }
@@ -172,7 +180,8 @@ data class PolyShape(
    * other polygon's dots move their own corners. (Resizing the whole shape is the resize chip's job.)
    */
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
-    if (smooth) return this
+    if (smooth || form == PolyForm.REGULAR) return this
+    if (form != null && points.size == 4) withForm(index, p)?.let { return it }
     if (isRect()) return withSide(index, p)
     // Anything but a rectangle or square (a pentagon, a star, a polygon recognised from her
     // drawing): each dot moves its own corner, so its joints can be shaped freely. (The resize
@@ -180,6 +189,57 @@ data class PolyShape(
     return copy(points = points.toMutableList().also { it[index] = p })
   }
 }
+
+/**
+ * A basic shape's own dot, in its own frame (turned with it, and right even when mirrored):
+ * a diamond's right and bottom points stretch it evenly about its middle (snapping to a square
+ * diamond); a parallelogram's top-left corner sets its slant (the bottom side stays, snapping
+ * upright); a trapezoid's top-left corner sets how narrow its top is, both sides alike.
+ */
+private fun PolyShape.withForm(index: Int, p: Pt): ShapeGeometry? {
+  val c = Geo.centroid(points)
+  val local = points.map { (it - c).rotated(-rotation) }
+  val target = (p - c).rotated(-rotation)
+  val out: List<Pt> =
+    when (form) {
+      PolyForm.DIAMOND -> {
+        // Points: top, right, bottom, left, each on its own axis about the middle.
+        var hw = abs(local[1].x)
+        var hh = abs(local[2].y)
+        if (index == 0) hw = max(abs(target.x), hh * MIN_SCALE) else hh = max(abs(target.y), hw * MIN_SCALE)
+        if (abs(hw - hh) < max(hw, hh) * SQUARE_SNAP) if (index == 0) hw = hh else hh = hw
+        val sx = if (local[1].x < 0f) -1f else 1f
+        val sy = if (local[2].y < 0f) -1f else 1f
+        listOf(Pt(0f, -hh * sy), Pt(hw * sx, 0f), Pt(0f, hh * sy), Pt(-hw * sx, 0f))
+      }
+      PolyForm.PARALLELOGRAM -> {
+        // Points: top-left, top-right, bottom-right, bottom-left; the bottom side stays.
+        val x0 = local[3].x
+        val a = local[2].x - local[3].x
+        var slant = (target.x - x0).coerceIn(-2 * abs(a), 2 * abs(a))
+        if (abs(slant) < abs(a) * 0.03f) slant = 0f
+        val t = local[0].y
+        listOf(Pt(x0 + slant, t), Pt(x0 + slant + a, t), local[2], local[3])
+      }
+      PolyForm.TRAPEZOID -> {
+        // Points: top-left, top-right, bottom-right, bottom-left; the bottom side stays.
+        val xl = local[3].x
+        val xr = local[2].x
+        val w = xr - xl
+        val sgn = if (w < 0f) -1f else 1f
+        var inset = ((target.x - xl) * sgn).coerceIn(-abs(w) * 0.45f, abs(w) * 0.48f)
+        if (abs(inset) < abs(w) * 0.02f) inset = 0f
+        val t = local[0].y
+        listOf(Pt(xl + inset * sgn, t), Pt(xr - inset * sgn, t), local[2], local[3])
+      }
+      else -> return null
+    }
+  return copy(points = out.map { c + it.rotated(rotation) })
+}
+
+/** The basic shapes that keep their form (see [PolyShape.form]). */
+@Serializable
+enum class PolyForm { DIAMOND, PARALLELOGRAM, TRAPEZOID, REGULAR }
 
 private const val MIN_SCALE = 0.05f
 /** How close to square (as a share of the side) a rectangle being stretched snaps to a square. */
@@ -285,6 +345,40 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
     }
   }
 }
+
+/**
+ * A smooth curve through its dots (Catmull-Rom, no corners): drawn from where the pen landed to
+ * where it lifted as a gentle bow with [CURVE_DOTS] dots spread along it, straight stretches
+ * included, so any part of it can be bent. Each dot moves on its own.
+ */
+@Serializable
+@SerialName("curve")
+data class CurveShape(val points: List<Pt>) : ShapeGeometry {
+  override fun paths(penSize: Float): List<List<Pt>> = listOf(Geo.smooth(points, cornerDeg = 180f))
+
+  override fun transformed(m: Affine) = copy(points = points.map(m::apply))
+
+  override fun handles() = points
+
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry = copy(points = points.toMutableList().also { if (index in it.indices) it[index] = p })
+
+  companion object {
+    /** A gentle bow from [a] to [b] (bulging to the left of the way it's drawn), dots evenly along it. */
+    fun between(a: Pt, b: Pt): CurveShape {
+      val d = b - a
+      val len = d.length()
+      val normal = if (len < 1e-3f) Pt(0f, -1f) else Pt(d.y / len, -d.x / len)
+      val bulge = len * 0.2f
+      return CurveShape(List(CURVE_DOTS) { i ->
+        val t = i / (CURVE_DOTS - 1f)
+        if (i == 0) a else if (i == CURVE_DOTS - 1) b else a + d * t + normal * (bulge * kotlin.math.sin(PI.toFloat() * t))
+      })
+    }
+  }
+}
+
+/** How many dots a new curve has (both ends and three between). */
+const val CURVE_DOTS = 5
 
 /**
  * Part of a circle, closed like a slice of pie: [sweep] of a full turn (so 50% is a half circle with
@@ -549,6 +643,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
   CIRCLE("Circle", ShapeGroup.BASIC),
   ELLIPSE("Ellipse", ShapeGroup.BASIC),
   ARC("Arc", ShapeGroup.BASIC),
+  CURVE("Curve", ShapeGroup.BASIC),
   PART_CIRCLE("Part circle", ShapeGroup.BASIC),
   TRIANGLE("Triangle", ShapeGroup.BASIC),
   SQUARE("Square", ShapeGroup.BASIC),
@@ -585,6 +680,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       FIXED_SUPPORT -> fixedSupport(p0, if (p0.dist(p1) < 4f) p0 + Pt(0f, 40f) else p1)
       POINT_LOAD -> LineShape(p0, p1, arrowEnd = true)
       MOMENT -> ArcShape(p0, max(p0.dist(p1), 6f), (0.75 * PI).toFloat(), (1.5 * PI).toFloat(), arrowEnd = true)
+      CURVE -> CurveShape.between(p0, p1)
       else -> inBox(p0, p1)
     }
 
@@ -607,6 +703,7 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
       // An ellipse can be stretched by its dots, and snaps round into a circle when close.
       ELLIPSE -> EllipseShape(c, w / 2f, h / 2f, stretchable = true).let { e -> if (abs(e.rx - e.ry) < max(e.rx, e.ry) * SQUARE_SNAP) e.copy(rx = max(e.rx, e.ry), ry = max(e.rx, e.ry)) else e }
       ARC -> ArcShape(c, side / 2f, PI.toFloat(), PI.toFloat())
+      CURVE -> CurveShape.between(Pt(l, b - h * 0.15f), Pt(r, t + h * 0.15f))
       // From the centre outwards, a half to start with; its end dots change the amount.
       PART_CIRCLE -> SectorShape.of(p0, p1, 0.5f)
       // One triangle: each corner moves on its own and snaps to tidy angles.
@@ -620,12 +717,12 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
           val q = Pt(p0.x + sx * side, p0.y + sy * side)
           PolyShape(listOf(Pt(min(p0.x, q.x), min(p0.y, q.y)), Pt(max(p0.x, q.x), min(p0.y, q.y)), Pt(max(p0.x, q.x), max(p0.y, q.y)), Pt(min(p0.x, q.x), max(p0.y, q.y))), true)
         } else PolyShape(listOf(Pt(l, t), Pt(r, t), Pt(r, b), Pt(l, b)), true)
-      DIAMOND -> PolyShape(listOf(Pt(c.x, t), Pt(r, c.y), Pt(c.x, b), Pt(l, c.y)), true)
-      PARALLELOGRAM -> PolyShape(listOf(Pt(l + w * 0.25f, t), Pt(r, t), Pt(r - w * 0.25f, b), Pt(l, b)), true)
-      TRAPEZOID -> PolyShape(listOf(Pt(l + w * 0.22f, t), Pt(r - w * 0.22f, t), Pt(r, b), Pt(l, b)), true)
-      PENTAGON -> regularPolygon(c, side / 2f, 5)
-      HEXAGON -> regularPolygon(c, side / 2f, 6)
-      STAR -> star(c, side / 2f)
+      DIAMOND -> PolyShape(listOf(Pt(c.x, t), Pt(r, c.y), Pt(c.x, b), Pt(l, c.y)), true, form = PolyForm.DIAMOND)
+      PARALLELOGRAM -> PolyShape(listOf(Pt(l + w * 0.25f, t), Pt(r, t), Pt(r - w * 0.25f, b), Pt(l, b)), true, form = PolyForm.PARALLELOGRAM)
+      TRAPEZOID -> PolyShape(listOf(Pt(l + w * 0.22f, t), Pt(r - w * 0.22f, t), Pt(r, b), Pt(l, b)), true, form = PolyForm.TRAPEZOID)
+      PENTAGON -> regularPolygon(c, side / 2f, 5).copy(form = PolyForm.REGULAR)
+      HEXAGON -> regularPolygon(c, side / 2f, 6).copy(form = PolyForm.REGULAR)
+      STAR -> star(c, side / 2f).copy(form = PolyForm.REGULAR)
       PIN_SUPPORT -> pinSupport(c, side)
       ROLLER_SUPPORT -> rollerSupport(c, side)
       FIXED_SUPPORT -> fixedSupport(Pt(c.x, c.y - max(w, h) / 2f), Pt(c.x, c.y + max(w, h) / 2f))
@@ -637,11 +734,11 @@ enum class ShapeKind(val label: String, val group: ShapeGroup) {
 
   /** Whether dragging should keep the drag's aspect ratio rather than a free box. */
   val dragIsSegment: Boolean
-    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == CIRCLE || this == PART_CIRCLE
+    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == CIRCLE || this == PART_CIRCLE || this == CURVE
 
   /** Drawn like a line from one end to the other: its end snaps where a line's would (onto edges, at tidy angles). */
   val drawnAsLine: Boolean
-    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == POINT_LOAD || this == FIXED_SUPPORT
+    get() = this == LINE || this == ARROW || this == DOUBLE_ARROW || this == DIMENSION || this == POINT_LOAD || this == FIXED_SUPPORT || this == CURVE
 
   /** Drawn out from a point (a support's tip, a moment's centre): only that first point snaps; the drag just sets its size. */
   val drawnFromPoint: Boolean
@@ -789,6 +886,8 @@ fun ShapeGeometry.snapFeatures(): com.tali.notes.geometry.SnapFeatures {
       is EllipseShape -> listOf(center, point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat())) to segs(paths(1f).first())
       is ArcShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
       is SectorShape -> listOf(center, center + Pt.polar(radius, start), center + Pt.polar(radius, start + sweep)) to segs(paths(1f).first())
+      // A curve: its two ends, and the curve itself.
+      is CurveShape -> listOf(points.first(), points.last()) to segs(paths(1f).first())
       // A distributed load: its line, and the line along its arrow tips (which rest on the beam).
       is LoadShape -> {
         val ta = a + (handles()[2] - mid(a, b))

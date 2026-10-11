@@ -162,6 +162,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
   private val paper = PaperRenderer()
   private val predictor = MotionEventPredictor.newInstance(this)
+  /** Keeps the predicted tail from overshooting sharp turns (it twitched fast writing): at most 2.5 mm ahead. */
+  private val predictionGuard = com.tali.notes.ink.PredictionGuard(2.5f / 25.4f * resources.displayMetrics.xdpi)
   private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
   private var doc: Document? = null
@@ -1316,7 +1318,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun shapeScreenSize(shape: ShapeItem): Float {
     val r = screenRect(shape.bounds, Affine.IDENTITY)
     val g = shape.geometry
-    return if (g is LineShape || g is ArcShape) max(r.width(), r.height()) else min(r.width(), r.height())
+    return if (g is LineShape || g is ArcShape || g is com.tali.notes.model.CurveShape) max(r.width(), r.height()) else min(r.width(), r.height())
   }
 
   /**
@@ -1757,8 +1759,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
     // The pen's path is smoothed before Ink sees it (see PenSmoother); the predictor follows the smoothed path too.
     smoother.reset()
+    predictionGuard.reset()
     val se = smoother.smooth(e, idx, MotionEvent.ACTION_DOWN)
     predictor.record(se)
+    predictionGuard.record(se)
     // Ink running off the page is hidden as it's drawn, so what she sees is what's kept.
     inProgress.maskPath = inkAreas(slot.size / 2f, pageAt(p))?.let { areas ->
       android.graphics.Path().apply {
@@ -1794,7 +1798,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.INK -> {
         val se = smoother.smooth(e, idx, MotionEvent.ACTION_MOVE)
         predictor.record(se)
-        val prediction = predictor.predict()
+        predictionGuard.record(se)
+        val prediction = predictionGuard.tame(predictor.predict())
         strokeId?.let { sid ->
           inProgress.addToStroke(se, drawPointer, sid, prediction)
           shadows[sid]?.let { s -> for (h in 0..se.historySize) s.add(se, 0, h) }
