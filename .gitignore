@@ -22,3 +22,6 @@ local.properties
 
 # Test APKs handed out from the project folder
 /*.apk
+
+# Release APKs copied out for sending
+/apk/
