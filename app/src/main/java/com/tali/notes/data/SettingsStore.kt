@@ -122,6 +122,11 @@ data class AppSettings(
   val inkBetweenPages: Boolean = false,
   /** The Google Drive backup also keeps a PDF of each notebook beside it, readable anywhere. */
   val drivePdf: Boolean = false,
+  /**
+   * PDFs opened from other apps go straight into her notebooks, ready to write on. Off (the start),
+   * they open just for looking, with a Save button.
+   */
+  val pdfsToLibrary: Boolean = false,
   /** How many colours a pen shows beside the pens until she sets its own number (`PenSlot.toolbarColors`). */
   val toolbarColors: Int = 3,
   /** Light, dark, or following the tablet. */

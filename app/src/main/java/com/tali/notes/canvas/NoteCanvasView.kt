@@ -1449,7 +1449,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     InputDevice.getDeviceIds().any { id -> InputDevice.getDevice(id)?.supportsSource(InputDevice.SOURCE_STYLUS) == true }
   }
 
-  private fun drawsWith(toolType: Int) = isStylus(toolType) || toolType == MotionEvent.TOOL_TYPE_MOUSE || (toolType == MotionEvent.TOOL_TYPE_FINGER && fingerDraws())
+  /**
+   * Just looking (a PDF opened from another app, not saved yet): the pen and fingers only move and
+   * zoom the page; nothing is written, picked up, pasted, undone or added.
+   */
+  var viewOnly = false
+    set(value) {
+      if (field == value) return
+      field = value
+      if (value) {
+        runCatching { abortDrawing() }
+        clearSelection()
+        mode = Mode.NONE
+      }
+    }
+
+  private fun drawsWith(toolType: Int) = !viewOnly && (isStylus(toolType) || toolType == MotionEvent.TOOL_TYPE_MOUSE || (toolType == MotionEvent.TOOL_TYPE_FINGER && fingerDraws()))
 
   private fun isDrawingMode() = mode in DRAW_MODES
 
@@ -1511,7 +1526,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         } else if (!isDrawingMode()) {
           // A finger on a shape's dot or on a selection edits it (that's how she adjusts shapes);
           // anywhere else it scrolls and zooms as usual.
-          if (e.actionMasked == MotionEvent.ACTION_DOWN && grabsEdit(Pt(e.getX(idx), e.getY(idx)))) {
+          if (e.actionMasked == MotionEvent.ACTION_DOWN && !viewOnly && grabsEdit(Pt(e.getX(idx), e.getY(idx)))) {
             stopFling()
             beginDraw(e, idx)
           } else {
@@ -3499,7 +3514,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   class Dropped(val uris: List<android.net.Uri>, val text: String?, val at: Pt)
 
   private fun droppable(desc: android.content.ClipDescription?): Boolean =
-    desc != null && listOf("image/*", "application/pdf", "application/zip", "text/plain", "text/html").any { desc.hasMimeType(it) }
+    !viewOnly && desc != null && listOf("image/*", "application/pdf", "application/zip", "text/plain", "text/html").any { desc.hasMimeType(it) }
 
   /** Takes a drop from another app side by side (split screen): pictures, PDFs or text. */
   private fun acceptDrop(e: android.view.DragEvent) {
@@ -3673,7 +3688,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       zoomAtDown = camera.zoom
       // Only a pull that starts at the end of the notebook can open space for a new page; a
       // fast scroll down just stops there.
-      pulling = pageCount != null && pullDp() >= REST_DP - 4f
+      pulling = !viewOnly && pageCount != null && pullDp() >= REST_DP - 4f
       // Whatever already showed below the last page (zoomed out, it can be a lot) isn't a pull.
       pullOffset = if (pulling) max(0f, pullDp() - REST_DP) else 0f
       fingerStart = Pt(e.x, e.y)
@@ -3683,7 +3698,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       longPressed = false
       mode = Mode.FINGER_PENDING
       cancelHold()
-      if (e.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER && fingertip(e) && SystemClock.uptimeMillis() - lastPenAt >= PEN_NEARBY_MS) {
+      if (!viewOnly && e.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER && fingertip(e) && SystemClock.uptimeMillis() - lastPenAt >= PEN_NEARBY_MS) {
         holdTarget = hitTest(camera.toWorld(e.x, e.y), locked = true) { true }
         holdTarget?.let { target ->
           // The padlock shows over the item, unless the finger is covering that spot: then just above it.
@@ -3697,7 +3712,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           postInvalidateOnAnimation()
         }
       }
-      if (holdTarget == null && fingertip(e)) armPasteHold(Pt(e.x, e.y), camera.toWorld(e.x, e.y))
+      if (!viewOnly && holdTarget == null && fingertip(e)) armPasteHold(Pt(e.x, e.y), camera.toWorld(e.x, e.y))
     } else {
       removeCallbacks(pasteHold)
       cancelHold()
@@ -3927,6 +3942,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         return
       }
       longPressed -> Unit
+      viewOnly -> Unit
       mode == Mode.FINGER_PENDING && maxPointers == 1 -> tapAt(camera.toWorld(e.x, e.y))
       maxPointers == 2 && quick && !multiTapMoved && settings.smartUndo -> undo()
       maxPointers == 3 && quick && !multiTapMoved && settings.smartUndo -> redo()

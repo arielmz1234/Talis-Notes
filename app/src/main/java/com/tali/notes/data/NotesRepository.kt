@@ -49,6 +49,11 @@ data class NotebookMeta(
   val landscape: Boolean = false,
   /** One of her own paper backgrounds ([CustomPaper.id]), used instead of [paper] when set. */
   val customPaper: String? = null,
+  /**
+   * A PDF opened from another app that she's looking at but hasn't saved: not in the library,
+   * Quick open or backups until she taps Save.
+   */
+  val draft: Boolean = false,
 )
 
 /** A folder; [parentId] is the folder it sits in, or null at the top level. */
@@ -76,6 +81,11 @@ class NotesRepository(private val context: Context) {
 
   private val _notebooks = MutableStateFlow<List<NotebookMeta>>(emptyList())
   val notebooks: StateFlow<List<NotebookMeta>> = _notebooks.asStateFlow()
+
+  private val _drafts = MutableStateFlow<List<NotebookMeta>>(emptyList())
+
+  /** PDFs opened from another app that she hasn't saved yet (see [NotebookMeta.draft]). */
+  val drafts: StateFlow<List<NotebookMeta>> = _drafts.asStateFlow()
 
   private val _trash = MutableStateFlow<List<NotebookMeta>>(emptyList())
 
@@ -105,6 +115,7 @@ class NotesRepository(private val context: Context) {
 
   init {
     scope.launch {
+      sweepDrafts()
       reload()
       loaded.value = true
       purgeTrash()
@@ -113,7 +124,7 @@ class NotesRepository(private val context: Context) {
 
   private fun reload() {
     val list = mutableListOf<NotebookMeta>()
-    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape FROM notebooks ORDER BY updated DESC", null).use { c ->
+    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,draft FROM notebooks ORDER BY updated DESC", null).use { c ->
       while (c.moveToNext()) {
         list +=
           NotebookMeta(
@@ -131,6 +142,7 @@ class NotesRepository(private val context: Context) {
             dark = c.getInt(11) != 0,
             landscape = c.getInt(12) != 0,
             customPaper = c.getString(5).takeIf { it.startsWith(CustomPaper.PREFIX) }?.removePrefix(CustomPaper.PREFIX),
+            draft = c.getInt(13) != 0,
           )
       }
     }
@@ -139,7 +151,8 @@ class NotesRepository(private val context: Context) {
       while (c.moveToNext()) folders += Folder(c.getString(0), c.getString(1), c.getInt(2), c.getInt(3), if (c.isNull(4)) null else c.getString(4))
     }
     _folders.value = folders
-    _notebooks.value = list.filter { it.deleted == null }
+    _notebooks.value = list.filter { it.deleted == null && !it.draft }
+    _drafts.value = list.filter { it.deleted == null && it.draft }
     _trash.value = list.filter { it.deleted != null }.sortedByDescending { it.deleted }
   }
 
@@ -153,6 +166,7 @@ class NotesRepository(private val context: Context) {
     dark: Boolean = false,
     cover: Int? = null,
     landscape: Boolean = false,
+    draft: Boolean = false,
   ): NotebookMeta =
     withContext(writer) {
       val now = System.currentTimeMillis()
@@ -172,13 +186,32 @@ class NotesRepository(private val context: Context) {
           put("pages", pages)
           put("dark", if (dark) 1 else 0)
           put("landscape", if (landscape) 1 else 0)
+          put("draft", if (draft) 1 else 0)
         },
       )
       reload()
-      _notebooks.value.first { it.id == id }
+      (_notebooks.value + _drafts.value).first { it.id == id }
     }
 
   fun rename(id: String, title: String) = update(id) { put("title", title) }
+
+  /** A PDF she was only looking at becomes one of her notebooks, called [title]. */
+  fun saveDraft(id: String, title: String) =
+    update(id) {
+      put("title", title)
+      put("draft", 0)
+    }
+
+  /**
+   * A draft left behind (the app was closed while she was looking at a PDF) waits a day in case
+   * the app reopens on it, then is erased with its pages. Nothing of hers is lost: a draft can only
+   * be looked at, not written on, until it's saved.
+   */
+  private fun sweepDrafts() {
+    val cutoff = System.currentTimeMillis() - 24L * 3600_000L
+    val old = db.readableDatabase.rawQuery("SELECT id FROM notebooks WHERE draft = 1 AND created < ?", arrayOf(cutoff.toString())).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
+    old.forEach { erase(it) }
+  }
 
   fun moveToFolder(id: String, folderId: String?) = update(id, touch = false) { put("folder_id", folderId) }
 
@@ -484,7 +517,9 @@ class NotesRepository(private val context: Context) {
           val landscapeCol = if ("landscape" in bkNotebook) "landscape" else "0"
           val parentCol = if ("parent_id" in columns(w, "folders")) "parent_id" else "NULL"
           w.execSQL("INSERT OR IGNORE INTO folders (id,name,color,created,position,parent_id) SELECT id,name,color,created,position,$parentCol FROM bk.folders")
-          w.rawQuery("SELECT b.id, m.id IS NOT NULL, b.updated > IFNULL(m.updated, 0) FROM bk.notebooks b LEFT JOIN main.notebooks m ON m.id = b.id WHERE b.deleted IS NULL", null).use { c ->
+          // A PDF that was only being looked at (never saved) isn't brought back.
+          val notDraft = if ("draft" in bkNotebook) " AND b.draft = 0" else ""
+          w.rawQuery("SELECT b.id, m.id IS NOT NULL, b.updated > IFNULL(m.updated, 0) FROM bk.notebooks b LEFT JOIN main.notebooks m ON m.id = b.id WHERE b.deleted IS NULL$notDraft", null).use { c ->
             while (c.moveToNext()) {
               val exists = c.getInt(1) == 1
               val newer = c.getInt(2) == 1

@@ -56,9 +56,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * A PDF or pictures came from another app: where do they go? A new notebook (named after the
- * file), the notebook she has open, or one of her recent notebooks. A backup file asks to restore.
- * [onGo] gets the notebook to add them to.
+ * Pictures came from another app: where do they go? A new notebook, the notebook she has open, or
+ * one of her recent notebooks. A backup file asks to restore. (A PDF never asks: it opens in a new
+ * notebook of its own, [openPdfDraft].) [onGo] gets the notebook to add them to.
  */
 @Composable
 fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) -> Unit, onDismiss: () -> Unit) {
@@ -76,13 +76,12 @@ fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) ->
   // The open notebook first, then the ones she opened last.
   val choices = (listOfNotNull(openNotebook) + settings.recentNotebooks).distinct().mapNotNull { byId[it] }.take(4)
   val what = Incoming.title(files)
-  val pdf = files.kind == Incoming.Kind.PDF
   var busy by remember { mutableStateOf(false) }
 
   DialogCard(onDismiss, width = 480) {
-    Text(if (pdf) "Add “$what”" else "Add ${if (files.uris.size > 1) what else "the picture"}", style = MaterialTheme.typography.titleLarge, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Text("Add ${if (files.uris.size > 1) what else "the picture"}", style = MaterialTheme.typography.titleLarge, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
     Spacer(Modifier.height(4.dp))
-    Text(if (pdf) "Its pages go in as pages you can write on." else "Into which notebook?", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+    Text("Into which notebook?", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
     Spacer(Modifier.height(14.dp))
     CardBody {
       Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -110,6 +109,31 @@ fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) ->
   }
 }
 
+/**
+ * A PDF from another app opens straight into a new notebook she's only looking at
+ * ([com.tali.notes.data.NotebookMeta.draft]) until she saves it, on landscape pages when most of
+ * the PDF's pages are wider than tall (slides). Returns its id.
+ */
+suspend fun openPdfDraft(app: TalisApp, files: Incoming.Files): String {
+  val s = app.settings.settings.value
+  val landscape = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { pdfMostlyLandscape(app, files.uris.first()) }
+  // With *Add them to my notebooks* on, it's one of her notebooks straight away.
+  return app.repository.create(Incoming.title(files), s.defaultPaper, pages = 1, customPaper = s.defaultCustomPaper, landscape = landscape, draft = !s.pdfsToLibrary).id
+}
+
+/** Whether most of the PDF's pages (the first 30) are wider than they are tall. */
+fun pdfMostlyLandscape(context: android.content.Context, uri: android.net.Uri): Boolean =
+  runCatching {
+      context.contentResolver.openFileDescriptor(uri, "r")!!.use { fd ->
+        android.graphics.pdf.PdfRenderer(fd).use { r ->
+          val n = minOf(r.pageCount, 30)
+          val wide = (0 until n).count { i -> r.openPage(i).use { it.width > it.height } }
+          n > 0 && wide * 2 > n
+        }
+      }
+    }
+    .getOrDefault(false)
+
 /** A new notebook for what came in, started the way her new notebooks start. Returns its id. */
 private suspend fun newNotebookFor(app: TalisApp, files: Incoming.Files): String {
   val s = app.settings.settings.value
@@ -117,8 +141,7 @@ private suspend fun newNotebookFor(app: TalisApp, files: Incoming.Files): String
     app.repository.create(
       Incoming.title(files),
       s.defaultPaper,
-      // A PDF's pages go onto A4 pages, one each.
-      pages = if (files.kind == Incoming.Kind.PDF || s.defaultPaged) 1 else null,
+      pages = if (s.defaultPaged) 1 else null,
       customPaper = s.defaultCustomPaper,
       landscape = s.defaultLandscape,
     )

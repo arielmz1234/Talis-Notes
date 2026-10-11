@@ -60,7 +60,7 @@ A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite an
 **Library**
 - Folders, folders inside folders (a tree in the sidebar, folder tiles and a path back up in the main area), each with its own colour (chosen when it's made; the selected folder's highlight takes that colour), search, cover colours, and a *Recently deleted* area that keeps notebooks for 30 days. New folders arrive, and deleted notebooks, folders and pages go, on a puff of mist that dissipates. Tapping a cloud in the sky bursts it into the same mist; it forms again a few seconds later.
 - Backups: *Back up by itself* into one file she picks once (her Google Drive, OneDrive, Dropbox or the tablet), kept up to date in the background; a backup file with merge-restore; Android's own backup; and optional Google Drive backup. See [BACKUP_SETUP.md](BACKUP_SETUP.md).
-- From other apps: a PDF opened with Tali's Notes, or PDFs and pictures shared to it, ask where they go (a new notebook named after the PDF, the open notebook, or a recent one); her backup file opened with the app offers to restore; pictures, PDFs and text dragged over from an app side by side land where they're dropped.
+- From other apps: a PDF opened with or shared to Tali's Notes opens in a new notebook (landscape for slides) just for looking, with a Save button to keep it and write on it (or, with *Add them to my notebooks* in Settings, straight into her notebooks); pictures shared to it ask which notebook they go in; her backup file opened with the app offers to restore; pictures, PDFs and text dragged over from an app side by side land where they're dropped.
 
 ## Building
 

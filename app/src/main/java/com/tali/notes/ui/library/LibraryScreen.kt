@@ -465,7 +465,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     }
   }
   if (welcome) WelcomeRestoreCard(onDismiss = { welcome = false })
-  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onDismiss = { showSettings = false })
+  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> (app as com.tali.notes.TalisApp).settings.update { it.copy(pdfsToLibrary = on) } }, onDismiss = { showSettings = false })
   trashAction?.let { nb ->
     DialogCard(onDismiss = { trashAction = null }, width = 480, dim = false) {
       Text("“${nb.title}”", style = MaterialTheme.typography.titleLarge, color = c.ink)

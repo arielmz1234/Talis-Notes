@@ -32,7 +32,19 @@ fun MainNavigation() {
   // A PDF, pictures or a backup from another app: she picks where they go, then that notebook opens
   // (in place of one already open, so Back still goes to the library) and adds them.
   val offer = Incoming.offer.collectAsState().value
-  if (offer != null) {
+  val app = androidx.compose.ui.platform.LocalContext.current.talisApp
+  if (offer != null && offer.kind == Incoming.Kind.PDF) {
+    // A PDF always opens in a new notebook she's just looking at, until she saves it. It opens on
+    // top of whatever was open, so leaving it goes back there.
+    androidx.compose.runtime.LaunchedEffect(offer) {
+      val id = runCatching { com.tali.notes.ui.library.openPdfDraft(app, offer) }.getOrNull()
+      Incoming.offer.value = null
+      if (id != null) {
+        Incoming.sendTo(id, offer)
+        backStack.add(Notebook(id))
+      }
+    }
+  } else if (offer != null) {
     val open = (backStack.lastOrNull() as? Notebook)?.id
     IncomingCard(
       offer,

@@ -21,7 +21,7 @@ import com.tali.notes.ui.components.Segmented
 
 /** The app's settings, from the library's sidebar: light or dark, and the cloudy or minimal look. */
 @Composable
-fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinimal: (Boolean) -> Unit, onDismiss: () -> Unit) {
+fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onDismiss: () -> Unit) {
   val c = Tali.colors
   DialogCard(onDismiss, width = 520) {
     Text("Settings", style = MaterialTheme.typography.titleLarge, color = c.ink)
@@ -46,6 +46,16 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinima
       else "Soft cloud edges on bars and cards, and clouds drifting across the sky.",
       style = MaterialTheme.typography.bodySmall,
       color = c.inkMuted,
+    )
+    Spacer(Modifier.height(18.dp))
+    SectionLabel("PDFs from other apps")
+    Spacer(Modifier.height(4.dp))
+    com.tali.notes.ui.components.ToggleRow(
+      "Add them to my notebooks",
+      settings.pdfsToLibrary,
+      onPdfsToLibrary,
+      detail = if (settings.pdfsToLibrary) "A PDF you open with Tali's Notes goes straight into your notebooks, ready to write on."
+      else "A PDF you open with Tali's Notes opens just for looking. Tap Save to keep it and write on it.",
     )
     }
     Spacer(Modifier.height(22.dp))

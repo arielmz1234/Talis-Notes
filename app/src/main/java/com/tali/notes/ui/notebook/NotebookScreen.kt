@@ -163,6 +163,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.outlined.LibraryAdd
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -349,6 +351,15 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 
   BackHandler(enabled = vm.panel != null) { vm.panel = null }
 
+  // A PDF opened from another app is only being looked at until she saves it: leaving asks first.
+  val unsaved = meta?.draft == true && vm.unsaved
+  var savingPdf by remember { mutableStateOf<(() -> Unit)?>(null) }
+  var leavingPdf by remember { mutableStateOf<(() -> Unit)?>(null) }
+  val leave: (() -> Unit) -> Unit = { go -> if (vm.unsaved) leavingPdf = go else go() }
+  BackHandler(enabled = unsaved && vm.panel == null) { leavingPdf = onBack }
+  // Only scrolling and zooming until it's saved.
+  LaunchedEffect(unsaved, holder.view) { holder.view?.viewOnly = unsaved }
+
   val lifecycleOwner = LocalLifecycleOwner.current
   DisposableEffect(lifecycleOwner) {
     val observer = LifecycleEventObserver { _, event ->
@@ -487,7 +498,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       delay(260)
       ready = true
     }
-    chrome.targetState = ready && !vm.focus
+    // Just looking at a PDF from another app: no toolbars until it's saved (the viewer bar instead).
+    chrome.targetState = ready && !vm.focus && !unsaved
     var puffs by remember { mutableIntStateOf(0) }
     var shownFocus by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(vm.focus, ready) {
@@ -534,7 +546,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       val titlePill: @Composable () -> Unit = {
         Box(Modifier.bar("title", 0)) {
           TitlePill(
-            onBack = onBack,
+            onBack = { leave(onBack) },
             canUndo = vm.canUndo,
             canRedo = vm.canRedo,
             onUndo = { holder.view?.runSafely { undo() } },
@@ -542,7 +554,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           ) {
             QuickOpen(recent, vm::thumbnailFile) { id ->
               vm.panel = null
-              onSwitch(id)
+              leave { onSwitch(id) }
             }
           }
         }
@@ -725,7 +737,25 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     }
     // Recording a voice memo: the bar hangs just below the mic button, over everything.
     RecorderPanel(vm, anchor = { micAnchor[0] }, onAdd = vm::keepDraft)
-    ShowToolbarsButton(vm.focus, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
+    PdfViewerBar(
+      visible = ready && unsaved,
+      title = meta?.title ?: "",
+      pages = vm.pageCount,
+      darkPaper = darkPaper,
+      onBack = { leave(onBack) },
+      onSave = { savingPdf = {} },
+      onPages = if (paged) ({ pagesOpen = true }) else null,
+      onFit = { holder.view?.runSafely { fitContent() } },
+      onDarkPaper = vm::setDark,
+    ) {
+      HintPill(vm.hint, onDone = { vm.hint = null }, modifier = Modifier.align(Alignment.BottomCenter))
+      Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        val (page, pages) = vm.page
+        if (page >= 0) PageChip(page, pages, onOverview = if (paged) ({ pagesOpen = true }) else null) { target -> holder.view?.runSafely { goToPage(target) } }
+        ZoomChip(vm.zoom) { holder.view?.runSafely { setZoom(1f) } }
+      }
+    }
+    ShowToolbarsButton(vm.focus && !unsaved, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
 
     pasteOffer?.let { offer ->
       PasteBubble(offer, onDismiss = { pasteOffer = null }) {
@@ -781,6 +811,29 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       holder.view?.runSafely { clearSelection() }
       vm.showHint("Saved to My shapes — hold the pen at the end of a stroke to snap to it")
     }
+  }
+  savingPdf?.let { then ->
+    SavePdfDialog(meta?.title ?: "", onDismiss = { savingPdf = null }) { name ->
+      vm.saveAsNotebook(name)
+      savingPdf = null
+      vm.showHint("Saved to your notebooks")
+      then()
+    }
+  }
+  leavingPdf?.let { go ->
+    LeavePdfDialog(
+      title = meta?.title ?: "",
+      onStay = { leavingPdf = null },
+      onSave = {
+        leavingPdf = null
+        savingPdf = go
+      },
+      onLeave = {
+        leavingPdf = null
+        vm.discardOnLeave()
+        go()
+      },
+    )
   }
   if (renaming) {
     RenameDialog(meta?.title ?: "", onDismiss = { renaming = false }) {
@@ -877,6 +930,143 @@ private fun TitlePill(onBack: () -> Unit, canUndo: Boolean, canRedo: Boolean, on
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
       ToolButton(Icons.AutoMirrored.Outlined.Undo, "Undo", enabled = canUndo, onClick = onUndo)
       ToolButton(Icons.AutoMirrored.Outlined.Redo, "Redo", enabled = canRedo, onClick = onRedo)
+    }
+  }
+}
+
+/**
+ * Looking at a PDF opened from another app, before it's saved: no toolbars, just Back, its name,
+ * Save and a few options, with the page and zoom chips below. The pieces arrive like the toolbars
+ * (lifting in from their top edge, 40 ms apart); when it's saved they leave and the toolbars come.
+ */
+@Composable
+private fun PdfViewerBar(
+  visible: Boolean,
+  title: String,
+  pages: Int?,
+  darkPaper: Boolean,
+  onBack: () -> Unit,
+  onSave: () -> Unit,
+  onPages: (() -> Unit)?,
+  onFit: () -> Unit,
+  onDarkPaper: (Boolean) -> Unit,
+  bottom: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
+) {
+  val c = Tali.colors
+  val lift = with(LocalDensity.current) { 10.dp.toPx() }
+  AnimatedVisibility(visible, enter = androidx.compose.animation.EnterTransition.None, exit = androidx.compose.animation.ExitTransition.None) {
+    @Composable
+    fun Modifier.arrive(order: Int, fromBelow: Boolean = false): Modifier {
+      val shown by transition.animateFloat(
+        transitionSpec = {
+          if (targetState == androidx.compose.animation.EnterExitState.Visible) tween(260, delayMillis = 40 * order, easing = com.tali.notes.ui.components.EaseOutStrong)
+          else tween(170, easing = com.tali.notes.ui.components.EaseOutStrong)
+        },
+        label = "viewer$order",
+      ) { if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+      return graphicsLayer {
+        alpha = shown
+        compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+        translationY = (1f - shown) * (if (fromBelow) lift else -lift)
+        val sc = 0.96f + 0.04f * shown
+        scaleX = sc
+        scaleY = sc
+        transformOrigin = TransformOrigin(0.5f, if (fromBelow) 1f else 0f)
+      }
+    }
+    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp)) {
+      Row(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalAlignment = Alignment.CenterVertically) {
+        FloatingBar(Modifier.height(52.dp).arrive(0), crown = CloudCrown.LITTLE) {
+          ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onClick = onBack)
+        }
+        Spacer(Modifier.width(10.dp))
+        FloatingBar(Modifier.height(52.dp).widthIn(max = 380.dp).arrive(1), crown = CloudCrown.NONE) {
+          Column(Modifier.padding(horizontal = 10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+              listOfNotNull(pages?.let { if (it == 1) "1 page" else "$it pages" }, "Not saved").joinToString(" · "),
+              style = MaterialTheme.typography.bodySmall,
+              color = c.inkFaint,
+              maxLines = 1,
+            )
+          }
+        }
+        Spacer(Modifier.weight(1f).widthIn(min = 10.dp))
+        PrimaryButton("Save", icon = Icons.Outlined.Save, modifier = Modifier.height(52.dp).arrive(2), onClick = onSave)
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.arrive(3)) {
+          var open by remember { mutableStateOf(false) }
+          FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) { ToolButton(Icons.Outlined.MoreHoriz, "More") { open = true } }
+          DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface, offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)) {
+            if (onPages != null) {
+              DropdownMenuItem(
+                text = { Text("All pages") },
+                leadingIcon = { Icon(Icons.Outlined.GridView, null) },
+                onClick = {
+                  open = false
+                  onPages()
+                },
+              )
+            }
+            DropdownMenuItem(
+              text = { Text("Fit to screen") },
+              leadingIcon = { Icon(Icons.Outlined.FitScreen, null) },
+              onClick = {
+                open = false
+                onFit()
+              },
+            )
+            DropdownMenuItem(
+              text = { Text("Dark paper") },
+              leadingIcon = { Icon(Icons.Outlined.DarkMode, null) },
+              trailingIcon = { if (darkPaper) Icon(Icons.Outlined.Check, null, tint = c.accent) },
+              onClick = { onDarkPaper(!darkPaper) },
+            )
+          }
+        }
+      }
+      Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).arrive(4, fromBelow = true)) { bottom() }
+    }
+  }
+}
+
+/** Saving a PDF she opened from another app: its name to start with, ready to change. */
+@Composable
+private fun SavePdfDialog(title: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+  val c = Tali.colors
+  var name by remember { mutableStateOf(TextFieldValue(title, androidx.compose.ui.text.TextRange(0, title.length))) }
+  com.tali.notes.ui.library.DialogCard(onDismiss, width = 460) {
+    Text("Save to your notebooks", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(6.dp))
+    Text("It goes into your notebooks, ready to write on.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+    Spacer(Modifier.height(16.dp))
+    TitleField(name, { name = it }, placeholder = "Notebook name") { onSave(name.text) }
+    Spacer(Modifier.height(20.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+      QuietButton("Cancel", onClick = onDismiss)
+      PrimaryButton("Save") { onSave(name.text) }
+    }
+  }
+}
+
+/** Leaving a PDF she only looked at: keep looking, save it, or let it go. */
+@Composable
+private fun LeavePdfDialog(title: String, onStay: () -> Unit, onSave: () -> Unit, onLeave: () -> Unit) {
+  val c = Tali.colors
+  com.tali.notes.ui.library.DialogCard(onStay, width = 500) {
+    Text("Leave without saving?", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(10.dp))
+    Text(
+      "“$title” isn't in your notebooks. Save it to keep it and write on it, or leave and it won't be kept.",
+      style = MaterialTheme.typography.bodyMedium,
+      color = c.inkMuted,
+    )
+    Spacer(Modifier.height(22.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+      QuietButton("Keep looking", onClick = onStay)
+      Spacer(Modifier.weight(1f))
+      QuietButton("Leave without saving", color = c.danger, onClick = onLeave)
+      PrimaryButton("Save", onClick = onSave)
     }
   }
 }

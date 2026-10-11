@@ -69,8 +69,31 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   private val store = app.talisApp.settings
 
   val settings: StateFlow<AppSettings> = store.settings
+  // Her notebooks, or a PDF opened from another app that she hasn't saved yet.
   val meta: StateFlow<NotebookMeta?> =
-    repo.notebooks.map { list -> list.firstOrNull { it.id == notebookId } }.stateIn(viewModelScope, SharingStarted.Eagerly, repo.notebooks.value.firstOrNull { it.id == notebookId })
+    kotlinx.coroutines.flow.combine(repo.notebooks, repo.drafts) { list, drafts -> list.firstOrNull { it.id == notebookId } ?: drafts.firstOrNull { it.id == notebookId } }
+      .stateIn(viewModelScope, SharingStarted.Eagerly, (repo.notebooks.value + repo.drafts.value).firstOrNull { it.id == notebookId })
+
+  /** Saved just now (the stored notebook catches up a moment later). */
+  private var savedNow by mutableStateOf(false)
+
+  /** A PDF she's only looking at: not in her notebooks until she saves it. */
+  val unsaved: Boolean
+    get() = meta.value?.draft == true && !savedNow
+
+  /** She chose to leave without saving: the PDF and what she wrote on it go when the notebook closes. */
+  private var discardOnLeave = false
+
+  /** Keeps the PDF she was looking at as one of her notebooks, called [title]. */
+  fun saveAsNotebook(title: String) {
+    repo.saveDraft(notebookId, title.trim().ifBlank { "Untitled" })
+    savedNow = true
+    store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
+  }
+
+  fun discardOnLeave() {
+    discardOnLeave = true
+  }
 
   var document by mutableStateOf<Document?>(null)
     private set
@@ -231,12 +254,13 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     if (voice.recording) stopMemo()
     keepDraft()
     voice.release()
+    if (discardOnLeave && !savedNow) repo.deleteForever(notebookId)
     super.onCleared()
   }
 
   init {
-    // This one goes to the top of the recent list.
-    store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
+    // This one goes to the top of the recent list (a PDF she's only looking at doesn't, until it's saved).
+    if (repo.drafts.value.none { it.id == notebookId }) store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
     viewModelScope.launch {
       val m = meta.value ?: repo.notebooks.value.firstOrNull { it.id == notebookId }
       initialViewport = m?.viewport
