@@ -791,6 +791,8 @@ fun ShapeGeometry.snapFeatures(): com.tali.notes.geometry.SnapFeatures {
         val tb = b + (handles()[2] - mid(a, b))
         listOf(a, b, mid(a, b), ta, tb, handles()[2]) to listOf(a to b, ta to tb, a to ta, b to tb)
       }
+      // A shape with joints snaps like the drawing it shows.
+      is ParamShape -> return drawn().snapFeatures()
       // Engineering symbols: their outlines, ground lines and arrows snap; the hatching under a
       // support (five or more short plain lines) doesn't, or its ends would catch on everything.
       is GroupShape -> {
