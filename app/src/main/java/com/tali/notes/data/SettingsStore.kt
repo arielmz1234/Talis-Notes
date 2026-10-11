@@ -94,6 +94,11 @@ data class AppSettings(
   val lastShape: String = "LINE",
   /** Shapes she saved from her own drawings; hold-to-shape recognises them too. */
   val customShapes: List<CustomShape> = emptyList(),
+  /**
+   * Subjects whose shapes she starred ([com.tali.notes.model.ShapePacks]): they join the Shapes
+   * panel and hold-to-shape. None at first: the panel starts with the standard shapes and hers.
+   */
+  val starredPacks: Set<String> = emptySet(),
   /** Paper backgrounds she made (pictures or designed patterns), offered in every notebook. */
   val customPapers: List<CustomPaper> = emptyList(),
   /** The paper new notebooks start with when it's one of hers, otherwise [defaultPaper]. */

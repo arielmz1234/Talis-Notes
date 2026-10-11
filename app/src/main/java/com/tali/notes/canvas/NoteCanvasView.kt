@@ -195,6 +195,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   /** When set, the shape tool draws this saved shape instead of [shapeKind]. */
   var customShape: CustomShape? = null
+
+  /** When set (and no saved shape is), the shape tool draws this subject's shape ([com.tali.notes.model.ShapePacks]). */
+  var packShape: com.tali.notes.model.PackShape? = null
   var paperStyle = PaperStyle.DOTS
     set(value) {
       field = value
@@ -1875,13 +1878,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val raw = world(e, idx)
         // Nothing until the pen has slid a little: a touch alone never drops a shape.
         if (shapePreview == null && camera.toScreen(raw).dist(camera.toScreen(shapeStart)) < SHAPE_START_DP * density) return
-        val kind = shapeKind.takeIf { customShape == null }
+        val pack = packShape.takeIf { customShape == null }
+        val kind = shapeKind.takeIf { customShape == null && pack == null }
+        val fromPoint = pack?.drawnFromPoint ?: (kind?.drawnFromPoint == true)
+        val asLine = pack?.drawnAsLine ?: (kind?.drawnAsLine == true)
         // Where the drag ends: a line's end (and a point load's tip, a fixed support's wall) onto
         // an edge or corner; a box's corner onto a corner or edge, or lined up with other shapes.
         // Shapes drawn out from a point (supports, moments, circles) only snap where they start.
         val (end, guides) = when {
-          kind?.drawnFromPoint == true -> raw to emptyList()
-          kind?.drawnAsLine == true -> lineEndAt(shapeStart, raw).let { (p, on) ->
+          fromPoint -> raw to emptyList()
+          asLine -> lineEndAt(shapeStart, raw).let { (p, on) ->
             when {
               on -> p to listOf<SnapGuide>(SnapGuide.Touch(p))
               // On a tidy angle already: that wins. Otherwise its end lines up like any corner.
@@ -1993,7 +1999,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc ?: return
     val id = strokeId ?: return
     if (Geo.pathLength(strokePoints) * camera.scale < 24f * density) return
-    var geometry = ShapeRecognizer.recognize(strokePoints, settings.customShapes) ?: return
+    // Her own shapes and the shapes of the subjects she starred (not every subject's).
+    val packs = com.tali.notes.model.ShapePacks.all.filter { it.id in settings.starredPacks }.flatMap { it.shapes }
+    var geometry = ShapeRecognizer.recognize(strokePoints, settings.customShapes, packs) ?: return
     // A line drawn from another shape starts exactly on it.
     snapTargets = gatherSnapTargets(emptySet())
     liveStartStuck = false
@@ -2026,8 +2034,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // The Shapes tool has its own style (its panel), apart from the pen in use.
     val look = settings.shapeLook
     // Anything drawn like a line (lines, arrows, dimensions, point loads, fixed supports) keeps to tidy angles unless its end locked onto something.
-    val end = if (!keepEnd && customShape == null && shapeKind.drawnAsLine) ShapeRecognizer.snappedLine(p0, p1).b else p1
-    val geometry = customShape?.fitInto(p0, p1) ?: shapeKind.create(p0, end)
+    val pack = packShape.takeIf { customShape == null }
+    val end = if (!keepEnd && customShape == null && (pack?.drawnAsLine ?: shapeKind.drawnAsLine)) ShapeRecognizer.snappedLine(p0, p1).b else p1
+    val geometry = customShape?.fitInto(p0, p1) ?: pack?.create(p0, end) ?: shapeKind.create(p0, end)
     val shape = ShapeItem("preview", 0, PenType.FINELINER, look.outlineArgb, look.size, geometry, line = look.line)
     val fill = look.fillArgb
     return if (fill != null && shape.closed) shape.filled(fill) else shape

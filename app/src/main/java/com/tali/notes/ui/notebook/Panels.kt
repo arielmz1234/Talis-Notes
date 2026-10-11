@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.Brush
 import android.content.res.Resources
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.graphics.graphicsLayer
@@ -177,7 +179,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(slot.type.label, style = MaterialTheme.typography.titleMedium, color = c.ink, modifier = Modifier.weight(1f))
       // Only with a pen that has a button to press.
-      if (vm.hasStylus) StarToggle(slot.starred, vm::toggleStar)
+      if (vm.hasStylus) StarToggle(slot.starred, onToggle = vm::toggleStar)
     }
     Spacer(Modifier.height(10.dp))
     StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle, slot.square, slot.straight)
@@ -259,7 +261,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
  * starred (from 85%, a quick spring) and its colour fades.
  */
 @Composable
-private fun StarToggle(on: Boolean, onToggle: () -> Unit) {
+private fun StarToggle(on: Boolean, starLabel: String = "Star this pen", unstarLabel: String = "Unstar this pen", onToggle: () -> Unit) {
   val c = Tali.colors
   val pop = remember { androidx.compose.animation.core.Animatable(1f) }
   var first by remember { mutableStateOf(true) }
@@ -273,12 +275,12 @@ private fun StarToggle(on: Boolean, onToggle: () -> Unit) {
   val tint by animateColorAsState(if (on) STAR_GOLD else c.inkFaint, tween(200), label = "star")
   Box(
     Modifier.size(40.dp).clip(CircleShape)
-      .clickable(role = Role.Switch, onClickLabel = if (on) "Unstar this pen" else "Star this pen", onClick = onToggle),
+      .clickable(role = Role.Switch, onClickLabel = if (on) unstarLabel else starLabel, onClick = onToggle),
     contentAlignment = Alignment.Center,
   ) {
     Icon(
       if (on) Icons.Filled.Star else Icons.Outlined.StarBorder,
-      if (on) "Starred: the S Pen button switches to it" else "Not starred",
+      if (on) "Starred" else "Not starred",
       tint = tint,
       modifier = Modifier.size(24.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value },
     )
@@ -468,23 +470,110 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
     if (styling) {
       ShapeStylePicker(settings, vm)
     } else {
-      ShapeGroup.entries.forEach { group ->
-        Spacer(Modifier.height(12.dp))
-        SectionLabel(group.label)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          ShapeKind.offered.filter { it.group == group }.forEach { kind ->
-            val on = kind == current && vm.customShapeId == null && vm.tool == com.tali.notes.model.Tool.SHAPE
-            ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
-          }
+      // The standard shapes, then the subjects she starred, then hers; every subject is under More shapes.
+      Spacer(Modifier.height(12.dp))
+      SectionLabel(ShapeGroup.BASIC.label)
+      Spacer(Modifier.height(8.dp))
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ShapeKind.offered.filter { it.group == ShapeGroup.BASIC }.forEach { kind ->
+          val on = kind == current && vm.customShapeId == null && vm.packShapeId == null && vm.tool == com.tali.notes.model.Tool.SHAPE
+          ShapeTile(kind.label, on, onClick = { vm.pickShape(kind) }) { tint -> ShapeIcon(kind, tint, size = 30.dp) }
         }
       }
-      if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null) {
+      com.tali.notes.model.ShapePacks.all.filter { it.id in settings.starredPacks }.forEach { pack ->
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(Modifier.weight(1f)) { SectionLabel(pack.name) }
+          StarToggle(true, unstarLabel = "Take ${pack.name} out of the Shapes panel") { vm.toggleStarPack(pack.id) }
+        }
+        PackTiles(pack, current, vm)
+      }
+      if (current == ShapeKind.PART_CIRCLE && vm.customShapeId == null && vm.packShapeId == null) {
         Spacer(Modifier.height(10.dp))
         Text("Part circle: drag from the centre outwards; it starts as a half. Then drag an end dot to make it any % of a circle.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
       }
       MyShapes(settings.customShapes, vm)
+      var browsing by remember { mutableStateOf(false) }
+      Spacer(Modifier.height(14.dp))
+      Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.accentSoft.copy(alpha = 0.6f)).clickable { browsing = true }.padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Icon(Icons.Outlined.Category, null, tint = c.accent, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+          Text("More shapes", style = MaterialTheme.typography.titleSmall, color = c.ink)
+          Text("Shapes for each subject: engineering, law, health, economics and more", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+        }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = c.accent)
+      }
+      if (browsing) ShapePacksDialog(settings, current, vm, onDismiss = { browsing = false })
     }
+  }
+}
+
+/** A subject's shapes as tiles; the one the Shapes tool is drawing is lit. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PackTiles(pack: com.tali.notes.model.ShapePack, current: ShapeKind, vm: NotebookViewModel, onPicked: () -> Unit = {}) {
+  Spacer(Modifier.height(8.dp))
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    pack.shapes.forEach { shape ->
+      val shapeTool = vm.tool == com.tali.notes.model.Tool.SHAPE
+      val kind = shape.kind
+      val on = shapeTool && vm.customShapeId == null && (if (kind != null) vm.packShapeId == null && kind == current else vm.packShapeId == shape.id)
+      ShapeTile(shape.label, on, onClick = {
+        vm.pickPackShape(shape)
+        onPicked()
+      }) { tint -> if (kind != null) ShapeIcon(kind, tint, size = 30.dp) else GeometryIcon(shape.icon, tint, size = 30.dp) }
+    }
+  }
+}
+
+/**
+ * Every subject's shapes: the subjects down the left (a star keeps one in the Shapes panel, for
+ * the whole app), the chosen subject's shapes on the right. Picking a shape starts drawing it.
+ */
+@Composable
+private fun ShapePacksDialog(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel, onDismiss: () -> Unit) {
+  val c = Tali.colors
+  val packs = com.tali.notes.model.ShapePacks.all
+  var shown by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(packs.firstOrNull { it.id in settings.starredPacks }?.id ?: packs.first().id) }
+  val pack = packs.first { it.id == shown }
+  com.tali.notes.ui.library.DialogCard(onDismiss, width = 860) {
+    Text("More shapes", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(4.dp))
+    Text("Star a subject to keep its shapes in the Shapes panel; holding the pen at the end of a stroke snaps to them too.", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+    Spacer(Modifier.height(14.dp))
+    Row(Modifier.weight(1f, fill = false)) {
+      // The subjects.
+      Column(Modifier.width(250.dp).verticalScroll(rememberScrollState())) {
+        packs.forEach { p ->
+          val on = p.id == shown
+          val wash by animateColorAsState(if (on) c.accentSoft else Color.Transparent, tween(200), label = "subject")
+          Row(
+            Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(12.dp)).background(wash).clickable { shown = p.id }.padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Text(p.name, style = MaterialTheme.typography.bodyMedium, color = if (on) c.accent else c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            StarToggle(p.id in settings.starredPacks, starLabel = "Add ${p.name} to the Shapes panel", unstarLabel = "Take ${p.name} out of the Shapes panel") { vm.toggleStarPack(p.id) }
+          }
+        }
+      }
+      Spacer(Modifier.width(18.dp))
+      // Its shapes.
+      Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Text(pack.name, style = MaterialTheme.typography.titleMedium, color = c.ink)
+        Text(
+          if (pack.id in settings.starredPacks) "In your Shapes panel" else "Tap the star to keep these in your Shapes panel",
+          style = MaterialTheme.typography.bodySmall,
+          color = c.inkFaint,
+        )
+        PackTiles(pack, current, vm, onPicked = onDismiss)
+      }
+    }
+    Spacer(Modifier.height(16.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { QuietButton("Done", onClick = onDismiss) }
   }
 }
 

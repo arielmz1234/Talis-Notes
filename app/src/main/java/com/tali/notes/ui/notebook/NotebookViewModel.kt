@@ -46,6 +46,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val CUSTOM_PREFIX = "custom:"
+private const val PACK_PREFIX = "pack:"
 
 enum class PanelKind {
   PEN,
@@ -117,6 +118,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   /** The saved shape the shape tool draws, if she picked one of hers. */
   var customShapeId by mutableStateOf(store.settings.value.lastShape.removePrefix(CUSTOM_PREFIX).takeIf { store.settings.value.lastShape.startsWith(CUSTOM_PREFIX) })
+
+  /** A subject's shape the Shapes tool draws ([com.tali.notes.model.ShapePacks]), when one is picked. */
+  var packShapeId by mutableStateOf(store.settings.value.lastShape.removePrefix(PACK_PREFIX).takeIf { store.settings.value.lastShape.startsWith(PACK_PREFIX) && com.tali.notes.model.ShapePacks.shape(it.removePrefix(PACK_PREFIX)) != null })
     private set
 
   var hint by mutableStateOf<String?>(null)
@@ -363,13 +367,31 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun pickShape(kind: ShapeKind) {
     shapeKind = kind
     customShapeId = null
+    packShapeId = null
     tool = Tool.SHAPE
     panel = null
     store.update { it.copy(lastShape = kind.name) }
   }
 
+  /** A subject's shape: one of the built-in kinds (civil engineering symbols) or a design of its own. */
+  fun pickPackShape(shape: com.tali.notes.model.PackShape) {
+    shape.kind?.let {
+      pickShape(it)
+      return
+    }
+    packShapeId = shape.id
+    customShapeId = null
+    tool = Tool.SHAPE
+    panel = null
+    store.update { it.copy(lastShape = PACK_PREFIX + shape.id) }
+  }
+
+  /** Stars a subject (its shapes join the Shapes panel and hold-to-shape) or takes the star away. App-wide. */
+  fun toggleStarPack(id: String) = store.update { s -> s.copy(starredPacks = if (id in s.starredPacks) s.starredPacks - id else s.starredPacks + id) }
+
   fun pickCustomShape(shape: CustomShape) {
     customShapeId = shape.id
+    packShapeId = null
     tool = Tool.SHAPE
     panel = null
     store.update { it.copy(lastShape = CUSTOM_PREFIX + shape.id) }

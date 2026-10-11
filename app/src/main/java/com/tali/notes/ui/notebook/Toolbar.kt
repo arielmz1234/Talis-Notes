@@ -105,6 +105,7 @@ fun MainToolbar(
   recording: Boolean = false,
   onVoice: () -> Unit = {},
   onVoiceAnchor: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit = {},
+  packShape: com.tali.notes.model.PackShape? = null,
 ) {
   val c = Tali.colors
   FloatingBar(modifier.height(MAIN_TOOLBAR_HEIGHT), crown = CloudCrown.EDGE) {
@@ -200,6 +201,7 @@ fun MainToolbar(
           when {
             tool != Tool.SHAPE -> Icon(Icons.Outlined.Category, "Shapes", tint = c.ink, modifier = Modifier.size(22.dp))
             customShape != null -> GeometryIcon(customShape.geometry, c.blue, size = 26.dp)
+            packShape != null -> GeometryIcon(packShape.icon, c.blue, size = 26.dp)
             else -> ShapeIcon(shapeKind, c.blue, size = 26.dp)
           }
         }

@@ -31,12 +31,29 @@ object ShapeRecognizer {
    * hold-to-straighten never surprises her); otherwise a close enough match with one of her shapes
    * wins, since she saved it precisely because she draws it often.
    */
-  fun recognize(raw: List<Pt>, custom: List<CustomShape>): ShapeGeometry? {
+  /**
+   * The clean shape for a held stroke: one of the standard shapes, one of hers ([custom]), or one of
+   * the starred subjects' shapes ([packs]; never a subject she hasn't starred), whichever it looks
+   * most like, when it's close enough.
+   */
+  fun recognize(raw: List<Pt>, custom: List<CustomShape>, packs: List<com.tali.notes.model.PackShape> = emptyList()): ShapeGeometry? {
     val builtin = recognize(raw)
-    if (custom.isEmpty() || builtin is LineShape) return builtin
-    val match = bestCustom(raw, custom) ?: return builtin
+    if ((custom.isEmpty() && packs.none { it.cloud != null }) || builtin is LineShape) return builtin
     val box = Rect.around(raw) ?: return builtin
-    return match.placeOver(box)
+    val drawn = ShapeMatcher.cloud(listOf(dedupe(raw))) ?: return builtin
+    var bestD = ShapeMatcher.MATCH
+    var best: (() -> ShapeGeometry)? = null
+    fun consider(template: ShapeMatcher.Cloud?, place: () -> ShapeGeometry) {
+      if (template == null || !ShapeMatcher.similarAspect(drawn, template)) return
+      val d = ShapeMatcher.distance(drawn, template)
+      if (d < bestD) {
+        bestD = d
+        best = place
+      }
+    }
+    custom.forEach { shape -> consider(shape.cloud) { shape.placeOver(box) } }
+    packs.forEach { shape -> consider(shape.cloud) { shape.placeOver(box, raw.first(), raw.last()) } }
+    return best?.invoke() ?: builtin
   }
 
   /** The saved shape that the stroke looks most like, or null when none is close enough. */

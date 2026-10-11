@@ -456,6 +456,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           v.shapeKind = vm.shapeKind
           v.topClearance = if (narrow) 196f else 124f
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
+          v.packShape = vm.packShapeId?.let(com.tali.notes.model.ShapePacks::shape)
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
           v.customPaper = vm.customPaperOf(meta, settings)
           v.pageLayout = vm.pageLayout
@@ -569,6 +570,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             tool = vm.tool,
             shapeKind = vm.shapeKind,
             customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId },
+            packShape = vm.packShapeId?.let(com.tali.notes.model.ShapePacks::shape),
             onPen = vm::onPenTapped,
             penSettingsOpen = vm.panel == PanelKind.PEN,
             onPenSettings = vm::togglePenSettings,
