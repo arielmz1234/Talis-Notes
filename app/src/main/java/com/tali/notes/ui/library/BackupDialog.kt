@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -114,8 +115,9 @@ fun BackupDialog(onDismiss: () -> Unit) {
     BackupCard(Icons.Outlined.FolderZip, "Backup file", "Everything in one file: notebooks, pictures, pens, colours and your shapes. Keep it in Files, on a computer, or send it to yourself.") {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         // The one to set up is the automatic backup above; this is the extra copy.
-        QuietButton("Save backup file") { saveFile.launch(BackupArchive.fileName()) }
-        QuietButton("Restore from file") { openFile.launch(arrayOf(BackupArchive.MIME, "application/octet-stream")) }
+        // Saving and restoring wear their own colours so they're not mistaken for each other.
+        QuietButton("Save backup file", color = c.blue) { saveFile.launch(BackupArchive.fileName()) }
+        QuietButton("Restore from file", color = if (c.isDark) Color(0xFF6FD3B5) else Color(0xFF1C8466)) { openFile.launch(arrayOf(BackupArchive.MIME, "application/octet-stream")) }
       }
     }
     if (DriveBackup.available) {

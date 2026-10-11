@@ -137,6 +137,8 @@ import com.tali.notes.ui.components.rememberSlidingSelection
 import com.tali.notes.ui.components.slidingHighlight
 import com.tali.notes.ui.components.slidingOption
 
+private const val WELCOME_RESTORE = "welcome-restore"
+
 @Composable
 fun LibraryScreen(onOpen: (String) -> Unit) {
   val app = LocalContext.current.applicationContext as Application
@@ -452,6 +454,17 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     }
   }
   if (backups) BackupDialog(onDismiss = { backups = false })
+  // The first time the app opens with nothing in it (new tablet, or installed again): offer to
+  // bring notebooks back from a backup. Once only; Backups has it after that.
+  val loaded by (app as com.tali.notes.TalisApp).repository.loaded.collectAsState()
+  var welcome by remember { mutableStateOf(false) }
+  LaunchedEffect(loaded) {
+    if (loaded && all.isEmpty() && trash.isEmpty() && WELCOME_RESTORE !in settings.seenTips) {
+      welcome = true
+      (app as com.tali.notes.TalisApp).settings.update { it.copy(seenTips = it.seenTips + WELCOME_RESTORE) }
+    }
+  }
+  if (welcome) WelcomeRestoreCard(onDismiss = { welcome = false })
   if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onDismiss = { showSettings = false })
   trashAction?.let { nb ->
     DialogCard(onDismiss = { trashAction = null }, width = 480, dim = false) {

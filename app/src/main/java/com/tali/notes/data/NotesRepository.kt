@@ -100,9 +100,13 @@ class NotesRepository(private val context: Context) {
   val databaseFile: File
     get() = context.getDatabasePath("notes.db")
 
+  /** True once the notebooks have been read from storage the first time (until then the lists are just empty). */
+  val loaded = MutableStateFlow(false)
+
   init {
     scope.launch {
       reload()
+      loaded.value = true
       purgeTrash()
     }
   }

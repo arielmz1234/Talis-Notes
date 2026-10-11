@@ -164,6 +164,71 @@ private fun Thumb(app: TalisApp, nb: NotebookMeta) {
   }
 }
 
+/** "2 notebooks added, 1 notebook updated." for what a restore did. */
+fun describeRestore(r: com.tali.notes.data.NotesRepository.MergeResult): String {
+  val parts = buildList {
+    if (r.added > 0) add(if (r.added == 1) "1 notebook added" else "${r.added} notebooks added")
+    if (r.updated > 0) add(if (r.updated == 1) "1 notebook updated" else "${r.updated} notebooks updated")
+  }
+  return if (parts.isEmpty()) "Everything in the backup was already here." else parts.joinToString(", ") + "."
+}
+
+/**
+ * The first time the app opens with nothing in it (a new tablet, or the app reinstalled): offers to
+ * bring notebooks back from a backup file. Restoring also keeps backing up into that file when the
+ * storage app (Drive, the tablet…) lets it.
+ */
+@Composable
+fun WelcomeRestoreCard(onDismiss: () -> Unit) {
+  val c = Tali.colors
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var busy by remember { mutableStateOf(false) }
+  var result by remember { mutableStateOf<String?>(null) }
+  val pick =
+    androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+      if (uri != null) {
+        busy = true
+        scope.launch {
+          result =
+            try {
+              val r = context.contentResolver.openInputStream(uri)?.use { BackupArchive.restore(context, it) } ?: error("Couldn't open the file")
+              val kept = com.tali.notes.backup.AutoBackup.adopt(context, uri)
+              describeRestore(r) + if (kept) " It'll keep backing up into that file by itself." else ""
+            } catch (e: BackupArchive.InvalidBackup) {
+              e.message
+            } catch (t: Throwable) {
+              CrashLog.recovered(context, t)
+              "Something went wrong: ${t.message ?: t.javaClass.simpleName}"
+            }
+          busy = false
+        }
+      }
+    }
+  DialogCard({ if (!busy) onDismiss() }, width = 500) {
+    Text(if (result != null) "Welcome back" else "Welcome to Tali's Notes", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(10.dp))
+    Text(
+      result ?: if (busy) "Restoring…" else "New tablet, or the app installed again? If you have a backup (in Google Drive, OneDrive or on the tablet), you can bring all your notebooks back now. You can also do it later from Backups, at the bottom left.",
+      style = MaterialTheme.typography.bodyMedium,
+      color = if (result != null || busy) c.blue else c.inkMuted,
+    )
+    if (result == null && !busy) {
+      Spacer(Modifier.height(6.dp))
+      Text("To find Google Drive, tap ☰ at the top left of the next screen.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
+    }
+    Spacer(Modifier.height(20.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+      if (result != null) {
+        PrimaryButton("Done", onClick = onDismiss)
+      } else {
+        QuietButton("Start fresh") { if (!busy) onDismiss() }
+        PrimaryButton("Restore a backup") { if (!busy) pick.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream")) }
+      }
+    }
+  }
+}
+
 /** Her backup file was opened with the app: restore it (merging, never deleting)? */
 @Composable
 private fun RestoreCard(files: Incoming.Files, onDismiss: () -> Unit) {

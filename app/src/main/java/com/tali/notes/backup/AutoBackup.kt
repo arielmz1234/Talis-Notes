@@ -137,6 +137,21 @@ object AutoBackup {
       }
       .getOrNull() ?: 0L
 
+  /**
+   * After restoring from [uri] (picked with the open screen), keeps backing up into that same file
+   * when the storage app lets the app write to it. Does nothing if a backup file is already set.
+   * Returns whether it did.
+   */
+  suspend fun adopt(context: Context, uri: Uri): Boolean {
+    if (flow(context).value.enabled) return false
+    runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }.onFailure { return false }
+    val name = withContext(Dispatchers.IO) { displayName(context, uri) }
+    save(context) { it.copy(uri = uri, place = placeOf(uri), fileName = name, error = null, lastSuccess = 0L) }
+    WorkManager.getInstance(context)
+      .enqueueUniquePeriodicWork(DAILY, ExistingPeriodicWorkPolicy.UPDATE, PeriodicWorkRequestBuilder<Worker>(1, TimeUnit.DAYS).setConstraints(constraints(batteryNotLow = true)).build())
+    return true
+  }
+
   fun turnOff(context: Context) {
     val uri = flow(context).value.uri
     if (uri != null) runCatching { context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
