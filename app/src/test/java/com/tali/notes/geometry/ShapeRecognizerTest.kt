@@ -152,6 +152,22 @@ class ShapeRecognizerTest {
   }
 
   @Test
+  fun aWaveBecomesACurve() {
+    // Up and down twice, smoothly.
+    val wave = List(120) { i -> Pt(i * 3f, 60f * sin(i / 119.0 * 4 * PI).toFloat() + rnd.nextFloat() * 2f) }
+    val g = ShapeRecognizer.recognize(wave)
+    assertTrue("got $g", g is com.tali.notes.model.CurveShape)
+    val c = g as com.tali.notes.model.CurveShape
+    // Its ends are where the stroke began and ended, and it follows the stroke.
+    assertTrue(c.points.first().dist(wave.first()) < 3f && c.points.last().dist(wave.last()) < 3f)
+    val path = c.paths(1f).first()
+    assertTrue(wave.all { p -> path.minOf { it.dist(p) } < 15f })
+    // An S.
+    val s = List(100) { i -> val t = i / 99.0 * PI; Pt(80f * sin(2 * t).toFloat(), i * 3f) }
+    assertTrue("got ${ShapeRecognizer.recognize(s)}", ShapeRecognizer.recognize(s) is com.tali.notes.model.CurveShape)
+  }
+
+  @Test
   fun pentagonKeepsItsCorners() {
     val corners = List(6) { i -> Pt(100f * cos(-PI / 2 + 2 * PI * i / 5).toFloat(), 100f * sin(-PI / 2 + 2 * PI * i / 5).toFloat()) }
     val shape = ShapeRecognizer.recognize(wobbly(*corners.toTypedArray(), jitter = 2f))

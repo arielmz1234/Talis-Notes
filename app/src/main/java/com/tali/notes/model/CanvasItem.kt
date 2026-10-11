@@ -235,7 +235,9 @@ class TextItem(
         this.color = color
         typeface = android.graphics.Typeface.SANS_SERIF
       }
-    return android.text.StaticLayout.Builder.obtain(text, 0, text.length, paint, width.toInt().coerceAtLeast(1)).setLineSpacing(0f, LINE / 1.17f).setIncludePad(false).build()
+    return android.text.StaticLayout.Builder.obtain(text, 0, text.length, paint, width.toInt().coerceAtLeast(1)).setLineSpacing(0f, LINE / 1.17f).setIncludePad(false)
+      // Each paragraph runs the way its first letters do: Hebrew from the right, English from the left.
+      .setTextDirection(android.text.TextDirectionHeuristics.FIRSTSTRONG_LTR).setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL).build()
   }
 
   override fun transformed(m: Affine, newId: String, newZ: Long): TextItem {

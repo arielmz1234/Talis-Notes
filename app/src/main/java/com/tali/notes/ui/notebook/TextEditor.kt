@@ -155,7 +155,7 @@ fun TextEditorOverlay(
     BasicTextField(
       value,
       { value = it },
-      textStyle = TextStyle(color = ink, fontSize = fontSp, lineHeight = lineSp, fontFamily = FontFamily.SansSerif),
+      textStyle = TextStyle(color = ink, fontSize = fontSp, lineHeight = lineSp, fontFamily = FontFamily.SansSerif, textDirection = androidx.compose.ui.text.style.TextDirection.Content),
       cursorBrush = SolidColor(c.accent),
       onTextLayout = { textHeight = kotlin.math.ceil(it.multiParagraph.height).toInt() },
       modifier =

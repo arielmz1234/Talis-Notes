@@ -1,5 +1,7 @@
 package com.tali.notes.geometry
 
+import com.tali.notes.model.CURVE_DOTS
+import com.tali.notes.model.CurveShape
 import com.tali.notes.model.CustomShape
 import com.tali.notes.model.EllipseShape
 import com.tali.notes.model.LineShape
@@ -27,6 +29,8 @@ object ShapeRecognizer {
   private const val DEG = (PI / 180).toFloat()
   /** A bend gentler than 130° that sticks out less than this share of the shape's size is her hand, not a corner. */
   private const val GENTLE_BEND = 0.14f
+  /** A turn sharper than this from one step of the finely sampled stroke to the next is a corner, not a bend. */
+  private val CORNER_TURN = (40 * PI / 180).toFloat()
 
   /**
    * Like [recognize], but also tries her own saved shapes. A straight line always stays a line (so
@@ -134,9 +138,59 @@ object ShapeRecognizer {
     val simplified = Geo.simplify(points, max(0.08f * diag, 5f))
     arrow(simplified)?.let { return it }
 
+    // A stroke that bends without corners (up and down, an S, a bow) becomes a Curve.
+    if (!hasCorner(points)) fitCurve(points, diag)?.let { return it }
+
     if (simplified.size in 3..8) {
       val fit = Geo.meanDistToPolyline(points, simplified, closed = false)
       if (fit < 0.035f * diag) return PolyShape(simplified.map { it }, closed = false)
+    }
+    return null
+  }
+
+  /**
+   * Whether the stroke turns sharply somewhere (a corner, as in an L or a zigzag) rather than
+   * bending smoothly: measured on the stroke evenly resampled, over short stretches of it.
+   */
+  private fun hasCorner(points: List<Pt>): Boolean {
+    // Finely sampled, a corner turns all at once (in one or two steps) while a bend, even a tight
+    // one at the top of a wave, spreads its turn over many.
+    val r = Geo.resample(points, 96)
+    for (i in 1 until r.size - 1) {
+      val before = r[i] - r[i - 1]
+      val after = r[i + 1] - r[i]
+      if (before.length() < 1e-3f || after.length() < 1e-3f) continue
+      var turn = abs(after.angle() - before.angle())
+      if (turn > PI.toFloat()) turn = 2 * PI.toFloat() - turn
+      if (turn > CORNER_TURN) return true
+    }
+    return false
+  }
+
+  /**
+   * A smooth curve through the stroke, or null when none follows it closely. Its dots sit where
+   * the stroke turns (the top and bottom of each wave, found by simplifying it), with more added
+   * along the longest stretches so there are always at least [CURVE_DOTS], straight parts included.
+   */
+  private fun fitCurve(points: List<Pt>, diag: Float): CurveShape? {
+    val stroke = Geo.resample(points, 120)
+    fun close(c: CurveShape): Boolean {
+      val path = c.paths(1f).first()
+      val worst = stroke.maxOf { p -> (0 until path.size - 1).minOf { i -> Geo.distToSegment(p, path[i], path[i + 1]) } }
+      return worst < 0.05f * diag && Geo.meanDistToPolyline(stroke, path, closed = false) < 0.02f * diag
+    }
+    for (tolerance in listOf(0.05f, 0.035f, 0.02f)) {
+      val turns = Geo.simplify(stroke, tolerance * diag)
+      if (turns.size > 12) break
+      // Where each dot sits along the stroke, then more between the farthest-apart ones.
+      val at = turns.map { t -> stroke.indexOf(t) }.toMutableList()
+      while (at.size < CURVE_DOTS) {
+        val gap = (0 until at.size - 1).maxBy { at[it + 1] - at[it] }
+        if (at[gap + 1] - at[gap] < 2) break
+        at.add(gap + 1, (at[gap] + at[gap + 1]) / 2)
+      }
+      val curve = CurveShape(at.map { stroke[it] })
+      if (close(curve)) return curve
     }
     return null
   }

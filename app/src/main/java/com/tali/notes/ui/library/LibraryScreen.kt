@@ -905,7 +905,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
         value,
         onChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.ink),
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.ink, textDirection = androidx.compose.ui.text.style.TextDirection.Content),
         cursorBrush = SolidColor(c.accent),
         modifier = Modifier.fillMaxWidth(),
       )

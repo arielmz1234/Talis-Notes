@@ -404,7 +404,7 @@ private fun MemoTitle(title: String, editing: Boolean, onEdit: () -> Unit, onDon
           value,
           { value = it },
           singleLine = true,
-          textStyle = MaterialTheme.typography.labelLarge.merge(TextStyle(color = c.ink)),
+          textStyle = MaterialTheme.typography.labelLarge.merge(TextStyle(color = c.ink, textDirection = androidx.compose.ui.text.style.TextDirection.Content)),
           cursorBrush = SolidColor(c.accent),
           keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
           keyboardActions = KeyboardActions(onDone = { done() }),

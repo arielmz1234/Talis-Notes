@@ -128,7 +128,7 @@ fun TitleField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, placeh
       value,
       onChange,
       singleLine = true,
-      textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.ink),
+      textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.ink, textDirection = androidx.compose.ui.text.style.TextDirection.Content),
       cursorBrush = SolidColor(c.accent),
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
       keyboardActions = KeyboardActions(onDone = { onDone() }),
