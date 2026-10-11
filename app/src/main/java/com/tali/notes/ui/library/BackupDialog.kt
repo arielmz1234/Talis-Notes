@@ -125,7 +125,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
         // The one to set up is the automatic backup above; this is the extra copy.
         // Saving and restoring wear their own colours so they're not mistaken for each other.
         QuietButton("Save backup file", color = c.blue) { saveFile.launch(BackupArchive.fileName()) }
-        QuietButton("Restore from file", color = if (c.isDark) Color(0xFF6FD3B5) else Color(0xFF1C8466)) { openFile.launch(arrayOf(BackupArchive.MIME, "application/octet-stream")) }
+        QuietButton("Restore from file", color = restoreColor()) { openFile.launch(arrayOf(BackupArchive.MIME, "application/octet-stream")) }
       }
     }
     Spacer(Modifier.height(14.dp))
@@ -220,7 +220,7 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
       )
       Spacer(Modifier.height(10.dp))
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuietButton("Back up now") { onRun("Backing up…") { if (AutoBackup.backupNow(context)) "Backed up." else AutoBackup.status(context).value.error ?: "Couldn't save the backup" } }
+        QuietButton("Back up now", color = c.blue) { onRun("Backing up…") { if (AutoBackup.backupNow(context)) "Backed up." else AutoBackup.status(context).value.error ?: "Couldn't save the backup" } }
         QuietButton("Change place") { pick.launch(AutoBackup.FILE_NAME) }
         QuietButton("Turn off") { AutoBackup.turnOff(context) }
       }
@@ -229,6 +229,10 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
     }
   }
 }
+
+/** Restoring wears teal everywhere in Backups, saving blue, so the two are never mistaken for each other. */
+@Composable
+private fun restoreColor() = if (Tali.colors.isDark) Color(0xFF6FD3B5) else Color(0xFF1C8466)
 
 @Composable
 private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (NotesRepository.MergeResult) -> String) {
@@ -287,14 +291,14 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
     Spacer(Modifier.height(10.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
       if (status.enabled) {
-        QuietButton("Back up now") {
+        QuietButton("Back up now", color = c.blue) {
           withToken("Backing up to Drive…") { token ->
             DriveBackup.backupNow(context, token)
             "Backed up to Google Drive."
           }
         }
       }
-      QuietButton("Restore from Drive") {
+      QuietButton("Restore from Drive", color = restoreColor()) {
         withToken("Restoring from Drive…") { token -> describe(DriveBackup.restore(context, token)) }
       }
     }
