@@ -718,4 +718,26 @@
     <string name="your_own">Your own</string>
     <string name="your_own_paper">Your own paper</string>
     <string name="z_to_a">Z to A</string>
+    <string name="tour_step_n_of_n">%1$s of %2$s</string>
+    <string name="tour_skip">Skip</string>
+    <string name="tour_next">Next</string>
+    <string name="tour_start_writing">Start writing</string>
+    <string name="getting_started">Getting started</string>
+    <string name="take_the_tour">Take the tour</string>
+    <string name="tour_write_title">Write like on paper</string>
+    <string name="tour_write_body">A4 pages that keep coming as you write. Pinch to zoom, slide with two fingers, and everything saves the moment you write it.</string>
+    <string name="tour_pens_title">Your pens, your colours</string>
+    <string name="tour_pens_body">Tap a pen to write with it, and tap it again for its settings: type, thickness, line style and colours. Your favourite colours and three thicknesses sit right in the toolbar.</string>
+    <string name="tour_hold_title">Hold to perfect it</string>
+    <string name="tour_hold_body">Draw a line, a circle or a box and keep the pen still at the end: it snaps into a clean shape. Keep moving to size it. A wavy stroke becomes a smooth curve.</string>
+    <string name="tour_subjects_title">Shapes for your subject</string>
+    <string name="tour_subjects_body">The Shapes tool has the basics, and shapes for every subject: engineering, law, health, economics and more. Star yours to keep them close. Their dots change what they are: pull a stack longer and it gets more cells.</string>
+    <string name="tour_lasso_title">Pick up anything</string>
+    <string name="tour_lasso_body">Circle anything with the lasso to move, resize, recolour, lock or copy it. Once something is copied, hold the pen anywhere to paste it.</string>
+    <string name="tour_voice_title">Lectures and slides</string>
+    <string name="tour_voice_body">Record a voice memo right beside your notes with the mic. Open a PDF from any app to look through it, or save it and write on the slides.</string>
+    <string name="tour_spen_title">S Pen tricks</string>
+    <string name="tour_spen_body">Hold the S Pen\'s button to erase with any tool. Star your favourite pens, then double-press the button to jump between them. Tap with two fingers to undo.</string>
+    <string name="tour_backup_title">Always backed up</string>
+    <string name="tour_backup_body">Everything is saved on the tablet as you write. Turn on Google Drive or Back up by itself in Backups, at the bottom left, and your notes are safe even if the tablet isn\'t.</string>
 </resources>

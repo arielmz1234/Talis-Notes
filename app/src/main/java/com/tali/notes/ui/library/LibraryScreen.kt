@@ -143,6 +143,9 @@ import com.tali.notes.ui.components.slidingOption
 
 private const val WELCOME_RESTORE = "welcome-restore"
 
+/** The walk through the app, shown once to someone new (after the welcome card); Settings replays it. */
+private const val TOUR = "tour"
+
 @Composable
 fun LibraryScreen(onOpen: (String) -> Unit) {
   val app = LocalContext.current.applicationContext as Application
@@ -468,8 +471,20 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       (app as com.tali.notes.TalisApp).settings.update { it.copy(seenTips = it.seenTips + WELCOME_RESTORE) }
     }
   }
-  if (welcome) WelcomeRestoreCard(onDismiss = { welcome = false })
-  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> (app as com.tali.notes.TalisApp).settings.update { it.copy(pdfsToLibrary = on) } }, onDismiss = { showSettings = false })
+  var tour by remember { mutableStateOf(false) }
+  if (welcome) WelcomeRestoreCard(onDismiss = {
+    welcome = false
+    // Someone new: walk them through the app next (once).
+    if (TOUR !in settings.seenTips) {
+      tour = true
+      (app as com.tali.notes.TalisApp).settings.update { it.copy(seenTips = it.seenTips + TOUR) }
+    }
+  })
+  if (tour) TourCard(onDone = { tour = false })
+  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> (app as com.tali.notes.TalisApp).settings.update { it.copy(pdfsToLibrary = on) } }, onTour = {
+    showSettings = false
+    tour = true
+  }, onDismiss = { showSettings = false })
   trashAction?.let { nb ->
     DialogCard(onDismiss = { trashAction = null }, width = 480, dim = false) {
       Text("“${nb.title}”", style = MaterialTheme.typography.titleLarge, color = c.ink)

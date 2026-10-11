@@ -24,7 +24,7 @@ import com.tali.notes.ui.components.Segmented
 
 /** The app's settings, from the library's sidebar: light or dark, and the cloudy or minimal look. */
 @Composable
-fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onDismiss: () -> Unit) {
+fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onTour: () -> Unit, onDismiss: () -> Unit) {
   val c = Tali.colors
   DialogCard(onDismiss, width = 520) {
     Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, color = c.ink)
@@ -76,6 +76,9 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinima
     }
     Spacer(Modifier.height(22.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+      // The walk through the app, again.
+      com.tali.notes.ui.components.QuietButton(stringResource(R.string.take_the_tour), onClick = onTour)
+      Spacer(Modifier.weight(1f))
       PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
     }
   }

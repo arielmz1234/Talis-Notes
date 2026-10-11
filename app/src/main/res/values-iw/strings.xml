@@ -719,4 +719,26 @@
     <string name="your_own">משלך</string>
     <string name="your_own_paper">דף משלך</string>
     <string name="z_to_a">ת עד א</string>
+    <string name="tour_step_n_of_n">%1$s מתוך %2$s</string>
+    <string name="tour_skip">דילוג</string>
+    <string name="tour_next">הבא</string>
+    <string name="tour_start_writing">מתחילים לכתוב</string>
+    <string name="getting_started">צעדים ראשונים</string>
+    <string name="take_the_tour">סיור באפליקציה</string>
+    <string name="tour_write_title">כותבים כמו על נייר</string>
+    <string name="tour_write_body">עמודי A4 שממשיכים להגיע תוך כדי כתיבה. צובטים כדי להגדיל, גוללים בשתי אצבעות, והכול נשמר ברגע שכותבים.</string>
+    <string name="tour_pens_title">העטים שלך, הצבעים שלך</string>
+    <string name="tour_pens_body">מקישים על עט כדי לכתוב בו, ושוב כדי לפתוח את ההגדרות שלו: סוג, עובי, סוג קו וצבעים. הצבעים האהובים ושלושה עוביים מחכים בסרגל הכלים.</string>
+    <string name="tour_hold_title">לחיצה ממושכת לצורה מושלמת</string>
+    <string name="tour_hold_body">מציירים קו, עיגול או מלבן ומשאירים את העט במקום בסוף: הוא הופך לצורה נקייה. ממשיכים להזיז כדי לקבוע גודל. קו גלי הופך לעקומה חלקה.</string>
+    <string name="tour_subjects_title">צורות לתחום שלך</string>
+    <string name="tour_subjects_body">בכלי הצורות יש את הבסיס, וצורות לכל תחום: הנדסה, משפטים, בריאות, כלכלה ועוד. מסמנים את התחום שלך בכוכב כדי שיהיה קרוב. הנקודות שלהן משנות אותן: מושכים מחסנית והיא מקבלת עוד תאים.</string>
+    <string name="tour_lasso_title">לבחור כל דבר</string>
+    <string name="tour_lasso_body">מקיפים כל דבר בלאסו כדי להזיז, לשנות גודל, לצבוע, לנעול או להעתיק. אחרי העתקה, לחיצה ממושכת בעט בכל מקום מדביקה.</string>
+    <string name="tour_voice_title">הרצאות ושקפים</string>
+    <string name="tour_voice_body">מקליטים הקלטה קולית ממש ליד הסיכומים עם המיקרופון. פותחים PDF מכל אפליקציה כדי לעבור עליו, או שומרים וכותבים על השקפים.</string>
+    <string name="tour_spen_title">טריקים עם ה-S Pen</string>
+    <string name="tour_spen_body">לחיצה ממושכת על כפתור ה-S Pen מוחקת עם כל כלי. מסמנים עטים אהובים בכוכב, ולחיצה כפולה על הכפתור קופצת ביניהם. הקשה בשתי אצבעות מבטלת.</string>
+    <string name="tour_backup_title">תמיד מגובה</string>
+    <string name="tour_backup_body">הכול נשמר בטאבלט תוך כדי כתיבה. מפעילים את Google Drive או גיבוי אוטומטי ב„גיבויים”, בפינה התחתונה, והסיכומים בטוחים גם אם הטאבלט לא.</string>
 </resources>
