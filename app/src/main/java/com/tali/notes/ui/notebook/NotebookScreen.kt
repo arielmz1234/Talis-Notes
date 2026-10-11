@@ -1440,7 +1440,9 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
       val bottomLimit = constraints.maxHeight - p.height - gap
       val cx = sel.screenRect.centerX().roundToInt()
       val folded = if (foldedWidth > 0) foldedWidth + with(density) { 12.dp.roundToPx() } else p.width
-      val x = (cx - folded / 2).coerceIn(gap, (constraints.maxWidth - p.width - gap).coerceAtLeast(gap))
+      // Opening keeps the side ⋯ starts from: the left in English, the right in Hebrew.
+      val start = if (layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl) cx + folded / 2 - p.width else cx - folded / 2
+      val x = start.coerceIn(gap, (constraints.maxWidth - p.width - gap).coerceAtLeast(gap))
       val above = sel.screenRect.top.roundToInt() - p.height - gap
       // Leave room for the rotate handle hanging under the selection.
       val below = sel.screenRect.bottom.roundToInt() + gap + if (sel.rotatable) with(density) { 48.dp.roundToPx() } else 0

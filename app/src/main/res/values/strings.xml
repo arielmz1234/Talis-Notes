@@ -41,6 +41,8 @@
     <string name="backed_up_from_now_on_it">Backed up. From now on it saves by itself.</string>
     <string name="backed_up_to_google_drive">Backed up to Google Drive.</string>
     <string name="backed_up_to_google_drive_2">Backed up to Google Drive</string>
+    <string name="backed_up_today">today</string>
+    <string name="backed_up_yesterday">yesterday</string>
     <string name="backing_up">Backing up…</string>
     <string name="backing_up_now">Backing up now…</string>
     <string name="backing_up_to_drive">Backing up to Drive…</string>
@@ -122,7 +124,7 @@
     <string name="delete_the_n_folder">Delete the “%1$s” folder?</string>
     <string name="delete_the_recording">Delete the recording</string>
     <string name="delete_voice_memo">Delete voice memo</string>
-    <string name="deleted">Deleted </string>
+    <string name="deleted">"Deleted "</string>
     <string name="deleted_when_for_good_in_days">Deleted %1$s. It will be deleted for good in %2$s days.</string>
     <string name="deleted_when_for_good_in_one_day">Deleted %1$s. It will be deleted for good tomorrow.</string>
     <string name="design_a_pattern">Design a pattern</string>
@@ -141,10 +143,10 @@
     <string name="draw_with_finger">Draw with finger</string>
     <string name="draws">Draws</string>
     <string name="duplicate">Duplicate</string>
-    <string name="each_slide_you_imported_comes_back">Each slide you imported comes back as its own page, with your writing on it. </string>
+    <string name="each_slide_you_imported_comes_back">"Each slide you imported comes back as its own page, with your writing on it. "</string>
     <string name="edit_paper">Edit paper</string>
     <string name="edit_text">Edit text</string>
-    <string name="edited">Edited </string>
+    <string name="edited">"Edited "</string>
     <string name="empty">Empty</string>
     <string name="empty_recently_deleted">Empty Recently deleted?</string>
     <string name="endless">Endless</string>
@@ -156,7 +158,7 @@
     <string name="erases">Erases</string>
     <string name="every_backup_in_a_folder_on">Every backup in a folder on the tablet or a memory card.</string>
     <string name="every_notebook_the_app_backed_up">Every notebook the app backed up there. It keeps backing up there too.</string>
-    <string name="every_page_of_the_notebook_as">Every page of the notebook as an A4 page. </string>
+    <string name="every_page_of_the_notebook_as">"Every page of the notebook as an A4 page. "</string>
     <string name="every_stroke_is_saved_the_moment">Every stroke is saved the moment you write it, even without internet.</string>
     <string name="everything">Everything</string>
     <string name="everything_in_one_file_notebooks_pictures">Everything in one file: notebooks, pictures, pens, colours and your shapes. Keep it in Files, on a computer, or send it to yourself.</string>
@@ -185,7 +187,7 @@
     <string name="free_form_select">Free-form select</string>
     <string name="freehand">Freehand</string>
     <string name="from_a_picture">From a picture</string>
-    <string name="from_now_on_it_saves_by"> From now on it saves by itself.</string>
+    <string name="from_now_on_it_saves_by">" From now on it saves by itself."</string>
     <string name="from_your_photos_or_files">From your photos or files</string>
     <string name="full_screen">Full screen</string>
     <string name="go_to_page">Go to page</string>
@@ -198,7 +200,7 @@
     <string name="google_drive_didn_t_start_the">Google Drive didn\'t start the upload</string>
     <string name="google_drive_error_n">Google Drive error %1$s</string>
     <string name="google_drive_refused_access_n">Google Drive refused access (%1$s)</string>
-    <string name="google_drive_will_keep_backing_up"> Google Drive will keep backing up from now on.</string>
+    <string name="google_drive_will_keep_backing_up">" Google Drive will keep backing up from now on."</string>
     <string name="google_needs_you_to_sign_in">Google needs you to sign in again</string>
     <string name="heavy">Heavy</string>
     <string name="here_now">Here now</string>
@@ -213,7 +215,7 @@
     <string name="into_which_notebook">Into which notebook?</string>
     <string name="it_disappears_from_the_paper_choices">It disappears from the paper choices. Notebooks using it switch to blank paper; your writing stays.</string>
     <string name="it_goes_into_your_notebooks_ready">It goes into your notebooks, ready to write on.</string>
-    <string name="it_ll_keep_backing_up_into"> It\'ll keep backing up into that file by itself.</string>
+    <string name="it_ll_keep_backing_up_into">" It\'ll keep backing up into that file by itself."</string>
     <string name="it_moves_to_recently_deleted_where">It moves to Recently deleted, where you can bring it back for %1$s days.</string>
     <string name="it_will_appear_in_shapes_under">It will appear in Shapes under My shapes, and holding the pen at the end of a similar stroke will snap to it.</string>
     <string name="it_will_no_longer_be_offered">It will no longer be offered here or recognised when you hold the pen. Shapes already on your pages stay.</string>
@@ -267,7 +269,7 @@
     <string name="my_shape">My shape</string>
     <string name="my_shapes">My shapes</string>
     <string name="n">%1$s%%</string>
-    <string name="n_folders"> · %1$s folders</string>
+    <string name="n_folders">" · %1$s folders"</string>
     <string name="n_folders_2">%1$s folders</string>
     <string name="n_h_ago">%1$s h ago</string>
     <string name="n_isn_t_in_your_notebooks">“%1$s” isn\'t in your notebooks. Save it to keep it and write on it, or leave and it won\'t be kept.</string>
@@ -619,7 +621,7 @@
     <string name="subject_shape_venn">Venn diagram</string>
     <string name="subject_social">Social Sciences</string>
     <string name="system_default">System default</string>
-    <string name="t_1_folder"> · 1 folder</string>
+    <string name="t_1_folder">" · 1 folder"</string>
     <string name="t_1_folder_2">1 folder</string>
     <string name="t_1_item_unlocked">1 item unlocked</string>
     <string name="t_1_notebook">1 notebook</string>
@@ -638,7 +640,7 @@
     <string name="tap_a_filled_shape_or_area">Tap a filled shape or area to take its fill away.</string>
     <string name="tap_a_filled_shape_or_area_2">Tap a filled shape or area to take its fill away</string>
     <string name="tap_a_notebook_to_bring_it">Tap a notebook to bring it back</string>
-    <string name="tap_a_page_to_look_closer"> · tap a page to look closer, hold and drag to move it</string>
+    <string name="tap_a_page_to_look_closer">" · tap a page to look closer, hold and drag to move it"</string>
     <string name="tap_for_backups">Tap for backups</string>
     <string name="tap_inside_a_shape_or_inside">Tap inside a shape, or inside an area you\'ve drawn around, to fill it with colour. Your writing stays on top.</string>
     <string name="tap_pages_to_pick_them">Tap pages to pick them</string>
@@ -658,7 +660,7 @@
     <string name="the_app_can_t_reach_the">The app can\'t reach the backup file any more. Choose it again.</string>
     <string name="the_backup_file_was_moved_or">The backup file was moved or deleted. Choose it again.</string>
     <string name="the_board_a_textbook_page_a">The board, a textbook page, a sketch</string>
-    <string name="the_canvas_cut_into_a4_pages">The canvas cut into A4 pages; empty areas are skipped. </string>
+    <string name="the_canvas_cut_into_a4_pages">"The canvas cut into A4 pages; empty areas are skipped. "</string>
     <string name="the_colours_before_the_line_hold">The colours before the line · hold one and drag to move it</string>
     <string name="the_lasso_takes_a_picture_of">The lasso takes a picture of the rectangle around what you draw, instead of picking it up.</string>
     <string name="the_microphone_couldn_t_start_try">The microphone couldn\'t start. Try again in a moment.</string>

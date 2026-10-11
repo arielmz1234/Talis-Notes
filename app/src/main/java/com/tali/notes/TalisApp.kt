@@ -51,6 +51,9 @@ private lateinit var instance: TalisApp
  */
 fun tr(@androidx.annotation.StringRes id: Int, vararg args: Any): String = appContext().getString(id, *args)
 
+/** The language the app is showing (for dates and month names). */
+fun appLocale(): java.util.Locale = appContext().resources.configuration.locales[0]
+
 // The app; or, where it isn't Tali's Notes' own (tests), whichever application is running.
 private fun appContext(): Context =
   if (::instance.isInitialized) instance

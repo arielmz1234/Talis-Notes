@@ -180,9 +180,9 @@ fun backedUpAt(millis: Long, now: Long = System.currentTimeMillis()): String {
   val yesterday = (today.clone() as java.util.Calendar).apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
   val date =
     when {
-      same(day, today) -> "today"
-      same(day, yesterday) -> "yesterday"
-      else -> java.text.SimpleDateFormat("d MMM", java.util.Locale.UK).format(java.util.Date(millis))
+      same(day, today) -> tr(R.string.backed_up_today)
+      same(day, yesterday) -> tr(R.string.backed_up_yesterday)
+      else -> java.text.SimpleDateFormat("d MMM", com.tali.notes.appLocale()).format(java.util.Date(millis))
     }
   return tr(R.string.n_n, date, time)
 }

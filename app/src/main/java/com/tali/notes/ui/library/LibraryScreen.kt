@@ -248,7 +248,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
           }
           Text(if (inTrash) stringResource(R.string.recently_deleted) else currentFolder?.name ?: stringResource(R.string.all_notebooks), style = MaterialTheme.typography.displayLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Spacer(Modifier.height(6.dp))
-          val today = remember { SimpleDateFormat("EEEE, d MMMM", Locale.UK).format(Date()) }
+          val today = remember { SimpleDateFormat("EEEE, d MMMM", com.tali.notes.appLocale()).format(Date()) }
           val count = if (currentFolder == null) all.size else all.count { it.folderId == currentFolder.id }
           val inside = if (currentFolder == null) 0 else folders.count { it.parentId == currentFolder.id }
           val counts = (if (count == 1) stringResource(R.string.t_1_notebook) else stringResource(R.string.n_notebooks, count)) + when (inside) {
