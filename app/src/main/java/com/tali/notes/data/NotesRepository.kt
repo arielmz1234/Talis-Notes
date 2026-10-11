@@ -116,6 +116,7 @@ class NotesRepository(private val context: Context) {
   init {
     scope.launch {
       sweepDrafts()
+      separateNames()
       reload()
       loaded.value = true
       purgeTrash()
@@ -172,6 +173,8 @@ class NotesRepository(private val context: Context) {
       val now = System.currentTimeMillis()
       val id = UUID.randomUUID().toString()
       val cover = cover ?: COVER_COLORS[(_notebooks.value.size) % COVER_COLORS.size]
+      // No two notebooks in one place share a name (a PDF only being looked at gets one when saved).
+      val title = if (draft) title else freeTitle(title, folderId, except = null)
       db.writableDatabase.insertOrThrow(
         "notebooks",
         null,
@@ -193,14 +196,85 @@ class NotesRepository(private val context: Context) {
       (_notebooks.value + _drafts.value).first { it.id == id }
     }
 
-  fun rename(id: String, title: String) = update(id) { put("title", title) }
+  fun rename(id: String, title: String) = renamed(id, title, draft = null)
 
   /** A PDF she was only looking at becomes one of her notebooks, called [title]. */
-  fun saveDraft(id: String, title: String) =
-    update(id) {
-      put("title", title)
-      put("draft", 0)
+  fun saveDraft(id: String, title: String) = renamed(id, title, draft = false)
+
+  /** Gives a notebook [title], numbered if another notebook in the same place has it. */
+  private fun renamed(id: String, title: String, draft: Boolean?) {
+    scope.launch {
+      val name = freeTitle(title, folderOf(id), except = id)
+      db.writableDatabase.update(
+        "notebooks",
+        ContentValues().apply {
+          put("title", name)
+          if (draft != null) put("draft", if (draft) 1 else 0)
+          put("updated", System.currentTimeMillis())
+        },
+        "id=?",
+        arrayOf(id),
+      )
+      reload()
+      _revision.value++
     }
+  }
+
+  private fun folderOf(id: String): String? =
+    db.readableDatabase.rawQuery("SELECT folder_id FROM notebooks WHERE id=?", arrayOf(id)).use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null }
+
+  /**
+   * [title], or the next free "[title] (1)", "(2)"… among the notebooks in [folderId] (null: the
+   * ones in no folder, under All notebooks), leaving out [except] (the one being named). Notebooks
+   * in Recently deleted and PDFs only being looked at don't count. Case doesn't matter.
+   */
+  private fun freeTitle(title: String, folderId: String?, except: String?): String {
+    val taken =
+      db.readableDatabase.rawQuery("SELECT title FROM notebooks WHERE deleted IS NULL AND draft = 0 AND IFNULL(folder_id, '') = ? AND id != ?", arrayOf(folderId ?: "", except ?: "")).use { c ->
+        buildList { while (c.moveToNext()) add(c.getString(0)) }
+      }
+    return numberedName(title, taken)
+  }
+
+  /** The same for a folder among the folders beside it, in [parentId]. */
+  private fun freeFolderName(name: String, parentId: String?, except: String?): String {
+    val taken =
+      db.readableDatabase.rawQuery("SELECT name FROM folders WHERE IFNULL(parent_id, '') = ? AND id != ?", arrayOf(parentId ?: "", except ?: "")).use { c ->
+        buildList { while (c.moveToNext()) add(c.getString(0)) }
+      }
+    return numberedName(name, taken)
+  }
+
+  /**
+   * Numbers any notebooks (and folders) that share a name with an older one in the same place.
+   * Run at start-up (for libraries from before names were kept apart), after a restore and after a
+   * folder is deleted (its contents move up). The older one keeps the plain name.
+   */
+  private fun separateNames() {
+    val w = db.writableDatabase
+    val notebooks = w.rawQuery("SELECT id, title, IFNULL(folder_id, '') FROM notebooks WHERE deleted IS NULL AND draft = 0 ORDER BY created, id", null).use { c ->
+      buildList { while (c.moveToNext()) add(Triple(c.getString(0), c.getString(1), c.getString(2))) }
+    }
+    for ((_, group) in notebooks.groupBy { it.third }) {
+      val seen = mutableListOf<String>()
+      for ((id, title, _) in group) {
+        val name = numberedName(title, seen)
+        if (name != title) w.update("notebooks", ContentValues().apply { put("title", name) }, "id=?", arrayOf(id))
+        seen += name
+      }
+    }
+    val folders = w.rawQuery("SELECT id, name, IFNULL(parent_id, '') FROM folders ORDER BY created, id", null).use { c ->
+      buildList { while (c.moveToNext()) add(Triple(c.getString(0), c.getString(1), c.getString(2))) }
+    }
+    for ((_, group) in folders.groupBy { it.third }) {
+      val seen = mutableListOf<String>()
+      for ((id, name0, _) in group) {
+        val name = numberedName(name0, seen)
+        if (name != name0) w.update("folders", ContentValues().apply { put("name", name) }, "id=?", arrayOf(id))
+        seen += name
+      }
+    }
+  }
 
   /**
    * A draft left behind (the app was closed while she was looking at a PDF) waits a day in case
@@ -213,7 +287,23 @@ class NotesRepository(private val context: Context) {
     old.forEach { erase(it) }
   }
 
-  fun moveToFolder(id: String, folderId: String?) = update(id, touch = false) { put("folder_id", folderId) }
+  /** Moves a notebook into [folderId]; if one there has its name, it's numbered. */
+  fun moveToFolder(id: String, folderId: String?) {
+    scope.launch {
+      val title = db.readableDatabase.rawQuery("SELECT title FROM notebooks WHERE id=?", arrayOf(id)).use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: return@launch
+      db.writableDatabase.update(
+        "notebooks",
+        ContentValues().apply {
+          put("folder_id", folderId)
+          put("title", freeTitle(title, folderId, except = id))
+        },
+        "id=?",
+        arrayOf(id),
+      )
+      reload()
+      _revision.value++
+    }
+  }
 
   suspend fun createFolder(name: String, color: Int, parentId: String? = null): Folder =
     withContext(writer) {
@@ -223,7 +313,7 @@ class NotesRepository(private val context: Context) {
         null,
         ContentValues().apply {
           put("id", id)
-          put("name", name)
+          put("name", freeFolderName(name, parentId, except = null))
           put("color", color)
           put("created", System.currentTimeMillis())
           put("position", _folders.value.size)
@@ -234,12 +324,32 @@ class NotesRepository(private val context: Context) {
       _folders.value.first { it.id == id }
     }
 
-  fun renameFolder(id: String, name: String) = updateFolder(id) { put("name", name) }
+  fun renameFolder(id: String, name: String) {
+    scope.launch {
+      val parent = db.readableDatabase.rawQuery("SELECT parent_id FROM folders WHERE id=?", arrayOf(id)).use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null }
+      db.writableDatabase.update("folders", ContentValues().apply { put("name", freeFolderName(name, parent, except = id)) }, "id=?", arrayOf(id))
+      reload()
+    }
+  }
 
   fun recolorFolder(id: String, color: Int) = updateFolder(id) { put("color", color) }
 
   /** Moves a folder into another folder, or to the top level with null. */
-  fun moveFolder(id: String, parentId: String?) = updateFolder(id) { put("parent_id", parentId) }
+  fun moveFolder(id: String, parentId: String?) {
+    scope.launch {
+      val name = db.readableDatabase.rawQuery("SELECT name FROM folders WHERE id=?", arrayOf(id)).use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: return@launch
+      db.writableDatabase.update(
+        "folders",
+        ContentValues().apply {
+          put("parent_id", parentId)
+          put("name", freeFolderName(name, parentId, except = id))
+        },
+        "id=?",
+        arrayOf(id),
+      )
+      reload()
+    }
+  }
 
   /**
    * Deletes a folder. Nothing inside is lost: its notebooks and folders move up into the folder it
@@ -258,6 +368,8 @@ class NotesRepository(private val context: Context) {
       } finally {
         w.endTransaction()
       }
+      // What moved up may share a name with what was already there.
+      separateNames()
       reload()
       _revision.value++
     }
@@ -299,7 +411,23 @@ class NotesRepository(private val context: Context) {
   /** Moves a notebook to Recently deleted. Nothing is erased until it has been there [TRASH_DAYS] days. */
   fun delete(id: String) = update(id, touch = false) { put("deleted", System.currentTimeMillis()) }
 
-  fun restoreFromTrash(id: String) = update(id, touch = false) { putNull("deleted") }
+  /** Brings a notebook back from Recently deleted; numbered if one in its place now has its name. */
+  fun restoreFromTrash(id: String) {
+    scope.launch {
+      val title = db.readableDatabase.rawQuery("SELECT title FROM notebooks WHERE id=?", arrayOf(id)).use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: return@launch
+      db.writableDatabase.update(
+        "notebooks",
+        ContentValues().apply {
+          putNull("deleted")
+          put("title", freeTitle(title, folderOf(id), except = id))
+        },
+        "id=?",
+        arrayOf(id),
+      )
+      reload()
+      _revision.value++
+    }
+  }
 
   /** Erases a notebook for good, with its pictures (unless another notebook uses them) and preview. */
   fun deleteForever(id: String) {
@@ -336,7 +464,7 @@ class NotesRepository(private val context: Context) {
       try {
         w.execSQL(
           "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id,pages,dark,landscape) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id,pages,dark,landscape FROM notebooks WHERE id=?",
-          arrayOf<Any>(newId, src.title + " (copy)", now, now, id),
+          arrayOf<Any>(newId, freeTitle(src.title, src.folderId, except = null), now, now, id),
         )
         readRows(id).forEach { w.insertOrThrow("items", null, it.toValues(newId).apply { put("id", UUID.randomUUID().toString()) }) }
         w.setTransactionSuccessful()
@@ -545,6 +673,8 @@ class NotesRepository(private val context: Context) {
         } finally {
           w.endTransaction()
         }
+        // A notebook from the backup may share a name with a different one already here.
+        separateNames()
         reload()
         _revision.value++
         MergeResult(added, updated, kept, incoming.map { it.first }.toSet())
@@ -567,4 +697,18 @@ class NotesRepository(private val context: Context) {
 
 private object SQLiteConflict {
   const val REPLACE = android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE
+}
+
+/**
+ * [name], or "[name] (1)", "(2)"… whichever is first free among [taken] (ignoring case and spaces
+ * at the ends). A name that already ends in a number in brackets counts on from its stem.
+ */
+fun numberedName(name: String, taken: Collection<String>): String {
+  val used = taken.map { it.trim().lowercase() }.toSet()
+  val base = name.trim().ifEmpty { "Untitled" }
+  if (base.lowercase() !in used) return base
+  val stem = Regex("""^(.*\S)\s*\(\d+\)$""").find(base)?.groupValues?.get(1) ?: base
+  var n = 1
+  while ("${stem.lowercase()} ($n)" in used) n++
+  return "$stem ($n)"
 }

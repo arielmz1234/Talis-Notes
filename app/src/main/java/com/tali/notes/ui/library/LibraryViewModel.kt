@@ -187,13 +187,7 @@ fun folderPath(folders: List<Folder>, id: String?): List<Folder> {
 }
 
 /** [base] if no name in [taken] is it (ignoring case and spaces at the ends), else "[base] 2", "[base] 3"… */
-internal fun nextFreeName(base: String, taken: Collection<String>): String {
-  val used = taken.map { it.trim().lowercase() }.toSet()
-  if (base.lowercase() !in used) return base
-  var n = 2
-  while ("${base.lowercase()} $n" in used) n++
-  return "$base $n"
-}
+internal fun nextFreeName(base: String, taken: Collection<String>): String = com.tali.notes.data.numberedName(base, taken)
 
 /** Notebooks in [sort] order: newest first (A to Z for names), or the other way round when [reversed]. */
 internal fun sortNotebooks(list: List<NotebookMeta>, sort: com.tali.notes.data.LibrarySort, reversed: Boolean, opened: List<String>): List<NotebookMeta> {

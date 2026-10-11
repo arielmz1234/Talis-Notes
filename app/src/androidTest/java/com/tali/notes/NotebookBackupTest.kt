@@ -28,8 +28,10 @@ class NotebookBackupTest {
     val repo = context.talisApp.repository
     val brush = Brushes.brush(PenType.FOUNTAIN, 0xFF1B1F2A.toInt(), 2.6f)
     fun strokes(prefix: String, n: Int) = List(n) { i -> InkItem("$prefix-$i", i.toLong(), PenType.FOUNTAIN, StrokeFactory.strokeAlong(listOf(Pt(10f, 10f + i * 20f), Pt(200f, 12f + i * 20f)), brush)) }
-    val kept = repo.create("Kept", PaperStyle.LINES)
-    val backedUp = repo.create("Statics", PaperStyle.GRID)
+    // Names of their own: no two notebooks in one place share a name, and earlier runs may have left one.
+    val name = "Statics ${System.nanoTime() % 100000}"
+    val kept = repo.create("Kept ${System.nanoTime() % 100000}", PaperStyle.LINES)
+    val backedUp = repo.create(name, PaperStyle.GRID)
     repo.applyChange(kept.id, Change(emptyList(), strokes("k", 3)))
     repo.applyChange(backedUp.id, Change(emptyList(), strokes("s", 5)))
     delay(1500) // the writer thread
@@ -51,7 +53,7 @@ class NotebookBackupTest {
     assertEquals(1, result.added)
     val back = repo.notebooks.value.firstOrNull { it.id == backedUp.id }
     assertNotNull(back)
-    assertEquals("Statics", back!!.title)
+    assertEquals(name, back!!.title)
     assertEquals(5, repo.loadItems(backedUp.id).size)
     // The other notebook wasn't in that file and is untouched.
     assertEquals(3, repo.loadItems(kept.id).size)
@@ -59,5 +61,6 @@ class NotebookBackupTest {
     repo.deleteForever(kept.id)
     repo.deleteForever(backedUp.id)
     listOf(snapshot, zip, settingsZip).forEach { it.delete() }
+    delay(1000) // let the writer erase them before the test app closes
   }
 }
