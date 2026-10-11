@@ -231,7 +231,7 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
   DialogCard({ if (!busy) onDismiss() }, width = 500) {
     Text(if (result != null) "Welcome back" else "Welcome to Tali's Notes", style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(10.dp))
-    Text(
+    com.tali.notes.ui.components.WorkingText(
       result ?: if (busy) "Restoring…" else "New tablet, or the app installed again? If you have a backup (in Google Drive, OneDrive or on the tablet), you can bring all your notebooks back now. You can also do it later from Backups, at the bottom left.",
       style = MaterialTheme.typography.bodyMedium,
       color = if (result != null || busy) c.blue else c.inkMuted,
@@ -265,7 +265,7 @@ private fun RestoreCard(files: Incoming.Files, onDismiss: () -> Unit) {
     Spacer(Modifier.height(4.dp))
     Text(files.name ?: "Backup file", style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
     Spacer(Modifier.height(14.dp))
-    Text(
+    com.tali.notes.ui.components.WorkingText(
       result ?: if (busy) "Restoring…" else "Nothing on this tablet is deleted: notebooks from the backup are added, and if a notebook is in both places, the newest version is kept.",
       style = MaterialTheme.typography.bodyMedium,
       color = if (result != null || busy) c.blue else c.inkMuted,

@@ -50,6 +50,7 @@ import com.tali.notes.ui.library.CardBody
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.ToggleRow
+import com.tali.notes.ui.components.WorkingText
 import com.tali.notes.ui.components.relativeTime
 import kotlinx.coroutines.launch
 
@@ -128,7 +129,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
       }
     }
     Spacer(Modifier.height(14.dp))
-    Text(
+    WorkingText(
       busy ?: message ?: "Restoring never deletes anything: notebooks from a backup are added, and if a notebook is in both places, the newest version is kept.",
       style = MaterialTheme.typography.bodySmall,
       color = if (busy != null || message != null) c.blue else c.inkFaint,
@@ -207,7 +208,7 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
     else "Choose a place once and the app keeps one backup file there up to date by itself. For Google Drive, tap ☰ at the top left of the next screen. Picking an old backup file brings its notebooks back.",
   ) {
     if (status.enabled) {
-      Text(
+      WorkingText(
         when {
           status.running -> "Backing up now…"
           status.error != null -> status.error!!
@@ -273,7 +274,7 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
         DriveBackup.backupSoon(context, delayMinutes = 0)
       }, detail = "Opens on any computer or phone, without the app. Uses more space and takes longer.")
     }
-    Text(
+    WorkingText(
       when {
         status.running -> "Backing up now…"
         status.error != null -> status.error!!

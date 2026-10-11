@@ -723,9 +723,11 @@ private fun Sidebar(
           style = MaterialTheme.typography.labelMedium,
           color = c.inkMuted,
         )
-        Text(
+        com.tali.notes.ui.components.WorkingText(
           when {
             error != null -> error
+            onDrive && drive.running -> "Backing up…"
+            onAuto && auto.running -> "Backing up…"
             onDrive && drive.lastSuccess > 0 -> "Last backup ${relativeTime(drive.lastSuccess)}"
             onAuto && auto.lastSuccess > 0 -> "Last: ${backedUpAt(auto.lastSuccess)}"
             else -> "Tap for backups"
