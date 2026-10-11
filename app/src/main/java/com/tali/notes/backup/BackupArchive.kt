@@ -64,6 +64,94 @@ object BackupArchive {
       }
     }
 
+  /**
+   * A backup of one notebook (for the per-notebook Drive backup): a database holding only that
+   * notebook and its writing (plus her folders, so it lands back in its folder), with only its own
+   * pictures, recordings and preview. [snapshot] is a copy of the database made for this run.
+   * Restoring it is the same merge as any backup.
+   */
+  suspend fun writeNotebook(context: Context, snapshot: File, notebookId: String, out: OutputStream) =
+    withContext(Dispatchers.IO) {
+      val repo = context.talisApp.repository
+      val db = File(context.cacheDir, "backup-one.db")
+      try {
+        prune(context, snapshot, db, notebookId)
+        val files = { kind: Int, dir: File -> repo.filesOf(notebookId, kind).distinct().map { File(dir, it) }.filter { it.isFile } }
+        zipUp(out, db, settingsJson = null, notebooks = 1, images = files(ItemCodec.KIND_IMAGE, repo.imagesDir), audio = files(ItemCodec.KIND_AUDIO, repo.audioDir), thumbs = listOf(repo.thumbnailFile(notebookId)).filter { it.isFile })
+      } finally {
+        dropDb(db)
+      }
+    }
+
+  /** Her settings (pens, colours, shapes, papers and the pictures they use) and folders, with no notebooks. */
+  suspend fun writeSettings(context: Context, snapshot: File, out: OutputStream) =
+    withContext(Dispatchers.IO) {
+      val app = context.talisApp
+      val db = File(context.cacheDir, "backup-settings.db")
+      try {
+        prune(context, snapshot, db, notebookId = null)
+        val settings = app.settings.exportJson()
+        // Her own papers' pictures live with the notebooks' pictures; only those named in the settings go here.
+        val images = app.repository.imagesDir.listFiles()?.filter { it.isFile && settings.contains(it.name) }.orEmpty()
+        zipUp(out, db, settings, notebooks = 0, images = images, audio = emptyList(), thumbs = emptyList())
+      } finally {
+        dropDb(db)
+      }
+    }
+
+  /** A fresh database at [target] with every folder and only [notebookId]'s notebook and items (none for null). */
+  private fun prune(context: Context, snapshot: File, target: File, notebookId: String?) {
+    dropDb(target)
+    NotesDb(context, target.path).use { helper ->
+      val w = helper.writableDatabase
+      w.execSQL("ATTACH DATABASE ? AS src", arrayOf(snapshot.path))
+      try {
+        // Columns by name: a database upgraded over time has them in a different order than a new one.
+        fun copy(table: String, where: String, args: Array<String>) {
+          val mine = w.rawQuery("PRAGMA main.table_info($table)", null).use { c -> buildList { while (c.moveToNext()) add(c.getString(1)) } }
+          val theirs = w.rawQuery("PRAGMA src.table_info($table)", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
+          val cols = mine.filter { it in theirs }.joinToString(",")
+          w.execSQL("INSERT INTO main.$table ($cols) SELECT $cols FROM src.$table $where", args)
+        }
+        copy("folders", "", emptyArray())
+        if (notebookId != null) {
+          copy("notebooks", "WHERE id = ?", arrayOf(notebookId))
+          copy("items", "WHERE notebook_id = ?", arrayOf(notebookId))
+        }
+      } finally {
+        w.execSQL("DETACH DATABASE src")
+      }
+      w.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+    }
+  }
+
+  private fun dropDb(db: File) {
+    for (suffix in listOf("", "-wal", "-shm", "-journal")) File(db.path + suffix).delete()
+  }
+
+  private fun zipUp(out: OutputStream, db: File, settingsJson: String?, notebooks: Int, images: List<File>, audio: List<File>, thumbs: List<File>) {
+    ZipOutputStream(out.buffered()).use { zip ->
+      zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
+      zip.write(ItemCodec.json.encodeToString(Manifest.serializer(), Manifest(FORMAT, System.currentTimeMillis(), notebooks)).encodeToByteArray())
+      zip.closeEntry()
+      zip.putNextEntry(ZipEntry(DB_ENTRY))
+      db.inputStream().use { it.copyTo(zip) }
+      zip.closeEntry()
+      if (settingsJson != null) {
+        zip.putNextEntry(ZipEntry(SETTINGS_ENTRY))
+        zip.write(settingsJson.encodeToByteArray())
+        zip.closeEntry()
+      }
+      for ((prefix, list) in listOf("images/" to images, "audio/" to audio, "thumbs/" to thumbs)) {
+        list.forEach { f ->
+          zip.putNextEntry(ZipEntry(prefix + f.name))
+          f.inputStream().use { it.copyTo(zip) }
+          zip.closeEntry()
+        }
+      }
+    }
+  }
+
   private fun addFolder(zip: ZipOutputStream, dir: File, prefix: String) {
     dir.listFiles()?.filter { it.isFile }?.forEach { f ->
       zip.putNextEntry(ZipEntry(prefix + f.name))

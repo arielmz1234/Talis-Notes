@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.tali.notes.CrashLog
 import androidx.compose.material.icons.outlined.CloudSync
 import com.tali.notes.backup.AutoBackup
+import com.tali.notes.talisApp
 import com.tali.notes.backup.BackupArchive
 import com.tali.notes.backup.DriveBackup
 import com.tali.notes.data.NotesRepository
@@ -109,8 +110,14 @@ fun BackupDialog(onDismiss: () -> Unit) {
     Spacer(Modifier.height(16.dp))
     CardBody {
     BackupCard(Icons.Outlined.TabletAndroid, "On this tablet", "Every stroke is saved the moment you write it, even without internet.")
+    // With Google Drive set up, it's the main automatic backup; saving into a file she picked stays
+    // as the way for OneDrive, Dropbox or the tablet.
+    if (DriveBackup.available) {
+      Spacer(Modifier.height(10.dp))
+      DriveCard(onRun = ::run, describe = ::describe)
+    }
     Spacer(Modifier.height(10.dp))
-    AutoCard(onRun = ::run)
+    AutoCard(onRun = ::run, compact = DriveBackup.available)
     Spacer(Modifier.height(10.dp))
     BackupCard(Icons.Outlined.FolderZip, "Backup file", "Everything in one file: notebooks, pictures, pens, colours and your shapes. Keep it in Files, on a computer, or send it to yourself.") {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -119,10 +126,6 @@ fun BackupDialog(onDismiss: () -> Unit) {
         QuietButton("Save backup file", color = c.blue) { saveFile.launch(BackupArchive.fileName()) }
         QuietButton("Restore from file", color = if (c.isDark) Color(0xFF6FD3B5) else Color(0xFF1C8466)) { openFile.launch(arrayOf(BackupArchive.MIME, "application/octet-stream")) }
       }
-    }
-    if (DriveBackup.available) {
-      Spacer(Modifier.height(10.dp))
-      DriveCard(onRun = ::run, describe = ::describe)
     }
     Spacer(Modifier.height(14.dp))
     Text(
@@ -172,7 +175,7 @@ fun backedUpAt(millis: Long, now: Long = System.currentTimeMillis()): String {
 
 /** The backup that saves itself into one file she picked once (her Drive, OneDrive, the tablet…). */
 @Composable
-private fun AutoCard(onRun: (String, suspend () -> String) -> Unit) {
+private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boolean = false) {
   val c = Tali.colors
   val context = LocalContext.current
   val status by AutoBackup.status(context).collectAsState()
@@ -180,6 +183,23 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit) {
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { uri ->
       if (uri != null) onRun("Saving backup…") { AutoBackup.choose(context, uri) }
     }
+  if (compact && !status.enabled) {
+    // Google Drive already backs up by itself: this is just the other way, kept to one line.
+    Row(
+      Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(c.surface.copy(alpha = 0.7f)).border(1.dp, c.line, RoundedCornerShape(18.dp)).padding(horizontal = 16.dp, vertical = 12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(Icons.Outlined.CloudSync, null, tint = c.blue, modifier = Modifier.size(22.dp))
+      Spacer(Modifier.width(14.dp))
+      Column(Modifier.weight(1f)) {
+        Text("Or back up by itself into a file", style = MaterialTheme.typography.titleSmall, color = c.ink)
+        Text("For OneDrive, Dropbox or the tablet", style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
+      }
+      Spacer(Modifier.width(10.dp))
+      QuietButton("Choose") { pick.launch(AutoBackup.FILE_NAME) }
+    }
+    return
+  }
   BackupCard(
     if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudSync,
     "Back up by itself",
@@ -237,7 +257,7 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
       }
     }
 
-  BackupCard(if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload, "Google Drive", "Backs up by itself a couple of minutes after you finish writing, into a “Tali's Notes” folder in your Drive. The app can only see its own backup, nothing else in your Drive.") {
+  BackupCard(if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload, "Google Drive", "Backs up by itself a couple of minutes after you finish writing: one file per notebook in a “Tali's Notes” folder in your Drive, sending only the notebooks that changed. The app can only see its own files, nothing else in your Drive.") {
     ToggleRow("Back up automatically", status.enabled, { on ->
       if (on) withToken("Backing up to Drive…") { token ->
         DriveBackup.enable(context)
@@ -245,6 +265,14 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
         "Backed up to Google Drive."
       } else DriveBackup.disable(context)
     })
+    if (status.enabled) {
+      val settings by context.talisApp.settings.settings.collectAsState()
+      ToggleRow("Also keep a PDF of each notebook", settings.drivePdf, { on ->
+        context.talisApp.settings.update { it.copy(drivePdf = on) }
+        DriveBackup.markDirty(context)
+        DriveBackup.backupSoon(context, delayMinutes = 0)
+      }, detail = "Opens on any computer or phone, without the app. Uses more space and takes longer.")
+    }
     Text(
       when {
         status.running -> "Backing up now…"

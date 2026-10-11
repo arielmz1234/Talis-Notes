@@ -437,7 +437,7 @@ class NotesRepository(private val context: Context) {
   private fun imageFilesOf(notebookId: String): List<String> = filesOf(notebookId, ItemCodec.KIND_IMAGE)
 
   /** The files (pictures or recordings, by [kind]) that a notebook's items point to. */
-  private fun filesOf(notebookId: String, kind: Int): List<String> =
+  fun filesOf(notebookId: String, kind: Int): List<String> =
     readRows(notebookId).filter { it.kind == kind }.mapNotNull { row ->
       runCatching { ItemCodec.json.parseToJsonElement(row.payload.decodeToString()).let { (it as kotlinx.serialization.json.JsonObject)["file"].toString().trim('"') } }.getOrNull()
     }

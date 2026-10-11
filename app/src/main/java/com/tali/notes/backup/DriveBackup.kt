@@ -20,6 +20,15 @@ import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
 import com.tali.notes.BuildConfig
 import com.tali.notes.CrashLog
+import com.tali.notes.data.NotebookMeta
+import com.tali.notes.data.NotesRepository
+import com.tali.notes.export.Exporter
+import com.tali.notes.export.PdfLayout
+import com.tali.notes.export.PdfQuality
+import com.tali.notes.talisApp
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -185,44 +194,149 @@ object DriveBackup {
     }
   }
 
-  /** Uploads a fresh backup file, replacing the previous one in Drive. */
+  // ---- One file per notebook ----
+  //
+  // The "Tali's Notes" folder holds one backup file per notebook ("Statics.zip"), one for her
+  // settings and folders, and, when she wants, a PDF beside each notebook. Each file carries hidden
+  // app properties naming what it is, so a renamed notebook renames its file instead of adding one.
+  // Only notebooks that changed since this tablet last sent them are uploaded again.
+
+  private const val KIND = "tali"
+  private const val NOTEBOOK = "notebook"
+  private const val PDF = "pdf"
+  private const val SETTINGS = "settings"
+  private const val NOTEBOOK_ID = "notebookId"
+  private const val SETTINGS_NAME = "Tali's Notes settings.zip"
+
+  /** What this tablet last sent for a notebook. */
+  @kotlinx.serialization.Serializable private data class Sent(val sig: String, val pdf: Boolean = false)
+
+  private val sentSerializer = kotlinx.serialization.builtins.MapSerializer(String.serializer(), Sent.serializer())
+
+  private fun sent(context: Context): MutableMap<String, Sent> =
+    prefs(context).getString("sent", null)?.let { runCatching { json.decodeFromString(sentSerializer, it) }.getOrNull() }?.toMutableMap() ?: mutableMapOf()
+
+  private fun saveSent(context: Context, sent: Map<String, Sent>) = prefs(context).edit().putString("sent", json.encodeToString(sentSerializer, sent)).apply()
+
+  /** What changes a notebook's backup: an edit, a rename, a move to another folder, a new cover or paper. */
+  private fun signature(nb: NotebookMeta) = listOf(nb.updated, nb.title, nb.folderId, nb.cover, nb.paper, nb.customPaper, nb.pages, nb.dark, nb.landscape).joinToString("|")
+
+  /** A file in the backup folder, and what it holds (null kind: not one of ours, like the old single backup). */
+  private class Remote(val id: String, val name: String, val kind: String?, val notebook: String?)
+
+  private fun fileName(title: String) = title.ifBlank { "Untitled" }.replace('/', '-').replace('\\', '-')
+
+  /** Backs up every notebook that changed, her settings and folders, and the PDFs if she wants them. */
   suspend fun backupNow(context: Context, token: String) =
     withContext(Dispatchers.IO) {
       save(context) { it.copy(running = true) }
-      val file = File(context.cacheDir, "drive-backup.zip")
+      val app = context.talisApp
+      val repo = app.repository
+      val snapshot = File(context.cacheDir, "drive-snapshot.db")
+      val tmp = File(context.cacheDir, "drive-upload.tmp")
       try {
-        // Clear the flag first: an edit made during the upload marks it dirty again.
+        // Cleared first: an edit made during the upload marks it again.
         prefs(context).edit().putBoolean("dirty", false).apply()
-        file.outputStream().use { BackupArchive.write(context, it) }
-        val p = prefs(context)
-        val folder = p.getString("folder_id", null) ?: findOrCreateFolder(token).also { p.edit().putString("folder_id", it).apply() }
-        val existing = p.getString("file_id", null) ?: findBackup(token)
-        val id =
-          try {
-            upload(token, file, existing, folder)
-          } catch (e: NotFound) {
-            // She deleted the file (or its folder) in Drive: start over.
-            val newFolder = findOrCreateFolder(token).also { p.edit().putString("folder_id", it).apply() }
-            upload(token, file, null, newFolder)
+        repo.snapshotDatabase(snapshot)
+        val folder = findOrCreateFolder(token)
+        val remote = listFolder(token, folder)
+        val sent = sent(context)
+        val pdfOn = app.settings.settings.value.drivePdf
+        tmp.outputStream().use { BackupArchive.writeSettings(context, snapshot, it) }
+        upload(token, tmp, remote.firstOrNull { it.kind == SETTINGS }?.id, folder, SETTINGS_NAME, BackupArchive.MIME, mapOf(KIND to SETTINGS))
+        val live = repo.notebooks.value
+        for (nb in live) {
+          val sig = signature(nb)
+          val before = sent[nb.id]
+          val changed = before?.sig != sig
+          val zip = remote.firstOrNull { it.kind == NOTEBOOK && it.notebook == nb.id }
+          val pdf = remote.firstOrNull { it.kind == PDF && it.notebook == nb.id }
+          val name = fileName(nb.title)
+          if (changed || zip == null) {
+            tmp.outputStream().use { BackupArchive.writeNotebook(context, snapshot, nb.id, it) }
+            upload(token, tmp, zip?.id, folder, "$name.zip", BackupArchive.MIME, mapOf(KIND to NOTEBOOK, NOTEBOOK_ID to nb.id))
           }
-        p.edit().putString("file_id", id).apply()
+          var pdfSent = false
+          if (pdfOn) {
+            pdfSent = before?.pdf == true && !changed && pdf != null
+            if (!pdfSent && makePdf(context, nb, tmp)) {
+              upload(token, tmp, pdf?.id, folder, "$name.pdf", "application/pdf", mapOf(KIND to PDF, NOTEBOOK_ID to nb.id))
+              pdfSent = true
+            }
+          } else if (pdf != null) {
+            trash(token, pdf.id)
+          }
+          sent[nb.id] = Sent(sig, pdfSent)
+          // Kept after each notebook, so an interrupted backup carries on where it stopped.
+          saveSent(context, sent)
+        }
+        // A notebook this tablet sent and has since erased for good (not just put in Recently deleted):
+        // its files go to Drive's trash, where they can still be found for 30 days. Only ones this
+        // tablet sent: a new or cleared tablet has sent nothing, so it never removes anything.
+        val here = (live + repo.trash.value).map { it.id }.toSet()
+        for (id in sent.keys - here) {
+          remote.filter { it.notebook == id }.forEach { trash(token, it.id) }
+          sent.remove(id)
+        }
+        saveSent(context, sent)
+        // The old single backup file is replaced by these (it stays in Drive's trash for 30 days).
+        remote.filter { it.kind == null && it.name == FILE_NAME }.forEach { trash(token, it.id) }
+        prefs(context).edit().remove("file_id").apply()
         save(context) { it.copy(lastSuccess = System.currentTimeMillis(), error = null, running = false) }
       } catch (t: Throwable) {
         markDirty(context)
         save(context) { it.copy(running = false) }
         throw t
       } finally {
-        file.delete()
+        snapshot.delete()
+        tmp.delete()
       }
     }
 
-  /** Downloads the Drive backup and merges it in (for a new tablet, or after reinstalling). */
-  suspend fun restore(context: Context, token: String) =
+  /** A PDF of the notebook (A4 pages, pictures at print quality), written to [out]. */
+  private suspend fun makePdf(context: Context, nb: NotebookMeta, out: File): Boolean {
+    val app = context.talisApp
+    val s = app.settings.settings.value
+    val items = runCatching { app.repository.loadItems(nb.id) }.getOrNull()?.filterNot { it is com.tali.notes.model.AudioItem } ?: return false
+    return runCatching {
+        Exporter.pdf(
+          items,
+          nb.paper,
+          PdfLayout.A4_PAGES,
+          out,
+          app.repository.images,
+          fixedPages = s.pageGuides,
+          pageCount = nb.pages,
+          dark = nb.dark,
+          custom = nb.customPaper?.let { id -> s.customPapers.firstOrNull { it.id == id } },
+          quality = PdfQuality.BALANCED,
+          landscape = nb.landscape,
+          inkBetweenPages = s.inkBetweenPages,
+        )
+      }
+      .onFailure { CrashLog.recovered(context, it) }
+      .isSuccess && out.length() > 0
+  }
+
+  /**
+   * Brings the Drive backup back (a new tablet, or after reinstalling): her settings and folders
+   * first, then every notebook, each merged in. Older single-file backups still restore.
+   */
+  suspend fun restore(context: Context, token: String): NotesRepository.MergeResult =
     withContext(Dispatchers.IO) {
-      val id = findBackup(token) ?: throw BackupArchive.InvalidBackup("There's no backup in this Google Drive yet.")
-      val conn = open("$API/files/$id?alt=media", token)
-      check(conn)
-      conn.inputStream.use { BackupArchive.restore(context, it) }
+      val folder = findFolder(token)
+      val remote = folder?.let { listFolder(token, it) }.orEmpty()
+      val parts = remote.filter { it.kind == SETTINGS } + remote.filter { it.kind == NOTEBOOK }
+      val files = parts.map { it.id }.ifEmpty { listOfNotNull(findBackup(token)) }
+      if (files.isEmpty()) throw BackupArchive.InvalidBackup("There's no backup in this Google Drive yet.")
+      var total = NotesRepository.MergeResult(0, 0, 0, emptySet())
+      for (id in files) {
+        val conn = open("$API/files/$id?alt=media", token)
+        check(conn)
+        val r = conn.inputStream.use { BackupArchive.restore(context, it) }
+        total = NotesRepository.MergeResult(total.added + r.added, total.updated + r.updated, total.kept + r.kept, total.changed + r.changed)
+      }
+      total
     }
 
   private class NotFound : IOException("Not found")
@@ -248,16 +362,39 @@ object DriveBackup {
 
   private fun escape(name: String) = name.replace("\\", "\\\\").replace("'", "\\'")
 
-  private fun findOrCreateFolder(token: String): String {
+  private fun findFolder(token: String): String? {
     val q = "mimeType='application/vnd.google-apps.folder' and name='${escape(FOLDER_NAME)}' and trashed=false"
     val list = open("$API/files?q=${query(q)}&spaces=drive&fields=files(id)", token).also(::check).let(::readJson)
-    list["files"]?.jsonArray?.firstOrNull()?.jsonObject?.get("id")?.jsonPrimitive?.content?.let { return it }
+    return list["files"]?.jsonArray?.firstOrNull()?.jsonObject?.get("id")?.jsonPrimitive?.content
+  }
+
+  private fun findOrCreateFolder(token: String): String {
+    findFolder(token)?.let { return it }
     val conn = open("$API/files?fields=id", token, "POST")
     conn.doOutput = true
     conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-    conn.outputStream.use { it.write("""{"name":"${FOLDER_NAME.replace("\"", "\\\"")}","mimeType":"application/vnd.google-apps.folder"}""".encodeToByteArray()) }
+    val meta = JsonObject(mapOf("name" to JsonPrimitive(FOLDER_NAME), "mimeType" to JsonPrimitive("application/vnd.google-apps.folder")))
+    conn.outputStream.use { it.write(meta.toString().encodeToByteArray()) }
     check(conn)
     return readJson(conn)["id"]!!.jsonPrimitive.content
+  }
+
+  /** Every file in the backup folder (the app only ever sees its own files). */
+  private fun listFolder(token: String, folder: String): List<Remote> {
+    val out = mutableListOf<Remote>()
+    var page: String? = null
+    do {
+      val q = "'$folder' in parents and trashed=false"
+      val url = "$API/files?q=${query(q)}&spaces=drive&pageSize=1000&fields=${query("nextPageToken,files(id,name,appProperties)")}" + (page?.let { "&pageToken=${query(it)}" } ?: "")
+      val res = open(url, token).also(::check).let(::readJson)
+      res["files"]?.jsonArray?.forEach { f ->
+        val o = f.jsonObject
+        val props = o["appProperties"]?.jsonObject
+        out += Remote(o["id"]!!.jsonPrimitive.content, o["name"]?.jsonPrimitive?.content.orEmpty(), props?.get(KIND)?.jsonPrimitive?.content, props?.get(NOTEBOOK_ID)?.jsonPrimitive?.content)
+      }
+      page = res["nextPageToken"]?.jsonPrimitive?.content
+    } while (page != null)
+    return out
   }
 
   private fun findBackup(token: String): String? {
@@ -266,17 +403,40 @@ object DriveBackup {
     return list["files"]?.jsonArray?.firstOrNull()?.jsonObject?.get("id")?.jsonPrimitive?.content
   }
 
-  /** Resumable upload, which works for any size: start a session, then send the bytes. Returns the file id. */
-  private fun upload(token: String, file: File, existingId: String?, folderId: String): String {
+  /** Moves a file to Drive's trash (it can be brought back there for 30 days). */
+  private fun trash(token: String, id: String) {
+    val conn = open("$API/files/$id?fields=id", token, "POST")
+    conn.setRequestProperty("X-HTTP-Method-Override", "PATCH")
+    conn.doOutput = true
+    conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+    conn.outputStream.use { it.write(JsonObject(mapOf("trashed" to JsonPrimitive(true))).toString().encodeToByteArray()) }
+    runCatching { check(conn) }.onFailure { if (it !is NotFound) throw it }
+  }
+
+  /**
+   * Resumable upload, which works for any size: start a session, then send the bytes. Replaces
+   * [existingId] (renaming it to [name]) or makes a new file in [folderId]. Returns the file id.
+   */
+  private fun upload(token: String, file: File, existingId: String?, folderId: String, name: String, mime: String, props: Map<String, String>): String =
+    try {
+      uploadOnce(token, file, existingId, folderId, name, mime, props)
+    } catch (e: NotFound) {
+      // The file went in the meantime: make it again.
+      if (existingId == null) throw e
+      uploadOnce(token, file, null, folderId, name, mime, props)
+    }
+
+  private fun uploadOnce(token: String, file: File, existingId: String?, folderId: String, name: String, mime: String, props: Map<String, String>): String {
     val start =
       if (existingId == null) open("$UPLOAD/files?uploadType=resumable&fields=id", token, "POST")
       else open("$UPLOAD/files/$existingId?uploadType=resumable&fields=id", token, "POST").apply { setRequestProperty("X-HTTP-Method-Override", "PATCH") }
     start.doOutput = true
     start.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-    start.setRequestProperty("X-Upload-Content-Type", BackupArchive.MIME)
+    start.setRequestProperty("X-Upload-Content-Type", mime)
     start.setRequestProperty("X-Upload-Content-Length", file.length().toString())
-    val meta = if (existingId == null) """{"name":"${FILE_NAME.replace("\"", "\\\"")}","parents":["$folderId"]}""" else "{}"
-    start.outputStream.use { it.write(meta.encodeToByteArray()) }
+    val fields = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("name" to JsonPrimitive(name), "appProperties" to JsonObject(props.mapValues { JsonPrimitive(it.value) }))
+    if (existingId == null) fields["parents"] = JsonArray(listOf(JsonPrimitive(folderId)))
+    start.outputStream.use { it.write(JsonObject(fields).toString().encodeToByteArray()) }
     check(start)
     val session = start.getHeaderField("Location") ?: throw IOException("Google Drive didn't start the upload")
     val put = (URL(session).openConnection() as HttpURLConnection).apply {
@@ -285,7 +445,7 @@ object DriveBackup {
       connectTimeout = 20_000
       readTimeout = 120_000
       setFixedLengthStreamingMode(file.length())
-      setRequestProperty("Content-Type", BackupArchive.MIME)
+      setRequestProperty("Content-Type", mime)
     }
     file.inputStream().use { input -> put.outputStream.use { input.copyTo(it) } }
     check(put)

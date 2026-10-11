@@ -120,6 +120,8 @@ data class AppSettings(
   val hideNavBar: Boolean = false,
   /** On A4 pages, one stroke may carry on across the gap between pages (the gap isn't exported). Off, ink stops at each page's edge. */
   val inkBetweenPages: Boolean = false,
+  /** The Google Drive backup also keeps a PDF of each notebook beside it, readable anywhere. */
+  val drivePdf: Boolean = false,
   /** How many colours a pen shows beside the pens until she sets its own number (`PenSlot.toolbarColors`). */
   val toolbarColors: Int = 3,
   /** Light, dark, or following the tablet. */
