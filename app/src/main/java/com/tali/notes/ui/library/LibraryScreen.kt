@@ -603,7 +603,7 @@ private fun Sidebar(
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
       if (folders.isEmpty()) {
         Text(
-          "Make a folder for each course, like Statics or Hydraulics.",
+          "Make a folder for each course or subject.",
           style = MaterialTheme.typography.bodySmall,
           color = c.inkFaint,
           modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
