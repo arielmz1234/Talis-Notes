@@ -182,7 +182,7 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit) {
     if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudSync,
     "Back up by itself",
     if (status.enabled) "Saves a fresh backup a couple of minutes after you finish, and once a day, into “${status.fileName ?: AutoBackup.FILE_NAME}” ${if (status.place == "this tablet") "on" else "in"} ${status.place ?: "the place you chose"}."
-    else "Choose a place once (Google Drive is a good one) and the app keeps one backup file there up to date by itself. Free, no sign-in.",
+    else "Choose a place once and the app keeps one backup file there up to date by itself. For Google Drive, tap ☰ at the top left of the next screen. Picking an old backup file brings its notebooks back.",
   ) {
     if (status.enabled) {
       Text(

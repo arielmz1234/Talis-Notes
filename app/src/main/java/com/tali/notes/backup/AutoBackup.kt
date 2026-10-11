@@ -14,6 +14,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.tali.notes.CrashLog
+import com.tali.notes.data.NotesRepository
+import com.tali.notes.talisApp
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -104,11 +106,36 @@ object AutoBackup {
     // A different file than before: let go of the old one.
     flow(context).value.uri?.takeIf { it != uri }?.let { old -> runCatching { resolver.releasePersistableUriPermission(old, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
     val name = withContext(Dispatchers.IO) { displayName(context, uri) }
+    // On a new tablet (or after the app was cleared), picking her old backup file brings her notes
+    // back first: saving straight away would replace that backup with an empty one.
+    var restored: NotesRepository.MergeResult? = null
+    if (context.talisApp.repository.notebooks.value.isEmpty() && withContext(Dispatchers.IO) { sizeOf(context, uri) } > 0) {
+      restored =
+        try {
+          withContext(Dispatchers.IO) { resolver.openInputStream(uri)?.use { BackupArchive.restore(context, it) } }
+        } catch (e: BackupArchive.InvalidBackup) {
+          return "That file isn't a Tali's Notes backup. Choose another name or place."
+        } catch (t: Throwable) {
+          CrashLog.recovered(context, t)
+          return "Couldn't read the backup in that file, so it was left as it is."
+        }
+    }
     save(context) { it.copy(uri = uri, place = placeOf(uri), fileName = name, error = null) }
     WorkManager.getInstance(context)
       .enqueueUniquePeriodicWork(DAILY, ExistingPeriodicWorkPolicy.UPDATE, PeriodicWorkRequestBuilder<Worker>(1, TimeUnit.DAYS).setConstraints(constraints(batteryNotLow = true)).build())
+    val r = restored
+    if (r != null) {
+      val n = r.added + r.updated
+      return (if (n == 1) "Brought back 1 notebook from the backup." else "Brought back $n notebooks from the backup.") + " From now on it saves by itself."
+    }
     return if (backupNow(context)) "Backed up. From now on it saves by itself." else flow(context).value.error ?: "Couldn't save the backup"
   }
+
+  private fun sizeOf(context: Context, uri: Uri): Long =
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else 0L }
+      }
+      .getOrNull() ?: 0L
 
   fun turnOff(context: Context) {
     val uri = flow(context).value.uri
