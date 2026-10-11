@@ -164,6 +164,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
@@ -1210,67 +1211,45 @@ private fun MoreMenu(
     ToolButton(Icons.Outlined.MoreHoriz, "More") { open = true }
     // Kept to the room under the button (it scrolls): taller, the menu was moved up over the button.
     DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = roomBelow.max), shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
-      if (locked > 0) {
-        DropdownMenuItem(
-          text = { Column { Text("Unlock all"); Text(if (locked == 1) "1 locked item" else "$locked locked items", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-          leadingIcon = { Icon(Icons.Outlined.LockOpen, null) },
-          onClick = {
+      // Kept compact so it fits under the button on a landscape tablet: the actions as one row of
+      // tiles, the paper choices as chips, and the settings as one-line switches.
+      Column(Modifier.width(330.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
+        if (locked > 0) {
+          MenuSwitchRow(Icons.Outlined.LockOpen, "Unlock all (${if (locked == 1) "1 item" else "$locked items"})", checked = null) {
             open = false
             onUnlockAll()
-          },
-        )
-        HorizontalDivider(color = c.line)
-      }
-      Text("Paper", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp))
-      Box(Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp)) { paperPicker { open = false } }
-      DropdownMenuItem(
-        text = { Text("Dark paper") },
-        leadingIcon = { Icon(Icons.Outlined.DarkMode, null) },
-        trailingIcon = { if (darkPaper) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-        onClick = { onDarkPaper(!darkPaper) },
-      )
-      DropdownMenuItem(
-        text = { Text("Endless canvas") },
-        leadingIcon = { Icon(Icons.Outlined.AllInclusive, null) },
-        trailingIcon = { if (!paged) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-        onClick = { onEndless(paged) },
-      )
-      HorizontalDivider(color = c.line)
-      if (paged) {
-        DropdownMenuItem(
-          text = { Text("Pages") },
-          leadingIcon = { Icon(Icons.Outlined.AutoStories, null) },
-          onClick = {
+          }
+          HorizontalDivider(color = c.line, modifier = Modifier.padding(vertical = 4.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          if (paged) {
+            MenuTile(Icons.Outlined.AutoStories, "Pages", Modifier.weight(1f)) {
+              open = false
+              onPages()
+            }
+          }
+          MenuTile(Icons.Outlined.FitScreen, if (paged) "Whole page" else "Everything", Modifier.weight(1f)) {
             open = false
-            onPages()
-          },
-        )
-      }
-      DropdownMenuItem(text = { Text(if (paged) "Show whole page" else "Show everything") }, leadingIcon = { Icon(Icons.Outlined.FitScreen, null) }, onClick = {
-        open = false
-        onFit()
-      })
-      if (!paged) {
-        DropdownMenuItem(
-          text = { Text("A4 page guides") },
-          leadingIcon = { Icon(Icons.Outlined.Description, null) },
-          trailingIcon = { if (pageGuides) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-          onClick = { onPageGuides(!pageGuides) },
-        )
-      }
-      DropdownMenuItem(text = { Text("Export PDF") }, leadingIcon = { Icon(Icons.Outlined.IosShare, null) }, onClick = {
-        open = false
-        onExport()
-      })
-      val fingerLabel = when (fingerDraws) {
-        null -> "Automatic"
-        true -> "On"
-        false -> "Off"
-      }
-      DropdownMenuItem(
-        text = { Text("Draw with finger: $fingerLabel") },
-        leadingIcon = { Icon(Icons.Outlined.TouchApp, null) },
-        onClick = {
+            onFit()
+          }
+          MenuTile(Icons.Outlined.IosShare, "Export PDF", Modifier.weight(1f)) {
+            open = false
+            onExport()
+          }
+        }
+        Text("Paper", style = MaterialTheme.typography.labelSmall, color = c.inkFaint, modifier = Modifier.padding(start = 6.dp, top = 10.dp, bottom = 6.dp))
+        Box(Modifier.padding(horizontal = 2.dp)) { paperPicker { open = false } }
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          MenuChip(Icons.Outlined.DarkMode, "Dark paper", darkPaper, Modifier.weight(1f)) { onDarkPaper(!darkPaper) }
+          MenuChip(Icons.Outlined.AllInclusive, "Endless canvas", !paged, Modifier.weight(1f)) { onEndless(paged) }
+        }
+        HorizontalDivider(color = c.line, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+        val fingerLabel = when (fingerDraws) {
+          null -> "Auto"
+          true -> "On"
+          false -> "Off"
+        }
+        MenuSwitchRow(Icons.Outlined.TouchApp, "Draw with finger", checked = null, value = fingerLabel) {
           onFingerDraws(
             when (fingerDraws) {
               null -> true
@@ -1278,28 +1257,61 @@ private fun MoreMenu(
               false -> null
             }
           )
-        },
-      )
-      DropdownMenuItem(
-        text = { Column { Text("Smart undo and redo"); Text("Tap with two fingers to undo, three to redo", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Undo, null) },
-        trailingIcon = { if (smartUndo) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-        onClick = { onSmartUndo(!smartUndo) },
-      )
-      if (paged) {
-        DropdownMenuItem(
-          text = { Column { Text("Write between pages"); Text("A stroke can carry on across the gap; the gap isn't exported", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-          leadingIcon = { Icon(Icons.Outlined.VerticalAlignCenter, null) },
-          trailingIcon = { if (inkBetweenPages) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-          onClick = { onInkBetweenPages(!inkBetweenPages) },
-        )
+        }
+        MenuSwitchRow(Icons.AutoMirrored.Outlined.Undo, "Tap 2 fingers to undo, 3 to redo", smartUndo) { onSmartUndo(!smartUndo) }
+        if (paged) MenuSwitchRow(Icons.Outlined.VerticalAlignCenter, "Write between pages", inkBetweenPages) { onInkBetweenPages(!inkBetweenPages) }
+        else MenuSwitchRow(Icons.Outlined.Description, "A4 page guides", pageGuides) { onPageGuides(!pageGuides) }
+        MenuSwitchRow(Icons.Outlined.Fullscreen, "Full screen", hideNavBar) { onHideNavBar(!hideNavBar) }
       }
-      DropdownMenuItem(
-        text = { Column { Text("Full screen"); Text("Hides the clock bar and navigation bar; swipe from the edge to see them", style = MaterialTheme.typography.bodySmall, color = c.inkFaint) } },
-        leadingIcon = { Icon(Icons.Outlined.Fullscreen, null) },
-        trailingIcon = { if (hideNavBar) Icon(Icons.Outlined.Check, null, tint = c.accent) },
-        onClick = { onHideNavBar(!hideNavBar) },
-      )
+    }
+  }
+}
+
+/** An action in the ⋯ menu's top row: icon over a short label. */
+@Composable
+private fun MenuTile(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+  val c = Tali.colors
+  Column(
+    modifier.clip(RoundedCornerShape(12.dp)).background(c.accentSoft.copy(alpha = 0.55f)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Icon(icon, null, tint = c.accent, modifier = Modifier.size(20.dp))
+    Spacer(Modifier.height(3.dp))
+    Text(label, style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1)
+  }
+}
+
+/** An on/off paper choice in the ⋯ menu, as a chip that fills with the accent when on. */
+@Composable
+private fun MenuChip(icon: ImageVector, label: String, on: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+  val c = Tali.colors
+  val wash by animateColorAsState(if (on) c.accentSoft else Color.Transparent, tween(200), label = "chip")
+  Row(
+    modifier.height(38.dp).clip(RoundedCornerShape(12.dp)).background(wash).border(1.dp, if (on) Color.Transparent else c.line, RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(if (on) Icons.Outlined.Check else icon, null, tint = if (on) c.accent else c.inkMuted, modifier = Modifier.size(18.dp))
+    Spacer(Modifier.width(8.dp))
+    Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else c.ink, maxLines = 1)
+  }
+}
+
+/** A one-line setting in the ⋯ menu: a tick when [checked] is on, or a [value] for a three-way one. */
+@Composable
+private fun MenuSwitchRow(icon: ImageVector, label: String, checked: Boolean?, value: String? = null, onClick: () -> Unit) {
+  val c = Tali.colors
+  Row(
+    Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(icon, null, tint = c.inkMuted, modifier = Modifier.size(20.dp))
+    Spacer(Modifier.width(12.dp))
+    Text(label, style = MaterialTheme.typography.bodyMedium, color = c.ink, maxLines = 1, modifier = Modifier.weight(1f))
+    Spacer(Modifier.width(10.dp))
+    when {
+      value != null -> Text(value, style = MaterialTheme.typography.labelLarge, color = c.accent)
+      checked == true -> Icon(Icons.Outlined.Check, null, tint = c.accent, modifier = Modifier.size(20.dp))
+      else -> Spacer(Modifier.size(20.dp))
     }
   }
 }
