@@ -44,6 +44,7 @@ import com.tali.notes.backup.AutoBackup
 import com.tali.notes.talisApp
 import com.tali.notes.backup.BackupArchive
 import com.tali.notes.backup.DriveBackup
+import com.tali.notes.backup.RestoreFiles
 import com.tali.notes.data.NotesRepository
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.library.CardBody
@@ -65,6 +66,8 @@ fun BackupDialog(onDismiss: () -> Unit) {
   val scope = rememberCoroutineScope()
   var busy by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf<String?>(null) }
+  // Which card the running (or last) action came from: its status shows in that card, where she tapped.
+  var source by remember { mutableStateOf("file") }
 
   fun describe(r: NotesRepository.MergeResult): String {
     val parts = buildList {
@@ -74,7 +77,9 @@ fun BackupDialog(onDismiss: () -> Unit) {
     return if (parts.isEmpty()) "Everything in the backup was already here." else parts.joinToString(", ") + "."
   }
 
-  fun run(label: String, block: suspend () -> String) {
+  fun run(label: String, from: String = "file", block: suspend () -> String) {
+    if (busy != null) return
+    source = from
     busy = label
     message = null
     scope.launch {
@@ -98,13 +103,15 @@ fun BackupDialog(onDismiss: () -> Unit) {
         "Backup saved."
       }
     }
-  val openFile =
-    rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-      if (uri != null) run("Restoring…") {
-        val result = context.contentResolver.openInputStream(uri)?.use { BackupArchive.restore(context, it) } ?: error("Couldn't open the file")
-        describe(result)
-      }
+  val openFiles =
+    rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+      if (uris.isNotEmpty()) run("Restoring…") { describe(RestoreFiles.restore(context, uris)) }
     }
+  val openFolder =
+    rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+      if (tree != null) run("Restoring…") { describe(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
+    }
+  val note = busy ?: message
 
   DialogCard(onDismiss, width = 560) {
     Text("Backups", style = MaterialTheme.typography.titleLarge, color = c.ink)
@@ -115,24 +122,27 @@ fun BackupDialog(onDismiss: () -> Unit) {
     // as the way for OneDrive, Dropbox or the tablet.
     if (DriveBackup.available) {
       Spacer(Modifier.height(10.dp))
-      DriveCard(onRun = ::run, describe = ::describe)
+      DriveCard(onRun = { l, b -> run(l, "drive", b) }, describe = ::describe, note = note.takeIf { source == "drive" })
     }
     Spacer(Modifier.height(10.dp))
-    AutoCard(onRun = ::run, compact = DriveBackup.available)
+    AutoCard(onRun = { l, b -> run(l, "auto", b) }, compact = DriveBackup.available, note = note.takeIf { source == "auto" })
     Spacer(Modifier.height(10.dp))
     BackupCard(Icons.Outlined.FolderZip, "Backup file", "Everything in one file: notebooks, pictures, pens, colours and your shapes. Keep it in Files, on a computer, or send it to yourself.") {
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+      androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The one to set up is the automatic backup above; this is the extra copy.
         // Saving and restoring wear their own colours so they're not mistaken for each other.
         QuietButton("Save backup file", color = c.blue) { saveFile.launch(BackupArchive.fileName()) }
-        QuietButton("Restore from file", color = restoreColor()) { openFile.launch(arrayOf(BackupArchive.MIME, "application/octet-stream")) }
+        QuietButton("Restore files", color = restoreColor()) { openFiles.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream")) }
+        QuietButton("Restore folder", color = restoreColor()) { openFolder.launch(null) }
       }
     }
     Spacer(Modifier.height(14.dp))
+    val fileNote = note.takeIf { source == "file" }
     WorkingText(
-      busy ?: message ?: "Restoring never deletes anything: notebooks from a backup are added, and if a notebook is in both places, the newest version is kept.",
+      fileNote ?: "Restoring never deletes anything: notebooks from a backup are added, and if a notebook is in both places, the newest version is kept. To bring back every notebook at once, pick several files or the folder they're in.",
       style = MaterialTheme.typography.bodySmall,
-      color = if (busy != null || message != null) c.blue else c.inkFaint,
+      color = if (fileNote != null) c.blue else c.inkFaint,
     )
     }
     Spacer(Modifier.height(18.dp))
@@ -176,7 +186,7 @@ fun backedUpAt(millis: Long, now: Long = System.currentTimeMillis()): String {
 
 /** The backup that saves itself into one file she picked once (her Drive, OneDrive, the tablet…). */
 @Composable
-private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boolean = false) {
+private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boolean = false, note: String? = null) {
   val c = Tali.colors
   val context = LocalContext.current
   val status by AutoBackup.status(context).collectAsState()
@@ -210,13 +220,14 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
     if (status.enabled) {
       WorkingText(
         when {
+          note != null -> note
           status.running -> "Backing up now…"
           status.error != null -> status.error!!
           status.lastSuccess > 0 -> "Last backed up: ${backedUpAt(status.lastSuccess)}"
           else -> "No backup yet"
         },
         style = MaterialTheme.typography.bodySmall,
-        color = if (status.error != null) c.danger else c.inkFaint,
+        color = if (note != null) c.blue else if (status.error != null) c.danger else c.inkFaint,
       )
       Spacer(Modifier.height(10.dp))
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -230,15 +241,14 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
   }
 }
 
-/** Restoring wears teal everywhere in Backups, saving blue, so the two are never mistaken for each other. */
+/**
+ * Runs something that needs Google Drive: gets a token (showing Google's account and consent screen
+ * the first time), then the work, all under [label], so "Restoring from Drive…" hops from the
+ * moment she taps.
+ */
 @Composable
-private fun restoreColor() = if (Tali.colors.isDark) Color(0xFF6FD3B5) else Color(0xFF1C8466)
-
-@Composable
-private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (NotesRepository.MergeResult) -> String) {
-  val c = Tali.colors
+internal fun rememberDriveAuth(onRun: (String, suspend () -> String) -> Unit): (String, suspend (String) -> String) -> Unit {
   val context = LocalContext.current
-  val status by DriveBackup.status(context).collectAsState()
   // What to do once Google hands back a token after the consent screen.
   var afterConsent by remember { mutableStateOf<((String) -> Unit)?>(null) }
   val consent =
@@ -248,10 +258,8 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
       afterConsent = null
       if (auth is DriveBackup.Auth.Token && next != null) next(auth.value)
     }
-
-  /** Gets a Google token (asking her to pick an account the first time), then runs [then]. */
-  fun withToken(label: String, then: suspend (String) -> String) =
-    onRun("Connecting to Google…") {
+  return { label, then ->
+    onRun(label) {
       when (val auth = DriveBackup.authorize(context)) {
         is DriveBackup.Auth.Token -> then(auth.value)
         is DriveBackup.Auth.NeedsConsent -> {
@@ -261,6 +269,19 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
         }
       }
     }
+  }
+}
+
+/** Restoring wears teal everywhere in Backups, saving blue, so the two are never mistaken for each other. */
+@Composable
+private fun restoreColor() = if (Tali.colors.isDark) Color(0xFF6FD3B5) else Color(0xFF1C8466)
+
+@Composable
+private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (NotesRepository.MergeResult) -> String, note: String? = null) {
+  val c = Tali.colors
+  val context = LocalContext.current
+  val status by DriveBackup.status(context).collectAsState()
+  val withToken = rememberDriveAuth(onRun)
 
   BackupCard(if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload, "Google Drive", "Backs up by itself a couple of minutes after you finish writing: one file per notebook in a “Tali's Notes” folder in your Drive, sending only the notebooks that changed. The app can only see its own files, nothing else in your Drive.") {
     ToggleRow("Back up automatically", status.enabled, { on ->
@@ -280,13 +301,14 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
     }
     WorkingText(
       when {
+        note != null -> note
         status.running -> "Backing up now…"
         status.error != null -> status.error!!
         status.lastSuccess > 0 -> "Last backup ${relativeTime(status.lastSuccess)}"
         else -> "No backup yet"
       },
       style = MaterialTheme.typography.bodySmall,
-      color = if (status.error != null) c.danger else c.inkFaint,
+      color = if (note != null) c.blue else if (status.error != null) c.danger else c.inkFaint,
     )
     Spacer(Modifier.height(10.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

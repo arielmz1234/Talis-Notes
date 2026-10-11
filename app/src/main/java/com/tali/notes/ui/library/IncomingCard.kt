@@ -22,6 +22,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Folder
+import com.tali.notes.backup.DriveBackup
+import com.tali.notes.backup.RestoreFiles
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -198,57 +203,105 @@ fun describeRestore(r: com.tali.notes.data.NotesRepository.MergeResult): String 
 
 /**
  * The first time the app opens with nothing in it (a new tablet, or the app reinstalled): offers to
- * bring notebooks back from a backup file. Restoring also keeps backing up into that file when the
- * storage app (Drive, the tablet…) lets it.
+ * bring every notebook back, from Google Drive (which then keeps backing up there), from backup
+ * files (several at once: the Drive folder holds one per notebook), or from a whole folder.
  */
 @Composable
 fun WelcomeRestoreCard(onDismiss: () -> Unit) {
   val c = Tali.colors
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  var busy by remember { mutableStateOf(false) }
+  var busy by remember { mutableStateOf<String?>(null) }
   var result by remember { mutableStateOf<String?>(null) }
-  val pick =
-    androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-      if (uri != null) {
-        busy = true
-        scope.launch {
-          result =
-            try {
-              val r = context.contentResolver.openInputStream(uri)?.use { BackupArchive.restore(context, it) } ?: error("Couldn't open the file")
-              val kept = com.tali.notes.backup.AutoBackup.adopt(context, uri)
-              describeRestore(r) + if (kept) " It'll keep backing up into that file by itself." else ""
-            } catch (e: BackupArchive.InvalidBackup) {
-              e.message
-            } catch (t: Throwable) {
-              CrashLog.recovered(context, t)
-              "Something went wrong: ${t.message ?: t.javaClass.simpleName}"
+  var restored by remember { mutableStateOf(false) }
+
+  fun run(label: String, block: suspend () -> String) {
+    if (busy != null) return
+    busy = label
+    scope.launch {
+      result =
+        try {
+          block()
+        } catch (e: BackupArchive.InvalidBackup) {
+          e.message
+        } catch (t: Throwable) {
+          CrashLog.recovered(context, t)
+          "Something went wrong: ${t.message ?: t.javaClass.simpleName}"
+        }
+      busy = null
+    }
+  }
+
+  fun finished(r: com.tali.notes.data.NotesRepository.MergeResult, extra: String = ""): String {
+    restored = true
+    return describeRestore(r) + extra
+  }
+
+  // Until a restore finishes the choices stay up, so "Choose your Google account…" sits above them.
+  val drive = rememberDriveAuth(::run)
+  val files =
+    androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+      if (uris.isNotEmpty()) run("Restoring…") {
+        val r = RestoreFiles.restore(context, uris)
+        // One whole-app backup file: keep backing up into it, as before.
+        val kept = uris.size == 1 && com.tali.notes.backup.AutoBackup.adopt(context, uris.first())
+        finished(r, if (kept) " It'll keep backing up into that file by itself." else "")
+      }
+    }
+  val folder =
+    androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { tree ->
+      if (tree != null) run("Restoring…") { finished(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
+    }
+
+  DialogCard({ if (busy == null) onDismiss() }, width = 640) {
+    Text(if (restored) "Welcome back" else "Welcome to Tali's Notes", style = MaterialTheme.typography.titleLarge, color = c.ink)
+    Spacer(Modifier.height(10.dp))
+    com.tali.notes.ui.components.WorkingText(
+      busy ?: result ?: "New tablet, or the app installed again? If you have a backup, you can bring all your notebooks back now. You can also do it later from Backups, at the bottom left.",
+      style = MaterialTheme.typography.bodyMedium,
+      color = if (busy != null || result != null) c.blue else c.inkMuted,
+    )
+    if (!restored) {
+      Spacer(Modifier.height(18.dp))
+      Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).graphicsLayer { alpha = if (busy != null) 0.5f else 1f }, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (DriveBackup.available) {
+          RestoreChoice(Icons.Outlined.CloudDownload, "Google Drive", "Every notebook the app backed up there. It keeps backing up there too.", primary = true) {
+            drive("Restoring from Drive…") { token ->
+              val r = DriveBackup.restore(context, token)
+              DriveBackup.enable(context)
+              finished(r, " Google Drive will keep backing up from now on.")
             }
-          busy = false
+          }
+        }
+        RestoreChoice(Icons.Outlined.Description, "Backup files", "Pick one, or select several to bring them all back.") {
+          if (busy == null) files.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream"))
+        }
+        RestoreChoice(Icons.Outlined.Folder, "A folder", "Every backup in a folder on the tablet or a memory card.") {
+          if (busy == null) folder.launch(null)
         }
       }
     }
-  DialogCard({ if (!busy) onDismiss() }, width = 500) {
-    Text(if (result != null) "Welcome back" else "Welcome to Tali's Notes", style = MaterialTheme.typography.titleLarge, color = c.ink)
-    Spacer(Modifier.height(10.dp))
-    com.tali.notes.ui.components.WorkingText(
-      result ?: if (busy) "Restoring…" else "New tablet, or the app installed again? If you have a backup (in Google Drive, OneDrive or on the tablet), you can bring all your notebooks back now. You can also do it later from Backups, at the bottom left.",
-      style = MaterialTheme.typography.bodyMedium,
-      color = if (result != null || busy) c.blue else c.inkMuted,
-    )
-    if (result == null && !busy) {
-      Spacer(Modifier.height(6.dp))
-      Text("To find Google Drive, tap ☰ at the top left of the next screen.", style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
-    }
     Spacer(Modifier.height(20.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-      if (result != null) {
-        PrimaryButton("Done", onClick = onDismiss)
-      } else {
-        QuietButton("Start fresh") { if (!busy) onDismiss() }
-        PrimaryButton("Restore a backup") { if (!busy) pick.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream")) }
-      }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+      if (restored) PrimaryButton("Done", onClick = onDismiss) else QuietButton("Start fresh") { if (busy == null) onDismiss() }
     }
+  }
+}
+
+/** One way to restore: a tile with an icon, a name and a line about it. */
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.RestoreChoice(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, primary: Boolean = false, onClick: () -> Unit) {
+  val c = Tali.colors
+  val tint = if (primary) c.accent else Color(if (c.isDark) 0xFF6FD3B5 else 0xFF1C8466)
+  Column(
+    Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp)).background(if (primary) c.accentSoft else c.surface.copy(alpha = 0.7f))
+      .border(1.dp, if (primary) tint.copy(alpha = 0.35f) else c.line, RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(14.dp),
+  ) {
+    Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
+    Spacer(Modifier.height(8.dp))
+    Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink)
+    Spacer(Modifier.height(2.dp))
+    Text(body, style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
   }
 }
 
