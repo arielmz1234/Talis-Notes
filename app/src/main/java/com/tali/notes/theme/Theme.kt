@@ -195,6 +195,12 @@ val Figtree = FontFamily(figtree(400), figtree(500), figtree(600), figtree(700))
 val BricolageDisplay = FontFamily(bricolage(700, 72f), bricolage(600, 36f))
 val BricolageTitle = FontFamily(bricolage(600, 24f))
 
+@OptIn(ExperimentalTextApi::class)
+private fun heebo(weight: Int) = Font(R.font.heebo, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
+
+/** Hebrew: Figtree and Bricolage have no Hebrew letters, so the Hebrew app is set in Heebo throughout. */
+val Heebo = FontFamily(heebo(400), heebo(500), heebo(600), heebo(700))
+
 private val TaliTypography =
   Typography(
     displayLarge = TextStyle(fontFamily = BricolageDisplay, fontWeight = FontWeight(700), fontSize = 52.sp, lineHeight = 54.sp, letterSpacing = (-0.02).em),
@@ -209,6 +215,20 @@ private val TaliTypography =
     labelMedium = TextStyle(fontFamily = Figtree, fontWeight = FontWeight(600), fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.02.em),
     labelSmall = TextStyle(fontFamily = Figtree, fontWeight = FontWeight(600), fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.06.em),
   )
+
+// Hebrew isn't tracked (spread-out letters read as broken words), so no letter spacing at all.
+private fun TextStyle.inHeebo() = copy(fontFamily = Heebo, letterSpacing = 0.em)
+
+private val HebrewTypography =
+  TaliTypography.run {
+    copy(
+      displayLarge = displayLarge.inHeebo(), displayMedium = displayMedium.inHeebo(), displaySmall = displaySmall.inHeebo(),
+      headlineLarge = headlineLarge.inHeebo(), headlineMedium = headlineMedium.inHeebo(), headlineSmall = headlineSmall.inHeebo(),
+      titleLarge = titleLarge.inHeebo(), titleMedium = titleMedium.inHeebo(), titleSmall = titleSmall.inHeebo(),
+      bodyLarge = bodyLarge.inHeebo(), bodyMedium = bodyMedium.inHeebo(), bodySmall = bodySmall.inHeebo(),
+      labelLarge = labelLarge.inHeebo(), labelMedium = labelMedium.inHeebo(), labelSmall = labelSmall.inHeebo(),
+    )
+  }
 
 object Tali {
   val colors: TaliColors
@@ -258,7 +278,9 @@ fun TaliColorsScope(c: TaliColors, content: @Composable () -> Unit) {
         error = c.danger,
       )
     }
-  CompositionLocalProvider(LocalTaliColors provides c) { MaterialTheme(colorScheme = scheme, typography = TaliTypography) {
+  // In Hebrew every style is set in Heebo (same sizes and weights, no letter spacing).
+  val hebrew = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language.let { it == "he" || it == "iw" }
+  CompositionLocalProvider(LocalTaliColors provides c) { MaterialTheme(colorScheme = scheme, typography = if (hebrew) HebrewTypography else TaliTypography) {
       // No hover highlight: with the S Pen hovering it lit rows up, and after pressing an item and
       // moving the pen away the highlight could stay behind. Pressing still shows.
       CompositionLocalProvider(
