@@ -114,7 +114,7 @@ Backups come in four layers:
 ## Open items
 
 - Copy `keystore/` somewhere safe (it is not in git). As of 3 Oct 2026 it was **not** on the owner's PC (`C:\dev\Talis-Notes`). On 6 Oct 2026 it **was** found in the laptop checkout (`C:\Users\ariel\source\repos\talis-notes\keystore`), and its SHA-1 matches the release SHA-1 below, so build Tali's release APKs on the laptop. On 11 Oct 2026 the owner copied it to this PC too (`C:\dev\Talis-Notes\keystore`, checked: the release APK built here has the release SHA-1), so release APKs for Tali can be built on either machine.
-- The owner now also tests on a Galaxy Tab S6 Lite (SM-P620, Android 16, 1200×2000 @240dpi, which is 800×1333 dp, so the narrow layout when held upright).
+- The owner now also tests on a Galaxy Tab S6 Lite (SM-P620, Android 16, 1200×2000 @240dpi, which is 800×1333 dp, so the narrow layout when held upright). Since 11 Oct 2026 its app is the **release-key** build (he uninstalled and installed the release APK himself): `installPreview` (debug key) is refused there, so update it with `assembleRelease` and `adb install -r app/build/outputs/apk/release/app-release.apk`. Never let Gradle uninstall it.
 - Google Drive setup, then set `DRIVE_BACKUP=true`.
 - Try two-finger undo and three-finger redo on the real tablet. They are tested only in instrumented tests and the emulator.
 - The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
