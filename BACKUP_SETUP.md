@@ -26,7 +26,8 @@ Google only lets an app use Drive once the app is registered. There's nothing to
    - **Branding:** app name *Tali's Notes*, plus your email as the support and developer contact.
    - **Audience:** choose *External*, then click **Publish app** to move it to *In production*.
      - If you leave it in *Testing*, Google signs her out every 7 days.
-     - With only the `drive.file` scope there's no verification step. Google may show her a one-time "unverified app" notice; she taps *Advanced > Continue*.
+     - With only the `drive.file` scope there's no security review. Google may show her a one-time "unverified app" notice; she taps *Advanced > Continue*.
+     - Brand verification (name and logo on Google's sign-in screen, needed for a public release): the site is verified in Google Search Console (11 Oct 2026); from 12 Oct re-request it under Google Auth Platform → Branding → View issues → *I have fixed the issues*.
    - **Data access:** add the scope `.../auth/drive.file`.
 4. Go to **Clients > Create client**, choose **Android**, and fill in:
    - **Package name:** `com.tali.notes`

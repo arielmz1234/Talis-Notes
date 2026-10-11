@@ -1,8 +1,8 @@
 # Tali's Notes: notes for Claude
 
-A handwriting notes app for Android tablets, made for **one person**: Tali, a civil-engineering student, writing with an S Pen.
-- It is sideloaded as an APK and never goes to the Play Store.
-- It replaces Notewise for her.
+A handwriting notes app for Android tablets, made first for Tali, a civil-engineering student, writing with an S Pen.
+- For now it is sideloaded to her as an APK. It replaces Notewise for her.
+- **Heading for a public release (decided 11 Oct 2026):** Play Store, **tablets only** at first, **free** (no billing). See *Release plan* below. New work should suit strangers too, not only Tali: no personal names in the UI, nothing that needs the owner to explain it.
 - Devices: Galaxy Tab S6 Lite and newer (she has a Tab S9 FE).
 
 [README.md](README.md) lists the features and has a code map, so read it first. [BACKUP_SETUP.md](BACKUP_SETUP.md) covers signing and Google Drive.
@@ -82,6 +82,23 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # adjust per ma
 - Without the key, `assembleRelease` falls back to the debug key. That APK **will not** update her installed app, so don't hand it to her as an update.
 - Release SHA-1: `B9:89:A0:5A:05:74:6D:3D:AD:20:3C:F2:A0:74:51:BB:08:13:CE:08` (used by Drive OAuth).
 
+## Release plan (Play Store)
+
+Decided by the owner on 11 Oct 2026: tablets only at first, free. In order:
+1. **Google brand verification.** The Cloud project's branding is filled in (home page and privacy policy at arielmz1234.github.io, logo `site/logo-120.png`). The first attempt failed with "home page not registered to you", because the site wasn't in Search Console yet; the owner verified it there on 11 Oct (account arielmz12344@gmail.com). From 12 Oct: Google Auth Platform → Branding → View issues → *I have fixed the issues* → Proceed. Only `drive.file` is used (non-sensitive), so this is branding only, no security review.
+2. **Tali onto the release key** (see the hand-off note under Open items): she backs up, uninstalls, installs a release APK built here, restores from the welcome card.
+3. **First-run tour** for people with nobody to ask: the pen and toolbar, shapes and hold-to-shape, starring subjects, backups. Short, skippable, in the app's look.
+4. **Opt-in crash reports.** `CrashLog` only writes on the tablet. Anything that sends data out changes the privacy policy (`site/privacy.html`) and the Play Data safety answers.
+5. **Play Console:**
+   - Developer account (one-time $25).
+   - Upload an app bundle (`./gradlew bundleRelease`), not an APK.
+   - Play App Signing: give Play **our existing key** (`keystore/`), not a new Google-made one. Then Tali's sideloaded app updates straight from Play, and Drive's Android OAuth client (release SHA-1) keeps matching. If Play ends up with its own key, add its SHA-1 as another Android client in Google Cloud.
+   - Tablets only: limit to large screens in the Play Console device catalogue (and/or `<supports-screens>`).
+   - Store listing: screenshots, short and long descriptions, feature graphic, content rating, Data safety (nothing leaves the tablet except to the user's own Google Drive), privacy policy link.
+   - New personal developer accounts need a **closed test with at least 12 testers for 14 days** before production. Tali, the owner and friends count; it doubles as testing on other tablets (only Samsung and the emulator so far).
+6. **Before the name is final:** the display name can change any time; the package id `com.tali.notes` can't once uploaded (keeping it is fine, users don't see it).
+7. **After launch, by what testers ask for:** a Hebrew UI (today English only and forced LTR, `supportsRtl="false"`), handwriting search (held back so far), use on more than one device (Drive is a backup, not a live sync).
+
 ## Testing in the emulator
 
 - AVD `medium_tablet` (1334×800 @160dpi, landscape), run headless.
@@ -115,7 +132,7 @@ Backups come in four layers:
 
 - Copy `keystore/` somewhere safe (it is not in git). As of 3 Oct 2026 it was **not** on the owner's PC (`C:\dev\Talis-Notes`). On 6 Oct 2026 it **was** found in the laptop checkout (`C:\Users\ariel\source\repos\talis-notes\keystore`), and its SHA-1 matches the release SHA-1 below, so build Tali's release APKs on the laptop. On 11 Oct 2026 the owner copied it to this PC too (`C:\dev\Talis-Notes\keystore`, checked: the release APK built here has the release SHA-1), so release APKs for Tali can be built on either machine.
 - The owner now also tests on a Galaxy Tab S6 Lite (SM-P620, Android 16, 1200×2000 @240dpi, which is 800×1333 dp, so the narrow layout when held upright). Since 11 Oct 2026 its app is the **release-key** build (he uninstalled and installed the release APK himself): `installPreview` (debug key) is refused there, so update it with `assembleRelease` and `adb install -r app/build/outputs/apk/release/app-release.apk`. Never let Gradle uninstall it.
-- Google Drive setup, then set `DRIVE_BACKUP=true`.
+- Google Drive backup is on (`DRIVE_BACKUP=true`); brand verification is pending (Release plan, step 1).
 - Try two-finger undo and three-finger redo on the real tablet. They are tested only in instrumented tests and the emulator.
 - The app icon comes from `tools/icon-source.png` via `python tools/make_icon.py` (Pillow, numpy, scipy). It writes `mipmap-*/ic_launcher_art.webp` (the whole picture, used as the adaptive icon's background) and `ic_launcher_mono.webp` (themed icons). The foreground layer is empty. The owner should check it on his launcher.
 - The owner reviews visual changes on his own Galaxy Tab S9 FE (debug builds over USB). He asked to review: the frosted eye "show toolbars" button, the back-cloud plus title-with-pencil layout, and how scrolling feels after the glide fix.
@@ -123,7 +140,7 @@ Backups come in four layers:
 - Session hand-off (3 Oct 2026, end of the local session on the owner's PC): everything is on `master` and pushed; `claude/vigilant-fermat-8fu4pj` is identical. The owner is moving to his laptop: at the start, `git checkout master && git pull origin master` yourself (he wants no git steps of his own), follow *Setting up a new computer* below, then `./gradlew installDebug` on his Tab S9 FE if it's plugged in. His tablet has the item 42 selection menu (with the 3 Oct follow-ups) as a debug build and he's happy with it. A release APK of it was built on the PC **without** `keystore/` (it isn't on that PC), so it's debug-signed: Tali still needs back up, uninstall, install, restore. Earlier items still worth his eye: hold-to-paste (41), the precise eraser on fills (33, last bullet group), page edges hiding ink (40), starred pens with the S Pen button (33), free-form select (36). Still waiting from his older list (he said fixes first): touch-disable in notes, recent notes, split screen, voice recordings.
 - Session hand-off (6 Oct 2026, end of the laptop session): everything (items 43-47) is on `master` and pushed, and the owner's tablet has it as a preview build. Not yet tried by him on a device: carrying a memo to a screen edge to scroll, and the item 47 text box. On the next computer: `git checkout master && git pull origin master`, follow *Setting up a new computer*, then `./gradlew installPreview` on his tablet if it's plugged in. `keystore/` is only on the laptop (`C:/Users/ariel/source/repos/talis-notes/keystore`): copy it over by hand before building anything for Tali.
 - Session hand-off (10 Oct 2026, owner's PC `C:\dev\Talis-Notes`): items 48 and 49 are on `master`. Not yet tried on a device: the item 49 snapping (firm touch / soft lining up, pulling free; tune `SNAP_DP`, `ALIGN_DP`, `SnapSession.REARM`), the stroke fix for writing again right after scrolling, the distributed load's dots, the screenshot lasso's share/copy targets on Samsung.
-- **Tali's signing changed (2 Oct 2026):** the owner chose to have Tali uninstall (losing her notes, which he said was fine) and install a release APK built in a cloud session, signed with that session's throwaway debug key. So her installed app is **no longer** signed with the `keystore/` release key, and no future build (cloud or PC) will install over it: each one again needs an uninstall, which wipes her notes unless she backs up first and restores (restore merges). To get her back onto one stable key, the next update should be built on the owner's PC with `keystore/` (`assembleRelease`), after a backup and one last uninstall; from then on updates install over it. Remind the owner of this before handing her any APK.
+- **Tali's signing changed (2 Oct 2026):** the owner chose to have Tali uninstall (losing her notes, which he said was fine) and install a release APK built in a cloud session, signed with that session's throwaway debug key. So her installed app is **no longer** signed with the `keystore/` release key, and no future build (cloud or PC) will install over it: each one again needs an uninstall, which wipes her notes unless she backs up first and restores (restore merges). To get her back onto one stable key, the next update should be built on the owner's PC with `keystore/` (`assembleRelease`), after a backup and one last uninstall; from then on updates install over it. Remind the owner of this before handing her any APK. **11 Oct 2026:** `keystore/` is now on the PC and her release APK was built there (19:30, with the three-way welcome restore card; the owner tested the whole uninstall-and-restore on his own tablet and it worked). Still to do: Tali backs up, uninstalls, installs it and restores. Once she's done, this note can go.
 
 ## Recent work (October 2026)
 
