@@ -142,6 +142,8 @@ data class AppSettings(
   val seenTips: Set<String> = emptySet(),
   /** PDFs, pictures and scans she tapped Write on: they open ready to write from then on. */
   val writeOn: Set<String> = emptySet(),
+  /** Notebooks she set to View only (in the ⋯ menu): they open just for looking. */
+  val viewOnly: Set<String> = emptySet(),
   /** Notebooks she opened, newest first (quick open, and sorting the library by last opened). */
   val recentNotebooks: List<String> = emptyList(),
   /** How the library orders notebooks, and whether the other way round (oldest first, Z to A). */

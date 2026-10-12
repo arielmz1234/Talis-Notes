@@ -86,17 +86,23 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     get() = meta.value?.draft == true && !savedNow
 
   /**
-   * A PDF, picture or scan opens just for looking (no toolbars, the page only scrolls and zooms);
-   * tapping Write brings the toolbars to write on it, and from then on it opens ready to write
-   * ([com.tali.notes.data.AppSettings.writeOn]).
+   * Just for looking (no toolbars, the page only scrolls and zooms). A PDF, picture or scan starts
+   * that way until she taps Write ([com.tali.notes.data.AppSettings.writeOn]); any of them, notebooks
+   * too, can be set to View only and back in the ⋯ menu ([com.tali.notes.data.AppSettings.viewOnly]
+   * for notebooks). Either choice is kept for next time.
    */
-  var writing by mutableStateOf(notebookId in store.settings.value.writeOn)
-    private set
+  fun viewOnlyIn(s: com.tali.notes.data.AppSettings, m: NotebookMeta?): Boolean =
+    m != null && if (m.kind != com.tali.notes.data.DocKind.NOTEBOOK) notebookId !in s.writeOn else notebookId in s.viewOnly
 
-  fun startWriting() {
-    writing = true
-    store.update { it.copy(writeOn = it.writeOn + notebookId) }
+  fun setViewOnly(on: Boolean) {
+    val document = meta.value?.kind.let { it != null && it != com.tali.notes.data.DocKind.NOTEBOOK }
+    store.update {
+      if (document) it.copy(writeOn = if (on) it.writeOn - notebookId else it.writeOn + notebookId)
+      else it.copy(viewOnly = if (on) it.viewOnly + notebookId else it.viewOnly - notebookId)
+    }
   }
+
+  fun startWriting() = setViewOnly(false)
 
   /** She chose to leave without saving: the PDF and what she wrote on it go when the notebook closes. */
   private var discardOnLeave = false
@@ -309,7 +315,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       // A first-time nudge towards the app's best trick.
       kotlinx.coroutines.delay(1500)
       // One tip per visit, in this order, each shown once; none while only looking at a PDF, picture or scan.
-      val looking = meta.value?.let { it.draft || (it.kind != com.tali.notes.data.DocKind.NOTEBOOK && !writing) } == true
+      val looking = meta.value?.let { it.draft || viewOnlyIn(settings.value, it) } == true
       if (looking) Unit
       else if ("hold" !in settings.value.seenTips) tip("hold", tr(R.string.tip_at_the_end_of_a))
       else tip("spen", tr(R.string.tip_hold_the_s_pen_s))
@@ -687,6 +693,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         // still opens where she left off: that's the saved viewport, not the preview).
         val page = pageLayout.rect(0)
         val region = Rect(page.left, page.top, page.right, minOf(page.bottom, page.top + page.width / 1.32f))
+        // Pictures not decoded yet (left right after opening) would be missing from the preview.
+        items.forEach { if (it is com.tali.notes.model.ImageItem && it.bounds.intersects(region)) repo.images.loadNow(it.file) }
         val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page, clip = pageClip()) }.getOrNull() ?: return@launch
         repo.saveThumbnail(notebookId, bmp)
         return@launch
@@ -698,6 +706,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       w = minOf(w, visible.width * 1.5f)
       val h = w / 1.32f
       val region = Rect(center.x - w / 2, center.y - h / 2, center.x + w / 2, center.y + h / 2)
+      // Pictures not decoded yet (left right after opening) would be missing from the preview.
+      items.forEach { if (it is com.tali.notes.model.ImageItem && it.bounds.intersects(region)) repo.images.loadNow(it.file) }
       val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, custom = custom) }.getOrNull() ?: return@launch
       repo.saveThumbnail(notebookId, bmp)
     }

@@ -365,7 +365,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   BackHandler(enabled = unsaved && vm.panel == null) { leavingPdf = onBack }
   // Only looking (scrolling and zooming): a PDF until it's saved, and a PDF, picture or scan until
   // she taps Write.
-  val viewing = unsaved || (meta != null && meta?.kind != com.tali.notes.data.DocKind.NOTEBOOK && !vm.writing)
+  val viewing = unsaved || vm.viewOnlyIn(settings, meta)
   LaunchedEffect(viewing, holder.view) { holder.view?.viewOnly = viewing }
 
   val lifecycleOwner = LocalLifecycleOwner.current
@@ -694,6 +694,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onUnlockAll = { holder.view?.runSafely { unlockAll() } },
               hideNavBar = settings.hideNavBar,
               onHideNavBar = vm::setHideNavBar,
+              onViewOnly = { vm.setViewOnly(true) },
             )
           }
         }
@@ -1044,6 +1045,18 @@ private fun PdfViewerBar(
               trailingIcon = { if (darkPaper) Icon(Icons.Outlined.Check, null, tint = c.accent) },
               onClick = { onDarkPaper(!darkPaper) },
             )
+            // On while looking; turning it off is the same as Write.
+            if (saved) {
+              DropdownMenuItem(
+                text = { Text(stringResource(R.string.view_only)) },
+                leadingIcon = { Icon(Icons.Outlined.Visibility, null) },
+                trailingIcon = { Icon(Icons.Outlined.Check, null, tint = c.accent) },
+                onClick = {
+                  open = false
+                  onWrite()
+                },
+              )
+            }
           }
         }
       }
@@ -1222,6 +1235,7 @@ private fun MoreMenu(
   onUnlockAll: () -> Unit,
   hideNavBar: Boolean,
   onHideNavBar: (Boolean) -> Unit,
+  onViewOnly: () -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
@@ -1283,6 +1297,11 @@ private fun MoreMenu(
         if (paged) MenuSwitchRow(Icons.Outlined.VerticalAlignCenter, stringResource(R.string.write_between_pages), inkBetweenPages) { onInkBetweenPages(!inkBetweenPages) }
         else MenuSwitchRow(Icons.Outlined.Description, stringResource(R.string.a4_page_guides), pageGuides) { onPageGuides(!pageGuides) }
         MenuSwitchRow(Icons.Outlined.Fullscreen, stringResource(R.string.full_screen), hideNavBar) { onHideNavBar(!hideNavBar) }
+        // Just for looking from now on (the viewer's ⋯ menu turns it off again, or Write).
+        MenuSwitchRow(Icons.Outlined.Visibility, stringResource(R.string.view_only), false) {
+          open = false
+          onViewOnly()
+        }
       }
     }
   }

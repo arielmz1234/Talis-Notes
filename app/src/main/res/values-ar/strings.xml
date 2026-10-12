@@ -760,4 +760,5 @@
     <string name="write">كتابة</string>
     <string name="add_camera">الكاميرا</string>
     <string name="a_photo_of_the_board_or_a_page">صورة للسبورة أو لصفحة</string>
+    <string name="view_only">للعرض فقط</string>
 </resources>

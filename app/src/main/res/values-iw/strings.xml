@@ -761,4 +761,5 @@
     <string name="write">כתיבה</string>
     <string name="add_camera">מצלמה</string>
     <string name="a_photo_of_the_board_or_a_page">צילום של הלוח או של דף</string>
+    <string name="view_only">צפייה בלבד</string>
 </resources>

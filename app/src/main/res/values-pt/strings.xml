@@ -760,4 +760,5 @@
     <string name="write">Escrever</string>
     <string name="add_camera">Câmera</string>
     <string name="a_photo_of_the_board_or_a_page">Uma foto do quadro ou de uma página</string>
+    <string name="view_only">Só visualizar</string>
 </resources>

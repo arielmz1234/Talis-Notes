@@ -111,7 +111,8 @@ fun AddButton(
     val a = activity ?: return onScanUnavailable()
     val options =
       GmsDocumentScannerOptions.Builder()
-        .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+        // Crop, rotate and filters; not the "Clean" tool (rubbing out marks), which did more harm than good.
+        .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_BASE_WITH_FILTER)
         .setGalleryImportAllowed(true)
         .setPageLimit(MAX_SCAN_PAGES)
         .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
