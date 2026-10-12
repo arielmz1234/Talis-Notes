@@ -1,6 +1,6 @@
 package com.tali.notes.ui.library
 
-import com.tali.notes.tr
+import com.tali.notes.later
 import androidx.compose.ui.res.stringResource
 import com.tali.notes.R
 import androidx.compose.animation.core.Animatable
@@ -199,10 +199,10 @@ private fun Thumb(app: TalisApp, nb: NotebookMeta) {
 /** "2 notebooks added, 1 notebook updated." for what a restore did. */
 fun describeRestore(r: com.tali.notes.data.NotesRepository.MergeResult): String {
   val parts = buildList {
-    if (r.added > 0) add(if (r.added == 1) tr(R.string.t_1_notebook_added) else tr(R.string.n_notebooks_added, r.added))
-    if (r.updated > 0) add(if (r.updated == 1) tr(R.string.t_1_notebook_updated) else tr(R.string.n_notebooks_updated, r.updated))
+    if (r.added > 0) add(if (r.added == 1) later(R.string.t_1_notebook_added) else later(R.string.n_notebooks_added, r.added))
+    if (r.updated > 0) add(if (r.updated == 1) later(R.string.t_1_notebook_updated) else later(R.string.n_notebooks_updated, r.updated))
   }
-  return if (parts.isEmpty()) tr(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
+  return if (parts.isEmpty()) later(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
 }
 
 /**
@@ -230,7 +230,7 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
           e.message
         } catch (t: Throwable) {
           CrashLog.recovered(context, t)
-          tr(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
+          later(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
         }
       busy = null
     }
@@ -245,16 +245,16 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
   val drive = rememberDriveAuth(::run)
   val files =
     androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-      if (uris.isNotEmpty()) run(tr(R.string.restoring)) {
+      if (uris.isNotEmpty()) run(later(R.string.restoring)) {
         val r = RestoreFiles.restore(context, uris)
         // One whole-app backup file: keep backing up into it, as before.
         val kept = uris.size == 1 && com.tali.notes.backup.AutoBackup.adopt(context, uris.first())
-        finished(r, if (kept) tr(R.string.it_ll_keep_backing_up_into) else "")
+        finished(r, if (kept) later(R.string.it_ll_keep_backing_up_into) else "")
       }
     }
   val folder =
     androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { tree ->
-      if (tree != null) run(tr(R.string.restoring)) { finished(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
+      if (tree != null) run(later(R.string.restoring)) { finished(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
     }
 
   DialogCard({ if (busy == null) onDismiss() }, width = 640) {
@@ -270,10 +270,10 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
       Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).graphicsLayer { alpha = if (busy != null) 0.5f else 1f }, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (DriveBackup.available) {
           RestoreChoice(Icons.Outlined.CloudDownload, stringResource(R.string.google_drive), stringResource(R.string.every_notebook_the_app_backed_up)) {
-            drive(tr(R.string.restoring_from_drive)) { token ->
+            drive(later(R.string.restoring_from_drive)) { token ->
               val r = DriveBackup.restore(context, token)
               DriveBackup.enable(context)
-              finished(r, tr(R.string.google_drive_will_keep_backing_up))
+              finished(r, later(R.string.google_drive_will_keep_backing_up))
             }
           }
         }
@@ -346,17 +346,17 @@ private fun RestoreCard(files: Incoming.Files, onDismiss: () -> Unit) {
           scope.launch {
             result =
               try {
-                val r = context.contentResolver.openInputStream(files.uris.first())?.use { BackupArchive.restore(context, it) } ?: error(tr(R.string.couldn_t_open_the_file))
+                val r = context.contentResolver.openInputStream(files.uris.first())?.use { BackupArchive.restore(context, it) } ?: error(later(R.string.couldn_t_open_the_file))
                 val parts = buildList {
-                  if (r.added > 0) add(if (r.added == 1) tr(R.string.t_1_notebook_added) else tr(R.string.n_notebooks_added, r.added))
-                  if (r.updated > 0) add(if (r.updated == 1) tr(R.string.t_1_notebook_updated) else tr(R.string.n_notebooks_updated, r.updated))
+                  if (r.added > 0) add(if (r.added == 1) later(R.string.t_1_notebook_added) else later(R.string.n_notebooks_added, r.added))
+                  if (r.updated > 0) add(if (r.updated == 1) later(R.string.t_1_notebook_updated) else later(R.string.n_notebooks_updated, r.updated))
                 }
-                if (parts.isEmpty()) tr(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
+                if (parts.isEmpty()) later(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
               } catch (e: BackupArchive.InvalidBackup) {
                 e.message
               } catch (t: Throwable) {
                 CrashLog.recovered(context, t)
-                tr(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
+                later(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
               }
             busy = false
           }

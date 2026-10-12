@@ -245,7 +245,6 @@
     <string name="line_style_solid">Solid</string>
     <string name="line_thickness">Line thickness</string>
     <string name="lines">Lines</string>
-    <string name="location">Location</string>
     <string name="lock_in_place">Lock in place</string>
     <string name="locked_hold_it_to_unlock">Locked — hold it to unlock</string>
     <string name="look_at_page_n">Look at page %1$s</string>
@@ -633,7 +632,6 @@
     <string name="take_a_photo">Take a photo</string>
     <string name="take_n_out_of_the_shapes">Take %1$s out of the Shapes panel</string>
     <string name="tali_s_notes">Tali\'s Notes</string>
-    <string name="tali_s_notes_2">/Tali\'s Notes</string>
     <string name="tali_s_notes_closed_unexpectedly_last">Tali\'s Notes closed unexpectedly last time</string>
     <string name="tali_s_notes_crash_report">Tali\'s Notes crash report</string>
     <string name="tap_2_fingers_to_undo_3">Tap 2 fingers to undo, 3 to redo</string>
@@ -740,4 +738,5 @@
     <string name="tour_spen_body">Hold the S Pen\'s button to erase with any tool. Star your favourite pens, then double-press the button to jump between them. Tap with two fingers to undo.</string>
     <string name="tour_backup_title">Always backed up</string>
     <string name="tour_backup_body">Everything is saved on the tablet as you write. Turn on Google Drive or Back up by itself in Backups, at the bottom left, and your notes are safe even if the tablet isn\'t.</string>
+    <string name="follows_the_tablet_n">Follows the tablet: %1$s</string>
 </resources>

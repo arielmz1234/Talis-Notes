@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -289,3 +290,27 @@ fun RulerDivider(modifier: Modifier = Modifier) {
 
 fun Modifier.combinedClickableCompat(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modifier =
   combinedClickable(onClick = onClick, onLongClick = onLongClick)
+
+/**
+ * One line of text that shrinks (down to [minScale] of its size) rather than cut off when it's too
+ * wide, then ends with "…" if it still doesn't fit: for big headings, whose words are longer in some
+ * languages ("Todos los cuadernos").
+ */
+@Composable
+fun FitText(text: String, style: androidx.compose.ui.text.TextStyle, color: Color, modifier: Modifier = Modifier, minScale: Float = 0.62f) {
+  val measurer = rememberTextMeasurer()
+  androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+    val room = constraints.maxWidth
+    val fitted =
+      remember(text, style, room) {
+        var scale = 1f
+        var s = style
+        while (room != androidx.compose.ui.unit.Constraints.Infinity && scale > minScale && measurer.measure(text, s, maxLines = 1, softWrap = false).size.width > room) {
+          scale -= 0.04f
+          s = style.copy(fontSize = style.fontSize * scale, lineHeight = style.lineHeight * scale)
+        }
+        s
+      }
+    Text(text, style = fitted, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+  }
+}

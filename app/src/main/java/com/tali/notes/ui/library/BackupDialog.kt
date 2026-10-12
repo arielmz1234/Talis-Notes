@@ -1,6 +1,6 @@
 package com.tali.notes.ui.library
 
-import com.tali.notes.tr
+import com.tali.notes.later
 import androidx.compose.ui.res.stringResource
 import com.tali.notes.R
 import android.app.Activity
@@ -74,10 +74,10 @@ fun BackupDialog(onDismiss: () -> Unit) {
 
   fun describe(r: NotesRepository.MergeResult): String {
     val parts = buildList {
-      if (r.added > 0) add(if (r.added == 1) tr(R.string.t_1_notebook_added) else tr(R.string.n_notebooks_added, r.added))
-      if (r.updated > 0) add(if (r.updated == 1) tr(R.string.t_1_notebook_updated) else tr(R.string.n_notebooks_updated, r.updated))
+      if (r.added > 0) add(if (r.added == 1) later(R.string.t_1_notebook_added) else later(R.string.n_notebooks_added, r.added))
+      if (r.updated > 0) add(if (r.updated == 1) later(R.string.t_1_notebook_updated) else later(R.string.n_notebooks_updated, r.updated))
     }
-    return if (parts.isEmpty()) tr(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
+    return if (parts.isEmpty()) later(R.string.everything_in_the_backup_was_already) else parts.joinToString(", ") + "."
   }
 
   fun run(label: String, from: String = "file", block: suspend () -> String) {
@@ -93,7 +93,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
           e.message
         } catch (t: Throwable) {
           CrashLog.recovered(context, t)
-          tr(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
+          later(R.string.something_went_wrong_n, t.message ?: t.javaClass.simpleName)
         }
       busy = null
     }
@@ -101,18 +101,18 @@ fun BackupDialog(onDismiss: () -> Unit) {
 
   val saveFile =
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { uri ->
-      if (uri != null) run(tr(R.string.saving_backup)) {
-        context.contentResolver.openOutputStream(uri)?.use { BackupArchive.write(context, it) } ?: error(tr(R.string.couldn_t_open_the_file))
-        tr(R.string.backup_saved)
+      if (uri != null) run(later(R.string.saving_backup)) {
+        context.contentResolver.openOutputStream(uri)?.use { BackupArchive.write(context, it) } ?: error(later(R.string.couldn_t_open_the_file))
+        later(R.string.backup_saved)
       }
     }
   val openFiles =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-      if (uris.isNotEmpty()) run(tr(R.string.restoring)) { describe(RestoreFiles.restore(context, uris)) }
+      if (uris.isNotEmpty()) run(later(R.string.restoring)) { describe(RestoreFiles.restore(context, uris)) }
     }
   val openFolder =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-      if (tree != null) run(tr(R.string.restoring)) { describe(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
+      if (tree != null) run(later(R.string.restoring)) { describe(RestoreFiles.restore(context, RestoreFiles.inFolder(context, tree))) }
     }
   val note = busy ?: message
 
@@ -180,11 +180,11 @@ fun backedUpAt(millis: Long, now: Long = System.currentTimeMillis()): String {
   val yesterday = (today.clone() as java.util.Calendar).apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
   val date =
     when {
-      same(day, today) -> tr(R.string.backed_up_today)
-      same(day, yesterday) -> tr(R.string.backed_up_yesterday)
+      same(day, today) -> com.tali.notes.tr(R.string.backed_up_today)
+      same(day, yesterday) -> com.tali.notes.tr(R.string.backed_up_yesterday)
       else -> java.text.SimpleDateFormat("d MMM", com.tali.notes.appLocale()).format(java.util.Date(millis))
     }
-  return tr(R.string.n_n, date, time)
+  return com.tali.notes.tr(R.string.n_n, date, time)
 }
 
 /** The backup that saves itself into one file she picked once (her Drive, OneDrive, the tablet…). */
@@ -195,7 +195,7 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
   val status by AutoBackup.status(context).collectAsState()
   val pick =
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { uri ->
-      if (uri != null) onRun(tr(R.string.saving_backup)) { AutoBackup.choose(context, uri) }
+      if (uri != null) onRun(later(R.string.saving_backup)) { AutoBackup.choose(context, uri) }
     }
   if (compact && !status.enabled) {
     // Google Drive already backs up by itself: this is just the other way, kept to one line.
@@ -242,7 +242,7 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
       )
       Spacer(Modifier.height(10.dp))
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuietButton(stringResource(R.string.back_up_now), color = c.blue) { onRun(tr(R.string.backing_up)) { if (AutoBackup.backupNow(context)) tr(R.string.backed_up) else AutoBackup.status(context).value.error ?: tr(R.string.couldn_t_save_the_backup) } }
+        QuietButton(stringResource(R.string.back_up_now), color = c.blue) { onRun(later(R.string.backing_up)) { if (AutoBackup.backupNow(context)) later(R.string.backed_up) else AutoBackup.status(context).value.error ?: later(R.string.couldn_t_save_the_backup) } }
         QuietButton(stringResource(R.string.change_place)) { pick.launch(AutoBackup.FILE_NAME) }
         QuietButton(stringResource(R.string.turn_off)) { AutoBackup.turnOff(context) }
       }
@@ -276,7 +276,7 @@ internal fun rememberDriveAuth(onRun: (String, suspend () -> String) -> Unit): (
         is DriveBackup.Auth.NeedsConsent -> {
           afterConsent = { token -> onRun(label) { then(token) } }
           consent.launch(IntentSenderRequest.Builder(auth.intent).build())
-          tr(R.string.choose_your_google_account_to_continue)
+          later(R.string.choose_your_google_account_to_continue)
         }
       }
     }
@@ -296,10 +296,10 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
 
   BackupCard(if (status.enabled) Icons.Outlined.CloudDone else Icons.Outlined.CloudUpload, stringResource(R.string.google_drive), stringResource(R.string.backs_up_by_itself_a_couple)) {
     ToggleRow(stringResource(R.string.back_up_automatically), status.enabled, { on ->
-      if (on) withToken(tr(R.string.backing_up_to_drive)) { token ->
+      if (on) withToken(later(R.string.backing_up_to_drive)) { token ->
         DriveBackup.enable(context)
         DriveBackup.backupNow(context, token)
-        tr(R.string.backed_up_to_google_drive)
+        later(R.string.backed_up_to_google_drive)
       } else DriveBackup.disable(context)
     })
     if (status.enabled) {
@@ -325,14 +325,14 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
       if (status.enabled) {
         QuietButton(stringResource(R.string.back_up_now), color = c.blue) {
-          withToken(tr(R.string.backing_up_to_drive)) { token ->
+          withToken(later(R.string.backing_up_to_drive)) { token ->
             DriveBackup.backupNow(context, token)
-            tr(R.string.backed_up_to_google_drive)
+            later(R.string.backed_up_to_google_drive)
           }
         }
       }
       QuietButton(stringResource(R.string.restore_from_drive), color = restoreColor()) {
-        withToken(tr(R.string.restoring_from_drive)) { token -> describe(DriveBackup.restore(context, token)) }
+        withToken(later(R.string.restoring_from_drive)) { token -> describe(DriveBackup.restore(context, token)) }
       }
     }
   }

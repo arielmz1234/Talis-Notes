@@ -6,6 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -73,12 +76,16 @@ fun MainNavigation() {
       entryProvider {
         entry<Library> { LibraryScreen(onOpen = { id -> backStack.add(Notebook(id)) }) }
         entry<Notebook> { key ->
-          NotebookScreen(
-            notebookId = key.id,
-            onBack = { if (backStack.lastOrNull() == key) back() },
-            // Quick open: this notebook gives way to the other one, so Back still goes to the library.
-            onSwitch = { id -> if (backStack.lastOrNull() == key && id != key.id) backStack[backStack.lastIndex] = Notebook(id) },
-          )
+          // A notebook is laid out the same in every language (toolbars, panels, menus): in Hebrew or
+          // Arabic only the words change, so the tools stay where her hand expects them.
+          CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            NotebookScreen(
+              notebookId = key.id,
+              onBack = { if (backStack.lastOrNull() == key) back() },
+              // Quick open: this notebook gives way to the other one, so Back still goes to the library.
+              onSwitch = { id -> if (backStack.lastOrNull() == key && id != key.id) backStack[backStack.lastIndex] = Notebook(id) },
+            )
+          }
         }
       },
   )

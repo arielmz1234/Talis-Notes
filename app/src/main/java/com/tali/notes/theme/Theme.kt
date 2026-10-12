@@ -201,6 +201,12 @@ private fun heebo(weight: Int) = Font(R.font.heebo, FontWeight(weight), variatio
 /** Hebrew: Figtree and Bricolage have no Hebrew letters, so the Hebrew app is set in Heebo throughout. */
 val Heebo = FontFamily(heebo(400), heebo(500), heebo(600), heebo(700))
 
+@OptIn(ExperimentalTextApi::class)
+private fun vazirmatn(weight: Int) = Font(R.font.vazirmatn, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
+
+/** Arabic: set in Vazirmatn throughout (open and light at small sizes, with line heights close to Figtree's). */
+val Vazirmatn = FontFamily(vazirmatn(400), vazirmatn(500), vazirmatn(600), vazirmatn(700))
+
 private val TaliTypography =
   Typography(
     displayLarge = TextStyle(fontFamily = BricolageDisplay, fontWeight = FontWeight(700), fontSize = 52.sp, lineHeight = 54.sp, letterSpacing = (-0.02).em),
@@ -216,19 +222,25 @@ private val TaliTypography =
     labelSmall = TextStyle(fontFamily = Figtree, fontWeight = FontWeight(600), fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.06.em),
   )
 
-// Hebrew isn't tracked (spread-out letters read as broken words), so no letter spacing at all.
-private fun TextStyle.inHeebo() = copy(fontFamily = Heebo, letterSpacing = 0.em)
-
-private val HebrewTypography =
-  TaliTypography.run {
+/**
+ * Every style in [family], same sizes and weights. Hebrew and Arabic aren't tracked (spread-out
+ * letters read as broken words, and Arabic's joined letters come apart), so no letter spacing at all.
+ */
+private fun typographyIn(family: FontFamily): Typography {
+  fun TextStyle.inIt() = copy(fontFamily = family, letterSpacing = 0.em)
+  return TaliTypography.run {
     copy(
-      displayLarge = displayLarge.inHeebo(), displayMedium = displayMedium.inHeebo(), displaySmall = displaySmall.inHeebo(),
-      headlineLarge = headlineLarge.inHeebo(), headlineMedium = headlineMedium.inHeebo(), headlineSmall = headlineSmall.inHeebo(),
-      titleLarge = titleLarge.inHeebo(), titleMedium = titleMedium.inHeebo(), titleSmall = titleSmall.inHeebo(),
-      bodyLarge = bodyLarge.inHeebo(), bodyMedium = bodyMedium.inHeebo(), bodySmall = bodySmall.inHeebo(),
-      labelLarge = labelLarge.inHeebo(), labelMedium = labelMedium.inHeebo(), labelSmall = labelSmall.inHeebo(),
+      displayLarge = displayLarge.inIt(), displayMedium = displayMedium.inIt(), displaySmall = displaySmall.inIt(),
+      headlineLarge = headlineLarge.inIt(), headlineMedium = headlineMedium.inIt(), headlineSmall = headlineSmall.inIt(),
+      titleLarge = titleLarge.inIt(), titleMedium = titleMedium.inIt(), titleSmall = titleSmall.inIt(),
+      bodyLarge = bodyLarge.inIt(), bodyMedium = bodyMedium.inIt(), bodySmall = bodySmall.inIt(),
+      labelLarge = labelLarge.inIt(), labelMedium = labelMedium.inIt(), labelSmall = labelSmall.inIt(),
     )
   }
+}
+
+private val HebrewTypography = typographyIn(Heebo)
+private val ArabicTypography = typographyIn(Vazirmatn)
 
 object Tali {
   val colors: TaliColors
@@ -278,9 +290,14 @@ fun TaliColorsScope(c: TaliColors, content: @Composable () -> Unit) {
         error = c.danger,
       )
     }
-  // In Hebrew every style is set in Heebo (same sizes and weights, no letter spacing).
-  val hebrew = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language.let { it == "he" || it == "iw" }
-  CompositionLocalProvider(LocalTaliColors provides c) { MaterialTheme(colorScheme = scheme, typography = if (hebrew) HebrewTypography else TaliTypography) {
+  // In Hebrew every style is set in Heebo, in Arabic in Vazirmatn (same sizes and weights, no letter spacing).
+  val typography =
+    when (androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language) {
+      "he", "iw" -> HebrewTypography
+      "ar" -> ArabicTypography
+      else -> TaliTypography
+    }
+  CompositionLocalProvider(LocalTaliColors provides c) { MaterialTheme(colorScheme = scheme, typography = typography) {
       // No hover highlight: with the S Pen hovering it lit rows up, and after pressing an item and
       // moving the pen away the highlight could stay behind. Pressing still shows.
       CompositionLocalProvider(

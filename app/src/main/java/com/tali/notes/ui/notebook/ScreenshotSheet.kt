@@ -131,7 +131,7 @@ private fun saveToGallery(context: Context, file: File): Boolean {
   val values = ContentValues().apply {
     put(MediaStore.Images.Media.DISPLAY_NAME, file.name)
     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + tr(R.string.tali_s_notes_2))
+    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Tali's Notes")
     put(MediaStore.Images.Media.IS_PENDING, 1)
   }
   val resolver = context.contentResolver

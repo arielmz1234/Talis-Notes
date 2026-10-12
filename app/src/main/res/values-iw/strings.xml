@@ -246,7 +246,6 @@
     <string name="line_style_solid">רציף</string>
     <string name="line_thickness">עובי קו</string>
     <string name="lines">שורות</string>
-    <string name="location">מיקום</string>
     <string name="lock_in_place">נעילה במקום</string>
     <string name="locked_hold_it_to_unlock">נעול — לחיצה ממושכת משחררת</string>
     <string name="look_at_page_n">צפייה בעמוד %1$s</string>
@@ -634,7 +633,6 @@
     <string name="take_a_photo">צילום תמונה</string>
     <string name="take_n_out_of_the_shapes">הוצאת %1$s מלוח הצורות</string>
     <string name="tali_s_notes">Tali\'s Notes</string>
-    <string name="tali_s_notes_2">/Tali\'s Notes</string>
     <string name="tali_s_notes_closed_unexpectedly_last">Tali\'s Notes נסגרה באופן לא צפוי בפעם הקודמת</string>
     <string name="tali_s_notes_crash_report">דוח קריסה של Tali\'s Notes</string>
     <string name="tap_2_fingers_to_undo_3">שתי אצבעות: ביטול · שלוש: חזרה</string>
@@ -741,4 +739,5 @@
     <string name="tour_spen_body">לחיצה ממושכת על כפתור ה-S Pen מוחקת עם כל כלי. מסמנים עטים אהובים בכוכב, ולחיצה כפולה על הכפתור קופצת ביניהם. הקשה בשתי אצבעות מבטלת.</string>
     <string name="tour_backup_title">תמיד מגובה</string>
     <string name="tour_backup_body">הכול נשמר בטאבלט תוך כדי כתיבה. מפעילים את Google Drive או גיבוי אוטומטי ב„גיבויים”, בפינה התחתונה, והסיכומים בטוחים גם אם הטאבלט לא.</string>
+    <string name="follows_the_tablet_n">שפת הטאבלט: %1$s</string>
 </resources>

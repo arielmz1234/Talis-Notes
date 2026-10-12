@@ -1,6 +1,6 @@
 package com.tali.notes.backup
 
-import com.tali.notes.tr
+import com.tali.notes.later
 import com.tali.notes.R
 import android.content.Context
 import android.content.Intent
@@ -104,7 +104,7 @@ object AutoBackup {
   suspend fun choose(context: Context, uri: Uri): String {
     val resolver = context.contentResolver
     runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
-      .onFailure { return tr(R.string.that_place_doesn_t_let_apps) }
+      .onFailure { return later(R.string.that_place_doesn_t_let_apps) }
     // A different file than before: let go of the old one.
     flow(context).value.uri?.takeIf { it != uri }?.let { old -> runCatching { resolver.releasePersistableUriPermission(old, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
     val name = withContext(Dispatchers.IO) { displayName(context, uri) }
@@ -116,10 +116,10 @@ object AutoBackup {
         try {
           withContext(Dispatchers.IO) { resolver.openInputStream(uri)?.use { BackupArchive.restore(context, it) } }
         } catch (e: BackupArchive.InvalidBackup) {
-          return tr(R.string.that_file_isn_t_a_tali)
+          return later(R.string.that_file_isn_t_a_tali)
         } catch (t: Throwable) {
           CrashLog.recovered(context, t)
-          return tr(R.string.couldn_t_read_the_backup_in)
+          return later(R.string.couldn_t_read_the_backup_in)
         }
     }
     save(context) { it.copy(uri = uri, place = placeOf(uri), fileName = name, error = null) }
@@ -128,9 +128,9 @@ object AutoBackup {
     val r = restored
     if (r != null) {
       val n = r.added + r.updated
-      return (if (n == 1) tr(R.string.brought_back_1_notebook_from_the) else tr(R.string.brought_back_n_notebooks_from_the, n)) + tr(R.string.from_now_on_it_saves_by)
+      return (if (n == 1) later(R.string.brought_back_1_notebook_from_the) else later(R.string.brought_back_n_notebooks_from_the, n)) + later(R.string.from_now_on_it_saves_by)
     }
-    return if (backupNow(context)) tr(R.string.backed_up_from_now_on_it) else flow(context).value.error ?: tr(R.string.couldn_t_save_the_backup)
+    return if (backupNow(context)) later(R.string.backed_up_from_now_on_it) else flow(context).value.error ?: later(R.string.couldn_t_save_the_backup)
   }
 
   private fun sizeOf(context: Context, uri: Uri): Long =
@@ -209,17 +209,17 @@ object AutoBackup {
           true
         } catch (e: SecurityException) {
           markDirty(context)
-          save(context) { it.copy(error = tr(R.string.the_app_can_t_reach_the), running = false) }
+          save(context) { it.copy(error = later(R.string.the_app_can_t_reach_the), running = false) }
           false
         } catch (e: IOException) {
           markDirty(context)
           val gone = e is java.io.FileNotFoundException
-          save(context) { it.copy(error = if (gone) tr(R.string.the_backup_file_was_moved_or) else tr(R.string.couldn_t_save_the_backup_will), running = false) }
+          save(context) { it.copy(error = if (gone) later(R.string.the_backup_file_was_moved_or) else later(R.string.couldn_t_save_the_backup_will), running = false) }
           false
         } catch (t: Throwable) {
           CrashLog.recovered(context, t)
           markDirty(context)
-          save(context) { it.copy(error = tr(R.string.backup_failed_n, t.message ?: t.javaClass.simpleName), running = false) }
+          save(context) { it.copy(error = later(R.string.backup_failed_n, t.message ?: t.javaClass.simpleName), running = false) }
           false
         } finally {
           tmp.delete()
@@ -234,7 +234,7 @@ object AutoBackup {
    */
   private fun writeInto(context: Context, uri: Uri, src: File) {
     val resolver = context.contentResolver
-    val pfd = runCatching { resolver.openFileDescriptor(uri, "wt") }.getOrNull() ?: resolver.openFileDescriptor(uri, "w") ?: throw IOException(tr(R.string.couldn_t_open_the_backup_file))
+    val pfd = runCatching { resolver.openFileDescriptor(uri, "wt") }.getOrNull() ?: resolver.openFileDescriptor(uri, "w") ?: throw IOException(later(R.string.couldn_t_open_the_backup_file))
     pfd.use {
       FileOutputStream(it.fileDescriptor).use { out ->
         src.inputStream().use { input -> input.copyTo(out) }
@@ -247,8 +247,8 @@ object AutoBackup {
   /** Restores from her backup file (merging, like any restore). */
   suspend fun restore(context: Context) =
     withContext(Dispatchers.IO) {
-      val uri = flow(context).value.uri ?: throw BackupArchive.InvalidBackup(tr(R.string.no_backup_file_chosen_yet))
-      val input = runCatching { context.contentResolver.openInputStream(uri) }.getOrNull() ?: throw BackupArchive.InvalidBackup(tr(R.string.the_app_can_t_open_the))
+      val uri = flow(context).value.uri ?: throw BackupArchive.InvalidBackup(later(R.string.no_backup_file_chosen_yet))
+      val input = runCatching { context.contentResolver.openInputStream(uri) }.getOrNull() ?: throw BackupArchive.InvalidBackup(later(R.string.the_app_can_t_open_the))
       input.use { BackupArchive.restore(context, it) }
     }
 

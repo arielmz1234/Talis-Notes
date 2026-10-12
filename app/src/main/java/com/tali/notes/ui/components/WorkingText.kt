@@ -39,18 +39,19 @@ private const val DOT_GAP_MS = 120
 @Composable
 fun WorkingText(text: String, style: TextStyle, color: Color, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE) {
   AnimatedContent(
-    targetState = text,
+    // Saved messages are kept by name (`later`) and put into words here, in the language shown now.
+    targetState = com.tali.notes.shown(text),
     transitionSpec = {
       (fadeIn(tween(200, delayMillis = 60)) + slideInVertically(tween(260, easing = EaseOutStrong)) { it / 3 }) togetherWith fadeOut(tween(120))
     },
     label = "status",
     modifier = modifier,
-  ) { shown ->
-    if (!shown.endsWith("…")) {
-      Text(shown, style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+  ) { line ->
+    if (!line.endsWith("…")) {
+      Text(line, style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
     } else {
       Row {
-        Text(shown.dropLast(1), style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+        Text(line.dropLast(1), style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
         HoppingDots(style, color)
       }
     }

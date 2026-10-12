@@ -9,7 +9,7 @@ import android.os.LocaleList
 import java.util.Locale
 
 /**
- * The app's own language, apart from the tablet's: the system's (null), English or Hebrew.
+ * The app's own language, apart from the tablet's: the system's (null) or one the app is written in.
  *
  * On Android 13 and newer it's Android's per-app language ([LocaleManager]): the choice also shows
  * in the tablet's Settings › Apps › Tali's Notes › Language, and Android restarts the screen in the
@@ -17,11 +17,22 @@ import java.util.Locale
  * resources ([wrap]), restarting it on a change.
  */
 object AppLanguage {
-  /** The languages the app is written in, by tag. */
-  val available = listOf("en", "he")
+  /** The languages the app is written in, by tag (each has a `values-` folder of strings; Hebrew's is `values-iw`). */
+  val available = listOf("en", "es", "fr", "pt", "ar", "he")
 
   /** Each language's name in itself, as language pickers show them. */
   fun nativeName(tag: String): String = Locale.forLanguageTag(tag).let { it.getDisplayName(it) }.replaceFirstChar { it.titlecase(Locale.forLanguageTag(tag)) }
+
+  /** The tablet's own language (what "System default" follows), apart from the app's choice. */
+  fun tablet(context: Context): String {
+    val locale =
+      if (Build.VERSION.SDK_INT >= 33) context.getSystemService(LocaleManager::class.java).systemLocales[0]
+      else android.content.res.Resources.getSystem().configuration.locales[0]
+    return normalize(locale)
+  }
+
+  /** A language's name in another language ([locale]), as a second line under its own name. */
+  fun nameIn(tag: String, locale: Locale): String = Locale.forLanguageTag(tag).getDisplayLanguage(locale).replaceFirstChar { it.titlecase(locale) }
 
   /** The chosen language's tag, or null to follow the tablet. */
   fun current(context: Context): String? =

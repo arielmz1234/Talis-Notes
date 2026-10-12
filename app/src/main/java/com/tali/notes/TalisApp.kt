@@ -51,6 +51,36 @@ private lateinit var instance: TalisApp
  */
 fun tr(@androidx.annotation.StringRes id: Int, vararg args: Any): String = appContext().getString(id, *args)
 
+/**
+ * Words kept for later, such as a backup's saved error or a card's last note: stored by the string's
+ * name with its values, and put into words only when shown ([shown]), so they follow a change of
+ * language. Pieces can be joined with plain text (", ", " ") like finished text.
+ */
+fun later(@androidx.annotation.StringRes id: Int, vararg args: Any): String =
+  buildString {
+    append(START).append(appContext().resources.getResourceEntryName(id))
+    // A message inside another (an error wrapped in "Something went wrong: …") is put into words now.
+    for (a in args) append(ARG).append(if (a is Int || a is Long) "#" else "$").append(if (a is String) shown(a) else a.toString())
+    append(END)
+  }
+
+/** [later] words (any number, among plain text) in the language shown now. Plain text passes through. */
+fun shown(text: String): String {
+  if (START !in text) return text
+  val res = appContext().resources
+  return Regex("$START([^$END]*)$END").replace(text) { m ->
+    val parts = m.groupValues[1].split(ARG)
+    val id = res.getIdentifier(parts[0], "string", appContext().packageName)
+    if (id == 0) return@replace ""
+    val args = parts.drop(1).map<String, Any> { a -> if (a.startsWith("#")) (a.drop(1).toLongOrNull() ?: 0L) else a.drop(1) }
+    res.getString(id, *args.toTypedArray())
+  }
+}
+
+private const val START = '\u2063'
+private const val ARG = '\u2064'
+private const val END = '\u2065'
+
 /** The language the app is showing (for dates and month names). */
 fun appLocale(): java.util.Locale = appContext().resources.configuration.locales[0]
 
