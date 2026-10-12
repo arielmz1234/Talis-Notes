@@ -752,7 +752,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       title = meta?.title ?: "",
       saved = !unsaved,
       kind = meta?.kind ?: com.tali.notes.data.DocKind.PDF,
-      onWrite = { vm.writing = true },
+      onWrite = vm::startWriting,
       pages = vm.pageCount,
       darkPaper = darkPaper,
       onBack = { leave(onBack) },

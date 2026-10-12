@@ -87,9 +87,16 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   /**
    * A PDF, picture or scan opens just for looking (no toolbars, the page only scrolls and zooms);
-   * tapping Write brings the toolbars to write on it. Each time it's opened it starts looking again.
+   * tapping Write brings the toolbars to write on it, and from then on it opens ready to write
+   * ([com.tali.notes.data.AppSettings.writeOn]).
    */
-  var writing by mutableStateOf(false)
+  var writing by mutableStateOf(notebookId in store.settings.value.writeOn)
+    private set
+
+  fun startWriting() {
+    writing = true
+    store.update { it.copy(writeOn = it.writeOn + notebookId) }
+  }
 
   /** She chose to leave without saving: the PDF and what she wrote on it go when the notebook closes. */
   private var discardOnLeave = false
@@ -98,8 +105,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun saveAsNotebook(title: String) {
     repo.saveDraft(notebookId, title.trim().ifBlank { tr(R.string.untitled) })
     savedNow = true
-    // Saved to write on it: the toolbars come straight away.
-    writing = true
+    // Saved to write on it: the toolbars come straight away, and next time too.
+    startWriting()
     store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
   }
 
@@ -301,8 +308,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       warmUp(items, initialViewport)
       // A first-time nudge towards the app's best trick.
       kotlinx.coroutines.delay(1500)
-      // One tip per visit, in this order, each shown once.
-      if ("hold" !in settings.value.seenTips) tip("hold", tr(R.string.tip_at_the_end_of_a))
+      // One tip per visit, in this order, each shown once; none while only looking at a PDF, picture or scan.
+      val looking = meta.value?.let { it.draft || (it.kind != com.tali.notes.data.DocKind.NOTEBOOK && !writing) } == true
+      if (looking) Unit
+      else if ("hold" !in settings.value.seenTips) tip("hold", tr(R.string.tip_at_the_end_of_a))
       else tip("spen", tr(R.string.tip_hold_the_s_pen_s))
     }
   }
