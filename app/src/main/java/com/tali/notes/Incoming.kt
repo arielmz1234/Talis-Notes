@@ -84,8 +84,8 @@ object Incoming {
    */
   fun title(files: Files): String =
     when {
-      files.kind == Kind.IMAGE -> if (files.uris.size > 1) tr(R.string.n_pictures, files.uris.size) else tr(R.string.picture)
-      files.uris.size > 1 -> tr(R.string.n_pdfs, files.uris.size)
+      files.kind == Kind.IMAGE -> if (files.uris.size > 1) english(R.string.n_pictures, files.uris.size) else english(R.string.picture)
+      files.uris.size > 1 -> english(R.string.n_pdfs, files.uris.size)
       else -> files.name?.takeIf { it.contains('.') }?.substringBeforeLast('.')?.takeIf { it.isNotBlank() } ?: "PDF"
     }
 }

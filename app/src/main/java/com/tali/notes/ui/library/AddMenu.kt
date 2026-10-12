@@ -74,9 +74,9 @@ import kotlinx.coroutines.delay
 
 /**
  * The library's +: a round button that opens a small card of what she can add. A notebook (the
- * new-notebook card), a file (PDFs and pictures from Files or Drive), a scan or a photo (our own
- * camera screen, [CameraScreen]: pages found, cropped and straightened, like CamScanner), or photos
- * from the gallery. The + turns into × while the card is open; the card grows out of the button's corner and
+ * new-notebook card), a file (PDFs and pictures from Files or Drive), a scan (Google's document
+ * scanner, then our page check), a photo (our own camera screen, [CameraScreen]), or photos from the
+ * gallery. The + turns into × while the card is open; the card grows out of the button's corner and
  * its rows drift in one after another.
  */
 @Composable
@@ -85,13 +85,54 @@ fun AddButton(
   onFiles: (List<Uri>) -> Unit,
   onPhotos: (List<Uri>) -> Unit,
   onScan: (List<Uri>) -> Unit,
+  onScanUnavailable: () -> Unit,
 ) {
   val c = Tali.colors
   var open by remember { mutableStateOf(false) }
   val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onFiles(it) }
   val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)) { if (it.isNotEmpty()) onPhotos(it) }
-  // Our own camera screen, for photos and scans alike.
+  // Our own camera screen, for photos.
   var camera by remember { mutableStateOf<CameraMode?>(null) }
+  // Scan: Google's scanner finds and straightens the pages; then she checks them in ours (turning any
+  // that came out upside down), keyed by how the tablet was held when Scan was opened.
+  val activity = androidx.activity.compose.LocalActivity.current
+  val view = androidx.compose.ui.platform.LocalView.current
+  var held by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+  var scannedPages by remember { mutableStateOf<List<Uri>?>(null) }
+  val scanned =
+    rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+      if (r.resultCode != android.app.Activity.RESULT_OK) return@rememberLauncherForActivityResult
+      val pages = com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(r.data)?.pages.orEmpty().map { it.imageUri }
+      if (pages.isNotEmpty()) scannedPages = pages
+    }
+  fun scan() {
+    val a = activity ?: return onScanUnavailable()
+    held = view.display?.rotation ?: 0
+    val options =
+      com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.Builder()
+        // Crop, rotate and filters; not the "Clean" tool (rubbing out marks), which did more harm than good.
+        .setScannerMode(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_BASE_WITH_FILTER)
+        .setGalleryImportAllowed(true)
+        .setPageLimit(MAX_SCAN_PAGES)
+        .setResultFormats(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+        .build()
+    // Play services may still need to fetch the scanner the first time; without them it can't run.
+    com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options)
+      .getStartScanIntent(a)
+      .addOnSuccessListener { sender -> scanned.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build()) }
+      .addOnFailureListener { onScanUnavailable() }
+  }
+  scannedPages?.let { list ->
+    com.tali.notes.ui.camera.PagesReview(
+      uris = list,
+      held = held,
+      onClose = { scannedPages = null },
+      onSave = {
+        scannedPages = null
+        if (it.isNotEmpty()) onScan(it)
+      },
+    )
+  }
   camera?.let { mode ->
     CameraScreen(
       start = mode,
@@ -126,7 +167,7 @@ fun AddButton(
         when (choice) {
           Choice.NOTEBOOK -> onNotebook()
           Choice.FILE -> files.launch(arrayOf("application/pdf", "image/*"))
-          Choice.SCAN -> camera = CameraMode.SCAN
+          Choice.SCAN -> scan()
           Choice.CAMERA -> camera = CameraMode.PHOTO
           Choice.PHOTO -> photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
@@ -242,3 +283,4 @@ fun kindLabel(kind: DocKind): String =
   }
 
 private const val MAX_PHOTOS = 30
+private const val MAX_SCAN_PAGES = 100

@@ -54,11 +54,11 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
    */
   fun freeNotebookName(): String {
     val folder = selectedFolder.value?.takeIf { it != TRASH }
-    return nextFreeName(tr(R.string.new_notebook), repo.notebooks.value.filter { it.folderId == folder }.map { it.title })
+    return nextFreeName(com.tali.notes.english(R.string.new_notebook), repo.notebooks.value.filter { it.folderId == folder }.map { it.title })
   }
 
   /** The same for a new folder, among the folders beside it. */
-  fun freeFolderName(parentId: String?): String = nextFreeName(tr(R.string.new_folder), folders.value.filter { it.parentId == parentId }.map { it.name })
+  fun freeFolderName(parentId: String?): String = nextFreeName(com.tali.notes.english(R.string.new_folder), folders.value.filter { it.parentId == parentId }.map { it.name })
 
   fun create(n: NewNotebook, onCreated: (String) -> Unit) {
     viewModelScope.launch {
@@ -93,7 +93,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   suspend fun importImage(uri: android.net.Uri): String? = repo.importImage(uri)
 
-  fun rename(id: String, title: String) = repo.rename(id, title.ifBlank { tr(R.string.untitled) })
+  fun rename(id: String, title: String) = repo.rename(id, title.ifBlank { com.tali.notes.english(R.string.untitled) })
 
   fun setCover(id: String, color: Int) = repo.setCover(id, color)
 

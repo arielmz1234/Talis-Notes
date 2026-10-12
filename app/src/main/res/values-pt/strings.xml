@@ -786,4 +786,7 @@
     <string name="cam_gallery">Da galeria</string>
     <string name="cam_flash">Flash</string>
     <string name="cam_take">Tirar foto</string>
+    <string name="the_scanner_isn_t_available">O digitalizador não está disponível neste tablet. Ele precisa do Google Play Services.</string>
+    <string name="cam_check_title">Confira as páginas</string>
+    <string name="cam_check_hint">Toque numa página para girá-la.</string>
 </resources>

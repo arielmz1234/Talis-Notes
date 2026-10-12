@@ -8,7 +8,7 @@
     <string name="a_black_page_your_pens_switch">דף שחור; העטים עוברים לצבעים בהירים</string>
     <string name="a_folder">תיקייה</string>
     <string name="a_pdf_you_open_with_tali">קובץ PDF שנפתח ב-Tali\'s Notes נכנס ישר למחברות שלך, מוכן לכתיבה.</string>
-    <string name="a_pdf_you_open_with_tali_2">קובץ PDF שנפתח ב-Tali\'s Notes נפתח לצפייה בלבד. אפשר להקיש על „שמירה” כדי לשמור אותו ולכתוב עליו.</string>
+    <string name="a_pdf_you_open_with_tali_2">קובץ PDF שנפתח ב-Tali\'s Notes נפתח לצפייה בלבד. אפשר להקיש על \"שמירה\" כדי לשמור אותו ולכתוב עליו.</string>
     <string name="a_red_line_down_the_left">קו אדום לאורך הצד, כמו במחברת</string>
     <string name="a_to_z">א עד ת</string>
     <string name="add">הוספה</string>
@@ -30,9 +30,9 @@
     <string name="already_in_front">כבר מלפנים</string>
     <string name="also_keep_a_pdf_of_each">לשמור גם PDF של כל מחברת</string>
     <string name="auto">אוטומטי</string>
-    <string name="auto_backup_into_file_in_place">שומר גיבוי חדש כמה דקות אחרי שסיימת, ופעם ביום, בקובץ „%1$s” ב-%2$s.</string>
-    <string name="auto_backup_into_file_on_tablet">שומר גיבוי חדש כמה דקות אחרי שסיימת, ופעם ביום, בקובץ „%1$s” בטאבלט הזה.</string>
-    <string name="auto_backup_into_file_somewhere">שומר גיבוי חדש כמה דקות אחרי שסיימת, ופעם ביום, בקובץ „%1$s” במקום שבחרת.</string>
+    <string name="auto_backup_into_file_in_place">שומר גיבוי חדש כמה דקות אחרי שסיימת, ופעם ביום, בקובץ \"%1$s\" ב-%2$s.</string>
+    <string name="auto_backup_into_file_on_tablet">שומר גיבוי חדש כמה דקות אחרי שסיימת, ופעם ביום, בקובץ \"%1$s\" בטאבלט הזה.</string>
+    <string name="auto_backup_into_file_somewhere">שומר גיבוי חדש כמה דקות אחרי שסיימת, ופעם ביום, בקובץ \"%1$s\" במקום שבחרת.</string>
     <string name="back">חזרה</string>
     <string name="back_to_notebooks">חזרה למחברות</string>
     <string name="back_up_automatically">גיבוי אוטומטי</string>
@@ -48,7 +48,7 @@
     <string name="backing_up_now">מגבה עכשיו…</string>
     <string name="backing_up_to_drive">מגבה ל-Drive…</string>
     <string name="backs_up_by_itself">מגבה מעצמו</string>
-    <string name="backs_up_by_itself_a_couple">מגבה מעצמו כמה דקות אחרי שסיימת לכתוב: קובץ אחד לכל מחברת בתיקייה „Tali\'s Notes” ב-Drive שלך, ושולח רק מחברות שהשתנו. האפליקציה רואה רק את הקבצים שלה, שום דבר אחר ב-Drive.</string>
+    <string name="backs_up_by_itself_a_couple">מגבה מעצמו כמה דקות אחרי שסיימת לכתוב: קובץ אחד לכל מחברת בתיקייה \"Tali\'s Notes\" ב-Drive שלך, ושולח רק מחברות שהשתנו. האפליקציה רואה רק את הקבצים שלה, שום דבר אחר ב-Drive.</string>
     <string name="backup_failed_n">הגיבוי נכשל: %1$s</string>
     <string name="backup_file">קובץ גיבוי</string>
     <string name="backup_files">קובצי גיבוי</string>
@@ -64,7 +64,7 @@
     <string name="brought_back_1_notebook_from_the">מחברת אחת שוחזרה מהגיבוי.</string>
     <string name="brought_back_n_notebooks_from_the">%1$s מחברות שוחזרו מהגיבוי.</string>
     <string name="brought_to_the_front">הובא לחזית</string>
-    <string name="called_n">בשם „%1$s”</string>
+    <string name="called_n">בשם \"%1$s\"</string>
     <string name="cancel">ביטול</string>
     <string name="change_place">שינוי מיקום</string>
     <string name="changes_show_in_every_notebook_on">השינויים יופיעו בכל מחברת עם הדף הזה.</string>
@@ -116,13 +116,13 @@
     <string name="delete_1_page">למחוק עמוד אחד?</string>
     <string name="delete_folder">מחיקת תיקייה</string>
     <string name="delete_forever">מחיקה לצמיתות</string>
-    <string name="delete_n">למחוק את „%1$s”?</string>
+    <string name="delete_n">למחוק את \"%1$s\"?</string>
     <string name="delete_n_notebooks">למחוק %1$s מחברות?</string>
     <string name="delete_n_pages">למחוק %1$s עמודים?</string>
     <string name="delete_page">מחיקת עמוד</string>
     <string name="delete_page_n">למחוק את עמוד %1$s?</string>
     <string name="delete_text">מחיקת טקסט</string>
-    <string name="delete_the_n_folder">למחוק את התיקייה „%1$s”?</string>
+    <string name="delete_the_n_folder">למחוק את התיקייה \"%1$s\"?</string>
     <string name="delete_the_recording">מחיקת ההקלטה</string>
     <string name="delete_voice_memo">מחיקת הקלטה</string>
     <string name="deleted">"נמחק "</string>
@@ -138,7 +138,7 @@
     <string name="drag_on_the_page_to_draw">גוררים על העמוד כדי לצייר את הצורה</string>
     <string name="drag_to_move_corner_dot_to">גרירה מזיזה · נקודה בפינה משנה גודל · נקודה למטה מסובבת</string>
     <string name="drag_to_move_corner_dot_to_2">גרירה מזיזה · נקודה בפינה משנה גודל</string>
-    <string name="draw_a_shape_you_use_a">מציירים צורה שמשתמשים בה הרבה, מקיפים אותה בלאסו ומקישים „שמירה כצורה”. לחיצה ממושכת בסוף קו תיישר אליה גם כן.</string>
+    <string name="draw_a_shape_you_use_a">מציירים צורה שמשתמשים בה הרבה, מקיפים אותה בלאסו ומקישים \"שמירה כצורה\". לחיצה ממושכת בסוף קו תיישר אליה גם כן.</string>
     <string name="draw_around_an_area_first_or">קודם מקיפים אזור, או מקישים בתוך צורה</string>
     <string name="draw_around_anything_to_take_a">מקיפים כל דבר כדי לצלם אותו: לשמור בגלריה, לשתף או להעתיק.</string>
     <string name="draw_with_finger">ציור באצבע</string>
@@ -149,7 +149,7 @@
     <string name="edit_text">עריכת טקסט</string>
     <string name="edited">"נערך "</string>
     <string name="empty">ריקון</string>
-    <string name="empty_recently_deleted">לרוקן את „נמחקו לאחרונה”?</string>
+    <string name="empty_recently_deleted">לרוקן את \"נמחקו לאחרונה\"?</string>
     <string name="endless">אינסופי</string>
     <string name="endless_canvas">קנבס אינסופי</string>
     <string name="endless_canvas_write_anywhere">קנבס אינסופי: כותבים בכל מקום</string>
@@ -217,8 +217,8 @@
     <string name="it_disappears_from_the_paper_choices">הוא ייעלם מבחירת הדפים. מחברות שמשתמשות בו יעברו לדף ריק; הכתיבה נשארת.</string>
     <string name="it_goes_into_your_notebooks_ready">הוא נכנס למחברות שלך, מוכן לכתיבה.</string>
     <string name="it_ll_keep_backing_up_into">" הגיבוי לקובץ הזה ימשיך מעצמו."</string>
-    <string name="it_moves_to_recently_deleted_where">היא תעבור ל„נמחקו לאחרונה”, ואפשר יהיה להחזיר אותה במשך %1$s ימים.</string>
-    <string name="it_will_appear_in_shapes_under">היא תופיע בצורות תחת „הצורות שלי”, ולחיצה ממושכת בסוף קו דומה תיישר אליה.</string>
+    <string name="it_moves_to_recently_deleted_where">היא תעבור ל\"נמחקו לאחרונה\", ואפשר יהיה להחזיר אותה במשך %1$s ימים.</string>
+    <string name="it_will_appear_in_shapes_under">היא תופיע בצורות תחת \"הצורות שלי\", ולחיצה ממושכת בסוף קו דומה תיישר אליה.</string>
     <string name="it_will_no_longer_be_offered">היא לא תוצע כאן יותר ולא תזוהה בלחיצה ממושכת. צורות שכבר על העמודים נשארות.</string>
     <string name="its_own">משלה</string>
     <string name="just_now">הרגע</string>
@@ -259,7 +259,7 @@
     <string name="more_options">עוד אפשרויות</string>
     <string name="more_shapes">עוד צורות</string>
     <string name="more_tools">עוד כלים</string>
-    <string name="move_n">העברת „%1$s”</string>
+    <string name="move_n">העברת \"%1$s\"</string>
     <string name="move_the_text_box">הזזת תיבת הטקסט</string>
     <string name="move_to">העברה אל</string>
     <string name="move_to_2">העברה אל…</string>
@@ -272,7 +272,7 @@
     <string name="n_folders">" · %1$s תיקיות"</string>
     <string name="n_folders_2">%1$s תיקיות</string>
     <string name="n_h_ago">לפני %1$s שע׳</string>
-    <string name="n_isn_t_in_your_notebooks">„%1$s” לא נמצא במחברות שלך. אפשר לשמור אותו כדי לכתוב עליו, או לצאת והוא לא יישמר.</string>
+    <string name="n_isn_t_in_your_notebooks">\"%1$s\" לא נמצא במחברות שלך. אפשר לשמור אותו כדי לכתוב עליו, או לצאת והוא לא יישמר.</string>
     <string name="n_items_locked_hold_one_to">%1$s פריטים ננעלו — לחיצה ממושכת על אחד משחררת אותו</string>
     <string name="n_items_unlocked">%1$s פריטים שוחררו</string>
     <string name="n_min_ago">לפני %1$s דק׳</string>
@@ -291,7 +291,7 @@
     <string name="n_pages_moved">%1$s עמודים הועברו</string>
     <string name="n_pdfs">%1$s קובצי PDF</string>
     <string name="n_pictures">%1$s תמונות</string>
-    <string name="n_saved_to_your_papers">„%1$s” נשמר בדפים שלך</string>
+    <string name="n_saved_to_your_papers">\"%1$s\" נשמר בדפים שלך</string>
     <string name="n_selected">%1$s נבחרו</string>
     <string name="n_tap_again_to_turn_it">%1$s · הקשה נוספת הופכת את הסדר</string>
     <string name="name_e_g_i_beam">שם, למשל: קורת I</string>
@@ -302,7 +302,7 @@
     <string name="new_folder_in_n">תיקייה חדשה ב-%1$s</string>
     <string name="new_folder_inside">תיקייה חדשה בתוך</string>
     <string name="new_notebook">מחברת חדשה</string>
-    <string name="new_tablet_or_the_app_installed">טאבלט חדש, או שהאפליקציה הותקנה מחדש? אם יש לך גיבוי, אפשר להחזיר עכשיו את כל המחברות. אפשר גם לעשות את זה אחר כך מ„גיבויים”, בפינה התחתונה.</string>
+    <string name="new_tablet_or_the_app_installed">טאבלט חדש, או שהאפליקציה הותקנה מחדש? אם יש לך גיבוי, אפשר להחזיר עכשיו את כל המחברות. אפשר גם לעשות את זה אחר כך מ\"גיבויים\", בפינה התחתונה.</string>
     <string name="newest_first">החדש קודם</string>
     <string name="next_page">העמוד הבא</string>
     <string name="no_backup_file_chosen_yet">עדיין לא נבחר קובץ גיבוי.</string>
@@ -310,7 +310,7 @@
     <string name="no_fill">בלי מילוי</string>
     <string name="no_folder">בלי תיקייה</string>
     <string name="no_folders_yet_add_one_from">עדיין אין תיקיות. אפשר להוסיף מסרגל הצד.</string>
-    <string name="no_notebooks_match_n">אין מחברות שמתאימות ל„%1$s”.</string>
+    <string name="no_notebooks_match_n">אין מחברות שמתאימות ל\"%1$s\".</string>
     <string name="none">בלי</string>
     <string name="normal">רגיל</string>
     <string name="not_saved">לא נשמר</string>
@@ -320,8 +320,8 @@
     <string name="notebooks">מחברות</string>
     <string name="notebooks_stay_here_for_n_days">מחברות נשארות כאן %1$s ימים, ואז נמחקות לצמיתות</string>
     <string name="notebooks_you_open_show_up_here">מחברות שפותחים מופיעות כאן, במרחק הקשה.</string>
-    <string name="nothing_inside_is_deleted_its_notebooks">שום דבר בפנים לא נמחק. המחברות והתיקיות שבה עוברות ל„%1$s”.</string>
-    <string name="nothing_inside_is_deleted_its_notebooks_2">שום דבר בפנים לא נמחק. המחברות שבה חוזרות ל„כל המחברות”, והתיקיות לרמה העליונה.</string>
+    <string name="nothing_inside_is_deleted_its_notebooks">שום דבר בפנים לא נמחק. המחברות והתיקיות שבה עוברות ל\"%1$s\".</string>
+    <string name="nothing_inside_is_deleted_its_notebooks_2">שום דבר בפנים לא נמחק. המחברות שבה חוזרות ל\"כל המחברות\", והתיקיות לרמה העליונה.</string>
     <string name="nothing_on_this_tablet_is_deleted">שום דבר בטאבלט לא נמחק: מחברות מהגיבוי מתווספות, ואם מחברת נמצאת בשני המקומות, נשמרת הגרסה החדשה ביותר.</string>
     <string name="off">כבוי</string>
     <string name="oldest_first">הישן קודם</string>
@@ -401,7 +401,7 @@
     <string name="release_to_add_a_page">עוזבים כדי להוסיף עמוד</string>
     <string name="remove">הסרה</string>
     <string name="remove_colour">הסרת צבע</string>
-    <string name="remove_n">להסיר את „%1$s”?</string>
+    <string name="remove_n">להסיר את \"%1$s\"?</string>
     <string name="remove_this_pen">הסרת העט הזה</string>
     <string name="rename">שינוי שם</string>
     <string name="rename_folder">שינוי שם לתיקייה</string>
@@ -433,7 +433,7 @@
     <string name="save_to_your_notebooks">שמירה במחברות שלך</string>
     <string name="saved">נשמר</string>
     <string name="saved_on_this_tablet">נשמר בטאבלט הזה</string>
-    <string name="saved_to_my_shapes_hold_the">נשמר ב„הצורות שלי” — לחיצה ממושכת בסוף קו תיישר אליה</string>
+    <string name="saved_to_my_shapes_hold_the">נשמר ב\"הצורות שלי\" — לחיצה ממושכת בסוף קו תיישר אליה</string>
     <string name="saved_to_your_gallery_pictures_tali">נשמר בגלריה (תמונות › Tali\'s Notes)</string>
     <string name="saved_to_your_notebooks">נשמר במחברות שלך</string>
     <string name="saved_with_your_papers_for_every">נשמר עם הדפים שלך, לכל המחברות.</string>
@@ -669,7 +669,7 @@
     <string name="there_s_no_backup_file_there">אין שם קובץ גיבוי. קובצי גיבוי מסתיימים ב-zip.</string>
     <string name="there_s_no_backup_in_this">עדיין אין גיבוי ב-Google Drive הזה.</string>
     <string name="they_go_with_everything_on_them">הם יימחקו עם כל מה שעליהם, והעמודים שאחריהם יעלו. ביטול הפעולה מחזיר אותם.</string>
-    <string name="they_move_to_recently_deleted_where">הן יעברו ל„נמחקו לאחרונה”, ואפשר יהיה להחזיר אותן במשך %1$s ימים.</string>
+    <string name="they_move_to_recently_deleted_where">הן יעברו ל\"נמחקו לאחרונה\", ואפשר יהיה להחזיר אותן במשך %1$s ימים.</string>
     <string name="thicker">עבה יותר</string>
     <string name="thickness">עובי</string>
     <string name="thickness_n">עובי %1$s</string>
@@ -737,7 +737,7 @@
     <string name="tour_spen_title">טריקים עם ה-S Pen</string>
     <string name="tour_spen_body">לחיצה ממושכת על כפתור ה-S Pen מוחקת עם כל כלי. מסמנים עטים אהובים בכוכב, ולחיצה כפולה על הכפתור קופצת ביניהם. הקשה בשתי אצבעות מבטלת.</string>
     <string name="tour_backup_title">תמיד מגובה</string>
-    <string name="tour_backup_body">הכול נשמר בטאבלט תוך כדי כתיבה. מפעילים את Google Drive או גיבוי אוטומטי ב„גיבויים”, בפינה התחתונה, והסיכומים בטוחים גם אם הטאבלט לא.</string>
+    <string name="tour_backup_body">הכול נשמר בטאבלט תוך כדי כתיבה. מפעילים את Google Drive או גיבוי אוטומטי ב\"גיבויים\", בפינה התחתונה, והסיכומים בטוחים גם אם הטאבלט לא.</string>
     <string name="follows_the_tablet_n">שפת הטאבלט: %1$s</string>
     <string name="blank_pages_to_write_on">דפים ריקים לכתיבה</string>
     <string name="add_file">קובץ</string>
@@ -747,11 +747,11 @@
     <string name="add_photo">תמונה</string>
     <string name="from_your_gallery">מהגלריה</string>
     <string name="scan_n">סריקה %1$s</string>
-    <string name="adding_n">מוסיפים את „%1$s”…</string>
-    <string name="adding_n_page_n_of_n">מוסיפים את „%1$s”, עמוד %2$s מתוך %3$s…</string>
+    <string name="adding_n">מוסיפים את \"%1$s\"…</string>
+    <string name="adding_n_page_n_of_n">מוסיפים את \"%1$s\", עמוד %2$s מתוך %3$s…</string>
     <string name="adding_pictures">מוסיפים את התמונות…</string>
     <string name="saving_the_scan">שומרים את הסריקה…</string>
-    <string name="added_n">„%1$s” נוסף</string>
+    <string name="added_n">\"%1$s\" נוסף</string>
     <string name="open">פתיחה</string>
     <string name="only_pdfs_and_pictures_can_be_added">אפשר להוסיף רק קובצי PDF ותמונות.</string>
     <string name="n_here">%1$s (כאן)</string>
@@ -787,4 +787,7 @@
     <string name="cam_gallery">מהגלריה</string>
     <string name="cam_flash">פלאש</string>
     <string name="cam_take">צילום</string>
+    <string name="the_scanner_isn_t_available">הסורק לא זמין בטאבלט הזה. הוא צריך את שירותי Google Play.</string>
+    <string name="cam_check_title">בדיקת הדפים</string>
+    <string name="cam_check_hint">הקישו על דף כדי לסובב אותו.</string>
 </resources>

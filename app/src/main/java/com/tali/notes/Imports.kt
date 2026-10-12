@@ -33,7 +33,7 @@ object Imports {
   suspend fun pictures(app: TalisApp, uris: List<Uri>, folderId: String?): NotebookMeta? {
     val pages = stored(app, uris)
     if (pages.isEmpty()) return null
-    val title = if (pages.size > 1) tr(R.string.n_pictures, pages.size) else tr(R.string.picture)
+    val title = if (pages.size > 1) english(R.string.n_pictures, pages.size) else english(R.string.picture)
     return build(app, DocKind.PICTURE, title, folderId, pages)
   }
 
@@ -41,9 +41,9 @@ object Imports {
   suspend fun scan(app: TalisApp, uris: List<Uri>, folderId: String?): NotebookMeta? {
     val pages = stored(app, uris)
     if (pages.isEmpty()) return null
-    val locale = appLocale()
+    val locale = java.util.Locale.ENGLISH
     val day = java.text.SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMM"), locale).format(java.util.Date())
-    return build(app, DocKind.SCAN, tr(R.string.scan_n, day), folderId, pages)
+    return build(app, DocKind.SCAN, english(R.string.scan_n, day), folderId, pages)
   }
 
   /** Copies pictures into the app, upright and downscaled; their size in pixels stands in for the page size. */

@@ -786,4 +786,7 @@
     <string name="cam_gallery">From the gallery</string>
     <string name="cam_flash">Flash</string>
     <string name="cam_take">Take picture</string>
+    <string name="the_scanner_isn_t_available">The scanner isn\'t available on this tablet. It needs Google Play services.</string>
+    <string name="cam_check_title">Check the pages</string>
+    <string name="cam_check_hint">Tap a page to turn it.</string>
 </resources>

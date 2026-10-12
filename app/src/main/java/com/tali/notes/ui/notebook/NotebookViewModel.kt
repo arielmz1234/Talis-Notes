@@ -109,7 +109,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   /** Keeps the PDF she was looking at as one of her notebooks, called [title]. */
   fun saveAsNotebook(title: String) {
-    repo.saveDraft(notebookId, title.trim().ifBlank { tr(R.string.untitled) })
+    repo.saveDraft(notebookId, title.trim().ifBlank { com.tali.notes.english(R.string.untitled) })
     savedNow = true
     // Saved to write on it: the toolbars come straight away, and next time too.
     startWriting()
@@ -633,7 +633,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   val pageLayout: com.tali.notes.canvas.Pages
     get() = com.tali.notes.canvas.Pages.of(meta.value?.landscape == true)
 
-  fun rename(title: String) = repo.rename(notebookId, title.ifBlank { tr(R.string.untitled) })
+  fun rename(title: String) = repo.rename(notebookId, title.ifBlank { com.tali.notes.english(R.string.untitled) })
 
   /** A number of A4 pages, or null to make it an endless canvas. */
   fun setPages(count: Int?) {

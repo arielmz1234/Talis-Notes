@@ -52,6 +52,17 @@ private lateinit var instance: TalisApp
 fun tr(@androidx.annotation.StringRes id: Int, vararg args: Any): String = appContext().getString(id, *args)
 
 /**
+ * Names the app makes up (a new notebook's or folder's, "Picture", "Scan Oct 12") are English in
+ * every language, like file names: the owner's call, so a library isn't a mix of languages after a
+ * switch.
+ */
+fun english(@androidx.annotation.StringRes id: Int, vararg args: Any): String {
+  val c = appContext()
+  val conf = android.content.res.Configuration(c.resources.configuration).apply { setLocale(java.util.Locale.ENGLISH) }
+  return c.createConfigurationContext(conf).getString(id, *args)
+}
+
+/**
  * Words kept for later, such as a backup's saved error or a card's last note: stored by the string's
  * name with its values, and put into words only when shown ([shown]), so they follow a change of
  * language. Pieces can be joined with plain text (", ", " ") like finished text.

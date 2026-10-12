@@ -161,7 +161,7 @@ fun NewNotebookDialog(
   settings: AppSettings,
   folderName: String? = null,
   /** What it's called if she leaves the name empty (shown as the hint). */
-  suggestedName: String = stringResource(R.string.new_notebook),
+  suggestedName: String = com.tali.notes.english(R.string.new_notebook),
   defaultCover: Int,
   onDismiss: () -> Unit,
   importImage: suspend (android.net.Uri) -> String?,

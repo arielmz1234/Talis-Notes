@@ -296,6 +296,12 @@ fun TaliColorsScope(c: TaliColors, content: @Composable () -> Unit) {
       "he", "iw" -> HebrewTypography
       "ar" -> ArabicTypography
       else -> TaliTypography
+    }.let { t ->
+      // A notebook or the camera keeps the English layout in Hebrew and Arabic: their words still read
+      // right to left there (a sentence's full stop at its end, not its start).
+      val forcedLtr = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Ltr &&
+        androidx.compose.ui.platform.LocalConfiguration.current.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL
+      if (forcedLtr) byContent(t) else t
     }
   CompositionLocalProvider(LocalTaliColors provides c) { MaterialTheme(colorScheme = scheme, typography = typography) {
       // No hover highlight: with the S Pen hovering it lit rows up, and after pressing an item and
@@ -307,4 +313,16 @@ fun TaliColorsScope(c: TaliColors, content: @Composable () -> Unit) {
         content = content,
       )
     } }
+}
+
+/** Every style reading in its own text's direction. */
+private fun byContent(t: androidx.compose.material3.Typography): androidx.compose.material3.Typography {
+  fun androidx.compose.ui.text.TextStyle.c() = copy(textDirection = androidx.compose.ui.text.style.TextDirection.Content)
+  return t.copy(
+    displayLarge = t.displayLarge.c(), displayMedium = t.displayMedium.c(), displaySmall = t.displaySmall.c(),
+    headlineLarge = t.headlineLarge.c(), headlineMedium = t.headlineMedium.c(), headlineSmall = t.headlineSmall.c(),
+    titleLarge = t.titleLarge.c(), titleMedium = t.titleMedium.c(), titleSmall = t.titleSmall.c(),
+    bodyLarge = t.bodyLarge.c(), bodyMedium = t.bodyMedium.c(), bodySmall = t.bodySmall.c(),
+    labelLarge = t.labelLarge.c(), labelMedium = t.labelMedium.c(), labelSmall = t.labelSmall.c(),
+  )
 }

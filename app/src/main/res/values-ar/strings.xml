@@ -786,4 +786,7 @@
     <string name="cam_gallery">من المعرض</string>
     <string name="cam_flash">الفلاش</string>
     <string name="cam_take">التقاط صورة</string>
+    <string name="the_scanner_isn_t_available">الماسح الضوئي غير متاح على هذا الجهاز. يحتاج إلى خدمات Google Play.</string>
+    <string name="cam_check_title">راجع الصفحات</string>
+    <string name="cam_check_hint">انقر على صفحة لتدويرها.</string>
 </resources>

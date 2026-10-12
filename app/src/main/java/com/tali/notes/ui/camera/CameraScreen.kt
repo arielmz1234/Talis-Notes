@@ -149,7 +149,6 @@ import com.tali.notes.theme.Tali
 import com.tali.notes.theme.TaliColorsScope
 import com.tali.notes.ui.components.EaseOutStrong
 import com.tali.notes.ui.components.PrimaryButton
-import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.Segmented
 import com.tali.notes.ui.library.ConfirmDialog
 import java.io.File
@@ -174,6 +173,15 @@ enum class CameraMode { PHOTO, SCAN }
  */
 @Composable
 fun CameraScreen(start: CameraMode, onClose: () -> Unit, onSave: (CameraMode, List<Uri>) -> Unit) {
+  CameraWindow { CameraBody(start, onClose, onSave) }
+}
+
+/**
+ * The camera's window: the whole screen, no system bars, the app's dark colours, and laid out the
+ * same in every language (like a notebook): in Hebrew or Arabic only the words change.
+ */
+@Composable
+internal fun CameraWindow(content: @Composable () -> Unit) {
   Dialog(
     onDismissRequest = {},
     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false, dismissOnBackPress = false),
@@ -193,7 +201,10 @@ fun CameraScreen(start: CameraMode, onClose: () -> Unit, onSave: (CameraMode, Li
       }
       onDispose {}
     }
-    TaliColorsScope(Dark) { CameraBody(start, onClose, onSave) }
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
+      // (Its words still read right to left in Hebrew and Arabic: TaliColorsScope sees the forced layout.)
+      TaliColorsScope(Dark) { content() }
+    }
   }
 }
 
@@ -298,6 +309,8 @@ private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMo
     }
   }
   if (discarding) {
+    // A question is a card like any other: it follows the language's direction, unlike the camera.
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides languageDirection()) {
     ConfirmDialog(
       title = stringResource(R.string.cam_discard_title),
       body = stringResource(R.string.cam_discard_body),
@@ -309,6 +322,7 @@ private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMo
         close()
       },
     )
+    }
   }
 }
 
@@ -536,7 +550,7 @@ private fun CameraPart(
     // Photo or Scan; once something's taken the choice is set.
     val photoWord = stringResource(R.string.add_photo)
     val scanWord = stringResource(R.string.add_scan)
-    AnimatedVisibility(pages.isEmpty(), edge.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
+    AnimatedVisibility(OWN_SCAN && pages.isEmpty(), edge.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
       Box(Modifier.width(240.dp).clip(RoundedCornerShape(16.dp)).background(GLASS).padding(4.dp)) {
         Segmented(
           listOf(CameraMode.PHOTO, CameraMode.SCAN),
@@ -754,24 +768,53 @@ private fun EditPanel(
     }
     val primary: @Composable (Modifier) -> Unit = { m ->
       if (step == Step.CROP) PrimaryButton(stringResource(R.string.tour_next), Icons.AutoMirrored.Outlined.ArrowForward, m.alpha(if (convex) 1f else 0.4f)) { if (convex) onStep(Step.LOOK) }
-      else PrimaryButton(if (pages > 0) stringResource(R.string.cam_save_n, pages + 1) else stringResource(R.string.save), Icons.Outlined.Check, m.alpha(if (working) 0.6f else 1f)) { if (!working) onSave() }
+      else Unit
     }
     if (step == Step.LOOK) {
-      val another = stringResource(if (mode == CameraMode.SCAN) R.string.cam_next_page else R.string.cam_another)
-      if (wide) {
-        QuietButton(another, Modifier.fillMaxWidth()) { if (!working) onAnother() }
-        primary(Modifier.fillMaxWidth())
-      } else
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          QuietButton(another, Modifier.weight(1f)) { if (!working) onAnother() }
-          primary(Modifier.weight(1f))
-        }
+      // Side by side and compact: another page or photo, or save.
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CompactButton(stringResource(if (mode == CameraMode.SCAN) R.string.cam_next_page else R.string.cam_another), Icons.Outlined.Add, primary = false, Modifier.weight(1f)) { if (!working) onAnother() }
+        CompactButton(
+          if (pages > 0) stringResource(R.string.cam_save_n, pages + 1) else stringResource(R.string.save),
+          Icons.Outlined.Check,
+          primary = true,
+          Modifier.weight(1f).alpha(if (working) 0.6f else 1f),
+        ) { if (!working) onSave() }
+      }
     } else primary(Modifier.fillMaxWidth())
   }
 }
 
 /** The screen's one surface: a faint lilac glass with a hairline edge, no cloud bumps (kept minimal). */
 private fun Modifier.quietSurface() = this.clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1428)).border(1.dp, Color(0xFFB79CFF).copy(alpha = 0.16f), RoundedCornerShape(24.dp))
+
+/** A smaller button for the two side by side under the looks. */
+@Composable
+internal fun CompactButton(text: String, icon: ImageVector, primary: Boolean, modifier: Modifier, onClick: () -> Unit) {
+  val c = Tali.colors
+  val interaction = remember { MutableInteractionSource() }
+  val pressed by interaction.collectIsPressedAsState()
+  val press by animateFloatAsState(if (pressed) 0.96f else 1f, tween(if (pressed) 80 else 160), label = "compact")
+  Row(
+    modifier
+      .graphicsLayer {
+        scaleX = press
+        scaleY = press
+      }
+      .height(40.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .then(if (primary) Modifier.background(c.accentBrush) else Modifier.background(c.accentSoft))
+      .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+      .padding(horizontal = 10.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.Center,
+  ) {
+    val ink = if (primary) c.onAccent else c.accent
+    Icon(icon, null, tint = ink, modifier = Modifier.size(17.dp))
+    Spacer(Modifier.width(6.dp))
+    Text(text, style = MaterialTheme.typography.labelMedium, color = ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+  }
+}
 
 private fun Modifier.alpha(a: Float) = this.graphicsLayer { alpha = a }
 
@@ -955,7 +998,7 @@ private fun Shutter(busy: Boolean, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RoundButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+internal fun RoundButton(icon: ImageVector, label: String, onClick: () -> Unit) {
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
   val press by animateFloatAsState(if (pressed) 0.92f else 1f, tween(if (pressed) 80 else 160), label = "round")
@@ -1030,11 +1073,12 @@ private fun hasCamera(context: Context) = ContextCompat.checkSelfPermission(cont
  * remembered for that way of holding the tablet and later pictures come out turned already; another
  * half turn undoes it. Quarter turns aren't learned: a page taken sideways is often on purpose.
  */
-private fun learnedTurn(context: Context, held: Int): Int = context.getSharedPreferences("camera", Context.MODE_PRIVATE).getInt("turn$held", 0)
+internal fun learnedTurn(context: Context, held: Int, key: String = "turn"): Int = context.getSharedPreferences("camera", Context.MODE_PRIVATE).getInt("$key$held", 0)
 
-private fun learnTurn(context: Context, held: Int) {
-  val prefs = context.getSharedPreferences("camera", Context.MODE_PRIVATE)
-  prefs.edit().putInt("turn$held", (prefs.getInt("turn$held", 0) + 2) % 4).apply()
+private fun learnTurn(context: Context, held: Int) = setLearnedTurn(context, held, (learnedTurn(context, held) + 2) % 4)
+
+internal fun setLearnedTurn(context: Context, held: Int, quarters: Int, key: String = "turn") {
+  context.getSharedPreferences("camera", Context.MODE_PRIVATE).edit().putInt("$key$held", quarters).apply()
 }
 
 /** A just-taken (or picked) picture made ready: in Scan, its page looked for and set to the document look. */
@@ -1060,23 +1104,23 @@ private fun finished(context: Context, s: Shot): Taken {
 }
 
 /** Pages left from earlier visits (already copied into notebooks) are cleared out after a day. */
-private fun clearOld(context: Context) {
+internal fun clearOld(context: Context) {
   val day = System.currentTimeMillis() - 24 * 3600_000L
   File(context.cacheDir, "camera").listFiles()?.forEach { if (it.lastModified() < day) it.delete() }
 }
 
 /** A picture from the gallery, upright and no bigger than needed. */
-private fun loadUpright(context: Context, uri: Uri): Bitmap? =
+internal fun loadUpright(context: Context, uri: Uri, maxSide: Int = MAX_SIDE): Bitmap? =
   runCatching {
       val resolver = context.contentResolver
       val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
       resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
       var sample = 1
-      while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_SIDE) sample *= 2
+      while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
       val bmp = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
       val rotation = resolver.openInputStream(uri)?.use { ExifInterface(it).rotationDegrees } ?: 0
       val upright = if (rotation != 0) Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(rotation.toFloat()) }, true) else bmp
-      PageImage.scaledTo(upright, MAX_SIDE)
+      PageImage.scaledTo(upright, maxSide)
     }
     .onFailure { android.util.Log.w("Camera", "gallery", it) }
     .getOrNull()
@@ -1098,9 +1142,22 @@ private fun smallLuminance(image: ImageProxy): Triple<IntArray, Int, Int> {
   return Triple(out, w, h)
 }
 
-private val NIGHT = Color(0xFF0E0A18)
+internal val NIGHT = Color(0xFF0E0A18)
 private val GLASS = Color(0xFF1B1430).copy(alpha = 0.62f)
 private val ACCENT = Color(0xFFB79CFF)
-private const val MAX_SIDE = 3000
+internal const val MAX_SIDE = 3000
+
+/** The language's own direction (right to left in Hebrew and Arabic), whatever the screen around it uses. */
+@Composable
+internal fun languageDirection(): androidx.compose.ui.unit.LayoutDirection =
+  if (androidx.compose.ui.platform.LocalConfiguration.current.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL) androidx.compose.ui.unit.LayoutDirection.Rtl
+  else androidx.compose.ui.unit.LayoutDirection.Ltr
+
+/**
+ * Our own Scan mode (page found live, corners, straightening) works but found pages less reliably
+ * than Google's scanner on a real desk, so + › Scan uses Google's (then [PagesReview]) and this
+ * screen offers photos only. Turn it on to bring the Photo / Scan switch back.
+ */
+private const val OWN_SCAN = false
 private const val LOOK_EVERY_MS = 200L
 private const val VIEW_SIDE = 1600

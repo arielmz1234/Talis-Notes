@@ -732,7 +732,7 @@ private object SQLiteConflict {
  */
 fun numberedName(name: String, taken: Collection<String>): String {
   val used = taken.map { it.trim().lowercase() }.toSet()
-  val base = name.trim().ifEmpty { tr(R.string.untitled) }
+  val base = name.trim().ifEmpty { com.tali.notes.english(R.string.untitled) }
   if (base.lowercase() !in used) return base
   val stem = Regex("""^(.*\S)\s*\(\d+\)$""").find(base)?.groupValues?.get(1) ?: base
   var n = 1
