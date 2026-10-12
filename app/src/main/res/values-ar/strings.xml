@@ -739,4 +739,22 @@
     <string name="tour_backup_title">نسخة احتياطية دائمًا</string>
     <string name="tour_backup_body">يُحفظ كل شيء على الجهاز أثناء الكتابة. فعّل Google Drive أو النسخ الاحتياطي التلقائي من «النسخ الاحتياطية» أسفل الشاشة، وستبقى ملاحظاتك بأمان حتى لو لم يبقَ الجهاز.</string>
     <string name="follows_the_tablet_n">لغة الجهاز: %1$s</string>
+    <string name="blank_pages_to_write_on">صفحات فارغة للكتابة</string>
+    <string name="add_file">ملف</string>
+    <string name="a_pdf_or_pictures_from_your_files">ملف PDF أو صور من ملفاتك</string>
+    <string name="add_scan">مسح ضوئي</string>
+    <string name="paper_pages_with_the_camera">صفحات ورقية، مقصوصة ومعدّلة</string>
+    <string name="add_photo">صورة</string>
+    <string name="from_your_gallery">من معرض الصور</string>
+    <string name="scan_n">مسح %1$s</string>
+    <string name="adding_n">جارٍ إضافة «%1$s»…</string>
+    <string name="adding_n_page_n_of_n">جارٍ إضافة «%1$s»، الصفحة %2$s من %3$s…</string>
+    <string name="adding_pictures">جارٍ إضافة الصور…</string>
+    <string name="saving_the_scan">جارٍ حفظ المسح…</string>
+    <string name="added_n">أُضيف «%1$s»</string>
+    <string name="open">فتح</string>
+    <string name="the_scanner_isn_t_available">الماسح الضوئي غير متاح على هذا الجهاز. يحتاج إلى خدمات Google Play.</string>
+    <string name="only_pdfs_and_pictures_can_be_added">يمكن إضافة ملفات PDF والصور فقط.</string>
+    <string name="n_here">%1$s (هنا)</string>
+    <string name="on_its_own">وحده</string>
 </resources>

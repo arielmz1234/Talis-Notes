@@ -8,7 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 /** Plain SQLite: notebooks, folders and items; no code generation, fast on older tablets. */
 class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(context, name, null, VERSION) {
   companion object {
-    const val VERSION = 6
+    const val VERSION = 7
   }
 
   override fun onConfigure(db: SQLiteDatabase) {
@@ -33,7 +33,8 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
         pages INTEGER,
         dark INTEGER NOT NULL DEFAULT 0,
         landscape INTEGER NOT NULL DEFAULT 0,
-        draft INTEGER NOT NULL DEFAULT 0
+        draft INTEGER NOT NULL DEFAULT 0,
+        kind TEXT
       )
       """
     )
@@ -74,6 +75,8 @@ class NotesDb(context: Context, name: String = "notes.db") : SQLiteOpenHelper(co
     if (oldVersion < 5) db.execSQL("ALTER TABLE notebooks ADD COLUMN landscape INTEGER NOT NULL DEFAULT 0")
     // A PDF opened from another app, being looked at but not saved to her notebooks yet.
     if (oldVersion < 6) db.execSQL("ALTER TABLE notebooks ADD COLUMN draft INTEGER NOT NULL DEFAULT 0")
+    // What it is: NULL for a notebook, or a PDF, picture or scan she added (see DocKind).
+    if (oldVersion < 7) db.execSQL("ALTER TABLE notebooks ADD COLUMN kind TEXT")
   }
 
   private fun createFolders(db: SQLiteDatabase) {

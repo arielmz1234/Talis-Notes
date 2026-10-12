@@ -739,4 +739,22 @@
     <string name="tour_backup_title">Sempre com backup</string>
     <string name="tour_backup_body">Tudo é salvo no tablet enquanto você escreve. Ative o Google Drive ou o backup automático em Backups, no canto inferior esquerdo, e suas anotações ficam seguras mesmo que o tablet não fique.</string>
     <string name="follows_the_tablet_n">Idioma do tablet: %1$s</string>
+    <string name="blank_pages_to_write_on">Páginas em branco para escrever</string>
+    <string name="add_file">Arquivo</string>
+    <string name="a_pdf_or_pictures_from_your_files">Um PDF ou imagens dos seus arquivos</string>
+    <string name="add_scan">Digitalizar</string>
+    <string name="paper_pages_with_the_camera">Páginas de papel, cortadas e endireitadas</string>
+    <string name="add_photo">Foto</string>
+    <string name="from_your_gallery">Da sua galeria</string>
+    <string name="scan_n">Digitalização %1$s</string>
+    <string name="adding_n">Adicionando “%1$s”…</string>
+    <string name="adding_n_page_n_of_n">Adicionando “%1$s”, página %2$s de %3$s…</string>
+    <string name="adding_pictures">Adicionando as imagens…</string>
+    <string name="saving_the_scan">Salvando a digitalização…</string>
+    <string name="added_n">“%1$s” adicionado</string>
+    <string name="open">Abrir</string>
+    <string name="the_scanner_isn_t_available">O digitalizador não está disponível neste tablet. Ele precisa do Google Play Services.</string>
+    <string name="only_pdfs_and_pictures_can_be_added">Só é possível adicionar PDFs e imagens.</string>
+    <string name="n_here">%1$s (aqui)</string>
+    <string name="on_its_own">Separado</string>
 </resources>

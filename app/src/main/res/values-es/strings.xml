@@ -739,4 +739,22 @@
     <string name="tour_backup_title">Siempre a salvo</string>
     <string name="tour_backup_body">Todo se guarda en la tableta mientras escribes. Activa Google Drive o la copia automática en Copias de seguridad, abajo a la izquierda, y tus apuntes estarán a salvo aunque la tableta no lo esté.</string>
     <string name="follows_the_tablet_n">Idioma de la tableta: %1$s</string>
+    <string name="blank_pages_to_write_on">Páginas en blanco para escribir</string>
+    <string name="add_file">Archivo</string>
+    <string name="a_pdf_or_pictures_from_your_files">Un PDF o imágenes de tus archivos</string>
+    <string name="add_scan">Escanear</string>
+    <string name="paper_pages_with_the_camera">Hojas de papel, recortadas y enderezadas</string>
+    <string name="add_photo">Foto</string>
+    <string name="from_your_gallery">De tu galería</string>
+    <string name="scan_n">Escaneo %1$s</string>
+    <string name="adding_n">Añadiendo «%1$s»…</string>
+    <string name="adding_n_page_n_of_n">Añadiendo «%1$s», página %2$s de %3$s…</string>
+    <string name="adding_pictures">Añadiendo las imágenes…</string>
+    <string name="saving_the_scan">Guardando el escaneo…</string>
+    <string name="added_n">«%1$s» añadido</string>
+    <string name="open">Abrir</string>
+    <string name="the_scanner_isn_t_available">El escáner no está disponible en esta tableta. Necesita los servicios de Google Play.</string>
+    <string name="only_pdfs_and_pictures_can_be_added">Solo se pueden añadir PDF e imágenes.</string>
+    <string name="n_here">%1$s (aquí)</string>
+    <string name="on_its_own">Por separado</string>
 </resources>

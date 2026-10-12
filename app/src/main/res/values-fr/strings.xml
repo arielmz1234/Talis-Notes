@@ -739,4 +739,22 @@
     <string name="tour_backup_title">Toujours sauvegardé</string>
     <string name="tour_backup_body">Tout est enregistré sur la tablette pendant que vous écrivez. Activez Google Drive ou la sauvegarde automatique dans Sauvegardes, en bas à gauche, et vos notes sont à l\'abri même si la tablette ne l\'est pas.</string>
     <string name="follows_the_tablet_n">Langue de la tablette : %1$s</string>
+    <string name="blank_pages_to_write_on">Des pages vierges où écrire</string>
+    <string name="add_file">Fichier</string>
+    <string name="a_pdf_or_pictures_from_your_files">Un PDF ou des images de vos fichiers</string>
+    <string name="add_scan">Scan</string>
+    <string name="paper_pages_with_the_camera">Des pages papier, recadrées et redressées</string>
+    <string name="add_photo">Photo</string>
+    <string name="from_your_gallery">Depuis votre galerie</string>
+    <string name="scan_n">Scan du %1$s</string>
+    <string name="adding_n">Ajout de « %1$s »…</string>
+    <string name="adding_n_page_n_of_n">Ajout de « %1$s », page %2$s sur %3$s…</string>
+    <string name="adding_pictures">Ajout des images…</string>
+    <string name="saving_the_scan">Enregistrement du scan…</string>
+    <string name="added_n">« %1$s » ajouté</string>
+    <string name="open">Ouvrir</string>
+    <string name="the_scanner_isn_t_available">Le scanner n\'est pas disponible sur cette tablette. Il a besoin des services Google Play.</string>
+    <string name="only_pdfs_and_pictures_can_be_added">Seuls les PDF et les images peuvent être ajoutés.</string>
+    <string name="n_here">%1$s (ici)</string>
+    <string name="on_its_own">À part</string>
 </resources>

@@ -61,6 +61,11 @@ fun MainNavigation() {
           else -> backStack.add(Notebook(id))
         }
       },
+      // Made into a Picture item of its own (already holding them): just open it.
+      onMade = { id ->
+        Incoming.offer.value = null
+        if (open != null) backStack[backStack.lastIndex] = Notebook(id) else backStack.add(Notebook(id))
+      },
       onDismiss = { Incoming.offer.value = null },
     )
   }

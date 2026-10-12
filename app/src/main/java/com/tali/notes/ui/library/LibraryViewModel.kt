@@ -113,6 +113,106 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     const val TRASH = "trash"
   }
 
+  /** What the + menu is adding, shown in a pill at the bottom of the library: words (`later`), and whether it went wrong. */
+  data class Adding(val words: String, val busy: Boolean, val failed: Boolean = false, val added: String? = null)
+
+  val adding = MutableStateFlow<Adding?>(null)
+  private var addingJob: kotlinx.coroutines.Job? = null
+
+  /**
+   * Files picked with + › File: each PDF becomes a PDF of its own, pictures picked together one
+   * Picture item. They're made one after another, with progress in [adding].
+   */
+  fun addFiles(uris: List<android.net.Uri>) {
+    val app = getApplication<Application>().talisApp
+    val pdfs = uris.filter { com.tali.notes.Incoming.kindOf(app, it) == com.tali.notes.Incoming.Kind.PDF }
+    val pictures = uris.filter { com.tali.notes.Incoming.kindOf(app, it) == com.tali.notes.Incoming.Kind.IMAGE }
+    if (pdfs.isEmpty() && pictures.isEmpty()) {
+      adding.value = Adding(com.tali.notes.later(R.string.only_pdfs_and_pictures_can_be_added), busy = false, failed = true)
+      finishSoon()
+      return
+    }
+    run {
+      var last: NotebookMeta? = null
+      for (uri in pdfs) {
+        val name = com.tali.notes.Incoming.nameOf(app, uri)?.substringBeforeLast('.') ?: "PDF"
+        adding.value = Adding(com.tali.notes.later(R.string.adding_n, name), busy = true)
+        last =
+          try {
+            com.tali.notes.Imports.pdf(app, uri, folder()) { done, total -> adding.value = Adding(com.tali.notes.later(R.string.adding_n_page_n_of_n, name, done, total), busy = true) }
+          } catch (e: com.tali.notes.data.NotesRepository.PdfImportException) {
+            adding.value = Adding(e.message.orEmpty(), busy = false, failed = true)
+            if (pdfs.size == 1 && pictures.isEmpty()) return@run null
+            continue
+          }
+      }
+      if (pictures.isNotEmpty()) {
+        adding.value = Adding(com.tali.notes.later(R.string.adding_pictures), busy = true)
+        last = com.tali.notes.Imports.pictures(app, pictures, folder()) ?: last
+      }
+      last
+    }
+  }
+
+  /** Pictures from + › Photo: one Picture item, a picture on each page. */
+  fun addPhotos(uris: List<android.net.Uri>) {
+    val app = getApplication<Application>().talisApp
+    if (uris.isEmpty()) return
+    run {
+      adding.value = Adding(com.tali.notes.later(R.string.adding_pictures), busy = true)
+      com.tali.notes.Imports.pictures(app, uris, folder())
+    }
+  }
+
+  /** Pages from + › Scan. */
+  fun addScan(uris: List<android.net.Uri>) {
+    val app = getApplication<Application>().talisApp
+    if (uris.isEmpty()) return
+    run {
+      adding.value = Adding(com.tali.notes.later(R.string.saving_the_scan), busy = true)
+      com.tali.notes.Imports.scan(app, uris, folder())
+    }
+  }
+
+  fun dismissAdding() {
+    adding.value = null
+  }
+
+  fun failedToAdd(words: String) {
+    adding.value = Adding(words, busy = false, failed = true)
+    finishSoon()
+  }
+
+  private fun folder(): String? = selectedFolder.value?.takeIf { it != TRASH }
+
+  /** Runs one adding job at a time; [block] returns what was made (for "Added …" and Open), or null. */
+  private fun run(block: suspend () -> NotebookMeta?) {
+    if (addingJob?.isActive == true) return
+    addingJob =
+      viewModelScope.launch {
+        val made =
+          try {
+            block()
+          } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            com.tali.notes.CrashLog.recovered(getApplication(), t)
+            adding.value = Adding(com.tali.notes.later(R.string.that_didn_t_work_try_again), busy = false, failed = true)
+            null
+          }
+        if (made != null) adding.value = Adding(com.tali.notes.later(R.string.added_n, made.title), busy = false, added = made.id)
+        else if (adding.value?.busy == true) adding.value = Adding(com.tali.notes.later(R.string.that_didn_t_work_try_again), busy = false, failed = true)
+        finishSoon()
+      }
+  }
+
+  private fun finishSoon() {
+    val shown = adding.value
+    viewModelScope.launch {
+      kotlinx.coroutines.delay(if (shown?.added != null) 9000 else 6000)
+      if (adding.value == shown) adding.value = null
+    }
+  }
+
   fun duplicate(id: String) {
     viewModelScope.launch { repo.duplicate(id) }
   }

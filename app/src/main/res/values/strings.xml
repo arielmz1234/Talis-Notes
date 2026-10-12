@@ -739,4 +739,22 @@
     <string name="tour_backup_title">Always backed up</string>
     <string name="tour_backup_body">Everything is saved on the tablet as you write. Turn on Google Drive or Back up by itself in Backups, at the bottom left, and your notes are safe even if the tablet isn\'t.</string>
     <string name="follows_the_tablet_n">Follows the tablet: %1$s</string>
+    <string name="blank_pages_to_write_on">Blank pages to write on</string>
+    <string name="add_file">File</string>
+    <string name="a_pdf_or_pictures_from_your_files">A PDF or pictures from your files</string>
+    <string name="add_scan">Scan</string>
+    <string name="paper_pages_with_the_camera">Paper pages, cropped and straightened</string>
+    <string name="add_photo">Photo</string>
+    <string name="from_your_gallery">From your gallery</string>
+    <string name="scan_n">Scan %1$s</string>
+    <string name="adding_n">Adding “%1$s”…</string>
+    <string name="adding_n_page_n_of_n">Adding “%1$s”, page %2$s of %3$s…</string>
+    <string name="adding_pictures">Adding the pictures…</string>
+    <string name="saving_the_scan">Saving the scan…</string>
+    <string name="added_n">Added “%1$s”</string>
+    <string name="open">Open</string>
+    <string name="the_scanner_isn_t_available">The scanner isn\'t available on this tablet. It needs Google Play services.</string>
+    <string name="only_pdfs_and_pictures_can_be_added">Only PDFs and pictures can be added.</string>
+    <string name="n_here">%1$s (here)</string>
+    <string name="on_its_own">On its own</string>
 </resources>

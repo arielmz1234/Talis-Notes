@@ -110,6 +110,8 @@ dependencies {
   implementation(libs.androidx.exifinterface)
   implementation(libs.androidx.work.runtime)
   implementation(libs.play.services.auth)
+  // The document scanner (edges found, cropped, straightened and cleaned up), from Google Play services.
+  implementation(libs.play.services.mlkit.document.scanner)
 
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)

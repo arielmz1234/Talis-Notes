@@ -740,4 +740,22 @@
     <string name="tour_backup_title">תמיד מגובה</string>
     <string name="tour_backup_body">הכול נשמר בטאבלט תוך כדי כתיבה. מפעילים את Google Drive או גיבוי אוטומטי ב„גיבויים”, בפינה התחתונה, והסיכומים בטוחים גם אם הטאבלט לא.</string>
     <string name="follows_the_tablet_n">שפת הטאבלט: %1$s</string>
+    <string name="blank_pages_to_write_on">דפים ריקים לכתיבה</string>
+    <string name="add_file">קובץ</string>
+    <string name="a_pdf_or_pictures_from_your_files">PDF או תמונות מהקבצים שלך</string>
+    <string name="add_scan">סריקה</string>
+    <string name="paper_pages_with_the_camera">דפי נייר, חתוכים ומיושרים</string>
+    <string name="add_photo">תמונה</string>
+    <string name="from_your_gallery">מהגלריה</string>
+    <string name="scan_n">סריקה %1$s</string>
+    <string name="adding_n">מוסיפים את „%1$s”…</string>
+    <string name="adding_n_page_n_of_n">מוסיפים את „%1$s”, עמוד %2$s מתוך %3$s…</string>
+    <string name="adding_pictures">מוסיפים את התמונות…</string>
+    <string name="saving_the_scan">שומרים את הסריקה…</string>
+    <string name="added_n">„%1$s” נוסף</string>
+    <string name="open">פתיחה</string>
+    <string name="the_scanner_isn_t_available">הסורק לא זמין בטאבלט הזה. הוא צריך את שירותי Google Play.</string>
+    <string name="only_pdfs_and_pictures_can_be_added">אפשר להוסיף רק קובצי PDF ותמונות.</string>
+    <string name="n_here">%1$s (כאן)</string>
+    <string name="on_its_own">בנפרד</string>
 </resources>

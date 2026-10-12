@@ -45,6 +45,10 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Downloading
+import com.tali.notes.ui.components.cloudSurface
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -156,6 +160,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     androidx.core.view.WindowCompat.getInsetsController(window, rootView).show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
   }
   val vm: LibraryViewModel = viewModel { LibraryViewModel(app) }
+  val adding by vm.adding.collectAsState()
   val c = Tali.colors
   val notebooks by vm.notebooks.collectAsState()
   val all by vm.allNotebooks.collectAsState()
@@ -300,7 +305,14 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                   QuietButton(stringResource(R.string.select)) { picked = emptySet() }
                   Spacer(Modifier.width(8.dp))
                 }
-                PrimaryButton(stringResource(R.string.new_notebook), Icons.Outlined.Add) { creating = true }
+                // One +: a notebook, a file, a scan or photos.
+                AddButton(
+                  onNotebook = { creating = true },
+                  onFiles = vm::addFiles,
+                  onPhotos = vm::addPhotos,
+                  onScan = vm::addScan,
+                  onScanUnavailable = { vm.failedToAdd(com.tali.notes.later(R.string.the_scanner_isn_t_available)) },
+                )
               }
             }
           }
@@ -386,7 +398,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
               }
             }
             items(notebooks, key = { it.id }) { nb ->
-              PuffBox(leaving = nb.id in vanishing, appearing = false) {
+              PuffBox(leaving = nb.id in vanishing, appearing = nb.id == adding?.added) {
               val chosen = picked
               NotebookCard(
                 nb,
@@ -409,6 +421,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         }
       }
     }
+    // What the + menu is adding: progress, then "Added …" with Open.
+    AddingPill(adding, onOpen = { id -> vm.dismissAdding(); onOpen(id) }, onDismiss = vm::dismissAdding, modifier = Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 24.dp))
     }
   }
   }
@@ -961,7 +975,9 @@ private fun NotebookCard(
   // A picked notebook sits a little lower, as if pressed in, with an accent outline.
   val scale by animateFloatAsState(if (pressed) 0.97f else if (picked) 0.955f else 1f, label = "press")
   val image = rememberThumbnail(thumbnail, nb.thumbVersion)
-  val shape = RoundedCornerShape(18.dp)
+  val document = nb.kind != com.tali.notes.data.DocKind.NOTEBOOK
+  // A PDF, picture or scan is a sheet with a folded corner; a notebook has a spine.
+  val shape = if (document) remember { DogEarShape(18.dp, FOLD) } else RoundedCornerShape(18.dp)
   val edge by androidx.compose.animation.animateColorAsState(if (picked) c.accent else c.line, tween(160), label = "pickEdge")
 
   Column(
@@ -985,13 +1001,30 @@ private fun NotebookCard(
       } else {
         PaperSwatch(nb.paper, Modifier.fillMaxSize())
       }
-      // Notebook spine in the cover colour, with a stitched edge.
-      Box(Modifier.fillMaxHeight().width(9.dp).background(Color(nb.cover)))
-      Canvas(Modifier.fillMaxHeight().width(9.dp)) {
-        var y = 6.dp.toPx()
-        while (y < size.height) {
-          drawRoundRect(Color.White.copy(alpha = 0.55f), Offset(size.width / 2 - 0.75.dp.toPx(), y), Size(1.5.dp.toPx(), 5.dp.toPx()), CornerRadius(1.dp.toPx()))
-          y += 11.dp.toPx()
+      if (document) {
+        // The folded-over corner, and what it is (PDF, picture, scan) in a small badge.
+        val fold = c.sunken
+        val crease = c.line
+        Canvas(Modifier.align(Alignment.TopEnd).size(FOLD)) {
+          val rtl = layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl
+          val w = size.width
+          val flap = androidx.compose.ui.graphics.Path().apply {
+            if (rtl) { moveTo(w, 0f); lineTo(w, w); lineTo(0f, w) } else { moveTo(0f, 0f); lineTo(0f, w); lineTo(w, w) }
+            close()
+          }
+          drawPath(flap, fold)
+          drawPath(flap, crease, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+        }
+        KindBadge(nb.kind, Modifier.align(Alignment.TopStart).padding(8.dp))
+      } else {
+        // Notebook spine in the cover colour, with a stitched edge.
+        Box(Modifier.fillMaxHeight().width(9.dp).background(Color(nb.cover)))
+        Canvas(Modifier.fillMaxHeight().width(9.dp)) {
+          var y = 6.dp.toPx()
+          while (y < size.height) {
+            drawRoundRect(Color.White.copy(alpha = 0.55f), Offset(size.width / 2 - 0.75.dp.toPx(), y), Size(1.5.dp.toPx(), 5.dp.toPx()), CornerRadius(1.dp.toPx()))
+            y += 11.dp.toPx()
+          }
         }
       }
       // While picking, a check circle in the corner: filled when picked.
@@ -1019,9 +1052,12 @@ private fun NotebookCard(
             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) },
             onClick = { moving = true },
           )
-          CoverSwatches(current = nb.cover) {
-            onCover(it)
-            menu = false
+          // Only a notebook has a cover (its spine).
+          if (!document) {
+            CoverSwatches(current = nb.cover) {
+              onCover(it)
+              menu = false
+            }
           }
           HorizontalDivider(color = c.line)
           DropdownMenuItem(text = { Text(stringResource(R.string.delete), color = c.danger) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = c.danger) }, onClick = { menu = false; onDelete() })
@@ -1034,7 +1070,7 @@ private fun NotebookCard(
           )
           folderTree(folders).forEach { (f, depth) ->
             DropdownMenuItem(
-              text = { Text(f.name + if (f.id == nb.folderId) "  (here)" else "") },
+              text = { Text(if (f.id == nb.folderId) stringResource(R.string.n_here, f.name) else f.name) },
               leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = Color(f.color)) },
               onClick = { onMove(f.id); menu = false; moving = false },
               modifier = Modifier.padding(start = (depth * 18).dp),
@@ -1048,7 +1084,9 @@ private fun NotebookCard(
     }
     Spacer(Modifier.height(10.dp))
     Text(nb.title, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp))
-    Text((if (inTrash) stringResource(R.string.deleted) else stringResource(R.string.edited)) + relativeTime(if (inTrash) nb.deleted ?: nb.updated else nb.updated).replaceFirstChar { it.lowercase() }, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.padding(start = 2.dp))
+    val edited = (if (inTrash) stringResource(R.string.deleted) else stringResource(R.string.edited)) + relativeTime(if (inTrash) nb.deleted ?: nb.updated else nb.updated).replaceFirstChar { it.lowercase() }
+    // A PDF, picture or scan says what it is first: "PDF · Edited 3 h ago".
+    Text(if (document) stringResource(R.string.n_n_2, kindLabel(nb.kind), edited) else edited, style = MaterialTheme.typography.bodySmall, color = c.inkFaint, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp))
   }
 }
 
@@ -1355,5 +1393,96 @@ private fun Greeting() {
     label = "greeting",
   ) { text ->
     Text(text, style = MaterialTheme.typography.titleMedium, color = c.accent)
+  }
+}
+
+/** How far a PDF's, picture's or scan's corner is folded over on its library card. */
+private val FOLD = 24.dp
+
+/**
+ * A card's outline with rounded corners, except the top one at the end (right, or left in Hebrew and
+ * Arabic), which is cut off where the corner is folded over.
+ */
+private class DogEarShape(private val radius: androidx.compose.ui.unit.Dp, private val fold: androidx.compose.ui.unit.Dp) : androidx.compose.ui.graphics.Shape {
+  override fun createOutline(size: Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): androidx.compose.ui.graphics.Outline {
+    val r = with(density) { radius.toPx() }
+    val f = with(density) { fold.toPx() }
+    val w = size.width
+    val h = size.height
+    val path = androidx.compose.ui.graphics.Path().apply {
+      moveTo(r, 0f)
+      lineTo(w - f, 0f)
+      lineTo(w, f)
+      lineTo(w, h - r)
+      quadraticTo(w, h, w - r, h)
+      lineTo(r, h)
+      quadraticTo(0f, h, 0f, h - r)
+      lineTo(0f, r)
+      quadraticTo(0f, 0f, r, 0f)
+      close()
+    }
+    if (layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl) {
+      path.transform(androidx.compose.ui.graphics.Matrix().apply { scale(-1f, 1f); translate(-w, 0f) })
+    }
+    return androidx.compose.ui.graphics.Outline.Generic(path)
+  }
+}
+
+/** "PDF", "Picture" or "Scan" with its icon, in its own colour on a frosted chip. */
+@Composable
+private fun KindBadge(kind: com.tali.notes.data.DocKind, modifier: Modifier = Modifier) {
+  val c = Tali.colors
+  val tint = kindTint(kind)
+  Row(
+    modifier.clip(RoundedCornerShape(10.dp)).background(c.surface.copy(alpha = 0.92f)).border(1.dp, tint.copy(alpha = 0.25f), RoundedCornerShape(10.dp)).padding(start = 6.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(kindIcon(kind), null, tint = tint, modifier = Modifier.size(14.dp))
+    Spacer(Modifier.width(4.dp))
+    Text(kindLabel(kind), style = MaterialTheme.typography.labelMedium, color = tint)
+  }
+}
+
+/**
+ * What the + menu is adding, floating at the bottom of the library: "Adding “Lecture 3”, page 4 of
+ * 20…" with hopping dots, then "Added “Lecture 3”" with Open (or what went wrong). It rises in and
+ * fades away by itself.
+ */
+@Composable
+private fun AddingPill(adding: LibraryViewModel.Adding?, onOpen: (String) -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+  val c = Tali.colors
+  var last by remember { mutableStateOf(adding) }
+  if (adding != null) last = adding
+  androidx.compose.animation.AnimatedVisibility(
+    adding != null,
+    modifier = modifier,
+    enter = fadeIn(tween(160)) + androidx.compose.animation.slideInVertically(tween(260, easing = com.tali.notes.ui.components.EaseOutStrong)) { it / 2 },
+    exit = fadeOut(tween(160)),
+  ) {
+    val a = last ?: return@AnimatedVisibility
+    Row(
+      Modifier.widthIn(max = 560.dp).cloudSurface(20.dp).padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 8.dp).heightIn(min = 40.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(
+        if (a.failed) Icons.Outlined.ErrorOutline else if (a.busy) Icons.Outlined.Downloading else Icons.Outlined.CheckCircle,
+        null,
+        tint = if (a.failed) c.danger else c.accent,
+        modifier = Modifier.size(20.dp),
+      )
+      Spacer(Modifier.width(10.dp))
+      com.tali.notes.ui.components.WorkingText(a.words, style = MaterialTheme.typography.labelLarge, color = if (a.failed) c.danger else c.ink, maxLines = 2, modifier = Modifier.weight(1f, fill = false))
+      Spacer(Modifier.width(8.dp))
+      val id = a.added
+      if (id != null) {
+        QuietButton(stringResource(R.string.open)) { onOpen(id) }
+      } else if (!a.busy) {
+        Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.close), onClick = onDismiss), contentAlignment = Alignment.Center) {
+          Icon(Icons.Outlined.Close, stringResource(R.string.close), tint = c.inkMuted, modifier = Modifier.size(18.dp))
+        }
+      } else {
+        Spacer(Modifier.width(8.dp))
+      }
+    }
   }
 }

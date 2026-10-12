@@ -67,10 +67,11 @@ import kotlinx.coroutines.launch
 /**
  * Pictures came from another app: where do they go? A new notebook, the notebook she has open, or
  * one of her recent notebooks. A backup file asks to restore. (A PDF never asks: it opens in a new
- * notebook of its own, [openPdfDraft].) [onGo] gets the notebook to add them to.
+ * notebook of its own, [openPdfDraft].) [onGo] gets the notebook to add them to; [onMade] the
+ * Picture item made of them on their own (already holding them).
  */
 @Composable
-fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) -> Unit, onDismiss: () -> Unit) {
+fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) -> Unit, onMade: (String) -> Unit, onDismiss: () -> Unit) {
   if (files.kind == Incoming.Kind.BACKUP) {
     RestoreCard(files, onDismiss)
     return
@@ -94,15 +95,17 @@ fun IncomingCard(files: Incoming.Files, openNotebook: String?, onGo: (String) ->
     Spacer(Modifier.height(14.dp))
     CardBody {
       Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        ChoiceRow(0, stringResource(R.string.new_notebook), stringResource(R.string.called_n, what), leading = {
-          Box(Modifier.size(width = 52.dp, height = 38.dp).clip(RoundedCornerShape(7.dp)).background(c.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Outlined.Add, null, tint = c.accent, modifier = Modifier.size(22.dp))
+        // On their own: a Picture item in the library (a picture on each page), not a notebook.
+        val tint = kindTint(com.tali.notes.data.DocKind.PICTURE)
+        ChoiceRow(0, stringResource(R.string.on_its_own), stringResource(R.string.called_n, what), leading = {
+          Box(Modifier.size(width = 52.dp, height = 38.dp).clip(RoundedCornerShape(7.dp)).background(tint.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+            Icon(kindIcon(com.tali.notes.data.DocKind.PICTURE), null, tint = tint, modifier = Modifier.size(22.dp))
           }
         }) {
           if (busy) return@ChoiceRow
           busy = true
           scope.launch {
-            runCatching { newNotebookFor(app, files) }.onSuccess(onGo).onFailure {
+            runCatching { com.tali.notes.Imports.pictures(app, files.uris, null)?.id ?: error("no pictures") }.onSuccess(onMade).onFailure {
               CrashLog.recovered(context, it)
               busy = false
             }
@@ -127,7 +130,7 @@ suspend fun openPdfDraft(app: TalisApp, files: Incoming.Files): String {
   val s = app.settings.settings.value
   val landscape = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { pdfMostlyLandscape(app, files.uris.first()) }
   // With *Add them to my notebooks* on, it's one of her notebooks straight away.
-  return app.repository.create(Incoming.title(files), s.defaultPaper, pages = 1, customPaper = s.defaultCustomPaper, landscape = landscape, draft = !s.pdfsToLibrary).id
+  return app.repository.create(Incoming.title(files), s.defaultPaper, pages = 1, customPaper = s.defaultCustomPaper, landscape = landscape, draft = !s.pdfsToLibrary, kind = com.tali.notes.data.DocKind.PDF).id
 }
 
 /** Whether most of the PDF's pages (the first 30) are wider than they are tall. */
@@ -142,20 +145,6 @@ fun pdfMostlyLandscape(context: android.content.Context, uri: android.net.Uri): 
       }
     }
     .getOrDefault(false)
-
-/** A new notebook for what came in, started the way her new notebooks start. Returns its id. */
-private suspend fun newNotebookFor(app: TalisApp, files: Incoming.Files): String {
-  val s = app.settings.settings.value
-  val meta =
-    app.repository.create(
-      Incoming.title(files),
-      s.defaultPaper,
-      pages = if (s.defaultPaged) 1 else null,
-      customPaper = s.defaultCustomPaper,
-      landscape = s.defaultLandscape,
-    )
-  return meta.id
-}
 
 @Composable
 private fun ChoiceRow(index: Int, title: String, detail: String, leading: @Composable () -> Unit, onClick: () -> Unit) {

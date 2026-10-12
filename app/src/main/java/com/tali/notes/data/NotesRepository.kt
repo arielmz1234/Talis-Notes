@@ -56,7 +56,28 @@ data class NotebookMeta(
    * Quick open or backups until she taps Save.
    */
   val draft: Boolean = false,
+  /** A notebook she started, or a PDF, picture or scan she added (shown as one in the library). */
+  val kind: DocKind = DocKind.NOTEBOOK,
 )
+
+/**
+ * What an item in the library is. Underneath they're all the same (pages she can write on); the
+ * library shows each as what it is, so a PDF reads as a PDF, not as a notebook.
+ */
+enum class DocKind {
+  NOTEBOOK,
+  PDF,
+  PICTURE,
+  SCAN;
+
+  /** As stored in `notebooks.kind` (NULL for a notebook, so every older one is one). */
+  val stored: String?
+    get() = if (this == NOTEBOOK) null else name.lowercase()
+
+  companion object {
+    fun of(stored: String?): DocKind = entries.firstOrNull { it.stored == stored } ?: NOTEBOOK
+  }
+}
 
 /** A folder; [parentId] is the folder it sits in, or null at the top level. */
 data class Folder(val id: String, val name: String, val color: Int, val position: Int, val parentId: String? = null)
@@ -127,7 +148,7 @@ class NotesRepository(private val context: Context) {
 
   private fun reload() {
     val list = mutableListOf<NotebookMeta>()
-    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,draft FROM notebooks ORDER BY updated DESC", null).use { c ->
+    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,draft,kind FROM notebooks ORDER BY updated DESC", null).use { c ->
       while (c.moveToNext()) {
         list +=
           NotebookMeta(
@@ -146,6 +167,7 @@ class NotesRepository(private val context: Context) {
             landscape = c.getInt(12) != 0,
             customPaper = c.getString(5).takeIf { it.startsWith(CustomPaper.PREFIX) }?.removePrefix(CustomPaper.PREFIX),
             draft = c.getInt(13) != 0,
+            kind = DocKind.of(c.getString(14)),
           )
       }
     }
@@ -170,6 +192,7 @@ class NotesRepository(private val context: Context) {
     cover: Int? = null,
     landscape: Boolean = false,
     draft: Boolean = false,
+    kind: DocKind = DocKind.NOTEBOOK,
   ): NotebookMeta =
     withContext(writer) {
       val now = System.currentTimeMillis()
@@ -192,6 +215,7 @@ class NotesRepository(private val context: Context) {
           put("dark", if (dark) 1 else 0)
           put("landscape", if (landscape) 1 else 0)
           put("draft", if (draft) 1 else 0)
+          put("kind", kind.stored)
         },
       )
       reload()
@@ -465,7 +489,7 @@ class NotesRepository(private val context: Context) {
       w.beginTransaction()
       try {
         w.execSQL(
-          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id,pages,dark,landscape) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id,pages,dark,landscape FROM notebooks WHERE id=?",
+          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id,pages,dark,landscape,kind) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id,pages,dark,landscape,kind FROM notebooks WHERE id=?",
           arrayOf<Any>(newId, freeTitle(src.title, src.folderId, except = null), now, now, id),
         )
         readRows(id).forEach { w.insertOrThrow("items", null, it.toValues(newId).apply { put("id", UUID.randomUUID().toString()) }) }
@@ -645,6 +669,7 @@ class NotesRepository(private val context: Context) {
           val pagesCol = if ("pages" in bkNotebook) "pages" else "NULL"
           val darkCol = if ("dark" in bkNotebook) "dark" else "0"
           val landscapeCol = if ("landscape" in bkNotebook) "landscape" else "0"
+          val kindCol = if ("kind" in bkNotebook) "kind" else "NULL"
           val parentCol = if ("parent_id" in columns(w, "folders")) "parent_id" else "NULL"
           w.execSQL("INSERT OR IGNORE INTO folders (id,name,color,created,position,parent_id) SELECT id,name,color,created,position,$parentCol FROM bk.folders")
           // A PDF that was only being looked at (never saved) isn't brought back.
@@ -666,7 +691,7 @@ class NotesRepository(private val context: Context) {
               w.execSQL("DELETE FROM main.notebooks WHERE id = ?", arrayOf(id))
             }
             w.execSQL(
-              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id,NULL,$pagesCol,$darkCol,$landscapeCol FROM bk.notebooks WHERE id = ?",
+              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,kind) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id,NULL,$pagesCol,$darkCol,$landscapeCol,$kindCol FROM bk.notebooks WHERE id = ?",
               arrayOf(id),
             )
             w.execSQL("INSERT OR REPLACE INTO main.items SELECT * FROM bk.items WHERE notebook_id = ?", arrayOf(id))
