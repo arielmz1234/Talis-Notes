@@ -363,8 +363,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   var leavingPdf by remember { mutableStateOf<(() -> Unit)?>(null) }
   val leave: (() -> Unit) -> Unit = { go -> if (vm.unsaved) leavingPdf = go else go() }
   BackHandler(enabled = unsaved && vm.panel == null) { leavingPdf = onBack }
-  // Only scrolling and zooming until it's saved.
-  LaunchedEffect(unsaved, holder.view) { holder.view?.viewOnly = unsaved }
+  // Only looking (scrolling and zooming): a PDF until it's saved, and a PDF, picture or scan until
+  // she taps Write.
+  val viewing = unsaved || (meta != null && meta?.kind != com.tali.notes.data.DocKind.NOTEBOOK && !vm.writing)
+  LaunchedEffect(viewing, holder.view) { holder.view?.viewOnly = viewing }
 
   val lifecycleOwner = LocalLifecycleOwner.current
   DisposableEffect(lifecycleOwner) {
@@ -506,7 +508,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       ready = true
     }
     // Just looking at a PDF from another app: no toolbars until it's saved (the viewer bar instead).
-    chrome.targetState = ready && !vm.focus && !unsaved
+    chrome.targetState = ready && !vm.focus && !viewing
     var puffs by remember { mutableIntStateOf(0) }
     var shownFocus by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(vm.focus, ready) {
@@ -746,8 +748,11 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     // Recording a voice memo: the bar hangs just below the mic button, over everything.
     RecorderPanel(vm, anchor = { micAnchor[0] }, onAdd = vm::keepDraft)
     PdfViewerBar(
-      visible = ready && unsaved,
+      visible = ready && viewing,
       title = meta?.title ?: "",
+      saved = !unsaved,
+      kind = meta?.kind ?: com.tali.notes.data.DocKind.PDF,
+      onWrite = { vm.writing = true },
       pages = vm.pageCount,
       darkPaper = darkPaper,
       onBack = { leave(onBack) },
@@ -763,7 +768,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         ZoomChip(vm.zoom) { holder.view?.runSafely { setZoom(1f) } }
       }
     }
-    ShowToolbarsButton(vm.focus && !unsaved, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
+    ShowToolbarsButton(vm.focus && !viewing, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
 
     pasteOffer?.let { offer ->
       PasteBubble(offer, onDismiss = { pasteOffer = null }) {
@@ -943,14 +948,17 @@ private fun TitlePill(onBack: () -> Unit, canUndo: Boolean, canRedo: Boolean, on
 }
 
 /**
- * Looking at a PDF opened from another app, before it's saved: no toolbars, just Back, its name,
- * Save and a few options, with the page and zoom chips below. The pieces arrive like the toolbars
+ * Looking at a PDF opened from another app before it's saved, or at a PDF, picture or scan from her
+ * library: no toolbars, just Back, its name, Save (or Write, which brings the toolbars) and a few options, with the page and zoom chips below. The pieces arrive like the toolbars
  * (lifting in from their top edge, 40 ms apart); when it's saved they leave and the toolbars come.
  */
 @Composable
 private fun PdfViewerBar(
   visible: Boolean,
   title: String,
+  saved: Boolean,
+  kind: com.tali.notes.data.DocKind,
+  onWrite: () -> Unit,
   pages: Int?,
   darkPaper: Boolean,
   onBack: () -> Unit,
@@ -992,7 +1000,11 @@ private fun PdfViewerBar(
           Column(Modifier.padding(horizontal = 10.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-              listOfNotNull(pages?.let { if (it == 1) stringResource(R.string.t_1_page) else stringResource(R.string.n_pages, it) }, stringResource(R.string.not_saved)).joinToString(" · "),
+              listOfNotNull(
+                if (saved) com.tali.notes.ui.library.kindLabel(kind) else null,
+                pages?.let { if (it == 1) stringResource(R.string.t_1_page) else stringResource(R.string.n_pages, it) },
+                if (saved) null else stringResource(R.string.not_saved),
+              ).joinToString(" · "),
               style = MaterialTheme.typography.bodySmall,
               color = c.inkFaint,
               maxLines = 1,
@@ -1000,7 +1012,9 @@ private fun PdfViewerBar(
           }
         }
         Spacer(Modifier.weight(1f).widthIn(min = 10.dp))
-        PrimaryButton(stringResource(R.string.save), icon = Icons.Outlined.Save, modifier = Modifier.height(52.dp).arrive(2), onClick = onSave)
+        // Saved, it's one of hers: the pen brings the toolbars to write on it. Not saved yet: Save.
+        if (saved) PrimaryButton(stringResource(R.string.write), icon = Icons.Outlined.Edit, modifier = Modifier.height(52.dp).arrive(2), onClick = onWrite)
+        else PrimaryButton(stringResource(R.string.save), icon = Icons.Outlined.Save, modifier = Modifier.height(52.dp).arrive(2), onClick = onSave)
         Spacer(Modifier.width(10.dp))
         Box(Modifier.arrive(3)) {
           var open by remember { mutableStateOf(false) }

@@ -757,4 +757,7 @@
     <string name="only_pdfs_and_pictures_can_be_added">Só é possível adicionar PDFs e imagens.</string>
     <string name="n_here">%1$s (aqui)</string>
     <string name="on_its_own">Separado</string>
+    <string name="write">Escrever</string>
+    <string name="add_camera">Câmera</string>
+    <string name="a_photo_of_the_board_or_a_page">Uma foto do quadro ou de uma página</string>
 </resources>

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.Icon
@@ -78,8 +79,8 @@ import kotlinx.coroutines.delay
 /**
  * The library's +: a round button that opens a small card of what she can add. A notebook (the
  * new-notebook card), a file (PDFs and pictures from Files or Drive), a scan (Google's document
- * scanner: edges found, cropped, straightened and cleaned up, like CamScanner) or photos from the
- * gallery. The + turns into × while the card is open; the card grows out of the button's corner and
+ * scanner: edges found, cropped, straightened and cleaned up, like CamScanner), a photo taken with
+ * the camera, or photos from the gallery. The + turns into × while the card is open; the card grows out of the button's corner and
  * its rows drift in one after another.
  */
 @Composable
@@ -89,11 +90,16 @@ fun AddButton(
   onPhotos: (List<Uri>) -> Unit,
   onScan: (List<Uri>) -> Unit,
   onScanUnavailable: () -> Unit,
+  onNoCamera: () -> Unit,
 ) {
   val c = Tali.colors
   val activity = LocalActivity.current
   var open by remember { mutableStateOf(false) }
   val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onFiles(it) }
+  // A photo straight from the camera app (the board, a page); no camera permission needed.
+  val context = androidx.compose.ui.platform.LocalContext.current
+  var shot by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Uri?>(null) }
+  val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken -> shot?.takeIf { taken }?.let { onPhotos(listOf(it)) } }
   val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)) { if (it.isNotEmpty()) onPhotos(it) }
   val scanned =
     rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
@@ -141,6 +147,12 @@ fun AddButton(
           Choice.NOTEBOOK -> onNotebook()
           Choice.FILE -> files.launch(arrayOf("application/pdf", "image/*"))
           Choice.SCAN -> scan()
+          Choice.CAMERA -> {
+            val file = java.io.File(java.io.File(context.cacheDir, "camera").apply { mkdirs() }, "shot-${System.currentTimeMillis()}.jpg")
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", file)
+            shot = uri
+            runCatching { camera.launch(uri) }.onFailure { onNoCamera() }
+          }
           Choice.PHOTO -> photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
       },
@@ -148,7 +160,7 @@ fun AddButton(
   }
 }
 
-private enum class Choice { NOTEBOOK, FILE, SCAN, PHOTO }
+private enum class Choice { NOTEBOOK, FILE, SCAN, CAMERA, PHOTO }
 
 @Composable
 private fun AddCard(open: Boolean, onDismiss: () -> Unit, onPick: (Choice) -> Unit) {
@@ -183,6 +195,7 @@ private fun AddCard(open: Boolean, onDismiss: () -> Unit, onPick: (Choice) -> Un
             Row4(Choice.NOTEBOOK, Icons.Outlined.AutoStories, c.accent, stringResource(R.string.notebook), stringResource(R.string.blank_pages_to_write_on)),
             Row4(Choice.FILE, Icons.Outlined.UploadFile, kindTint(DocKind.PDF), stringResource(R.string.add_file), stringResource(R.string.a_pdf_or_pictures_from_your_files)),
             Row4(Choice.SCAN, Icons.Outlined.DocumentScanner, kindTint(DocKind.SCAN), stringResource(R.string.add_scan), stringResource(R.string.paper_pages_with_the_camera)),
+            Row4(Choice.CAMERA, Icons.Outlined.PhotoCamera, kindTint(DocKind.PICTURE), stringResource(R.string.add_camera), stringResource(R.string.a_photo_of_the_board_or_a_page)),
             Row4(Choice.PHOTO, Icons.Outlined.Image, kindTint(DocKind.PICTURE), stringResource(R.string.add_photo), stringResource(R.string.from_your_gallery)),
           )
         rows.forEachIndexed { i, r -> AddRow(i, r) { onPick(r.choice) } }

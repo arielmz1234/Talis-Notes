@@ -85,6 +85,12 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   val unsaved: Boolean
     get() = meta.value?.draft == true && !savedNow
 
+  /**
+   * A PDF, picture or scan opens just for looking (no toolbars, the page only scrolls and zooms);
+   * tapping Write brings the toolbars to write on it. Each time it's opened it starts looking again.
+   */
+  var writing by mutableStateOf(false)
+
   /** She chose to leave without saving: the PDF and what she wrote on it go when the notebook closes. */
   private var discardOnLeave = false
 
@@ -92,6 +98,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun saveAsNotebook(title: String) {
     repo.saveDraft(notebookId, title.trim().ifBlank { tr(R.string.untitled) })
     savedNow = true
+    // Saved to write on it: the toolbars come straight away.
+    writing = true
     store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
   }
 
