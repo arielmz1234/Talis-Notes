@@ -307,7 +307,7 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
       ToggleRow(stringResource(R.string.also_keep_a_pdf_of_each), settings.drivePdf, { on ->
         context.talisApp.settings.update { it.copy(drivePdf = on) }
         DriveBackup.markDirty(context)
-        DriveBackup.backupSoon(context, delayMinutes = 0)
+        DriveBackup.backupSoon(context, delaySeconds = 0)
       }, detail = stringResource(R.string.opens_on_any_computer_or_phone))
     }
     WorkingText(

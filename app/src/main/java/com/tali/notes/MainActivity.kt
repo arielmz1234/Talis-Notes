@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onStop() {
     super.onStop()
-    // She put the tablet down or switched apps: a good moment to back up.
+    // She put the tablet down or switched apps: back up now, so her other devices have it.
     DriveBackup.backupSoon(this)
     com.tali.notes.backup.AutoBackup.backupSoon(this)
   }

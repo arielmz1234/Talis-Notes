@@ -284,6 +284,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     keepDraft()
     voice.release()
     if (discardOnLeave && !savedNow) repo.deleteForever(notebookId)
+    // Closing a notebook: what she wrote goes to Drive now, not minutes later.
+    com.tali.notes.backup.DriveBackup.backupSoon(getApplication())
     super.onCleared()
   }
 

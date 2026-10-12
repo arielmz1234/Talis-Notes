@@ -151,15 +151,20 @@ object DriveBackup {
     work.cancelUniqueWork(SOON)
   }
 
-  /** Backs up a little later, so a burst of edits becomes one upload. */
-  fun backupSoon(context: Context, delayMinutes: Long = 2) {
+  /**
+   * Backs up a moment later (a burst of changes becomes one upload, and what was just saved has
+   * reached the database). Called when something is added, a notebook is closed, or the app is left,
+   * so another device sees it straight away; never on every stroke. Runs in the background
+   * (WorkManager, waiting for a network), so it never slows the app.
+   */
+  fun backupSoon(context: Context, delaySeconds: Long = QUICK_S) {
     if (!available || !flow(context).value.enabled) return
     WorkManager.getInstance(context)
       .enqueueUniqueWork(
         SOON,
         ExistingWorkPolicy.REPLACE,
         OneTimeWorkRequestBuilder<BackupWorker>()
-          .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
+          .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
           .setConstraints(constraints(batteryNotLow = false))
           .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
           .build(),
@@ -429,6 +434,7 @@ object DriveBackup {
   }
 
   private const val SYNC_GAP_MS = 60_000L
+  private const val QUICK_S = 5L
 
   private class NotFound : IOException("Not found")
 

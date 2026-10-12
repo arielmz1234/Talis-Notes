@@ -91,6 +91,8 @@ object Imports {
         repo.saveThumbnail(meta.id, bmp)
       }
     }
+    // Something new (a photo, a scan, a PDF): to Drive straight away, so her other devices get it.
+    com.tali.notes.backup.DriveBackup.backupSoon(app)
     return meta
   }
 
