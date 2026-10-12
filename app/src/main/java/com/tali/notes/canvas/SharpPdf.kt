@@ -31,8 +31,7 @@ class SharpPdf(private val imagesDir: File, private val onReady: (Rect) -> Unit)
 
   private val main = Handler(Looper.getMainLooper())
   @Volatile private var generation = 0
-  private var open: Pair<String, PdfRenderer>? = null
-  private var openFd: ParcelFileDescriptor? = null
+  private val source = PdfSource(imagesDir)
 
   /**
    * The view settled at [scale] (screen pixels per world unit) showing [visible]: make sure each PDF
@@ -67,7 +66,7 @@ class SharpPdf(private val imagesDir: File, private val onReady: (Rect) -> Unit)
     worker.execute {
       for ((item, r) in todo) {
         if (gen != generation) return@execute
-        val bmp = runCatching { render(item, r, k) }.getOrNull() ?: continue
+        val bmp = runCatching { source.render(item, r, k) }.getOrNull() ?: continue
         main.post {
           if (gen != generation) return@post
           patches = patches + (item.id to Patch(bmp, r, item.rect))
@@ -88,51 +87,7 @@ class SharpPdf(private val imagesDir: File, private val onReady: (Rect) -> Unit)
   /** The canvas is going away: drop the patches and close the PDF. */
   fun release() {
     clear()
-    worker.execute {
-      open?.second?.close()
-      openFd?.close()
-      open = null
-      openFd = null
-    }
-  }
-
-  /** Renders [part] of [item]'s page at [k] pixels per world unit. Worker thread only. */
-  private fun render(item: ImageItem, part: Rect, k: Float): Bitmap? {
-    val (pdfId, index) = sourceOf(item.file) ?: return null
-    val renderer = rendererFor(pdfId) ?: return null
-    if (index !in 0 until renderer.pageCount) return null
-    val w = (part.width * k).toInt().coerceIn(1, MAX_SIDE)
-    val h = (part.height * k).toInt().coerceIn(1, MAX_SIDE)
-    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    bmp.eraseColor(android.graphics.Color.WHITE)
-    renderer.openPage(index).use { page ->
-      // Page points → world (the page fills its rect) → this bitmap.
-      val sx = w / part.width
-      val sy = h / part.height
-      val m = Matrix()
-      m.setScale(item.rect.width / page.width * sx, item.rect.height / page.height * sy)
-      m.postTranslate((item.rect.left - part.left) * sx, (item.rect.top - part.top) * sy)
-      page.render(bmp, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-    }
-    return bmp
-  }
-
-  private fun rendererFor(pdfId: String): PdfRenderer? {
-    open?.let { if (it.first == pdfId) return it.second }
-    open?.second?.close()
-    openFd?.close()
-    open = null
-    openFd = null
-    val file = pdfFileFor(imagesDir, pdfId)
-    if (!file.isFile) return null
-    return runCatching {
-        val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-        val r = PdfRenderer(fd)
-        openFd = fd
-        open = pdfId to r
-        r
-      }
-      .getOrNull()
+    worker.execute { source.close() }
   }
 
   private fun closeScale(p: Patch, scale: Float): Boolean {
@@ -143,7 +98,6 @@ class SharpPdf(private val imagesDir: File, private val onReady: (Rect) -> Unit)
   companion object {
     /** One thread for every canvas (one notebook is open at a time). */
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "sharp-pdf").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
-    private const val MAX_SIDE = 4096
     private const val MAX_SCREENS = 3.0
 
     private val NAME = Regex("""^pdf-([0-9a-f\-]{36})-p(\d+)-""")
@@ -171,5 +125,61 @@ class SharpPdf(private val imagesDir: File, private val onReady: (Rect) -> Unit)
     private fun visibleOnly(visible: Rect, item: Rect): Rect = intersect(visible, item) ?: visible
 
     private fun contains(outer: Rect, inner: Rect) = outer.left <= inner.left + 0.5f && outer.top <= inner.top + 0.5f && outer.right >= inner.right - 0.5f && outer.bottom >= inner.bottom - 0.5f
+  }
+}
+
+/**
+ * Draws parts of kept PDFs ([SharpPdf.sourceOf] a page picture) at any resolution. Keeps the last PDF
+ * open. Not thread-safe: one thread at a time.
+ */
+class PdfSource(private val imagesDir: File) : java.io.Closeable {
+  private var open: Pair<String, PdfRenderer>? = null
+  private var openFd: ParcelFileDescriptor? = null
+
+  /** [part] (world units, inside [item]'s rect) of [item]'s page, at [k] pixels per world unit. */
+  fun render(item: ImageItem, part: Rect = item.rect, k: Float): Bitmap? {
+    val (pdfId, index) = SharpPdf.sourceOf(item.file) ?: return null
+    val renderer = rendererFor(pdfId) ?: return null
+    if (index !in 0 until renderer.pageCount) return null
+    val w = (part.width * k).toInt().coerceIn(1, MAX_SIDE)
+    val h = (part.height * k).toInt().coerceIn(1, MAX_SIDE)
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    bmp.eraseColor(android.graphics.Color.WHITE)
+    renderer.openPage(index).use { page ->
+      // Page points → world (the page fills its rect) → this bitmap.
+      val sx = w / part.width
+      val sy = h / part.height
+      val m = Matrix()
+      m.setScale(item.rect.width / page.width * sx, item.rect.height / page.height * sy)
+      m.postTranslate((item.rect.left - part.left) * sx, (item.rect.top - part.top) * sy)
+      page.render(bmp, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+    }
+    return bmp
+  }
+
+  private fun rendererFor(pdfId: String): PdfRenderer? {
+    open?.let { if (it.first == pdfId) return it.second }
+    close()
+    val file = SharpPdf.pdfFileFor(imagesDir, pdfId)
+    if (!file.isFile) return null
+    return runCatching {
+        val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+        val r = PdfRenderer(fd)
+        openFd = fd
+        open = pdfId to r
+        r
+      }
+      .getOrNull()
+  }
+
+  override fun close() {
+    open?.second?.close()
+    openFd?.close()
+    open = null
+    openFd = null
+  }
+
+  private companion object {
+    const val MAX_SIDE = 4096
   }
 }

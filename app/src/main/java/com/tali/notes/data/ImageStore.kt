@@ -14,7 +14,7 @@ import java.util.concurrent.Executors
  * Pictures and PDF pages, loaded only when they come into view and kept in a memory-capped cache,
  * so a notebook with a long slide deck opens instantly and never runs the tablet out of memory.
  */
-class ImageStore(private val dir: File) {
+class ImageStore(val dir: File) {
   private val budget = (Runtime.getRuntime().maxMemory() / 3).coerceAtMost(256L * 1024 * 1024).toInt()
   private val cache =
     object : LruCache<String, Bitmap>(budget) {

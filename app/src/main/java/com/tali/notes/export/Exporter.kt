@@ -49,6 +49,8 @@ object Exporter {
   private const val A4_W_PT = 595
   private const val A4_H_PT = 842
   private const val MARGIN_DP = 48f
+  /** Imported PDF pages in a Best export (drawn from the PDF itself). */
+  private const val PDF_PAGE_DPI = 300f
 
   private fun renderer(images: ImageStore, dark: Boolean) =
     ItemRenderer(CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore), images, sync = true).also { it.dark = dark }
@@ -188,6 +190,8 @@ object Exporter {
         customImage = Bitmap.createScaledBitmap(bmp, w, (bmp.height.toLong() * w / bmp.width).toInt().coerceAtLeast(1), true)
       }
     }
+    // At Best, pages of an imported PDF are drawn again from the PDF itself at 300 dpi, not from their pictures.
+    val source = if (quality == PdfQuality.BEST) com.tali.notes.canvas.PdfSource(images.dir) else null
     try {
       pages.forEachIndexed { i, world ->
         val wPt = ceil(world.width * PT_PER_DP).toInt()
@@ -200,13 +204,22 @@ object Exporter {
         paperRenderer.draw(canvas, paper, camera, wPt, hPt)
         canvas.save()
         canvas.concat(camera.worldToScreen)
-        r.drawAll(canvas, items.filter { it.bounds.intersects(world) }, camera.worldToScreen)
+        val onPage = items.filter { it.bounds.intersects(world) }
+        val sharp =
+          source?.let { s ->
+            onPage.filterIsInstance<com.tali.notes.model.ImageItem>().filter { com.tali.notes.canvas.SharpPdf.sourceOf(it.file) != null }.mapNotNull { item ->
+              runCatching { s.render(item, k = PDF_PAGE_DPI / 160f) }.getOrNull()?.let { item.id to com.tali.notes.canvas.SharpPdf.Patch(it, item.rect, item.rect) }
+            }.toMap()
+          }.orEmpty()
+        r.sharp = { sharp }
+        r.drawAll(canvas, onPage, camera.worldToScreen)
         canvas.restore()
         doc.finishPage(page)
       }
       out.parentFile?.mkdirs()
       out.outputStream().use { doc.writeTo(it) }
     } finally {
+      source?.close()
       doc.close()
     }
   }
