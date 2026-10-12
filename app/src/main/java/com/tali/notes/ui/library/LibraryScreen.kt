@@ -4,6 +4,8 @@ import com.tali.notes.ui.components.nameRes
 import com.tali.notes.tr
 import androidx.compose.ui.res.stringResource
 import com.tali.notes.R
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.animation.fadeOut
@@ -222,13 +224,18 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     SkyBand(height = 360.dp)
     SkyClouds(LocalConfiguration.current.screenWidthDp)
   }
-  Row(Modifier.fillMaxSize()) {
+  // On a phone the folders slide in from the side (☰ by the heading) instead of standing beside the notebooks.
+  val phone = LocalConfiguration.current.screenWidthDp < PHONE_DP
+  var drawer by remember { mutableStateOf(false) }
+  if (!phone) drawer = false
+  androidx.activity.compose.BackHandler(enabled = drawer) { drawer = false }
+  val sidebar: @Composable () -> Unit = {
     Sidebar(
       folders = folders,
       notebooks = all,
       trashCount = trash.size,
       selected = selected,
-      onSelect = { vm.selectedFolder.value = it },
+      onSelect = { vm.selectedFolder.value = it; drawer = false },
       onNewFolder = { newFolder = NewFolderRequest(it) },
       onRenameFolder = { renamingFolder = it },
       onRecolorFolder = vm::recolorFolder,
@@ -236,12 +243,23 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       vanishing = vanishing,
       fresh = freshFolders,
       onDeleteFolder = { deletingFolder = it },
-      onBackup = { backups = true },
-      onSettings = { showSettings = true },
+      onBackup = { backups = true; drawer = false },
+      onSettings = { showSettings = true; drawer = false },
     )
+  }
+  Row(Modifier.fillMaxSize()) {
+    if (!phone) sidebar()
     Box(Modifier.weight(1f).fillMaxHeight()) {
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 36.dp, end = 36.dp)) {
-      Spacer(Modifier.height(if (minimal) 36.dp else 112.dp))
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = if (phone) 16.dp else 36.dp, end = if (phone) 16.dp else 36.dp)) {
+      if (phone) {
+        // Room for the sky, with the way to the folders at the top.
+        Spacer(Modifier.height(if (minimal) 8.dp else 64.dp))
+        Box(
+          Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(c.surface.copy(alpha = 0.7f)).clickable(onClickLabel = stringResource(R.string.folders)) { drawer = true },
+          contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Outlined.Menu, stringResource(R.string.folders), tint = c.ink) }
+        Spacer(Modifier.height(12.dp))
+      } else Spacer(Modifier.height(if (minimal) 36.dp else 112.dp))
       val heading: @Composable (Modifier) -> Unit = { mod ->
         Column(mod) {
           if (!inTrash) {
@@ -361,7 +379,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         notebooks.isEmpty() && subfolders.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
         else -> {
           LazyVerticalGrid(
-            columns = GridCells.Adaptive(210.dp),
+            columns = GridCells.Adaptive(if (phone) 150.dp else 210.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalArrangement = Arrangement.spacedBy(28.dp),
             contentPadding = PaddingValues(bottom = 40.dp),
@@ -424,6 +442,19 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     // What the + menu is adding: progress, then "Added …" with Open.
     AddingPill(adding, onOpen = { id -> vm.dismissAdding(); onOpen(id) }, onDismiss = vm::dismissAdding, modifier = Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 24.dp))
     }
+  }
+  // The phone's folder drawer: slides in over a soft tint, which closes it when tapped.
+  val shade by androidx.compose.animation.core.animateFloatAsState(if (drawer) 1f else 0f, tween(if (drawer) 260 else 180, easing = com.tali.notes.ui.components.EaseOutStrong), label = "drawer")
+  if (shade > 0f) {
+    Box(Modifier.fillMaxSize().background(c.scrim.copy(alpha = c.scrim.alpha * shade)).clickable(interactionSource = null, indication = null) { drawer = false })
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    Box(
+      Modifier.fillMaxHeight()
+        .graphicsLayer { translationX = (1f - shade) * size.width * (if (rtl) 1f else -1f) }
+        .clip(RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp))
+        .background(Brush.verticalGradient(0f to c.background, 1f to c.sidebarEnd))
+        .clickable(interactionSource = null, indication = null) {}
+    ) { sidebar() }
   }
   }
 
@@ -1486,3 +1517,6 @@ private fun AddingPill(adding: LibraryViewModel.Adding?, onOpen: (String) -> Uni
     }
   }
 }
+
+/** Narrower than this (a phone): the folders become a drawer. */
+internal const val PHONE_DP = 600

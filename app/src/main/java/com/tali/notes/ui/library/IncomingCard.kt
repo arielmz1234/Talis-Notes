@@ -256,9 +256,11 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
     )
     if (!restored) {
       Spacer(Modifier.height(18.dp))
-      Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).graphicsLayer { alpha = if (busy != null) 0.5f else 1f }, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      // Side by side on a tablet; on a phone, one under the other.
+      val phone = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < PHONE_DP
+      val tiles: @Composable (Modifier) -> Unit = { tile ->
         if (DriveBackup.available) {
-          RestoreChoice(Icons.Outlined.CloudDownload, stringResource(R.string.google_drive), stringResource(R.string.every_notebook_the_app_backed_up)) {
+          RestoreChoice(tile, Icons.Outlined.CloudDownload, stringResource(R.string.google_drive), stringResource(R.string.every_notebook_the_app_backed_up)) {
             drive(later(R.string.restoring_from_drive)) { token ->
               val r = DriveBackup.restore(context, token)
               DriveBackup.enable(context)
@@ -266,13 +268,16 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
             }
           }
         }
-        RestoreChoice(Icons.Outlined.Description, stringResource(R.string.backup_files), stringResource(R.string.pick_one_or_select_several_to)) {
+        RestoreChoice(tile, Icons.Outlined.Description, stringResource(R.string.backup_files), stringResource(R.string.pick_one_or_select_several_to)) {
           if (busy == null) files.launch(arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/octet-stream"))
         }
-        RestoreChoice(Icons.Outlined.Folder, stringResource(R.string.a_folder), stringResource(R.string.every_backup_in_a_folder_on)) {
+        RestoreChoice(tile, Icons.Outlined.Folder, stringResource(R.string.a_folder), stringResource(R.string.every_backup_in_a_folder_on)) {
           if (busy == null) folder.launch(null)
         }
       }
+      val dim = Modifier.graphicsLayer { alpha = if (busy != null) 0.5f else 1f }
+      if (phone) Column(dim.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) { tiles(Modifier.fillMaxWidth()) }
+      else Row(dim.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) { tiles(Modifier.weight(1f).fillMaxHeight()) }
     }
     Spacer(Modifier.height(20.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -286,7 +291,7 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
  * touched (none is picked for her); pressed, a tile washes lilac and sinks in a little.
  */
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.RestoreChoice(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, onClick: () -> Unit) {
+private fun RestoreChoice(modifier: Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, onClick: () -> Unit) {
   val c = Tali.colors
   val tint = Color(if (c.isDark) 0xFF6FD3B5 else 0xFF1C8466)
   val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -294,7 +299,7 @@ private fun androidx.compose.foundation.layout.RowScope.RestoreChoice(icon: andr
   val wash by androidx.compose.animation.animateColorAsState(if (pressed) c.accentSoft else c.surface.copy(alpha = 0.7f), tween(if (pressed) 90 else 220), label = "wash")
   val sink by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.97f else 1f, tween(if (pressed) 90 else 220), label = "sink")
   Column(
-    Modifier.weight(1f).fillMaxHeight().graphicsLayer { scaleX = sink; scaleY = sink }.clip(RoundedCornerShape(18.dp)).background(wash)
+    modifier.graphicsLayer { scaleX = sink; scaleY = sink }.clip(RoundedCornerShape(18.dp)).background(wash)
       .border(1.dp, c.line, RoundedCornerShape(18.dp)).clickable(interactionSource = press, indication = null, onClick = onClick).padding(14.dp),
   ) {
     Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))

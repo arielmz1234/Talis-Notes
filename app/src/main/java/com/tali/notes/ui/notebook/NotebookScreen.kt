@@ -259,6 +259,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   val scope = rememberCoroutineScope()
   // Held upright (or on a small tablet) the top bar splits into two lines.
   val narrow = LocalConfiguration.current.screenWidthDp < 900
+  // A phone: the main toolbar splits into two rows, and the notebook's name steps aside.
+  val phone = LocalConfiguration.current.screenWidthDp < com.tali.notes.ui.library.PHONE_DP
   val darkPaper = meta?.dark == true
   val paged = vm.pageCount != null
   var pagesOpen by remember { mutableStateOf(false) }
@@ -466,7 +468,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           v.settings = settings
           v.tool = vm.tool
           v.shapeKind = vm.shapeKind
-          v.topClearance = if (narrow) 196f else 124f
+          v.topClearance = if (phone) 262f else if (narrow) 196f else 124f
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.packShape = vm.packShapeId?.let(com.tali.notes.model.ShapePacks::shape)
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
@@ -575,47 +577,59 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
       val tools: @Composable () -> Unit = {
         Column(Modifier.bar("", 1), horizontalAlignment = Alignment.CenterHorizontally) {
-          MainToolbar(
-            modifier = Modifier.onGloballyPositioned { recordBar("tools", it) },
-            settings = settings,
-            darkPaper = darkPaper,
-            tool = vm.tool,
-            shapeKind = vm.shapeKind,
-            customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId },
-            packShape = vm.packShapeId?.let(com.tali.notes.model.ShapePacks::shape),
-            onPen = vm::onPenTapped,
-            penSettingsOpen = vm.panel == PanelKind.PEN,
-            onPenSettings = vm::togglePenSettings,
-            onQuickColor = vm::pickPenColor,
-            onQuickSize = vm::pickPenSize,
-            onSetSize = vm::setPenPreset,
-            onTool = vm::onToolTapped,
-            onImage = {
-              vm.panel = null
-              imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            },
-            onCamera = {
-              vm.panel = null
-              camera = true
-            },
-            onKeyboard = {
-              vm.panel = null
-              holder.view?.runSafely { startText(settings.activeSlot.color) }
-            },
-            onPdf = {
-              vm.panel = null
-              pdfPicker.launch(arrayOf("application/pdf"))
-            },
-            recording = vm.voice.recording || vm.draft != null,
-            onVoiceAnchor = { micAnchor[0] = it },
-            onVoice = {
-              vm.panel = null
-              if (vm.voice.recording) vm.stopMemo()
-              else if (vm.draft != null) Unit
-              else if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startMemo()
-              else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
-            },
-          )
+          val toolbar: @Composable (Modifier, ToolbarPart) -> Unit = { m, part ->
+            MainToolbar(
+              modifier = m,
+              part = part,
+
+              settings = settings,
+              darkPaper = darkPaper,
+              tool = vm.tool,
+              shapeKind = vm.shapeKind,
+              customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId },
+              packShape = vm.packShapeId?.let(com.tali.notes.model.ShapePacks::shape),
+              onPen = vm::onPenTapped,
+              penSettingsOpen = vm.panel == PanelKind.PEN,
+              onPenSettings = vm::togglePenSettings,
+              onQuickColor = vm::pickPenColor,
+              onQuickSize = vm::pickPenSize,
+              onSetSize = vm::setPenPreset,
+              onTool = vm::onToolTapped,
+              onImage = {
+                vm.panel = null
+                imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+              },
+              onCamera = {
+                vm.panel = null
+                camera = true
+              },
+              onKeyboard = {
+                vm.panel = null
+                holder.view?.runSafely { startText(settings.activeSlot.color) }
+              },
+              onPdf = {
+                vm.panel = null
+                pdfPicker.launch(arrayOf("application/pdf"))
+              },
+              recording = vm.voice.recording || vm.draft != null,
+              onVoiceAnchor = { micAnchor[0] = it },
+              onVoice = {
+                vm.panel = null
+                if (vm.voice.recording) vm.stopMemo()
+                else if (vm.draft != null) Unit
+                else if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startMemo()
+                else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+              },
+  )
+          }
+          if (phone) {
+            // A phone is too narrow for one bar: the pens and colours, then the tools underneath.
+            Column(Modifier.onGloballyPositioned { recordBar("tools", it) }, horizontalAlignment = Alignment.CenterHorizontally) {
+              toolbar(Modifier, ToolbarPart.PENS)
+              Spacer(Modifier.height(6.dp))
+              toolbar(Modifier, ToolbarPart.TOOLS)
+            }
+          } else toolbar(Modifier.onGloballyPositioned { recordBar("tools", it) }, ToolbarPart.ALL)
           AnimatedVisibility(
             visible = vm.panel != null,
             enter = fadeIn(tween(140)) + slideInVertically(tween(180)) { -it / 12 } + scaleIn(tween(180), initialScale = 0.97f),
@@ -646,7 +660,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         // The notebook's name (it shortens first when space is short), then the eye, then ⋯ always
         // in the top-right corner.
         Row(Modifier.bar("undo", 2), verticalAlignment = Alignment.CenterVertically) {
-          NamePill(meta?.title ?: "", Modifier.weight(1f, fill = false)) { renaming = true }
+          if (!phone) NamePill(meta?.title ?: "", Modifier.weight(1f, fill = false)) { renaming = true }
           Spacer(Modifier.width(10.dp))
           FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
             ToolButton(Icons.Outlined.VisibilityOff, stringResource(R.string.hide_toolbars)) {
@@ -739,7 +753,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
       Spacer(Modifier.weight(1f))
       Box(Modifier.fillMaxWidth().bar("", 3, fromBelow = true)) {
-        HintPill(vm.hint, onDone = { vm.hint = null }, modifier = Modifier.align(Alignment.BottomCenter))
+        // On a phone the tip sits above the page and zoom chips instead of over them.
+        HintPill(vm.hint, onDone = { vm.hint = null }, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (phone) 56.dp else 0.dp))
         Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
           val (page, pages) = vm.page
           if (page >= 0) PageChip(page, pages, onOverview = if (paged) ({ pagesOpen = true }) else null) { target -> holder.view?.runSafely { goToPage(target) } }
@@ -1456,6 +1471,7 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
 
 @Composable
 internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit, onThicknessLive: (Float) -> Unit = {}) {
+  val phoneMenu = LocalConfiguration.current.screenWidthDp < com.tali.notes.ui.library.PHONE_DP
   val c = Tali.colors
   val density = LocalDensity.current
   // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
@@ -1470,7 +1486,7 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val gap = with(density) { 14.dp.roundToPx() }
       // Keep clear of the toolbars along the top.
-      val topLimit = with(density) { (if (narrow) 196 else 128).dp.roundToPx() }
+      val topLimit = with(density) { (if (phoneMenu) 262 else if (narrow) 196 else 128).dp.roundToPx() }
       val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxHeight = (constraints.maxHeight - topLimit - gap).coerceAtLeast(0)))
       val bottomLimit = constraints.maxHeight - p.height - gap
       val cx = sel.screenRect.centerX().roundToInt()

@@ -109,9 +109,12 @@ fun MainToolbar(
   onVoice: () -> Unit = {},
   onVoiceAnchor: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit = {},
   packShape: com.tali.notes.model.PackShape? = null,
+  /** On a phone the bar is shown twice, stacked: the pens and colours, then the tools. */
+  part: ToolbarPart = ToolbarPart.ALL,
 ) {
   val c = Tali.colors
   FloatingBar(modifier.height(MAIN_TOOLBAR_HEIGHT), crown = CloudCrown.EDGE) {
+    if (part != ToolbarPart.TOOLS) {
     // The pen tray: pens stand at the bottom edge, the active one lifted.
     Row(Modifier.height(56.dp).clipToBounds().padding(horizontal = 4.dp), verticalAlignment = Alignment.Bottom) {
       settings.pens.forEach { slot ->
@@ -173,7 +176,9 @@ fun MainToolbar(
         QuickSizes(settings.activeSlot, onQuickSize, onSetSize)
       }
     }
-    Divider()
+    }
+    if (part == ToolbarPart.ALL) Divider()
+    if (part != ToolbarPart.PENS) {
     // Eraser, lasso and shapes share one highlight that glides between them.
     val tools = rememberSlidingSelection()
     val toolKey = when (tool) {
@@ -242,8 +247,11 @@ fun MainToolbar(
       stringResource(R.string.keyboard) to { ToolButton(Icons.Outlined.Keyboard, stringResource(R.string.type_text), blue = true, onClick = onKeyboard) },
     )
     ToolStrip(items, toolKey, tools)
+    }
   }
 }
+
+enum class ToolbarPart { ALL, PENS, TOOLS }
 
 /**
  * The tools after the pens. When they all fit (almost always) they simply sit in a row. Only
