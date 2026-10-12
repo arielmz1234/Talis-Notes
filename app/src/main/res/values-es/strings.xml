@@ -789,4 +789,5 @@
     <string name="the_scanner_isn_t_available">El escáner no está disponible en esta tableta. Necesita los servicios de Google Play.</string>
     <string name="cam_check_title">Revisa las páginas</string>
     <string name="cam_check_hint">Toca una página para girarla.</string>
+    <string name="updated_from_drive_n">Al día con Google Drive: %1$d actualizados</string>
 </resources>

@@ -789,4 +789,5 @@
     <string name="the_scanner_isn_t_available">The scanner isn\'t available on this tablet. It needs Google Play services.</string>
     <string name="cam_check_title">Check the pages</string>
     <string name="cam_check_hint">Tap a page to turn it.</string>
+    <string name="updated_from_drive_n">Up to date with Google Drive: %1$d updated</string>
 </resources>

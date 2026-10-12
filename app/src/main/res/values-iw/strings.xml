@@ -790,4 +790,5 @@
     <string name="the_scanner_isn_t_available">הסורק לא זמין בטאבלט הזה. הוא צריך את שירותי Google Play.</string>
     <string name="cam_check_title">בדיקת הדפים</string>
     <string name="cam_check_hint">הקישו על דף כדי לסובב אותו.</string>
+    <string name="updated_from_drive_n">מעודכן מול Google Drive: %1$d עודכנו</string>
 </resources>

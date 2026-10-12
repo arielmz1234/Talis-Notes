@@ -278,6 +278,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   }
 
   override fun onCleared() {
+    if (com.tali.notes.backup.DriveBackup.openNotebook == notebookId) com.tali.notes.backup.DriveBackup.openNotebook = null
     // Leaving mid-recording (or before deciding) keeps what was recorded, beside the page.
     if (voice.recording) stopMemo()
     keepDraft()
@@ -287,6 +288,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   }
 
   init {
+    com.tali.notes.backup.DriveBackup.openNotebook = notebookId
     // This one goes to the top of the recent list (a PDF she's only looking at doesn't, until it's saved).
     if (repo.drafts.value.none { it.id == notebookId }) store.update { s -> s.copy(recentNotebooks = (listOf(notebookId) + s.recentNotebooks.filter { it != notebookId }).take(RECENT_KEPT)) }
     viewModelScope.launch {

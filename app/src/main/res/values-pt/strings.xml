@@ -789,4 +789,5 @@
     <string name="the_scanner_isn_t_available">O digitalizador não está disponível neste tablet. Ele precisa do Google Play Services.</string>
     <string name="cam_check_title">Confira as páginas</string>
     <string name="cam_check_hint">Toque numa página para girá-la.</string>
+    <string name="updated_from_drive_n">Em dia com o Google Drive: %1$d atualizados</string>
 </resources>

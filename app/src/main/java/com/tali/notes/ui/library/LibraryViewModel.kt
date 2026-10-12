@@ -205,6 +205,12 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
       }
   }
 
+  /** Notebooks another device backed up were brought in from Drive: say so for a moment. */
+  fun broughtFromDrive(n: Int) {
+    adding.value = Adding(com.tali.notes.later(R.string.updated_from_drive_n, n), busy = false)
+    finishSoon()
+  }
+
   private fun finishSoon() {
     val shown = adding.value
     viewModelScope.launch {

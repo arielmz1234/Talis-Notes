@@ -789,4 +789,5 @@
     <string name="the_scanner_isn_t_available">الماسح الضوئي غير متاح على هذا الجهاز. يحتاج إلى خدمات Google Play.</string>
     <string name="cam_check_title">راجع الصفحات</string>
     <string name="cam_check_hint">انقر على صفحة لتدويرها.</string>
+    <string name="updated_from_drive_n">محدّث مع Google Drive: %1$d</string>
 </resources>

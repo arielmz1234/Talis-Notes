@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -209,6 +210,15 @@ object DriveBackup {
   private const val SETTINGS = "settings"
   private const val NOTEBOOK_ID = "notebookId"
   private const val SETTINGS_NAME = "Tali's Notes settings.zip"
+  /** On each file: the notebook's last edit (or when the settings were written), and the device that sent it. */
+  private const val UPDATED = "updated"
+  private const val DEVICE = "device"
+
+  /** This install's own id, so a device never pulls back what it sent itself. */
+  private fun deviceId(context: Context): String {
+    val p = prefs(context)
+    return p.getString("device", null) ?: java.util.UUID.randomUUID().toString().also { p.edit().putString("device", it).apply() }
+  }
 
   /** What this tablet last sent for a notebook. */
   @kotlinx.serialization.Serializable private data class Sent(val sig: String, val pdf: Boolean = false)
@@ -224,7 +234,7 @@ object DriveBackup {
   private fun signature(nb: NotebookMeta) = listOf(nb.updated, nb.title, nb.folderId, nb.cover, nb.paper, nb.customPaper, nb.pages, nb.dark, nb.landscape).joinToString("|")
 
   /** A file in the backup folder, and what it holds (null kind: not one of ours, like the old single backup). */
-  private class Remote(val id: String, val name: String, val kind: String?, val notebook: String?)
+  private class Remote(val id: String, val name: String, val kind: String?, val notebook: String?, val updated: Long? = null, val device: String? = null)
 
   private fun fileName(title: String) = title.ifBlank { "Untitled" }.replace('/', '-').replace('\\', '-')
 
@@ -245,7 +255,10 @@ object DriveBackup {
         val sent = sent(context)
         val pdfOn = app.settings.settings.value.drivePdf
         tmp.outputStream().use { BackupArchive.writeSettings(context, snapshot, it) }
-        upload(token, tmp, remote.firstOrNull { it.kind == SETTINGS }?.id, folder, SETTINGS_NAME, BackupArchive.MIME, mapOf(KIND to SETTINGS))
+        val me = deviceId(context)
+        val settingsAt = System.currentTimeMillis()
+        upload(token, tmp, remote.firstOrNull { it.kind == SETTINGS }?.id, folder, SETTINGS_NAME, BackupArchive.MIME, mapOf(KIND to SETTINGS, UPDATED to settingsAt.toString(), DEVICE to me))
+        prefs(context).edit().putLong("settings_seen", settingsAt).apply()
         val live = repo.notebooks.value
         for (nb in live) {
           val sig = signature(nb)
@@ -256,7 +269,7 @@ object DriveBackup {
           val name = fileName(nb.title)
           if (changed || zip == null) {
             tmp.outputStream().use { BackupArchive.writeNotebook(context, snapshot, nb.id, it) }
-            upload(token, tmp, zip?.id, folder, "$name.zip", BackupArchive.MIME, mapOf(KIND to NOTEBOOK, NOTEBOOK_ID to nb.id))
+            upload(token, tmp, zip?.id, folder, "$name.zip", BackupArchive.MIME, mapOf(KIND to NOTEBOOK, NOTEBOOK_ID to nb.id, UPDATED to nb.updated.toString(), DEVICE to me))
           }
           var pdfSent = false
           if (pdfOn) {
@@ -341,6 +354,82 @@ object DriveBackup {
       total
     }
 
+  /** The notebook open on screen right now: never replaced from Drive underneath her. */
+  @Volatile var openNotebook: String? = null
+
+  private val syncing = java.util.concurrent.atomic.AtomicBoolean(false)
+
+  /**
+   * Catches up with Drive when the app opens or comes back (another device may have backed up since):
+   * notebooks that are newer there, or new to this device, are brought in (merged: a newer notebook
+   * replaces the older one here), and settings and folders another device changed. Quiet: no consent
+   * screen, nothing shown if Drive can't be reached. Only with Drive backup on.
+   */
+  fun syncSoon(context: Context) {
+    val app = context.applicationContext
+    if (!available || !flow(app).value.enabled) return
+    val last = prefs(app).getLong("synced_at", 0L)
+    if (System.currentTimeMillis() - last < SYNC_GAP_MS) return
+    if (!syncing.compareAndSet(false, true)) return
+    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+      try {
+        val auth = runCatching { authorize(app) }.getOrNull() as? Auth.Token ?: return@launch
+        val brought = syncNow(app, auth.value)
+        prefs(app).edit().putLong("synced_at", System.currentTimeMillis()).apply()
+        if (brought > 0) synced.value = brought
+      } catch (t: Throwable) {
+        if (t !is IOException) CrashLog.recovered(app, t)
+      } finally {
+        syncing.set(false)
+      }
+    }
+  }
+
+  /** How many notebooks the last catch-up brought in (shown once by the library, then cleared). */
+  val synced = MutableStateFlow(0)
+
+  private suspend fun syncNow(context: Context, token: String): Int =
+    withContext(Dispatchers.IO) {
+      val folder = findFolder(token) ?: return@withContext 0
+      val remote = listFolder(token, folder)
+      val me = deviceId(context)
+      val repo = context.talisApp.repository
+      val p = prefs(context)
+      // Settings and folders another device sent since this one last saw them.
+      remote.firstOrNull { it.kind == SETTINGS }?.let { s ->
+        val at = s.updated ?: return@let
+        if (s.device != null && s.device != me && at > p.getLong("settings_seen", 0L)) {
+          download(token, s.id) { BackupArchive.restore(context, it) }
+          p.edit().putLong("settings_seen", at).apply()
+        }
+      }
+      val local = (repo.notebooks.value + repo.trash.value).associateBy { it.id }
+      val sent = sent(context)
+      var brought = 0
+      for (r in remote.filter { it.kind == NOTEBOOK && it.notebook != null && it.updated != null }) {
+        val id = r.notebook!!
+        if (id == openNotebook || r.device == me) continue
+        val here = local[id]
+        // Sent from here and erased since: its Drive file goes on the next backup, don't bring it back.
+        if (here == null && id in sent) continue
+        if (here != null && here.updated >= r.updated!!) continue
+        val result = download(token, r.id) { BackupArchive.restore(context, it) }
+        if (result.added + result.updated > 0) brought++
+        // It now matches Drive: nothing to send back for it.
+        repo.notebooks.value.firstOrNull { it.id == id }?.let { nb -> sent[id] = Sent(signature(nb), sent[id]?.pdf == true) }
+      }
+      saveSent(context, sent)
+      brought
+    }
+
+  private inline fun <T> download(token: String, id: String, read: (java.io.InputStream) -> T): T {
+    val conn = open("$API/files/$id?alt=media", token)
+    check(conn)
+    return conn.inputStream.use(read)
+  }
+
+  private const val SYNC_GAP_MS = 60_000L
+
   private class NotFound : IOException("Not found")
 
   private fun open(url: String, token: String, method: String = "GET"): HttpURLConnection =
@@ -392,7 +481,14 @@ object DriveBackup {
       res["files"]?.jsonArray?.forEach { f ->
         val o = f.jsonObject
         val props = o["appProperties"]?.jsonObject
-        out += Remote(o["id"]!!.jsonPrimitive.content, o["name"]?.jsonPrimitive?.content.orEmpty(), props?.get(KIND)?.jsonPrimitive?.content, props?.get(NOTEBOOK_ID)?.jsonPrimitive?.content)
+        out += Remote(
+          o["id"]!!.jsonPrimitive.content,
+          o["name"]?.jsonPrimitive?.content.orEmpty(),
+          props?.get(KIND)?.jsonPrimitive?.content,
+          props?.get(NOTEBOOK_ID)?.jsonPrimitive?.content,
+          props?.get(UPDATED)?.jsonPrimitive?.content?.toLongOrNull(),
+          props?.get(DEVICE)?.jsonPrimitive?.content,
+        )
       }
       page = res["nextPageToken"]?.jsonPrimitive?.content
     } while (page != null)

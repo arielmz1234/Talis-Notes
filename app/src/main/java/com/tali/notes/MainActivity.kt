@@ -76,6 +76,12 @@ class MainActivity : ComponentActivity() {
     return super.dispatchGenericMotionEvent(ev)
   }
 
+  override fun onStart() {
+    super.onStart()
+    // Back in the app: catch up with anything another device backed up to Drive.
+    DriveBackup.syncSoon(this)
+  }
+
   override fun onStop() {
     super.onStop()
     // She put the tablet down or switched apps: a good moment to back up.

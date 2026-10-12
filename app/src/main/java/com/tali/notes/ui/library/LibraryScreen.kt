@@ -440,6 +440,13 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       }
     }
     // What the + menu is adding: progress, then "Added …" with Open.
+    val fromDrive by com.tali.notes.backup.DriveBackup.synced.collectAsState()
+    LaunchedEffect(fromDrive) {
+      if (fromDrive > 0) {
+        vm.broughtFromDrive(fromDrive)
+        com.tali.notes.backup.DriveBackup.synced.value = 0
+      }
+    }
     AddingPill(adding, onOpen = { id -> vm.dismissAdding(); onOpen(id) }, onDismiss = vm::dismissAdding, modifier = Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 24.dp))
     }
   }
