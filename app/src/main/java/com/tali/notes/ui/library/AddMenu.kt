@@ -1,10 +1,7 @@
 package com.tali.notes.ui.library
 
-import android.app.Activity
 import android.net.Uri
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -66,9 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
-import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
-import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
-import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
+import com.tali.notes.ui.camera.CameraMode
+import com.tali.notes.ui.camera.CameraScreen
 import com.tali.notes.R
 import com.tali.notes.data.DocKind
 import com.tali.notes.theme.Tali
@@ -78,9 +74,9 @@ import kotlinx.coroutines.delay
 
 /**
  * The library's +: a round button that opens a small card of what she can add. A notebook (the
- * new-notebook card), a file (PDFs and pictures from Files or Drive), a scan (Google's document
- * scanner: edges found, cropped, straightened and cleaned up, like CamScanner), a photo taken with
- * the camera, or photos from the gallery. The + turns into × while the card is open; the card grows out of the button's corner and
+ * new-notebook card), a file (PDFs and pictures from Files or Drive), a scan or a photo (our own
+ * camera screen, [CameraScreen]: pages found, cropped and straightened, like CamScanner), or photos
+ * from the gallery. The + turns into × while the card is open; the card grows out of the button's corner and
  * its rows drift in one after another.
  */
 @Composable
@@ -89,39 +85,22 @@ fun AddButton(
   onFiles: (List<Uri>) -> Unit,
   onPhotos: (List<Uri>) -> Unit,
   onScan: (List<Uri>) -> Unit,
-  onScanUnavailable: () -> Unit,
-  onNoCamera: () -> Unit,
 ) {
   val c = Tali.colors
-  val activity = LocalActivity.current
   var open by remember { mutableStateOf(false) }
   val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onFiles(it) }
-  // A photo straight from the camera app (the board, a page); no camera permission needed.
-  val context = androidx.compose.ui.platform.LocalContext.current
-  var shot by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Uri?>(null) }
-  val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken -> shot?.takeIf { taken }?.let { onPhotos(listOf(it)) } }
   val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)) { if (it.isNotEmpty()) onPhotos(it) }
-  val scanned =
-    rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-      if (r.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-      val pages = GmsDocumentScanningResult.fromActivityResultIntent(r.data)?.pages.orEmpty().map { it.imageUri }
-      if (pages.isNotEmpty()) onScan(pages)
-    }
-  fun scan() {
-    val a = activity ?: return onScanUnavailable()
-    val options =
-      GmsDocumentScannerOptions.Builder()
-        // Crop, rotate and filters; not the "Clean" tool (rubbing out marks), which did more harm than good.
-        .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_BASE_WITH_FILTER)
-        .setGalleryImportAllowed(true)
-        .setPageLimit(MAX_SCAN_PAGES)
-        .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-        .build()
-    // Play services may still need to fetch the scanner the first time; without them it can't run.
-    GmsDocumentScanning.getClient(options)
-      .getStartScanIntent(a)
-      .addOnSuccessListener { sender -> scanned.launch(IntentSenderRequest.Builder(sender).build()) }
-      .addOnFailureListener { onScanUnavailable() }
+  // Our own camera screen, for photos and scans alike.
+  var camera by remember { mutableStateOf<CameraMode?>(null) }
+  camera?.let { mode ->
+    CameraScreen(
+      start = mode,
+      onClose = { camera = null },
+      onSave = { taken, uris ->
+        camera = null
+        if (uris.isNotEmpty()) if (taken == CameraMode.SCAN) onScan(uris) else onPhotos(uris)
+      },
+    )
   }
 
   val interaction = remember { MutableInteractionSource() }
@@ -147,13 +126,8 @@ fun AddButton(
         when (choice) {
           Choice.NOTEBOOK -> onNotebook()
           Choice.FILE -> files.launch(arrayOf("application/pdf", "image/*"))
-          Choice.SCAN -> scan()
-          Choice.CAMERA -> {
-            val file = java.io.File(java.io.File(context.cacheDir, "camera").apply { mkdirs() }, "shot-${System.currentTimeMillis()}.jpg")
-            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", file)
-            shot = uri
-            runCatching { camera.launch(uri) }.onFailure { onNoCamera() }
-          }
+          Choice.SCAN -> camera = CameraMode.SCAN
+          Choice.CAMERA -> camera = CameraMode.PHOTO
           Choice.PHOTO -> photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
       },
@@ -268,4 +242,3 @@ fun kindLabel(kind: DocKind): String =
   }
 
 private const val MAX_PHOTOS = 30
-private const val MAX_SCAN_PAGES = 100

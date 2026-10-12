@@ -117,7 +117,7 @@ private val Light =
     cloudShadow = Color(0x3D6256C8),
   )
 
-private val Dark =
+internal val Dark =
   TaliColors(
     background = Color(0xFF15111E),
     surface = Color(0xFF211B2E),

@@ -306,7 +306,6 @@
     <string name="next_page">Next page</string>
     <string name="no_backup_file_chosen_yet">No backup file chosen yet.</string>
     <string name="no_backup_yet">No backup yet</string>
-    <string name="no_camera_app_found">No camera app found</string>
     <string name="no_fill">No fill</string>
     <string name="no_folder">No folder</string>
     <string name="no_folders_yet_add_one_from">No folders yet. Add one from the sidebar.</string>
@@ -753,7 +752,6 @@
     <string name="saving_the_scan">Saving the scan…</string>
     <string name="added_n">Added “%1$s”</string>
     <string name="open">Open</string>
-    <string name="the_scanner_isn_t_available">The scanner isn\'t available on this tablet. It needs Google Play services.</string>
     <string name="only_pdfs_and_pictures_can_be_added">Only PDFs and pictures can be added.</string>
     <string name="n_here">%1$s (here)</string>
     <string name="on_its_own">On its own</string>
@@ -761,4 +759,31 @@
     <string name="add_camera">Camera</string>
     <string name="a_photo_of_the_board_or_a_page">A photo of the board or a page</string>
     <string name="view_only">View only</string>
+    <string name="cam_retake">Retake</string>
+    <string name="cam_crop">Crop</string>
+    <string name="cam_look">Look</string>
+    <string name="cam_turn">Turn</string>
+    <string name="cam_whole">No crop</string>
+    <string name="cam_find">Find the page</string>
+    <string name="look_original">Original</string>
+    <string name="look_document">Document</string>
+    <string name="look_grey">Grey</string>
+    <string name="look_bw">B&amp;W</string>
+    <string name="cam_another">Take another</string>
+    <string name="cam_next_page">Next page</string>
+    <string name="cam_save_n">Save %1$d</string>
+    <string name="cam_hold_over">Hold the camera over the page</string>
+    <string name="cam_found">Page found</string>
+    <string name="cam_corners">Drag the corners onto the page\'s corners.</string>
+    <string name="cam_not_found">The page wasn\'t found by itself: drag the corners onto it.</string>
+    <string name="cam_allow_title">Allow the camera</string>
+    <string name="cam_allow_body">The camera is used only while this screen is open. Photos stay on this tablet.</string>
+    <string name="cam_allow">Allow camera</string>
+    <string name="cam_unavailable">The camera couldn\'t start</string>
+    <string name="cam_discard_title">Discard these pages?</string>
+    <string name="cam_discard_body">The pages taken here aren\'t saved yet.</string>
+    <string name="cam_discard">Discard</string>
+    <string name="cam_gallery">From the gallery</string>
+    <string name="cam_flash">Flash</string>
+    <string name="cam_take">Take picture</string>
 </resources>

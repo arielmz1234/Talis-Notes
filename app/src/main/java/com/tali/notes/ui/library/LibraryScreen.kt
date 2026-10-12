@@ -311,8 +311,6 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                   onFiles = vm::addFiles,
                   onPhotos = vm::addPhotos,
                   onScan = vm::addScan,
-                  onScanUnavailable = { vm.failedToAdd(com.tali.notes.later(R.string.the_scanner_isn_t_available)) },
-                  onNoCamera = { vm.failedToAdd(com.tali.notes.later(R.string.no_camera_app_found)) },
                 )
               }
             }

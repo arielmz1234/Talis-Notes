@@ -282,18 +282,23 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
     }
-  // A photo straight from the camera app (the board, a textbook page); no camera permission needed.
-  var photoUri by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
-  val takePhoto =
-    rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
-      val uri = photoUri
-      if (taken && uri != null) {
+  // Photos (the board, a textbook page) or scanned pages from the app's own camera, put on the page.
+  var camera by remember { mutableStateOf(false) }
+  if (camera) {
+    com.tali.notes.ui.camera.CameraScreen(
+      start = com.tali.notes.ui.camera.CameraMode.PHOTO,
+      onClose = { camera = false },
+      onSave = { _, uris ->
+        camera = false
         scope.launch {
-          val result = vm.importImage(uri)
-          if (result == null) vm.showHint(tr(R.string.that_photo_couldn_t_be_opened)) else holder.view?.runSafely { insertImage(result.first, result.second) }
+          for (uri in uris) {
+            val result = vm.importImage(uri)
+            if (result == null) vm.showHint(tr(R.string.that_photo_couldn_t_be_opened)) else holder.view?.runSafely { insertImage(result.first, result.second) }
+          }
         }
-      }
-    }
+      },
+    )
+  }
   // Where the mic button is (the recording bar hangs just below it). Not state: it moves with the toolbar.
   val micAnchor = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
   // A voice memo goes beside the page on screen, below any already there.
@@ -591,10 +596,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             },
             onCamera = {
               vm.panel = null
-              val file = File(File(context.cacheDir, "camera").apply { mkdirs() }, "photo.jpg")
-              val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
-              photoUri = uri
-              runCatching { takePhoto.launch(uri) }.onFailure { vm.showHint(tr(R.string.no_camera_app_found)) }
+              camera = true
             },
             onKeyboard = {
               vm.panel = null

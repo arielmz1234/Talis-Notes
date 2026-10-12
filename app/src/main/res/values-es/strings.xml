@@ -306,7 +306,6 @@
     <string name="next_page">Página siguiente</string>
     <string name="no_backup_file_chosen_yet">Aún no se ha elegido un archivo de copia.</string>
     <string name="no_backup_yet">Aún no hay copia</string>
-    <string name="no_camera_app_found">No se encontró ninguna app de cámara</string>
     <string name="no_fill">Sin relleno</string>
     <string name="no_folder">Sin carpeta</string>
     <string name="no_folders_yet_add_one_from">Aún no hay carpetas. Añade una desde la barra lateral.</string>
@@ -753,7 +752,6 @@
     <string name="saving_the_scan">Guardando el escaneo…</string>
     <string name="added_n">«%1$s» añadido</string>
     <string name="open">Abrir</string>
-    <string name="the_scanner_isn_t_available">El escáner no está disponible en esta tableta. Necesita los servicios de Google Play.</string>
     <string name="only_pdfs_and_pictures_can_be_added">Solo se pueden añadir PDF e imágenes.</string>
     <string name="n_here">%1$s (aquí)</string>
     <string name="on_its_own">Por separado</string>
@@ -761,4 +759,31 @@
     <string name="add_camera">Cámara</string>
     <string name="a_photo_of_the_board_or_a_page">Una foto de la pizarra o de una página</string>
     <string name="view_only">Solo lectura</string>
+    <string name="cam_retake">Repetir</string>
+    <string name="cam_crop">Recortar</string>
+    <string name="cam_look">Aspecto</string>
+    <string name="cam_turn">Girar</string>
+    <string name="cam_whole">Sin recorte</string>
+    <string name="cam_find">Buscar la página</string>
+    <string name="look_original">Original</string>
+    <string name="look_document">Documento</string>
+    <string name="look_grey">Gris</string>
+    <string name="look_bw">B/N</string>
+    <string name="cam_another">Otra foto</string>
+    <string name="cam_next_page">Otra página</string>
+    <string name="cam_save_n">Guardar %1$d</string>
+    <string name="cam_hold_over">Coloca la cámara sobre la página</string>
+    <string name="cam_found">Página encontrada</string>
+    <string name="cam_corners">Arrastra las esquinas a las de la página.</string>
+    <string name="cam_not_found">No se encontró la página: arrastra las esquinas hasta ella.</string>
+    <string name="cam_allow_title">Permite la cámara</string>
+    <string name="cam_allow_body">La cámara solo se usa mientras esta pantalla está abierta. Las fotos se quedan en esta tablet.</string>
+    <string name="cam_allow">Permitir cámara</string>
+    <string name="cam_unavailable">No se pudo iniciar la cámara</string>
+    <string name="cam_discard_title">¿Descartar estas páginas?</string>
+    <string name="cam_discard_body">Las páginas tomadas aquí aún no se han guardado.</string>
+    <string name="cam_discard">Descartar</string>
+    <string name="cam_gallery">De la galería</string>
+    <string name="cam_flash">Flash</string>
+    <string name="cam_take">Tomar foto</string>
 </resources>
