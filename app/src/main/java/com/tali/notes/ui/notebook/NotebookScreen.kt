@@ -9,6 +9,11 @@ import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.Fullscreen
 import com.tali.notes.ui.components.TaliIcons
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.FormatColorFill
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateFloatAsState
 import com.tali.notes.ui.components.BuiltInPaperDialog
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.VerticalAlignCenter
@@ -261,6 +266,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   val narrow = LocalConfiguration.current.screenWidthDp < 900
   // A phone: the main toolbar splits into two rows, and the notebook's name steps aside.
   val phone = LocalConfiguration.current.screenWidthDp < com.tali.notes.ui.library.PHONE_DP
+  var toolsOpen by remember { mutableStateOf(false) }
   val darkPaper = meta?.dark == true
   val paged = vm.pageCount != null
   var pagesOpen by remember { mutableStateOf(false) }
@@ -468,7 +474,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           v.settings = settings
           v.tool = vm.tool
           v.shapeKind = vm.shapeKind
-          v.topClearance = if (phone) 262f else if (narrow) 196f else 124f
+          v.topClearance = if (narrow) 196f else 124f
           v.customShape = settings.customShapes.firstOrNull { it.id == vm.customShapeId }
           v.packShape = vm.packShapeId?.let(com.tali.notes.model.ShapePacks::shape)
           v.paperStyle = meta?.paper ?: PaperStyle.DOTS
@@ -577,10 +583,11 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
       val tools: @Composable () -> Unit = {
         Column(Modifier.bar("", 1), horizontalAlignment = Alignment.CenterHorizontally) {
-          val toolbar: @Composable (Modifier, ToolbarPart) -> Unit = { m, part ->
+          val toolbar: @Composable (Modifier, ToolbarPart, (@Composable () -> Unit)?) -> Unit = { m, part, trailing ->
             MainToolbar(
               modifier = m,
               part = part,
+              trailing = trailing,
 
               settings = settings,
               darkPaper = darkPaper,
@@ -594,7 +601,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               onQuickColor = vm::pickPenColor,
               onQuickSize = vm::pickPenSize,
               onSetSize = vm::setPenPreset,
-              onTool = vm::onToolTapped,
+              onTool = { t -> vm.onToolTapped(t); toolsOpen = false },
               onImage = {
                 vm.panel = null
                 imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -623,13 +630,17 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   )
           }
           if (phone) {
-            // A phone is too narrow for one bar: the pens and colours, then the tools underneath.
+            // A phone: one small bar of pens, with a button that drops the tools down underneath
+            // (it shows the tool in use; picking a tool folds them away again).
             Column(Modifier.onGloballyPositioned { recordBar("tools", it) }, horizontalAlignment = Alignment.CenterHorizontally) {
-              toolbar(Modifier, ToolbarPart.PENS)
-              Spacer(Modifier.height(6.dp))
-              toolbar(Modifier, ToolbarPart.TOOLS)
+              MainToolbarPhone(
+                toolbar = toolbar,
+                tool = vm.tool,
+                open = toolsOpen,
+                onToggle = { toolsOpen = !toolsOpen; vm.panel = null },
+              )
             }
-          } else toolbar(Modifier.onGloballyPositioned { recordBar("tools", it) }, ToolbarPart.ALL)
+          } else toolbar(Modifier.onGloballyPositioned { recordBar("tools", it) }, ToolbarPart.ALL, null)
           AnimatedVisibility(
             visible = vm.panel != null,
             enter = fadeIn(tween(140)) + slideInVertically(tween(180)) { -it / 12 } + scaleIn(tween(180), initialScale = 0.97f),
@@ -1471,7 +1482,6 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
 
 @Composable
 internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit, onThicknessLive: (Float) -> Unit = {}) {
-  val phoneMenu = LocalConfiguration.current.screenWidthDp < com.tali.notes.ui.library.PHONE_DP
   val c = Tali.colors
   val density = LocalDensity.current
   // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
@@ -1486,7 +1496,7 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
     Modifier.fillMaxSize().layout { measurable, constraints ->
       val gap = with(density) { 14.dp.roundToPx() }
       // Keep clear of the toolbars along the top.
-      val topLimit = with(density) { (if (phoneMenu) 262 else if (narrow) 196 else 128).dp.roundToPx() }
+      val topLimit = with(density) { (if (narrow) 196 else 128).dp.roundToPx() }
       val p = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxHeight = (constraints.maxHeight - topLimit - gap).coerceAtLeast(0)))
       val bottomLimit = constraints.maxHeight - p.height - gap
       val cx = sel.screenRect.centerX().roundToInt()
@@ -1770,3 +1780,40 @@ private val DESK_DARK_PAPER = Color(0xFF0E0C13)
 
 /** The main toolbar's height ([MainToolbar]); the bars beside it centre on its middle. */
 val MAIN_TOOLBAR_HEIGHT = 60.dp
+
+/** The phone's toolbar: the pens and a tools button; the tools drop down in a bar of their own. */
+@Composable
+private fun MainToolbarPhone(toolbar: @Composable (Modifier, ToolbarPart, (@Composable () -> Unit)?) -> Unit, tool: Tool, open: Boolean, onToggle: () -> Unit) {
+  val c = Tali.colors
+  val label = stringResource(R.string.more_tools)
+  toolbar(Modifier, ToolbarPart.PENS) {
+    val busy = tool != Tool.PEN
+    val wash by animateColorAsState(if (open || busy) c.blueSoft else Color.Transparent, tween(200), label = "toolsWash")
+    val turn by animateFloatAsState(if (open) 180f else 0f, tween(220, easing = com.tali.notes.ui.components.EaseOutStrong), label = "toolsTurn")
+    Row(
+      Modifier.height(44.dp).clip(RoundedCornerShape(14.dp)).background(wash).clickable(onClickLabel = label, role = Role.Button, onClick = onToggle).padding(start = 8.dp, end = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      val icon = when (tool) {
+        Tool.ERASER -> TaliIcons.Eraser
+        Tool.LASSO -> TaliIcons.LassoDotted
+        Tool.FILL -> Icons.Outlined.FormatColorFill
+        Tool.LASER -> TaliIcons.Laser
+        Tool.SHAPE -> Icons.Outlined.Category
+        else -> Icons.Outlined.GridView
+      }
+      Icon(icon, label, tint = if (busy) c.blue else c.ink, modifier = Modifier.size(22.dp))
+      Icon(Icons.Outlined.KeyboardArrowDown, null, tint = c.inkMuted, modifier = Modifier.size(20.dp).rotate(turn))
+    }
+  }
+  AnimatedVisibility(
+    open,
+    enter = fadeIn(tween(160)) + expandVertically(tween(240, easing = com.tali.notes.ui.components.EaseOutStrong), expandFrom = Alignment.Top),
+    exit = fadeOut(tween(120)) + shrinkVertically(tween(180, easing = com.tali.notes.ui.components.EaseOutStrong), shrinkTowards = Alignment.Top),
+  ) {
+    Column {
+      Spacer(Modifier.height(6.dp))
+      toolbar(Modifier, ToolbarPart.TOOLS, null)
+    }
+  }
+}

@@ -111,6 +111,8 @@ fun MainToolbar(
   packShape: com.tali.notes.model.PackShape? = null,
   /** On a phone the bar is shown twice, stacked: the pens and colours, then the tools. */
   part: ToolbarPart = ToolbarPart.ALL,
+  /** Shown at the end of the pens part (the phone's tools button). */
+  trailing: (@Composable () -> Unit)? = null,
 ) {
   val c = Tali.colors
   FloatingBar(modifier.height(MAIN_TOOLBAR_HEIGHT), crown = CloudCrown.EDGE) {
@@ -151,8 +153,9 @@ fun MainToolbar(
     }
     // Her first few saved colours (as many as she chose, in her order): switch the pen's colour
     // without opening its settings. The ring glides between them.
+    // On a phone the colours and thicknesses stay in the pen's panel (the arrow): the bar is just the pens.
     AnimatedVisibility(
-      tool == Tool.PEN && settings.toolbarColorsFor(settings.activeSlot) > 0,
+      part != ToolbarPart.PENS && tool == Tool.PEN && settings.toolbarColorsFor(settings.activeSlot) > 0,
       enter = fadeIn(tween(180)) + expandHorizontally(tween(220, easing = EaseOutStrong), expandFrom = Alignment.Start),
       exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160, easing = EaseOutStrong), shrinkTowards = Alignment.Start),
     ) {
@@ -166,7 +169,7 @@ fun MainToolbar(
     }
     // Her three thicknesses for this pen. Tap one to write with it; tap the one in use to set it.
     AnimatedVisibility(
-      tool == Tool.PEN,
+      part != ToolbarPart.PENS && tool == Tool.PEN,
       enter = fadeIn(tween(180)) + expandHorizontally(tween(220, easing = EaseOutStrong), expandFrom = Alignment.Start),
       exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160, easing = EaseOutStrong), shrinkTowards = Alignment.Start),
     ) {
@@ -176,6 +179,10 @@ fun MainToolbar(
         QuickSizes(settings.activeSlot, onQuickSize, onSetSize)
       }
     }
+    }
+    if (part == ToolbarPart.PENS && trailing != null) {
+      Divider()
+      trailing()
     }
     if (part == ToolbarPart.ALL) Divider()
     if (part != ToolbarPart.PENS) {
