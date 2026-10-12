@@ -9,6 +9,8 @@ import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.Fullscreen
 import com.tali.notes.ui.components.TaliIcons
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.FormatColorFill
 import androidx.compose.animation.expandVertically
@@ -797,6 +799,15 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         ZoomChip(vm.zoom) { holder.view?.runSafely { setZoom(1f) } }
       }
     }
+    // The side scroller: shows while the page moves, drag it to travel through the whole notebook.
+    SideScroller(
+      tick = vm.cameraTick,
+      span = { holder.view?.scrollSpan() },
+      page = vm.page,
+      onScroll = { y -> holder.view?.runSafely { scrollViewTo(y) } },
+      modifier = Modifier.align(Alignment.CenterEnd).windowInsetsPadding(WindowInsets.safeDrawing)
+        .padding(top = if (viewing) 120.dp else if (narrow) 220.dp else 150.dp, bottom = 84.dp),
+    )
     ShowToolbarsButton(vm.focus && !viewing, Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 26.dp, end = 22.dp)) { vm.focus = false }
 
     pasteOffer?.let { offer ->
@@ -1814,6 +1825,74 @@ private fun MainToolbarPhone(toolbar: @Composable (Modifier, ToolbarPart, (@Comp
     Column {
       Spacer(Modifier.height(6.dp))
       toolbar(Modifier, ToolbarPart.TOOLS, null)
+    }
+  }
+}
+
+/**
+ * A slim thumb along the right edge, as long as the share of the notebook on screen. It fades in
+ * while the page moves and away a moment after; held, it widens and dragging it travels through the
+ * whole notebook (a bubble beside it names the page). Tablets and phones alike.
+ */
+@Composable
+private fun SideScroller(tick: Int, span: () -> com.tali.notes.canvas.NoteCanvasView.ScrollSpan?, page: Pair<Int, Int>, onScroll: (Float) -> Unit, modifier: Modifier = Modifier) {
+  val c = Tali.colors
+  val now = remember(tick) { span() }
+  var held by remember { mutableStateOf<com.tali.notes.canvas.NoteCanvasView.ScrollSpan?>(null) }
+  var dragFrac by remember { mutableStateOf(0f) }
+  var awake by remember { mutableStateOf(false) }
+  LaunchedEffect(tick) {
+    if (tick == 0) return@LaunchedEffect
+    awake = true
+    kotlinx.coroutines.delay(1200)
+    awake = false
+  }
+  val s = held ?: now ?: return
+  val shown by animateFloatAsState(if (awake || held != null) 1f else 0f, tween(if (awake || held != null) 150 else 400), label = "scrollerShown")
+  val wide by animateFloatAsState(if (held != null) 1f else 0f, tween(160, easing = com.tali.notes.ui.components.EaseOutStrong), label = "scrollerWide")
+  val room = (s.bottom - s.top - s.viewHeight).coerceAtLeast(1f)
+  val frac = if (held != null) dragFrac else ((s.viewTop - s.top) / room).coerceIn(0f, 1f)
+  androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxHeight().width(36.dp).graphicsLayer { alpha = shown }) {
+    val track = maxHeight
+    val thumb = maxOf(44.dp, track * (s.viewHeight / (s.bottom - s.top)).coerceAtMost(1f))
+    val y = (track - thumb) * frac
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    Box(
+      Modifier.align(Alignment.TopEnd)
+        .offset(y = y)
+        .size(36.dp, thumb)
+        .pointerInput(Unit) {
+          detectDragGestures(
+            onDragStart = {
+              val start = span() ?: return@detectDragGestures
+              held = start
+              dragFrac = ((start.viewTop - start.top) / (start.bottom - start.top - start.viewHeight).coerceAtLeast(1f)).coerceIn(0f, 1f)
+            },
+            onDragEnd = { held = null },
+            onDragCancel = { held = null },
+          ) { change, delta ->
+            val h = held ?: return@detectDragGestures
+            change.consume()
+            val travel = with(density) { (track - thumb).toPx() }.coerceAtLeast(1f)
+            dragFrac = (dragFrac + delta.y / travel).coerceIn(0f, 1f)
+            onScroll(h.top + dragFrac * (h.bottom - h.top - h.viewHeight).coerceAtLeast(0f))
+          }
+        },
+      contentAlignment = Alignment.CenterEnd,
+    ) {
+      Box(
+        Modifier.padding(end = 4.dp).fillMaxHeight().width(5.dp + 5.dp * wide)
+          .clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.45f + 0.4f * wide))
+      )
+    }
+    // While dragging: which page this is, beside the thumb.
+    if (held != null && page.first >= 0) {
+      Box(
+        Modifier.align(Alignment.TopEnd).offset(x = (-44).dp, y = y + thumb / 2 - 16.dp)
+          .wrapContentSize(unbounded = true, align = Alignment.CenterEnd)
+          .height(32.dp).clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+      ) { Text("${page.first + 1} / ${page.second}", style = MaterialTheme.typography.labelLarge, color = c.ink, maxLines = 1) }
     }
   }
 }

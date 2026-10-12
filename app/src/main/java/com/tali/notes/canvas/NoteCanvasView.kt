@@ -4302,6 +4302,27 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   /** Glides to a page, fitting its width to the screen with the top just under the toolbar. */
+  /** Where the view is in the whole notebook, for the side scroller (world units). */
+  data class ScrollSpan(val top: Float, val bottom: Float, val viewTop: Float, val viewHeight: Float)
+
+  /** Null when the notebook fits on screen (nothing to scroll). */
+  fun scrollSpan(): ScrollSpan? {
+    if (width == 0 || height == 0) return null
+    val viewH = height / camera.scale
+    val (top, bottom) =
+      pageCount?.let { n -> 0f to lastPageBottom(n) }
+        ?: (doc?.contentBounds()?.let { b -> minOf(b.top, camera.y) to maxOf(b.bottom, camera.y + viewH) } ?: return null)
+    if (bottom - top <= viewH * 1.05f) return null
+    return ScrollSpan(top, bottom, camera.y, viewH)
+  }
+
+  /** The side scroller dragged: the view's top to [y] (world units). */
+  fun scrollViewTo(y: Float) {
+    stopFling()
+    camera.set(Viewport(camera.x, y, camera.zoom))
+    afterCameraMove()
+  }
+
   fun goToPage(index: Int) {
     val r = pages.getOrNull(index) ?: return
     if (width == 0 || height == 0) return

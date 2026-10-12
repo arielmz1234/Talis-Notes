@@ -66,11 +66,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * After Google's scanner: the pages it took, each one a tap to turn, then Save (Turn all turns every
- * page). Google's scanner turns Hebrew pages upside down (it reads text direction as if it were Latin),
- * so each page is read first ([PageOrientation]): clear Latin text decides; a page without any
- * (Hebrew, or no text) starts turned by what's been learned for such pages, a half turn at first.
- * When she saves such pages all turned the same way, that's learned. Laid out like the camera: the
- * same in every language, in its dark colours.
+ * page). Google's scanner hands Hebrew pages back upside down, so each page is read first
+ * ([PageOrientation]) and starts the right way up. Laid out like the camera: the same in every
+ * language, in its dark colours.
  */
 @Composable
 fun PagesReview(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: (List<Uri>) -> Unit) {
@@ -84,9 +82,6 @@ private class Page(val uri: Uri, val thumb: ImageBitmap)
 private fun ReviewBody(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: (List<Uri>) -> Unit) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  // How pages without Latin text come out right: turned over at first (Google turns Hebrew over).
-  val learned = remember { context.getSharedPreferences("camera", android.content.Context.MODE_PRIVATE).getInt(NO_LATIN_KEY, 2) }
-  val readings = remember { mutableStateListOf<com.tali.notes.camera.PageOrientation.Reading>() }
   var pages by remember { mutableStateOf<List<Page>?>(null) }
   val turns = remember { mutableStateListOf<Int>() }
   var saving by remember { mutableStateOf(false) }
@@ -105,14 +100,11 @@ private fun ReviewBody(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: 
           runCatching { loadUpright(context, p.uri, CHECK_SIDE)?.let { com.tali.notes.camera.PageOrientation.read(it) } }.getOrNull() ?: com.tali.notes.camera.PageOrientation.Reading.UPRIGHT
         }
       }
-    readings.clear()
-    readings.addAll(read)
     turns.addAll(
       read.map {
         when (it) {
           com.tali.notes.camera.PageOrientation.Reading.UPRIGHT -> 0
           com.tali.notes.camera.PageOrientation.Reading.UPSIDE_DOWN -> 2
-          com.tali.notes.camera.PageOrientation.Reading.NO_LATIN -> learned
         }
       }
     )
@@ -136,9 +128,6 @@ private fun ReviewBody(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: 
               .getOrNull()
           }
         }
-      // Pages without Latin text, all saved turned the same way (upright or over): that's how they come out from now on.
-      val noLatin = turns.filterIndexed { i, _ -> readings.getOrNull(i) == com.tali.notes.camera.PageOrientation.Reading.NO_LATIN }.map { ((it % 4) + 4) % 4 }.distinct()
-      if (noLatin.size == 1 && noLatin[0] % 2 == 0) context.getSharedPreferences("camera", android.content.Context.MODE_PRIVATE).edit().putInt(NO_LATIN_KEY, noLatin[0]).apply()
       onSave(files)
     }
   }
@@ -232,7 +221,6 @@ private fun PageTile(number: Int, thumb: ImageBitmap, turns: Int, onTurn: () -> 
   }
 }
 
-private const val NO_LATIN_KEY = "no_latin_turn"
 /** Read at this size to tell which way up a page is. */
 private const val CHECK_SIDE = 1600
 private const val THUMB_SIDE = 700
