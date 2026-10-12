@@ -742,14 +742,11 @@
     <string name="add_file">File</string>
     <string name="a_pdf_or_pictures_from_your_files">A PDF or pictures from your files</string>
     <string name="add_scan">Scan</string>
-    <string name="paper_pages_with_the_camera">Paper pages, cropped and straightened</string>
     <string name="add_photo">Photo</string>
     <string name="from_your_gallery">From your gallery</string>
-    <string name="scan_n">Scan %1$s</string>
     <string name="adding_n">Adding “%1$s”…</string>
     <string name="adding_n_page_n_of_n">Adding “%1$s”, page %2$s of %3$s…</string>
     <string name="adding_pictures">Adding the pictures…</string>
-    <string name="saving_the_scan">Saving the scan…</string>
     <string name="added_n">Added “%1$s”</string>
     <string name="open">Open</string>
     <string name="only_pdfs_and_pictures_can_be_added">Only PDFs and pictures can be added.</string>
@@ -764,18 +761,13 @@
     <string name="cam_look">Look</string>
     <string name="cam_turn">Turn</string>
     <string name="cam_whole">No crop</string>
-    <string name="cam_find">Find the page</string>
     <string name="look_original">Original</string>
     <string name="look_document">Document</string>
     <string name="look_grey">Grey</string>
     <string name="look_bw">B&amp;W</string>
     <string name="cam_another">Take another</string>
-    <string name="cam_next_page">Next page</string>
     <string name="cam_save_n">Save %1$d</string>
-    <string name="cam_hold_over">Hold the camera over the page</string>
-    <string name="cam_found">Page found</string>
     <string name="cam_corners">Drag the corners onto the page\'s corners.</string>
-    <string name="cam_not_found">The page wasn\'t found by itself: drag the corners onto it.</string>
     <string name="cam_allow_title">Allow the camera</string>
     <string name="cam_allow_body">The camera is used only while this screen is open. Photos stay on this tablet.</string>
     <string name="cam_allow">Allow camera</string>
@@ -783,12 +775,7 @@
     <string name="cam_discard_title">Discard these pages?</string>
     <string name="cam_discard_body">The pages taken here aren\'t saved yet.</string>
     <string name="cam_discard">Discard</string>
-    <string name="cam_gallery">From the gallery</string>
     <string name="cam_flash">Flash</string>
     <string name="cam_take">Take picture</string>
-    <string name="the_scanner_isn_t_available">The scanner isn\'t available on this tablet. It needs Google Play services.</string>
-    <string name="cam_check_title">Check the pages</string>
-    <string name="cam_check_hint">Tap a page to turn it.</string>
     <string name="updated_from_drive_n">Up to date with Google Drive: %1$d updated</string>
-    <string name="cam_turn_all">Turn all</string>
 </resources>

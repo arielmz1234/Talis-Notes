@@ -141,7 +141,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.tali.notes.R
 import com.tali.notes.camera.Look
 import com.tali.notes.camera.P
-import com.tali.notes.camera.PageFinder
 import com.tali.notes.camera.PageImage
 import com.tali.notes.camera.Quad
 import com.tali.notes.theme.Dark
@@ -159,21 +158,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** What the camera screen makes: pictures, or scanned pages. */
-enum class CameraMode { PHOTO, SCAN }
-
 /**
- * Our own camera, for both + › Camera and + › Scan, in the app's colours: the × top left, a Photo /
- * Scan switch, a big violet shutter. In Scan the page is found live (outlined as she aims) and, once
- * taken, she sets its corners (with a magnifier) and picks a look; the page is straightened flat.
- * Photos go straight to the look step, where they can be cropped too. Every picture is turned by
- * what the camera reports for the way the tablet is held (Google's scanner turned some pages upside
- * down on a Tab S6 Lite), and Turn fixes any that still aren't right. Several pages or photos can be
- * taken before saving; [onSave] gets them as files in the cache, upright and finished.
+ * Our own camera, for + › Camera and a notebook's Take a photo, in the app's colours: the × top
+ * left, a big violet shutter, tap to focus, pinch to zoom. A photo goes to the look step (Original,
+ * Document, Grey, B&W), where it can be cropped (corners with a magnifier, straightened) and turned.
+ * Every picture is turned by what the camera reports for the way the tablet is held, and a half turn
+ * she gives one is remembered. Several photos can be taken before saving; [onSave] gets them as files
+ * in the cache, upright and finished.
  */
 @Composable
-fun CameraScreen(start: CameraMode, onClose: () -> Unit, onSave: (CameraMode, List<Uri>) -> Unit) {
-  CameraWindow { CameraBody(start, onClose, onSave) }
+fun CameraScreen(onClose: () -> Unit, onSave: (List<Uri>) -> Unit) {
+  CameraWindow { CameraBody(onClose, onSave) }
 }
 
 /**
@@ -208,18 +203,17 @@ internal fun CameraWindow(content: @Composable () -> Unit) {
   }
 }
 
-/** [held] is the screen's rotation when it was taken (null from the gallery); [turns] how many quarter turns she gave it. */
-private data class Shot(val picture: Bitmap, val view: ImageBitmap, val quad: Quad, val look: Look, val found: Boolean, val held: Int? = null, val turns: Int = 0)
+/** [held] is the screen's rotation when it was taken; [turns] how many quarter turns she gave it. */
+private data class Shot(val picture: Bitmap, val view: ImageBitmap, val quad: Quad, val look: Look, val held: Int? = null, val turns: Int = 0)
 
 private class Taken(val file: File, val thumb: ImageBitmap)
 
 private enum class Step { CROP, LOOK }
 
 @Composable
-private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMode, List<Uri>) -> Unit) {
+private fun CameraBody(onClose: () -> Unit, onSave: (List<Uri>) -> Unit) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  var mode by remember { mutableStateOf(start) }
   val pages = remember { mutableStateListOf<Taken>() }
   var shot by remember { mutableStateOf<Shot?>(null) }
   var step by remember { mutableStateOf(Step.CROP) }
@@ -242,7 +236,7 @@ private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMo
   }
   fun finish(extra: Taken?) {
     val all = pages.toList() + listOfNotNull(extra)
-    close { onSave(mode, all.map { Uri.fromFile(it.file) }) }
+    close { onSave(all.map { Uri.fromFile(it.file) }) }
   }
   fun keep(s: Shot, then: (Taken) -> Unit) {
     if (working) return
@@ -257,7 +251,7 @@ private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMo
   fun back() {
     val s = shot
     when {
-      s != null && step == Step.LOOK && mode == CameraMode.SCAN -> step = Step.CROP
+      s != null && step == Step.CROP -> step = Step.LOOK
       s != null -> shot = null
       pages.isNotEmpty() -> discarding = true
       else -> close()
@@ -276,14 +270,11 @@ private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMo
       .background(NIGHT)
   ) {
     CameraPart(
-      mode = mode,
-      active = shot == null,
       pages = pages,
-      onMode = { mode = it },
       onClose = ::back,
       onTaken = { s ->
         shot = s
-        step = if (mode == CameraMode.SCAN) Step.CROP else Step.LOOK
+        step = Step.LOOK
       },
       onSave = { finish(null) },
     )
@@ -296,7 +287,6 @@ private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMo
         EditPart(
           shot = current,
           step = step,
-          mode = mode,
           pages = pages.size,
           working = working,
           onChange = { shot = it },
@@ -330,10 +320,7 @@ private fun CameraBody(start: CameraMode, onClose: () -> Unit, onSave: (CameraMo
 
 @Composable
 private fun CameraPart(
-  mode: CameraMode,
-  active: Boolean,
   pages: List<Taken>,
-  onMode: (CameraMode) -> Unit,
   onClose: () -> Unit,
   onTaken: (Shot) -> Unit,
   onSave: () -> Unit,
@@ -353,42 +340,15 @@ private fun CameraPart(
     granted = hasCamera(context)
     onPauseOrDispose {}
   }
-  val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-    android.util.Log.i("Camera", "picked $uri")
-    if (uri != null) scope.launch {
-      val s = withContext(Dispatchers.Default) { loadUpright(context, uri)?.let { prepare(it, CameraMode.SCAN) } }
-      android.util.Log.i("Camera", "loaded ${s != null}")
-      s?.let(onTaken)
-    }
-  }
-
   val preview = remember { PreviewView(context).apply { setBackgroundColor(android.graphics.Color.rgb(0x0E, 0x0A, 0x18)); implementationMode = PreviewView.ImplementationMode.COMPATIBLE; scaleType = PreviewView.ScaleType.FIT_CENTER } }
   val worker = remember { Executors.newSingleThreadExecutor() }
-  val finder = remember { Executors.newSingleThreadExecutor() }
-  DisposableEffect(Unit) {
-    onDispose {
-      worker.shutdown()
-      finder.shutdown()
-    }
-  }
+  DisposableEffect(Unit) { onDispose { worker.shutdown() } }
   val fourThree = remember { AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY }
   val capture =
     remember {
       ImageCapture.Builder()
         .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
         .setResolutionSelector(ResolutionSelector.Builder().setAspectRatioStrategy(fourThree).setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY).build())
-        .build()
-    }
-  val analysis =
-    remember {
-      ImageAnalysis.Builder()
-        .setResolutionSelector(
-          ResolutionSelector.Builder()
-            .setAspectRatioStrategy(fourThree)
-            .setResolutionStrategy(ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
-            .build()
-        )
-        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
         .build()
     }
   var camera by remember { mutableStateOf<Camera?>(null) }
@@ -401,55 +361,11 @@ private fun CameraPart(
         val p = Preview.Builder().setResolutionSelector(ResolutionSelector.Builder().setAspectRatioStrategy(fourThree).build()).build()
         p.surfaceProvider = preview.surfaceProvider
         provider.unbindAll()
-        camera = provider.bindToLifecycle(lifecycle, selector, p, capture, analysis)
+        camera = provider.bindToLifecycle(lifecycle, selector, p, capture)
       }
       .onFailure { failed = true }
   }
   DisposableEffect(Unit) { onDispose { runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() } } }
-
-  // The live outline in Scan: found on small frames off the main thread, gliding to each new place.
-  val scanning by rememberUpdatedState(mode == CameraMode.SCAN && active)
-  var target by remember { mutableStateOf<Quad?>(null) }
-  var seenAt by remember { mutableStateOf(0L) }
-  var frameAspect by remember { mutableStateOf(0f) }
-  DisposableEffect(analysis) {
-    var lastLook = 0L
-    analysis.setAnalyzer(finder) { image ->
-      // A few looks a second are plenty for the outline (each look allocates a little).
-      val now = System.currentTimeMillis()
-      if (!scanning || now - lastLook < LOOK_EVERY_MS) {
-        image.close()
-        return@setAnalyzer
-      }
-      lastLook = now
-      val rotation = image.imageInfo.rotationDegrees
-      val (lum, w, h) = smallLuminance(image)
-      image.close()
-      val q = PageFinder.find(lum, w, h)?.turned(rotation / 90)
-      val aspect = if (rotation % 180 == 0) w.toFloat() / h else h.toFloat() / w
-      scope.launch {
-        frameAspect = aspect
-        if (q != null) {
-          target = q
-          seenAt = System.currentTimeMillis()
-        }
-      }
-    }
-    onDispose { analysis.clearAnalyzer() }
-  }
-  var outline by remember { mutableStateOf<Quad?>(null) }
-  val outlineAlpha = remember { Animatable(0f) }
-  LaunchedEffect(Unit) {
-    while (true) {
-      withFrameNanos {}
-      val t = target
-      val fresh = t != null && System.currentTimeMillis() - seenAt < 600 && scanning
-      if (t != null) outline = outline?.toward(t, 0.3f) ?: t
-      val want = if (fresh) 1f else 0f
-      if (outlineAlpha.targetValue != want) scope.launch { outlineAlpha.animateTo(want, tween(if (fresh) 160 else 260)) }
-    }
-  }
-  val found = outlineAlpha.targetValue == 1f
 
   var taking by remember { mutableStateOf(false) }
   val blink = remember { Animatable(0f) }
@@ -468,7 +384,6 @@ private fun CameraPart(
     // Turned for the way the screen is now, so the picture comes out the way she sees it.
     val held = preview.display?.rotation ?: Surface.ROTATION_0
     capture.targetRotation = held
-    val taken = mode
     val learned = learnedTurn(context, held)
     capture.takePicture(
       worker,
@@ -477,7 +392,7 @@ private fun CameraPart(
           val rotation = image.imageInfo.rotationDegrees
           val raw = runCatching { image.toBitmap() }.onFailure { android.util.Log.w("Camera", "decode", it) }.getOrNull()
           image.close()
-          val s = raw?.let { runCatching { prepare(PageImage.turned(PageImage.scaledTo(it, MAX_SIDE), rotation / 90 + learned), taken).copy(held = held) }.onFailure { android.util.Log.w("Camera", "prepare", it) }.getOrNull() }
+          val s = raw?.let { runCatching { prepare(PageImage.turned(PageImage.scaledTo(it, MAX_SIDE), rotation / 90 + learned)).copy(held = held) }.onFailure { android.util.Log.w("Camera", "prepare", it) }.getOrNull() }
           scope.launch {
             taking = false
             if (s != null) onTaken(s)
@@ -521,11 +436,8 @@ private fun CameraPart(
         }
     ) {
       if (granted) AndroidView({ preview }, Modifier.fillMaxSize())
-      // Where the picture is on screen (fitted, not cropped), for the outline.
+      // The focus ring and the shutter's flash.
       Canvas(Modifier.fillMaxSize()) {
-        val area = fitted(this.size.width, this.size.height, if (frameAspect > 0f) frameAspect else if (wide) 4f / 3f else 3f / 4f)
-        val q = outline
-        if (q != null && outlineAlpha.value > 0f) drawQuad(q, area, outlineAlpha.value, ACCENT)
         focus?.let { f ->
           val t = focusRing.value
           if (t < 1f) {
@@ -547,20 +459,6 @@ private fun CameraPart(
     val edge = Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(20.dp)
     // × in the top corner, as everywhere else in the app.
     Box(edge.align(Alignment.TopStart)) { RoundButton(Icons.Outlined.Close, stringResource(R.string.close), onClick = onClose) }
-    // Photo or Scan; once something's taken the choice is set.
-    val photoWord = stringResource(R.string.add_photo)
-    val scanWord = stringResource(R.string.add_scan)
-    AnimatedVisibility(OWN_SCAN && pages.isEmpty(), edge.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
-      Box(Modifier.width(240.dp).clip(RoundedCornerShape(16.dp)).background(GLASS).padding(4.dp)) {
-        Segmented(
-          listOf(CameraMode.PHOTO, CameraMode.SCAN),
-          mode,
-          label = { if (it == CameraMode.PHOTO) photoWord else scanWord },
-          onSelect = onMode,
-          modifier = Modifier.fillMaxWidth(),
-        )
-      }
-    }
     if (camera?.cameraInfo?.hasFlashUnit() == true) {
       Box(edge.align(Alignment.TopEnd)) {
         RoundButton(
@@ -580,19 +478,6 @@ private fun CameraPart(
         }
       }
     }
-    // What to do, while scanning: aim, then the page is found.
-    if (mode == CameraMode.SCAN && granted) {
-      Box(edge.align(Alignment.BottomCenter).padding(bottom = if (wide) 0.dp else 112.dp)) {
-        AnimatedContent(found, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) }, label = "scanHint") { f ->
-          Hint(stringResource(if (f) R.string.cam_found else R.string.cam_hold_over), if (f) Icons.Outlined.Check else Icons.Outlined.CenterFocusStrong)
-        }
-      }
-    }
-
-    val gallerySlot: @Composable () -> Unit = {
-      if (mode == CameraMode.SCAN) RoundButton(Icons.Outlined.PhotoLibrary, stringResource(R.string.cam_gallery)) { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-      else Spacer(Modifier.size(52.dp))
-    }
     val saveSlot: @Composable () -> Unit = {
       AnimatedVisibility(pages.isNotEmpty(), enter = fadeIn() + scaleIn(initialScale = 0.9f), exit = fadeOut() + scaleOut(targetScale = 0.9f)) {
         pages.lastOrNull()?.let { SavePill(it.thumb, pages.size, onSave) }
@@ -605,7 +490,7 @@ private fun CameraPart(
         verticalArrangement = Arrangement.SpaceBetween,
       ) {
         Spacer(Modifier.height(52.dp))
-        gallerySlot()
+        Spacer(Modifier.size(52.dp))
         Shutter(taking, enabled = granted && camera != null, onClick = ::take)
         Box(Modifier.height(64.dp), contentAlignment = Alignment.Center) { saveSlot() }
         Spacer(Modifier.height(1.dp))
@@ -615,7 +500,7 @@ private fun CameraPart(
         edge.align(Alignment.BottomCenter).fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { gallerySlot() }
+        Spacer(Modifier.weight(1f))
         Shutter(taking, enabled = granted && camera != null, onClick = ::take)
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { saveSlot() }
       }
@@ -649,7 +534,6 @@ private fun NoCamera(asked: Boolean, failed: Boolean, onAllow: () -> Unit) {
 private fun EditPart(
   shot: Shot,
   step: Step,
-  mode: CameraMode,
   pages: Int,
   working: Boolean,
   onChange: (Shot) -> Unit,
@@ -684,18 +568,16 @@ private fun EditPart(
         modifier = m,
         wide = wide,
         step = step,
-        mode = mode,
         pages = pages,
         working = working || turning,
         look = shot.look,
         samples = samples,
-        found = shot.found,
         whole = shot.quad == Quad.whole(),
         convex = shot.quad.convex,
         onLook = { onChange(shot.copy(look = it)) },
         onTurn = ::turn,
         onWhole = {
-          val q = if (shot.quad == Quad.whole()) findIn(shot.picture) ?: Quad.whole(0.06f) else Quad.whole()
+          val q = if (shot.quad == Quad.whole()) Quad.whole(0.06f) else Quad.whole()
           onChange(shot.copy(quad = q))
         },
         onStep = onStep,
@@ -735,12 +617,10 @@ private fun EditPanel(
   modifier: Modifier,
   wide: Boolean,
   step: Step,
-  mode: CameraMode,
   pages: Int,
   working: Boolean,
   look: Look,
   samples: Map<Look, ImageBitmap>,
-  found: Boolean,
   whole: Boolean,
   convex: Boolean,
   onLook: (Look) -> Unit,
@@ -755,7 +635,7 @@ private fun EditPanel(
   Column(modifier.quietSurface().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
     Text(stringResource(if (step == Step.CROP) R.string.cam_crop else R.string.cam_look), style = MaterialTheme.typography.titleLarge, color = c.ink)
     if (step == Step.CROP) {
-      Text(stringResource(if (found || mode == CameraMode.PHOTO) R.string.cam_corners else R.string.cam_not_found), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+      Text(stringResource(R.string.cam_corners), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     } else {
       LookChoices(look, samples, columns = if (wide) 2 else 4, onLook)
     }
@@ -763,7 +643,7 @@ private fun EditPanel(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
       SmallTool(Icons.Outlined.Replay, stringResource(R.string.cam_retake), Modifier.weight(1f), onRetake)
       SmallTool(Icons.Outlined.RotateRight, stringResource(R.string.cam_turn), Modifier.weight(1f), onTurn)
-      if (step == Step.CROP) SmallTool(if (whole) Icons.Outlined.Crop else Icons.Outlined.CropFree, stringResource(if (whole) R.string.cam_find else R.string.cam_whole), Modifier.weight(1f), onWhole)
+      if (step == Step.CROP) SmallTool(if (whole) Icons.Outlined.Crop else Icons.Outlined.CropFree, stringResource(if (whole) R.string.cam_crop else R.string.cam_whole), Modifier.weight(1f), onWhole)
       else SmallTool(Icons.Outlined.Crop, stringResource(R.string.cam_crop), Modifier.weight(1f)) { onStep(Step.CROP) }
     }
     val primary: @Composable (Modifier) -> Unit = { m ->
@@ -773,7 +653,7 @@ private fun EditPanel(
     if (step == Step.LOOK) {
       // Side by side and compact: another page or photo, or save.
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        CompactButton(stringResource(if (mode == CameraMode.SCAN) R.string.cam_next_page else R.string.cam_another), Icons.Outlined.Add, primary = false, Modifier.weight(1f)) { if (!working) onAnother() }
+        CompactButton(stringResource(R.string.cam_another), Icons.Outlined.Add, primary = false, Modifier.weight(1f)) { if (!working) onAnother() }
         CompactButton(
           if (pages > 0) stringResource(R.string.cam_save_n, pages + 1) else stringResource(R.string.save),
           Icons.Outlined.Check,
@@ -1039,18 +919,6 @@ private fun SavePill(thumb: ImageBitmap, count: Int, onClick: () -> Unit) {
 private fun Modifier.offset(x: Int, y: Int) = this.then(Modifier.graphicsLayer { translationX = x.dp.toPx(); translationY = y.dp.toPx() })
 
 @Composable
-private fun Hint(text: String, icon: ImageVector) {
-  Row(
-    Modifier.clip(RoundedCornerShape(50)).background(GLASS).padding(horizontal = 16.dp, vertical = 10.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Icon(icon, null, tint = Color.White, modifier = Modifier.size(18.dp))
-    Spacer(Modifier.width(8.dp))
-    Text(text, style = MaterialTheme.typography.labelLarge, color = Color.White)
-  }
-}
-
-@Composable
 private fun SmallTool(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
   val c = Tali.colors
   Column(
@@ -1073,27 +941,16 @@ private fun hasCamera(context: Context) = ContextCompat.checkSelfPermission(cont
  * remembered for that way of holding the tablet and later pictures come out turned already; another
  * half turn undoes it. Quarter turns aren't learned: a page taken sideways is often on purpose.
  */
-internal fun learnedTurn(context: Context, held: Int, key: String = "turn"): Int = context.getSharedPreferences("camera", Context.MODE_PRIVATE).getInt("$key$held", 0)
+private fun learnedTurn(context: Context, held: Int): Int = context.getSharedPreferences("camera", Context.MODE_PRIVATE).getInt("turn$held", 0)
 
-private fun learnTurn(context: Context, held: Int) = setLearnedTurn(context, held, (learnedTurn(context, held) + 2) % 4)
-
-internal fun setLearnedTurn(context: Context, held: Int, quarters: Int, key: String = "turn") {
-  context.getSharedPreferences("camera", Context.MODE_PRIVATE).edit().putInt("$key$held", quarters).apply()
+private fun learnTurn(context: Context, held: Int) {
+  context.getSharedPreferences("camera", Context.MODE_PRIVATE).edit().putInt("turn$held", (learnedTurn(context, held) + 2) % 4).apply()
 }
 
-/** A just-taken (or picked) picture made ready: in Scan, its page looked for and set to the document look. */
-private fun prepare(picture: Bitmap, mode: CameraMode): Shot {
-  val found = if (mode == CameraMode.SCAN) findIn(picture) else null
-  val quad = found ?: if (mode == CameraMode.SCAN) Quad.whole(0.06f) else Quad.whole()
-  return Shot(picture, PageImage.scaledTo(picture, VIEW_SIDE).asImageBitmap(), quad, if (mode == CameraMode.SCAN) Look.DOCUMENT else Look.ORIGINAL, found != null)
-}
+/** A just-taken photo made ready: uncropped, as it is. */
+private fun prepare(picture: Bitmap): Shot = Shot(picture, PageImage.scaledTo(picture, VIEW_SIDE).asImageBitmap(), Quad.whole(), Look.ORIGINAL)
 
-private fun findIn(picture: Bitmap): Quad? {
-  val small = PageImage.scaledTo(picture, 320)
-  return PageFinder.find(PageImage.luminance(small), small.width, small.height)
-}
-
-/** The finished page or photo, written to the cache as a JPEG. */
+/** The finished photo, written to the cache as a JPEG. */
 private fun finished(context: Context, s: Shot): Taken {
   val flat = if (s.quad == Quad.whole()) s.picture else PageImage.straightened(s.picture, s.quad, MAX_SIDE)
   val out = PageImage.looked(flat, s.look)
@@ -1109,39 +966,6 @@ internal fun clearOld(context: Context) {
   File(context.cacheDir, "camera").listFiles()?.forEach { if (it.lastModified() < day) it.delete() }
 }
 
-/** A picture from the gallery, upright and no bigger than needed. */
-internal fun loadUpright(context: Context, uri: Uri, maxSide: Int = MAX_SIDE): Bitmap? =
-  runCatching {
-      val resolver = context.contentResolver
-      val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-      resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-      var sample = 1
-      while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
-      val bmp = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
-      val rotation = resolver.openInputStream(uri)?.use { ExifInterface(it).rotationDegrees } ?: 0
-      val upright = if (rotation != 0) Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(rotation.toFloat()) }, true) else bmp
-      PageImage.scaledTo(upright, maxSide)
-    }
-    .onFailure { android.util.Log.w("Camera", "gallery", it) }
-    .getOrNull()
-
-/** The frame's brightness (its Y plane), about 160 across, for finding the page. */
-private fun smallLuminance(image: ImageProxy): Triple<IntArray, Int, Int> {
-  val plane = image.planes[0]
-  val buf = plane.buffer
-  val row = plane.rowStride
-  val px = plane.pixelStride
-  val step = maxOf(1, image.width / 160)
-  val w = image.width / step
-  val h = image.height / step
-  val out = IntArray(w * h)
-  for (y in 0 until h) {
-    val base = y * step * row
-    for (x in 0 until w) out[y * w + x] = buf.get(base + x * step * px).toInt() and 0xff
-  }
-  return Triple(out, w, h)
-}
-
 internal val NIGHT = Color(0xFF0E0A18)
 private val GLASS = Color(0xFF1B1430).copy(alpha = 0.62f)
 private val ACCENT = Color(0xFFB79CFF)
@@ -1153,11 +977,4 @@ internal fun languageDirection(): androidx.compose.ui.unit.LayoutDirection =
   if (androidx.compose.ui.platform.LocalConfiguration.current.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL) androidx.compose.ui.unit.LayoutDirection.Rtl
   else androidx.compose.ui.unit.LayoutDirection.Ltr
 
-/**
- * Our own Scan mode (page found live, corners, straightening) works but found pages less reliably
- * than Google's scanner on a real desk, so + › Scan uses Google's (then [PagesReview]) and this
- * screen offers photos only. Turn it on to bring the Photo / Scan switch back.
- */
-private const val OWN_SCAN = false
-private const val LOOK_EVERY_MS = 200L
 private const val VIEW_SIDE = 1600

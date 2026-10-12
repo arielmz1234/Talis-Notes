@@ -115,10 +115,6 @@ dependencies {
   implementation(libs.androidx.camera.camera2)
   implementation(libs.androidx.camera.lifecycle)
   implementation(libs.androidx.camera.view)
-  // Scan: Google's document scanner (finds the page reliably), then our own page check (ui/camera/PagesReview.kt).
-  implementation(libs.play.services.mlkit.document.scanner)
-  // Telling which way up a scanned page is (Google's scanner turns Hebrew pages over; PageOrientation).
-  implementation(libs.play.services.mlkit.text.recognition)
 
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)

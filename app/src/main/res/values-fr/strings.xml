@@ -742,14 +742,11 @@
     <string name="add_file">Fichier</string>
     <string name="a_pdf_or_pictures_from_your_files">Un PDF ou des images de vos fichiers</string>
     <string name="add_scan">Scan</string>
-    <string name="paper_pages_with_the_camera">Des pages papier, recadrées et redressées</string>
     <string name="add_photo">Photo</string>
     <string name="from_your_gallery">Depuis votre galerie</string>
-    <string name="scan_n">Scan du %1$s</string>
     <string name="adding_n">Ajout de « %1$s »…</string>
     <string name="adding_n_page_n_of_n">Ajout de « %1$s », page %2$s sur %3$s…</string>
     <string name="adding_pictures">Ajout des images…</string>
-    <string name="saving_the_scan">Enregistrement du scan…</string>
     <string name="added_n">« %1$s » ajouté</string>
     <string name="open">Ouvrir</string>
     <string name="only_pdfs_and_pictures_can_be_added">Seuls les PDF et les images peuvent être ajoutés.</string>
@@ -764,18 +761,13 @@
     <string name="cam_look">Rendu</string>
     <string name="cam_turn">Pivoter</string>
     <string name="cam_whole">Sans recadrage</string>
-    <string name="cam_find">Trouver la page</string>
     <string name="look_original">Original</string>
     <string name="look_document">Document</string>
     <string name="look_grey">Gris</string>
     <string name="look_bw">N&amp;B</string>
     <string name="cam_another">Une autre</string>
-    <string name="cam_next_page">Page suivante</string>
     <string name="cam_save_n">Enregistrer %1$d</string>
-    <string name="cam_hold_over">Placez l’appareil au-dessus de la page</string>
-    <string name="cam_found">Page trouvée</string>
     <string name="cam_corners">Faites glisser les coins sur ceux de la page.</string>
-    <string name="cam_not_found">La page n’a pas été trouvée : faites glisser les coins dessus.</string>
     <string name="cam_allow_title">Autorisez l’appareil photo</string>
     <string name="cam_allow_body">L’appareil photo n’est utilisé que lorsque cet écran est ouvert. Les photos restent sur cette tablette.</string>
     <string name="cam_allow">Autoriser</string>
@@ -783,12 +775,7 @@
     <string name="cam_discard_title">Abandonner ces pages ?</string>
     <string name="cam_discard_body">Les pages prises ici ne sont pas encore enregistrées.</string>
     <string name="cam_discard">Abandonner</string>
-    <string name="cam_gallery">Depuis la galerie</string>
     <string name="cam_flash">Flash</string>
     <string name="cam_take">Prendre la photo</string>
-    <string name="the_scanner_isn_t_available">Le scanner n\'est pas disponible sur cette tablette. Il a besoin des services Google Play.</string>
-    <string name="cam_check_title">Vérifiez les pages</string>
-    <string name="cam_check_hint">Touchez une page pour la faire pivoter.</string>
     <string name="updated_from_drive_n">À jour avec Google Drive : %1$d mis à jour</string>
-    <string name="cam_turn_all">Tout pivoter</string>
 </resources>

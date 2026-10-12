@@ -37,15 +37,6 @@ object Imports {
     return build(app, DocKind.PICTURE, title, folderId, pages)
   }
 
-  /** Pages from the document scanner (already cropped and straightened): one page each, named by the day. */
-  suspend fun scan(app: TalisApp, uris: List<Uri>, folderId: String?): NotebookMeta? {
-    val pages = stored(app, uris)
-    if (pages.isEmpty()) return null
-    val locale = java.util.Locale.ENGLISH
-    val day = java.text.SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMM"), locale).format(java.util.Date())
-    return build(app, DocKind.SCAN, english(R.string.scan_n, day), folderId, pages)
-  }
-
   /** Copies pictures into the app, upright and downscaled; their size in pixels stands in for the page size. */
   private suspend fun stored(app: TalisApp, uris: List<Uri>): List<ImportedPage> =
     uris.mapNotNull { uri ->

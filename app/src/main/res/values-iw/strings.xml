@@ -743,14 +743,11 @@
     <string name="add_file">קובץ</string>
     <string name="a_pdf_or_pictures_from_your_files">PDF או תמונות מהקבצים שלך</string>
     <string name="add_scan">סריקה</string>
-    <string name="paper_pages_with_the_camera">דפי נייר, חתוכים ומיושרים</string>
     <string name="add_photo">תמונה</string>
     <string name="from_your_gallery">מהגלריה</string>
-    <string name="scan_n">סריקה %1$s</string>
     <string name="adding_n">מוסיפים את \"%1$s\"…</string>
     <string name="adding_n_page_n_of_n">מוסיפים את \"%1$s\", עמוד %2$s מתוך %3$s…</string>
     <string name="adding_pictures">מוסיפים את התמונות…</string>
-    <string name="saving_the_scan">שומרים את הסריקה…</string>
     <string name="added_n">\"%1$s\" נוסף</string>
     <string name="open">פתיחה</string>
     <string name="only_pdfs_and_pictures_can_be_added">אפשר להוסיף רק קובצי PDF ותמונות.</string>
@@ -765,18 +762,13 @@
     <string name="cam_look">מראה</string>
     <string name="cam_turn">סיבוב</string>
     <string name="cam_whole">בלי חיתוך</string>
-    <string name="cam_find">מציאת הדף</string>
     <string name="look_original">מקורי</string>
     <string name="look_document">מסמך</string>
     <string name="look_grey">אפור</string>
     <string name="look_bw">שחור-לבן</string>
     <string name="cam_another">עוד תמונה</string>
-    <string name="cam_next_page">הדף הבא</string>
     <string name="cam_save_n">שמירה (%1$d)</string>
-    <string name="cam_hold_over">כוונו את המצלמה אל הדף</string>
-    <string name="cam_found">הדף נמצא</string>
     <string name="cam_corners">גררו את הפינות אל פינות הדף.</string>
-    <string name="cam_not_found">הדף לא נמצא לבד: גררו את הפינות אליו.</string>
     <string name="cam_allow_title">אפשרו גישה למצלמה</string>
     <string name="cam_allow_body">המצלמה פועלת רק כשהמסך הזה פתוח. התמונות נשארות בטאבלט.</string>
     <string name="cam_allow">אישור מצלמה</string>
@@ -784,12 +776,7 @@
     <string name="cam_discard_title">לוותר על הדפים האלה?</string>
     <string name="cam_discard_body">הדפים שצולמו כאן עוד לא נשמרו.</string>
     <string name="cam_discard">ויתור</string>
-    <string name="cam_gallery">מהגלריה</string>
     <string name="cam_flash">פלאש</string>
     <string name="cam_take">צילום</string>
-    <string name="the_scanner_isn_t_available">הסורק לא זמין בטאבלט הזה. הוא צריך את שירותי Google Play.</string>
-    <string name="cam_check_title">בדיקת הדפים</string>
-    <string name="cam_check_hint">הקישו על דף כדי לסובב אותו.</string>
     <string name="updated_from_drive_n">מעודכן מול Google Drive: %1$d עודכנו</string>
-    <string name="cam_turn_all">סיבוב הכול</string>
 </resources>

@@ -296,9 +296,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   var camera by remember { mutableStateOf(false) }
   if (camera) {
     com.tali.notes.ui.camera.CameraScreen(
-      start = com.tali.notes.ui.camera.CameraMode.PHOTO,
       onClose = { camera = false },
-      onSave = { _, uris ->
+      onSave = { uris ->
         camera = false
         scope.launch {
           for (uri in uris) {

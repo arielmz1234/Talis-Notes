@@ -164,16 +164,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     }
   }
 
-  /** Pages from + › Scan. */
-  fun addScan(uris: List<android.net.Uri>) {
-    val app = getApplication<Application>().talisApp
-    if (uris.isEmpty()) return
-    run {
-      adding.value = Adding(com.tali.notes.later(R.string.saving_the_scan), busy = true)
-      com.tali.notes.Imports.scan(app, uris, folder())
-    }
-  }
-
   fun dismissAdding() {
     adding.value = null
   }

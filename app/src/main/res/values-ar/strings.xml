@@ -742,14 +742,11 @@
     <string name="add_file">ملف</string>
     <string name="a_pdf_or_pictures_from_your_files">ملف PDF أو صور من ملفاتك</string>
     <string name="add_scan">مسح ضوئي</string>
-    <string name="paper_pages_with_the_camera">صفحات ورقية، مقصوصة ومعدّلة</string>
     <string name="add_photo">صورة</string>
     <string name="from_your_gallery">من معرض الصور</string>
-    <string name="scan_n">مسح %1$s</string>
     <string name="adding_n">جارٍ إضافة «%1$s»…</string>
     <string name="adding_n_page_n_of_n">جارٍ إضافة «%1$s»، الصفحة %2$s من %3$s…</string>
     <string name="adding_pictures">جارٍ إضافة الصور…</string>
-    <string name="saving_the_scan">جارٍ حفظ المسح…</string>
     <string name="added_n">أُضيف «%1$s»</string>
     <string name="open">فتح</string>
     <string name="only_pdfs_and_pictures_can_be_added">يمكن إضافة ملفات PDF والصور فقط.</string>
@@ -764,18 +761,13 @@
     <string name="cam_look">المظهر</string>
     <string name="cam_turn">تدوير</string>
     <string name="cam_whole">بدون قص</string>
-    <string name="cam_find">إيجاد الصفحة</string>
     <string name="look_original">الأصلية</string>
     <string name="look_document">مستند</string>
     <string name="look_grey">رمادي</string>
     <string name="look_bw">أبيض وأسود</string>
     <string name="cam_another">صورة أخرى</string>
-    <string name="cam_next_page">الصفحة التالية</string>
     <string name="cam_save_n">حفظ %1$d</string>
-    <string name="cam_hold_over">وجّه الكاميرا نحو الصفحة</string>
-    <string name="cam_found">تم إيجاد الصفحة</string>
     <string name="cam_corners">اسحب الزوايا إلى زوايا الصفحة.</string>
-    <string name="cam_not_found">لم يتم إيجاد الصفحة تلقائيًا: اسحب الزوايا إليها.</string>
     <string name="cam_allow_title">اسمح باستخدام الكاميرا</string>
     <string name="cam_allow_body">تُستخدم الكاميرا فقط أثناء فتح هذه الشاشة. تبقى الصور على هذا الجهاز اللوحي.</string>
     <string name="cam_allow">السماح بالكاميرا</string>
@@ -783,12 +775,7 @@
     <string name="cam_discard_title">تجاهل هذه الصفحات؟</string>
     <string name="cam_discard_body">الصفحات الملتقطة هنا لم تُحفظ بعد.</string>
     <string name="cam_discard">تجاهل</string>
-    <string name="cam_gallery">من المعرض</string>
     <string name="cam_flash">الفلاش</string>
     <string name="cam_take">التقاط صورة</string>
-    <string name="the_scanner_isn_t_available">الماسح الضوئي غير متاح على هذا الجهاز. يحتاج إلى خدمات Google Play.</string>
-    <string name="cam_check_title">راجع الصفحات</string>
-    <string name="cam_check_hint">انقر على صفحة لتدويرها.</string>
     <string name="updated_from_drive_n">محدّث مع Google Drive: %1$d</string>
-    <string name="cam_turn_all">تدوير الكل</string>
 </resources>

@@ -27,20 +27,13 @@ object PageImage {
     return Bitmap.createScaledBitmap(src, maxOf(1, (src.width * s).toInt()), maxOf(1, (src.height * s).toInt()), true)
   }
 
-  /** Brightness 0..255 of a small copy, for [PageFinder]. */
-  fun luminance(src: Bitmap): IntArray {
-    val px = IntArray(src.width * src.height)
-    src.getPixels(px, 0, src.width, 0, 0, src.width, src.height)
-    return IntArray(px.size) { lum(px[it]) }
-  }
-
   /** The page inside [quad] pulled out flat, its sides as long as the longer of each pair (at most [maxSide]). */
   fun straightened(src: Bitmap, quad: Quad, maxSide: Int): Bitmap {
     val w = src.width.toFloat()
     val h = src.height.toFloat()
     val c = quad.points.map { P(it.x * w, it.y * h) }
-    var outW = maxOf(PageFinder.distance(c[0], c[1]), PageFinder.distance(c[3], c[2]))
-    var outH = maxOf(PageFinder.distance(c[0], c[3]), PageFinder.distance(c[1], c[2]))
+    var outW = maxOf(distance(c[0], c[1]), distance(c[3], c[2]))
+    var outH = maxOf(distance(c[0], c[3]), distance(c[1], c[2]))
     val s = minOf(1f, maxSide / maxOf(outW, outH))
     outW = maxOf(8f, outW * s)
     outH = maxOf(8f, outH * s)
@@ -97,7 +90,7 @@ object PageImage {
         if (v > grid[i]) grid[i] = v
       }
     }
-    repeat(2) { grid = PageFinder.blur(grid, gw, gh) }
+    repeat(2) { grid = blur(grid, gw, gh) }
     val out = IntArray(w * h)
     for (y in 0 until h) {
       val fy = ((y + 0.5f) / cell - 0.5f).coerceIn(0f, gh - 1f)
@@ -124,4 +117,20 @@ object PageImage {
 
   private fun rgb(r: Float, g: Float, b: Float): Int =
     (0xff shl 24) or ((r.coerceIn(0f, 1f) * 255).toInt() shl 16) or ((g.coerceIn(0f, 1f) * 255).toInt() shl 8) or (b.coerceIn(0f, 1f) * 255).toInt()
+
+  private fun distance(a: P, b: P) = kotlin.math.hypot(a.x - b.x, a.y - b.y)
+
+  /** A 3×3 box blur. */
+  private fun blur(src: IntArray, w: Int, h: Int): IntArray {
+    val tmp = IntArray(w * h)
+    for (y in 0 until h) for (x in 0 until w) {
+      val r = y * w
+      tmp[r + x] = (src[r + maxOf(x - 1, 0)] + src[r + x] + src[r + minOf(x + 1, w - 1)]) / 3
+    }
+    val out = IntArray(w * h)
+    for (y in 0 until h) for (x in 0 until w) {
+      out[y * w + x] = (tmp[maxOf(y - 1, 0) * w + x] + tmp[y * w + x] + tmp[minOf(y + 1, h - 1) * w + x]) / 3
+    }
+    return out
+  }
 }

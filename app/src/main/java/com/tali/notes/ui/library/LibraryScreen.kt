@@ -323,13 +323,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                   QuietButton(stringResource(R.string.select)) { picked = emptySet() }
                   Spacer(Modifier.width(8.dp))
                 }
-                // One +: a notebook, a file, a scan or photos.
+                // One +: a notebook, a file, a photo or photos.
                 AddButton(
                   onNotebook = { creating = true },
                   onFiles = vm::addFiles,
                   onPhotos = vm::addPhotos,
-                  onScan = vm::addScan,
-                  onScanUnavailable = { vm.failedToAdd(com.tali.notes.later(R.string.the_scanner_isn_t_available)) },
                 )
               }
             }
