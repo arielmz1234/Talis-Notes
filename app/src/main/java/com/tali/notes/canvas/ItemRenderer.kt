@@ -21,6 +21,7 @@ import com.tali.notes.model.TextItem
  */
 class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images: ImageStore, private val sync: Boolean = false) {
   private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+  private val patchRect = android.graphics.RectF()
   private val placeholderFill = Paint().apply { color = 0xFFF6F3FF.toInt() }
   private val placeholderEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     color = 0xFFE0D8F5.toInt()
@@ -43,6 +44,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
 
   /** Pictures being changed (a fill the eraser is rubbing out), by item id: drawn instead of their file. */
   var swapped: Map<String, Bitmap> = emptyMap()
+
+  /** Sharp pieces of PDF pages, drawn from the PDF for the current zoom ([SharpPdf]); by page id. */
+  var sharp: () -> Map<String, SharpPdf.Patch> = { emptyMap() }
 
   /** For lighter PDFs: pictures bigger than this many pixels per world unit are scaled down first. */
   var imagePxPerDp: Float? = null
@@ -133,6 +137,10 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
           }
           canvas.drawBitmap(if (edited != null) edited else reduce(item.file, bmp, item.rect), null, rectF, imagePaint)
           if (flip) canvas.restore()
+          sharp()[item.id]?.takeIf { it.itemRect == item.rect && !it.bitmap.isRecycled }?.let { p ->
+            patchRect.set(p.rect.left, p.rect.top, p.rect.right, p.rect.bottom)
+            canvas.drawBitmap(p.bitmap, null, patchRect, imagePaint)
+          }
         } else {
           if (!sync) images.request(item.file)
           canvas.drawRect(rectF, placeholderFill)

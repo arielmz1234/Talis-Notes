@@ -79,7 +79,7 @@ object BackupArchive {
       try {
         prune(context, snapshot, db, notebookId)
         val files = { kind: Int, dir: File -> repo.filesOf(notebookId, kind).distinct().map { File(dir, it) }.filter { it.isFile } }
-        zipUp(out, db, settingsJson = null, notebooks = 1, images = files(ItemCodec.KIND_IMAGE, repo.imagesDir), audio = files(ItemCodec.KIND_AUDIO, repo.audioDir), thumbs = listOf(repo.thumbnailFile(notebookId)).filter { it.isFile })
+        zipUp(out, db, settingsJson = null, notebooks = 1, images = files(ItemCodec.KIND_IMAGE, repo.imagesDir).let { it + com.tali.notes.canvas.SharpPdf.pdfsFor(repo.imagesDir, it.map { f -> f.name }) }, audio = files(ItemCodec.KIND_AUDIO, repo.audioDir), thumbs = listOf(repo.thumbnailFile(notebookId)).filter { it.isFile })
       } finally {
         dropDb(db)
       }

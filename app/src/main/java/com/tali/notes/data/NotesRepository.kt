@@ -474,6 +474,10 @@ class NotesRepository(private val context: Context) {
     val recordings = filesOf(id, ItemCodec.KIND_AUDIO)
     db.writableDatabase.delete("notebooks", "id=?", arrayOf(id))
     files.forEach { if (!isImageUsedElsewhere(it)) File(imagesDir, it).delete() }
+    // A kept PDF goes once no page picture made from it is left.
+    files.mapNotNull { com.tali.notes.canvas.SharpPdf.sourceOf(it)?.first }.distinct().forEach { pdfId ->
+      if (imagesDir.list()?.none { it.startsWith("pdf-$pdfId-p") } == true) com.tali.notes.canvas.SharpPdf.pdfFileFor(imagesDir, pdfId).delete()
+    }
     recordings.forEach { if (!isUsedElsewhere(it, ItemCodec.KIND_AUDIO)) File(audioDir, it).delete() }
     File(thumbsDir, "$id.png").delete()
     reload()
@@ -585,7 +589,8 @@ class NotesRepository(private val context: Context) {
 
   /**
    * Renders every page of a PDF (lecture slides, a problem sheet) into a picture she can write on.
-   * Pages are drawn sharp enough for zooming in on formulas, and saved as JPEGs to stay small.
+   * Pages are drawn as JPEGs (quick to open and scroll), and the PDF itself is kept beside them so the
+   * canvas can draw any part sharp when zoomed in ([com.tali.notes.canvas.SharpPdf]).
    */
   suspend fun importPdf(uri: Uri, onProgress: (done: Int, total: Int) -> Unit): List<ImportedPage> =
     withContext(Dispatchers.IO) {
@@ -599,6 +604,14 @@ class NotesRepository(private val context: Context) {
           } catch (e: java.io.IOException) {
             throw PdfImportException(tr(R.string.that_file_isn_t_a_pdf))
           }
+        // The original, kept for sharp zooming; the pictures' names say which PDF and page they are.
+        val pdfId = UUID.randomUUID().toString()
+        val kept =
+          runCatching {
+              context.contentResolver.openInputStream(uri)?.use { input -> com.tali.notes.canvas.SharpPdf.pdfFileFor(imagesDir, pdfId).outputStream().use { input.copyTo(it) } }
+              true
+            }
+            .getOrDefault(false)
         renderer.use { r ->
           val count = r.pageCount.coerceAtMost(MAX_PDF_PAGES)
           List(count) { i ->
@@ -610,7 +623,7 @@ class NotesRepository(private val context: Context) {
               val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
               bmp.eraseColor(android.graphics.Color.WHITE)
               page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-              val name = UUID.randomUUID().toString() + ".jpg"
+              val name = if (kept) com.tali.notes.canvas.SharpPdf.pageFileName(pdfId, i) else UUID.randomUUID().toString() + ".jpg"
               File(imagesDir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
               bmp.recycle()
               onProgress(i + 1, count)

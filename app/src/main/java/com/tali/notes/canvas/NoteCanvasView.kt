@@ -153,9 +153,38 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** A picture finished loading: redraw the tiles it covers. */
   private val onImageLoaded: (String) -> Unit = { file ->
     doc?.all?.forEach { if (it is ImageItem && it.file == file) tiles.invalidate(it.bounds) }
+    if (SharpPdf.sourceOf(file) != null) scheduleSharp()
     invalidate()
   }
   private val tiles = TileCache(itemRenderer)
+
+  /** PDF pages drawn sharp from their PDF once the view settles zoomed in. */
+  private val sharpPdf = SharpPdf(context.talisApp.repository.imagesDir) { r ->
+    tiles.invalidate(r)
+    invalidate()
+  }
+  private val sharpen = Runnable { refreshSharp() }
+
+  init {
+    itemRenderer.sharp = { sharpPdf.patches }
+  }
+
+  private fun scheduleSharp() {
+    removeCallbacks(sharpen)
+    postDelayed(sharpen, SHARP_WAIT_MS)
+  }
+
+  private fun refreshSharp() {
+    val d = doc ?: return
+    if (width == 0 || height == 0) return
+    val visible = visibleWorld()
+    val pages = d.intersecting(visible).filterIsInstance<ImageItem>().filter { SharpPdf.sourceOf(it.file) != null }
+    if (pages.isEmpty()) {
+      if (sharpPdf.patches.isNotEmpty()) sharpPdf.clear()
+      return
+    }
+    sharpPdf.refresh(pages, visible, camera.scale, width * height) { item -> images.peek(item.file)?.let { it.width / item.rect.width } }
+  }
 
   init {
     // On A4 pages, writing and shapes show only on their page (or the page column with Write
@@ -169,7 +198,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
   private var doc: Document? = null
-  private val docListener: (Change) -> Unit = ::onDocChanged
+  private val docListener: (Change) -> Unit = { onDocChanged(it); scheduleSharp() }
 
   var settings = AppSettings()
     set(value) {
@@ -481,12 +510,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     host.onZoomChanged(camera.zoom)
     invalidate()
     post { warmPens() }
+    doOnLayout { scheduleSharp() }
   }
 
   fun detach() {
     doc?.listeners?.remove(docListener)
     images.removeListener(onImageLoaded)
     StrokeBuilds.removeListener(onStrokesBuilt)
+    removeCallbacks(sharpen)
+    sharpPdf.release()
     doc = null
   }
 
@@ -495,6 +527,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     post {
       clampCamera()
       updatePage()
+      scheduleSharp()
       invalidate()
     }
   }
@@ -4043,6 +4076,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     host.onCameraMoved()
     if (selection.isNotEmpty()) publishSelection()
     updatePage()
+    scheduleSharp()
     invalidate()
   }
 
@@ -4444,6 +4478,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PEN_NEARBY_MS = 1500L
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L
+    /** How long the view rests before PDF pages are drawn sharp for it. */
+    private const val SHARP_WAIT_MS = 140L
   }
 }
 
