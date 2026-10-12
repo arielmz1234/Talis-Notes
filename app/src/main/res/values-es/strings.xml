@@ -790,4 +790,5 @@
     <string name="cam_check_title">Revisa las páginas</string>
     <string name="cam_check_hint">Toca una página para girarla.</string>
     <string name="updated_from_drive_n">Al día con Google Drive: %1$d actualizados</string>
+    <string name="cam_turn_all">Girar todas</string>
 </resources>

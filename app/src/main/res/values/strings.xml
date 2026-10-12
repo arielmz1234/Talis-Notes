@@ -790,4 +790,5 @@
     <string name="cam_check_title">Check the pages</string>
     <string name="cam_check_hint">Tap a page to turn it.</string>
     <string name="updated_from_drive_n">Up to date with Google Drive: %1$d updated</string>
+    <string name="cam_turn_all">Turn all</string>
 </resources>

@@ -65,11 +65,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * After Google's scanner: the pages it took, each one a tap to turn, then Save. On some tablets
- * Google's scanner hands pages back upside down (the owner's Tab S6 Lite, held one way), so each
- * page starts turned by what was learned for the way the tablet was held when Scan was opened
- * ([held], the screen's rotation), and when every page is saved turned the same half turn, that's
- * learned for next time. Laid out like the camera: the same in every language, in its dark colours.
+ * After Google's scanner: the pages it took, each one a tap to turn, then Save (Turn all turns every
+ * page). Google's scanner turns Hebrew pages upside down (it reads text direction as if it were Latin),
+ * so each page is read first ([PageOrientation]): clear Latin text decides; a page without any
+ * (Hebrew, or no text) starts turned by what's been learned for such pages, a half turn at first.
+ * When she saves such pages all turned the same way, that's learned. Laid out like the camera: the
+ * same in every language, in its dark colours.
  */
 @Composable
 fun PagesReview(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: (List<Uri>) -> Unit) {
@@ -83,7 +84,9 @@ private class Page(val uri: Uri, val thumb: ImageBitmap)
 private fun ReviewBody(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: (List<Uri>) -> Unit) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  val learned = remember { learnedTurn(context, held, SCAN_KEY) }
+  // How pages without Latin text come out right: turned over at first (Google turns Hebrew over).
+  val learned = remember { context.getSharedPreferences("camera", android.content.Context.MODE_PRIVATE).getInt(NO_LATIN_KEY, 2) }
+  val readings = remember { mutableStateListOf<com.tali.notes.camera.PageOrientation.Reading>() }
   var pages by remember { mutableStateOf<List<Page>?>(null) }
   val turns = remember { mutableStateListOf<Int>() }
   var saving by remember { mutableStateOf(false) }
@@ -95,7 +98,24 @@ private fun ReviewBody(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: 
         uris.mapNotNull { uri -> loadUpright(context, uri, THUMB_SIDE)?.let { Page(uri, it.asImageBitmap()) } }
       }
     turns.clear()
-    turns.addAll(List(loaded.size) { learned })
+    // Each page read for its text's direction (Google's scanner turns Hebrew pages over).
+    val read =
+      withContext(Dispatchers.Default) {
+        loaded.map { p ->
+          runCatching { loadUpright(context, p.uri, CHECK_SIDE)?.let { com.tali.notes.camera.PageOrientation.read(it) } }.getOrNull() ?: com.tali.notes.camera.PageOrientation.Reading.UPRIGHT
+        }
+      }
+    readings.clear()
+    readings.addAll(read)
+    turns.addAll(
+      read.map {
+        when (it) {
+          com.tali.notes.camera.PageOrientation.Reading.UPRIGHT -> 0
+          com.tali.notes.camera.PageOrientation.Reading.UPSIDE_DOWN -> 2
+          com.tali.notes.camera.PageOrientation.Reading.NO_LATIN -> learned
+        }
+      }
+    )
     pages = loaded
   }
   fun save() {
@@ -116,9 +136,9 @@ private fun ReviewBody(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: 
               .getOrNull()
           }
         }
-      // Every page turned the same half turn (or turned back to upright): remember it for this way of holding.
-      val same = turns.distinct().singleOrNull()
-      if (same != null && same % 2 == 0) setLearnedTurn(context, held, same, SCAN_KEY)
+      // Pages without Latin text, all saved turned the same way (upright or over): that's how they come out from now on.
+      val noLatin = turns.filterIndexed { i, _ -> readings.getOrNull(i) == com.tali.notes.camera.PageOrientation.Reading.NO_LATIN }.map { ((it % 4) + 4) % 4 }.distinct()
+      if (noLatin.size == 1 && noLatin[0] % 2 == 0) context.getSharedPreferences("camera", android.content.Context.MODE_PRIVATE).edit().putInt(NO_LATIN_KEY, noLatin[0]).apply()
       onSave(files)
     }
   }
@@ -127,21 +147,31 @@ private fun ReviewBody(uris: List<Uri>, held: Int, onClose: () -> Unit, onSave: 
   val c = Tali.colors
   Box(Modifier.fillMaxSize().background(NIGHT).windowInsetsPadding(WindowInsets.safeDrawing)) {
     Column(Modifier.fillMaxSize()) {
-      // × on the left, the title in the middle, Save on the right.
-      Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-        RoundButton(Icons.Outlined.Close, stringResource(R.string.close)) { discarding = true }
-        Column(Modifier.weight(1f).padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-          Text(stringResource(R.string.cam_check_title), style = MaterialTheme.typography.titleLarge, color = c.ink)
-          Text(stringResource(R.string.cam_check_hint), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+      // × on the left, the title in the middle, Turn all and Save on the right; on a phone the
+      // buttons go on a line of their own under the title.
+      val n = pages?.size ?: 0
+      val phone = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < com.tali.notes.ui.library.PHONE_DP
+      val buttons: @Composable (Modifier, Modifier) -> Unit = { turnMod, saveMod ->
+        if (n > 1) {
+          CompactButton(stringResource(R.string.cam_turn_all), Icons.Outlined.RotateRight, primary = false, turnMod) { for (i in turns.indices) turns[i] = turns[i] + 1 }
+          Spacer(Modifier.width(8.dp))
         }
-        val n = pages?.size ?: 0
         CompactButton(
           if (n > 1) stringResource(R.string.cam_save_n, n) else stringResource(R.string.save),
           Icons.Outlined.Check,
           primary = true,
-          Modifier.width(150.dp).graphicsLayer { alpha = if (n == 0 || saving) 0.5f else 1f },
+          saveMod.graphicsLayer { alpha = if (n == 0 || saving) 0.5f else 1f },
         ) { if (n > 0) save() }
       }
+      Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+        RoundButton(Icons.Outlined.Close, stringResource(R.string.close)) { discarding = true }
+        Column(Modifier.weight(1f).padding(horizontal = 16.dp), horizontalAlignment = if (phone) Alignment.Start else Alignment.CenterHorizontally) {
+          Text(stringResource(R.string.cam_check_title), style = MaterialTheme.typography.titleLarge, color = c.ink)
+          Text(stringResource(R.string.cam_check_hint), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
+        }
+        if (!phone) buttons(Modifier.width(130.dp), Modifier.width(150.dp))
+      }
+      if (phone) Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp)) { buttons(Modifier.weight(1f), Modifier.weight(1f)) }
       val list = pages
       if (list == null)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.accent) }
@@ -202,5 +232,7 @@ private fun PageTile(number: Int, thumb: ImageBitmap, turns: Int, onTurn: () -> 
   }
 }
 
-private const val SCAN_KEY = "scan"
+private const val NO_LATIN_KEY = "no_latin_turn"
+/** Read at this size to tell which way up a page is. */
+private const val CHECK_SIDE = 1600
 private const val THUMB_SIDE = 700

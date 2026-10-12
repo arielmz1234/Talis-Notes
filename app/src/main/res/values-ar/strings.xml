@@ -790,4 +790,5 @@
     <string name="cam_check_title">راجع الصفحات</string>
     <string name="cam_check_hint">انقر على صفحة لتدويرها.</string>
     <string name="updated_from_drive_n">محدّث مع Google Drive: %1$d</string>
+    <string name="cam_turn_all">تدوير الكل</string>
 </resources>

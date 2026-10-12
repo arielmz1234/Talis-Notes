@@ -7,3 +7,4 @@
 -keep class com.google.android.gms.internal.mlkit_vision_document_scanner.** { *; }
 -keep class com.google.android.gms.internal.mlkit_common.** { *; }
 -keep class com.google.firebase.components.** { *; }
+-keep class com.google.android.gms.internal.mlkit_** { *; }
