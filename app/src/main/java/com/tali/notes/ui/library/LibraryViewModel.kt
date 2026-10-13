@@ -277,9 +277,9 @@ fun descendants(folders: List<Folder>, id: String): Set<String> {
 fun folderPath(folders: List<Folder>, id: String?): List<Folder> {
   val out = ArrayList<Folder>()
   var cur = folders.firstOrNull { it.id == id }
-  while (cur != null && out.none { it.id == cur!!.id }) {
+  while (cur != null && out.none { it.id == cur.id }) {
     out.add(0, cur)
-    cur = folders.firstOrNull { it.id == cur!!.parentId }
+    cur = folders.firstOrNull { it.id == cur.parentId }
   }
   return out
 }

@@ -528,7 +528,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   LaunchedEffect(loaded) {
     if (loaded && all.isEmpty() && trash.isEmpty() && WELCOME_RESTORE !in settings.seenTips) {
       welcome = true
-      (app as com.tali.notes.TalisApp).settings.update { it.copy(seenTips = it.seenTips + WELCOME_RESTORE) }
+      app.settings.update { it.copy(seenTips = it.seenTips + WELCOME_RESTORE) }
     }
   }
   var tour by remember { mutableStateOf(false) }
@@ -537,11 +537,11 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     // Someone new: walk them through the app next (once).
     if (TOUR !in settings.seenTips) {
       tour = true
-      (app as com.tali.notes.TalisApp).settings.update { it.copy(seenTips = it.seenTips + TOUR) }
+      app.settings.update { it.copy(seenTips = it.seenTips + TOUR) }
     }
   })
   if (tour) TourCard(onDone = { tour = false })
-  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> (app as com.tali.notes.TalisApp).settings.update { it.copy(pdfsToLibrary = on) } }, onTour = {
+  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> app.settings.update { it.copy(pdfsToLibrary = on) } }, onTour = {
     showSettings = false
     tour = true
   }, onDismiss = { showSettings = false })

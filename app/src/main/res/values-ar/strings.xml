@@ -54,8 +54,6 @@
     <string name="backup_restored">تمت استعادة النسخة الاحتياطية</string>
     <string name="backup_saved">تم حفظ النسخة الاحتياطية.</string>
     <string name="backups">النسخ الاحتياطية</string>
-    <string name="balanced">متوازنة</string>
-    <string name="best">الأفضل</string>
     <string name="bigger_text">نص أكبر</string>
     <string name="bold">عريض</string>
     <string name="bolder">أعرض</string>
@@ -719,7 +717,6 @@
     <string name="tour_skip">تخطٍّ</string>
     <string name="tour_next">التالي</string>
     <string name="tour_start_writing">ابدأ الكتابة</string>
-    <string name="getting_started">البداية</string>
     <string name="take_the_tour">جولة في التطبيق</string>
     <string name="tour_write_title">اكتب كما على الورق</string>
     <string name="tour_write_body">صفحات A4 تتوالى أثناء الكتابة. قرّب بإصبعين للتكبير، واسحب بإصبعين للتمرير، ويُحفظ كل شيء لحظة كتابته.</string>

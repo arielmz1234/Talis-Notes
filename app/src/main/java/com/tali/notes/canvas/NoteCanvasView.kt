@@ -729,7 +729,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val guidePaint =
     Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.STROKE
-      color = 0x669B7BE0.toInt()
+      color = 0x669B7BE0
       pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 8f), 0f)
     }
 

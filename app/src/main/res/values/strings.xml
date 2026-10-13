@@ -54,8 +54,6 @@
     <string name="backup_restored">Backup restored</string>
     <string name="backup_saved">Backup saved.</string>
     <string name="backups">Backups</string>
-    <string name="balanced">Balanced</string>
-    <string name="best">Best</string>
     <string name="bigger_text">Bigger text</string>
     <string name="bold">Bold</string>
     <string name="bolder">Bolder</string>
@@ -719,7 +717,6 @@
     <string name="tour_skip">Skip</string>
     <string name="tour_next">Next</string>
     <string name="tour_start_writing">Start writing</string>
-    <string name="getting_started">Getting started</string>
     <string name="take_the_tour">Take the tour</string>
     <string name="tour_write_title">Write like on paper</string>
     <string name="tour_write_body">A4 pages that keep coming as you write. Pinch to zoom, slide with two fingers, and everything saves the moment you write it.</string>

@@ -54,8 +54,6 @@
     <string name="backup_restored">Sauvegarde restaurée</string>
     <string name="backup_saved">Sauvegarde enregistrée.</string>
     <string name="backups">Sauvegardes</string>
-    <string name="balanced">Équilibrée</string>
-    <string name="best">Maximale</string>
     <string name="bigger_text">Texte plus grand</string>
     <string name="bold">Épaisse</string>
     <string name="bolder">Plus épaisse</string>
@@ -719,7 +717,6 @@
     <string name="tour_skip">Passer</string>
     <string name="tour_next">Suivant</string>
     <string name="tour_start_writing">Commencer à écrire</string>
-    <string name="getting_started">Premiers pas</string>
     <string name="take_the_tour">Faire la visite</string>
     <string name="tour_write_title">Écrivez comme sur papier</string>
     <string name="tour_write_body">Des pages A4 qui s\'ajoutent au fil de l\'écriture. Pincez pour zoomer, faites glisser avec deux doigts, et tout est enregistré dès que vous l\'écrivez.</string>

@@ -249,7 +249,7 @@ object ShapeRecognizer {
     val polyErr = polygon?.let { Geo.meanDistToPolyline(samples, it, closed = true) / meanRadius } ?: Float.MAX_VALUE
 
     val useEllipse = ellipse != null && ellipse.second < 0.12f && (polygon == null || polygon.size > 6 || ellipse.second < polyErr)
-    if (useEllipse) return beautifyEllipse(ellipse!!.first)
+    if (useEllipse) return beautifyEllipse(ellipse.first)
     if (polygon != null && polyErr < 0.09f) return beautifyPolygon(polygon)
     if (ellipse != null && ellipse.second < 0.16f) return beautifyEllipse(ellipse.first)
     return null

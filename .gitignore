@@ -25,3 +25,7 @@ local.properties
 
 # Release APKs copied out for sending
 /apk/
+
+# JVM crash dumps
+hs_err_pid*.log
+replay_pid*.log

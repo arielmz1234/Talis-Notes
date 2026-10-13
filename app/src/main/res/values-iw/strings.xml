@@ -55,8 +55,6 @@
     <string name="backup_restored">הגיבוי שוחזר</string>
     <string name="backup_saved">הגיבוי נשמר.</string>
     <string name="backups">גיבויים</string>
-    <string name="balanced">מאוזן</string>
-    <string name="best">הכי טוב</string>
     <string name="bigger_text">טקסט גדול יותר</string>
     <string name="bold">עבה</string>
     <string name="bolder">עבה יותר</string>
@@ -720,7 +718,6 @@
     <string name="tour_skip">דילוג</string>
     <string name="tour_next">הבא</string>
     <string name="tour_start_writing">מתחילים לכתוב</string>
-    <string name="getting_started">צעדים ראשונים</string>
     <string name="take_the_tour">סיור באפליקציה</string>
     <string name="tour_write_title">כותבים כמו על נייר</string>
     <string name="tour_write_body">עמודי A4 שממשיכים להגיע תוך כדי כתיבה. צובטים כדי להגדיל, גוללים בשתי אצבעות, והכול נשמר ברגע שכותבים.</string>
