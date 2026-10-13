@@ -85,7 +85,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # adjust per ma
 ## Release plan (Play Store)
 
 Decided by the owner on 11 Oct 2026: tablets only at first, free. In order:
-1. **Google brand verification.** The Cloud project's branding is filled in (home page and privacy policy at arielmz1234.github.io, logo `site/logo-120.png`). The first attempt failed with "home page not registered to you", because the site wasn't in Search Console yet; the owner verified it there on 11 Oct (account arielmz12344@gmail.com). From 12 Oct: Google Auth Platform → Branding → View issues → *I have fixed the issues* → Proceed. Only `drive.file` is used (non-sensitive), so this is branding only, no security review.
+1. ~~Google brand verification~~ **skipped (13 Oct 2026, the owner's call).** Google rejected it: the home page must be on a domain he owns (`*.github.io` and `*.vercel.app` don't count). Not needed: only `drive.file` (non-sensitive), so no unverified-app warning or user cap; the sign-in pop-up already looks fine to him. Keep the Cloud project, Drive API and Android OAuth clients (backup needs them). Revisit only if he buys a domain (point it at GitHub Pages, verify it as a Domain property in Search Console, update the Branding URLs, resubmit).
 2. **Tali onto the release key** (see the hand-off note under Open items): she backs up, uninstalls, installs a release APK built here, restores from the welcome card.
 3. ~~First-run tour~~ done 12 Oct 2026 (`Tour.kt`, item 61). Languages too (item 60, then item 62: Spanish, French, Portuguese, Arabic).
 4. **Opt-in crash reports.** `CrashLog` only writes on the tablet. Anything that sends data out changes the privacy policy (`site/privacy.html`) and the Play Data safety answers.
