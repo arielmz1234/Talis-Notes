@@ -29,3 +29,7 @@ local.properties
 # JVM crash dumps
 hs_err_pid*.log
 replay_pid*.log
+
+# Play upload builds (rebuilt with ./gradlew bundleRelease)
+/play/store/*.aab
+/play/screenshots/
