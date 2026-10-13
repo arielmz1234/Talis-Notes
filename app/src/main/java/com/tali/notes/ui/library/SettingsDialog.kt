@@ -109,6 +109,15 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinima
       Spacer(Modifier.weight(1f))
       PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
     }
+    // Who made it, and which version this is.
+    Spacer(Modifier.height(14.dp))
+    Text(
+      stringResource(R.string.made_by_n, "Ariel M.") + " · " + com.tali.notes.BuildConfig.VERSION_NAME,
+      style = MaterialTheme.typography.labelSmall,
+      color = c.inkFaint,
+      modifier = Modifier.fillMaxWidth(),
+      textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
   }
 }
 

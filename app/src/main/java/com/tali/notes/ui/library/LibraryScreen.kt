@@ -349,12 +349,22 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         Spacer(Modifier.height(16.dp))
         CrashBanner(
           onSend = {
-            val send = Intent(Intent.ACTION_SEND).apply {
-              type = "text/plain"
-              putExtra(Intent.EXTRA_SUBJECT, tr(R.string.tali_s_notes_crash_report))
+            // Straight into an email to the developer, report filled in: one tap on Send. (Only email
+            // apps are offered; with none, the share sheet as a fallback.)
+            val email = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("mailto:")).apply {
+              putExtra(Intent.EXTRA_EMAIL, arrayOf(com.tali.notes.BuildConfig.SUPPORT_EMAIL))
+              putExtra(Intent.EXTRA_SUBJECT, tr(R.string.tali_s_notes_crash_report) + " · " + com.tali.notes.BuildConfig.VERSION_NAME)
               putExtra(Intent.EXTRA_TEXT, report)
             }
-            context.startActivity(Intent.createChooser(send, tr(R.string.send_crash_report)))
+            runCatching { context.startActivity(email) }.onFailure {
+              val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_EMAIL, arrayOf(com.tali.notes.BuildConfig.SUPPORT_EMAIL))
+                putExtra(Intent.EXTRA_SUBJECT, tr(R.string.tali_s_notes_crash_report))
+                putExtra(Intent.EXTRA_TEXT, report)
+              }
+              context.startActivity(Intent.createChooser(send, tr(R.string.send_crash_report)))
+            }
             CrashLog.dismiss(context)
             crashReport = null
           },

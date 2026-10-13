@@ -778,4 +778,5 @@
     <string name="cam_flash">Flash</string>
     <string name="cam_take">Tirar foto</string>
     <string name="updated_from_drive_n">Em dia com o Google Drive: %1$d atualizados</string>
+    <string name="made_by_n">Feito por %1$s</string>
 </resources>
