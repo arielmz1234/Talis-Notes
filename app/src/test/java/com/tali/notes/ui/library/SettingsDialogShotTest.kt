@@ -23,7 +23,7 @@ class SettingsDialogShotTest {
 
   @Test
   fun settings() {
-    rule.setContent { TaliTheme(darkTheme = false) { SettingsDialog(AppSettings(), {}, {}, {}, {}, {}) } }
+    rule.setContent { TaliTheme(darkTheme = false) { SettingsDialog(AppSettings(), {}, {}, {}, {}, {}, {}) } }
     rule.waitForIdle()
     val dir = File("build/settings").apply { mkdirs() }
     rule.onNode(isDialog()).captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, File(dir, "settings.png").outputStream())
