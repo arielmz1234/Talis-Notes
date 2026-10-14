@@ -158,28 +158,52 @@ fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modi
   }
 }
 
-/** Segmented control for two to four options; the white pill glides to the chosen one. */
+/**
+ * Segmented control for two to four options; the white pill glides to the chosen one. Each option
+ * gets the room its label needs and the rest is shared out evenly, so a longer label ("System
+ * default") stays on one line beside short ones.
+ */
 @Composable
 fun <T : Any> Segmented(options: List<T>, selected: T?, label: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
   val c = Tali.colors
   val glide = rememberSlidingSelection()
-  Row(
-    modifier.clip(RoundedCornerShape(12.dp)).background(c.sunken).slidingHighlight(glide, selected, SolidColor(c.surface), 10.dp, lift = true).padding(3.dp),
-    horizontalArrangement = Arrangement.spacedBy(3.dp),
-  ) {
-    options.forEach { o ->
-      val ink by animateColorAsState(if (o == selected) c.ink else c.inkMuted, tween(220), label = "segment")
-      Box(
-        Modifier.weight(1f)
-          .slidingOption(glide, o)
-          .clip(RoundedCornerShape(10.dp))
-          // No ripple: the gliding pill is the feedback, and a grey flash under it looks muddy.
-          .clickable(interactionSource = null, indication = null, role = Role.RadioButton) { onSelect(o) }
-          .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(label(o), style = MaterialTheme.typography.labelLarge, color = ink)
-      }
+  androidx.compose.ui.layout.Layout(
+    content = { SegmentOptions(options, selected, label, onSelect, glide) },
+    modifier = modifier.clip(RoundedCornerShape(12.dp)).background(c.sunken).slidingHighlight(glide, selected, SolidColor(c.surface), 10.dp, lift = true).padding(3.dp),
+  ) { parts, constraints ->
+    val gap = 3.dp.roundToPx()
+    val gaps = gap * (parts.size - 1).coerceAtLeast(0)
+    val needs = parts.map { it.maxIntrinsicWidth(constraints.maxHeight) }
+    val total = needs.sum()
+    val room = if (constraints.hasBoundedWidth) constraints.maxWidth - gaps else total
+    val widths =
+      if (total <= room) needs.map { it + (room - total) / parts.size }
+      else needs.map { (it.toLong() * room / total.coerceAtLeast(1)).toInt() }
+    val h = parts.indices.maxOfOrNull { parts[it].minIntrinsicHeight(widths[it]) } ?: 0
+    val placed = parts.mapIndexed { i, m -> m.measure(androidx.compose.ui.unit.Constraints.fixed(widths[i].coerceAtLeast(0), h)) }
+    val w = (widths.sum() + gaps).coerceIn(constraints.minWidth, constraints.maxWidth)
+    layout(w, h.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+      var x = 0
+      placed.forEach { it.placeRelative(x, 0); x += it.width + gap }
+    }
+  }
+}
+
+@Composable
+private fun <T : Any> SegmentOptions(options: List<T>, selected: T?, label: (T) -> String, onSelect: (T) -> Unit, glide: SlidingSelection) {
+  val c = Tali.colors
+  options.forEach { o ->
+    val ink by animateColorAsState(if (o == selected) c.ink else c.inkMuted, tween(220), label = "segment")
+    Box(
+      Modifier
+        .slidingOption(glide, o)
+        .clip(RoundedCornerShape(10.dp))
+        // No ripple: the gliding pill is the feedback, and a grey flash under it looks muddy.
+        .clickable(interactionSource = null, indication = null, role = Role.RadioButton) { onSelect(o) }
+        .padding(vertical = 8.dp, horizontal = 6.dp),
+      contentAlignment = Alignment.Center,
+    ) {
+      Text(label(o), style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
   }
 }
