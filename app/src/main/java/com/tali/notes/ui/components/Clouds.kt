@@ -175,13 +175,14 @@ fun Cloud(modifier: Modifier = Modifier, width: Dp = 160.dp, variant: Int = 0, a
   val c = Tali.colors
   val px = with(LocalDensity.current) { width.toPx() }
   val dark = c.isDark
-  val key = "$variant/${px.toInt()}/$dark"
+  val key = "$variant/${px.toInt()}/$dark/${c.skyCloudMid}"
   val image by
     produceState(cloudCache.get(key), key) {
-      if (value == null) {
-        val tones =
-          if (dark) CloudTones(0xFFE4E1F7.toInt(), 0xFF9AA0DC.toInt(), 0xFF7C7CC8.toInt(), 0x40000000)
-          else CloudTones(0xFFFFFFFF.toInt(), 0xFFD3D9FA.toInt(), 0xFFB3B8EF.toInt(), 0x296256C8)
+      // A new key (another size, dark mode or colour family) paints its own cloud; the old one stays until then.
+      val cached = cloudCache.get(key)
+      if (cached != null) value = cached
+      else {
+        val tones = CloudTones(c.skyCloudTop, c.skyCloudMid, c.skyCloudLow, c.skyCloudShadow)
         value =
           withContext(Dispatchers.Default) {
             val bmp = paintCloud(RECIPES[variant % RECIPES.size], px, tones)
@@ -274,8 +275,8 @@ fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, dr
 @Composable
 fun SkyBand(modifier: Modifier = Modifier, height: Dp = 320.dp, fadeTo: Color = Tali.colors.background) {
   val c = Tali.colors
-  val left = if (c.isDark) Color(0xFF1D2A52) else Color(0xFFBFD4FF)
-  val right = if (c.isDark) Color(0xFF30245A) else Color(0xFFDCCBFF)
+  val left = c.skyFrom
+  val right = c.skyTo
   Canvas(modifier.fillMaxWidth().height(height)) {
     drawRect(Brush.linearGradient(listOf(left, right), start = Offset.Zero, end = Offset(size.width, size.height * 0.6f)))
     drawRect(Brush.verticalGradient(0.35f to Color.Transparent, 1f to fadeTo))

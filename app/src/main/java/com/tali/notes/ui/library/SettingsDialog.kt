@@ -54,16 +54,29 @@ import androidx.compose.ui.unit.dp
 import com.tali.notes.data.AppSettings
 import com.tali.notes.data.ThemeMode
 import com.tali.notes.theme.Tali
+import com.tali.notes.theme.ColorTheme
+import com.tali.notes.theme.TaliColors
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import com.tali.notes.ui.library.CardBody
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.SectionLabel
 import com.tali.notes.ui.components.Segmented
+import com.tali.notes.ui.components.slidingHighlight
+import com.tali.notes.ui.components.slidingOption
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 
 /** The app's settings, from the library's sidebar: light or dark, and the cloudy or minimal look. */
 @Composable
-fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onTour: () -> Unit, onDismiss: () -> Unit) {
+fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onColors: (com.tali.notes.theme.ColorTheme) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onTour: () -> Unit, onDismiss: () -> Unit) {
   val c = Tali.colors
-  DialogCard(onDismiss, width = 520) {
+  DialogCard(onDismiss, width = 600) {
     Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(18.dp))
     CardBody {
@@ -71,19 +84,29 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onMinima
     Spacer(Modifier.height(8.dp))
     LanguagePicker(Modifier.fillMaxWidth())
     Spacer(Modifier.height(18.dp))
-    SectionLabel(stringResource(R.string.theme))
+    SectionLabel(stringResource(R.string.colours))
     Spacer(Modifier.height(8.dp))
-    Segmented(
-      listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK),
-      settings.themeMode,
-      { when (it) { ThemeMode.SYSTEM -> tr(R.string.system_default); ThemeMode.LIGHT -> tr(R.string.light); ThemeMode.DARK -> tr(R.string.dark) } },
-      { com.tali.notes.ui.components.ThemeFade.beforeChange(); onTheme(it) },
-      Modifier.fillMaxWidth(),
-    )
+    ColorThemePicker(settings.colorTheme) { com.tali.notes.ui.components.ThemeFade.beforeChange(); onColors(it) }
     Spacer(Modifier.height(18.dp))
-    SectionLabel(stringResource(R.string.style))
-    Spacer(Modifier.height(8.dp))
-    Segmented(listOf(false, true), settings.minimal, { if (it) tr(R.string.minimal) else tr(R.string.cloudy) }, { com.tali.notes.ui.components.ThemeFade.beforeChange(); onMinimal(it) }, Modifier.fillMaxWidth())
+    // Light or dark beside cloudy or minimal, so the card still fits a landscape tablet.
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+      Column(Modifier.weight(1.6f)) {
+        SectionLabel(stringResource(R.string.theme))
+        Spacer(Modifier.height(8.dp))
+        Segmented(
+          listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK),
+          settings.themeMode,
+          { when (it) { ThemeMode.SYSTEM -> tr(R.string.system_default); ThemeMode.LIGHT -> tr(R.string.light); ThemeMode.DARK -> tr(R.string.dark) } },
+          { com.tali.notes.ui.components.ThemeFade.beforeChange(); onTheme(it) },
+          Modifier.fillMaxWidth(),
+        )
+      }
+      Column(Modifier.weight(1f)) {
+        SectionLabel(stringResource(R.string.style))
+        Spacer(Modifier.height(8.dp))
+        Segmented(listOf(false, true), settings.minimal, { if (it) tr(R.string.minimal) else tr(R.string.cloudy) }, { com.tali.notes.ui.components.ThemeFade.beforeChange(); onMinimal(it) }, Modifier.fillMaxWidth())
+      }
+    }
     Spacer(Modifier.height(6.dp))
     Text(
       if (settings.minimal) stringResource(R.string.clean_edges_on_bars_and_cards)
@@ -212,3 +235,85 @@ private fun familyFor(tag: String?) =
     null -> MaterialTheme.typography.titleSmall.fontFamily
     else -> com.tali.notes.theme.Figtree
   }
+
+/**
+ * The four colour families, each tile a small picture of the app in it (in light or dark, as the app
+ * is now): its sky with a cloud, a notebook card with a spine and two lines of writing, and its +
+ * button in the accent's two tones. The chosen one wears a ring that glides between them.
+ */
+@Composable
+private fun ColorThemePicker(selected: ColorTheme, onPick: (ColorTheme) -> Unit) {
+  val c = Tali.colors
+  val glide = com.tali.notes.ui.components.rememberSlidingSelection()
+  Row(
+    Modifier.fillMaxWidth().slidingHighlight(glide, selected, SolidColor(c.accent), 20.dp, ring = 2.5.dp),
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    ColorTheme.entries.forEach { theme ->
+      val p = if (c.isDark) theme.dark else theme.light
+      val on = theme == selected
+      val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+      val pressed by press.collectIsPressedAsState()
+      val sink by animateFloatAsState(if (pressed) 0.96f else 1f, tween(if (pressed) 90 else 180), label = "themeSink")
+      Column(
+        Modifier.weight(1f)
+          .slidingOption(glide, theme)
+          .graphicsLayer { scaleX = sink; scaleY = sink }
+          .clip(RoundedCornerShape(20.dp))
+          .clickable(interactionSource = press, indication = null, role = Role.RadioButton) { onPick(theme) }
+          .padding(5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+      ) {
+        ThemePreview(p, Modifier.fillMaxWidth().height(78.dp))
+        Spacer(Modifier.height(6.dp))
+        Text(stringResource(themeName(theme)), style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else c.inkMuted, maxLines = 1)
+        Spacer(Modifier.height(2.dp))
+      }
+    }
+  }
+}
+
+private fun themeName(t: ColorTheme) =
+  when (t) {
+    ColorTheme.LILAC -> R.string.colours_lilac
+    ColorTheme.SKY -> R.string.colours_sky
+    ColorTheme.SAGE -> R.string.colours_sage
+    ColorTheme.PEACH -> R.string.colours_peach
+  }
+
+/** A tiny library in [p]'s colours: sky and a cloud above, a notebook card, the + button. */
+@Composable
+private fun ThemePreview(p: TaliColors, modifier: Modifier) {
+  Canvas(modifier.clip(RoundedCornerShape(15.dp)).border(1.dp, p.line, RoundedCornerShape(15.dp))) {
+    val w = size.width
+    val h = size.height
+    val d = density
+    drawRect(p.background)
+    // The sky band, fading into the page.
+    drawRect(Brush.linearGradient(listOf(p.skyFrom, p.skyTo), end = Offset(w, h * 0.5f)), size = Size(w, h * 0.55f))
+    drawRect(Brush.verticalGradient(0f to Color.Transparent, 1f to p.background, startY = h * 0.25f, endY = h * 0.55f), size = Size(w, h * 0.55f))
+    // A small cloud: three puffs on a flat base.
+    val cloud = Color(p.skyCloudTop)
+    val cx = w * 0.3f
+    val cy = h * 0.27f
+    drawCircle(cloud, 7f * d, Offset(cx - 7f * d, cy + 2f * d))
+    drawCircle(cloud, 9.5f * d, Offset(cx + 2f * d, cy - 1f * d))
+    drawCircle(cloud, 6.5f * d, Offset(cx + 11f * d, cy + 3f * d))
+    drawRoundRect(cloud, Offset(cx - 13f * d, cy + 2f * d), Size(30f * d, 7f * d), CornerRadius(4f * d))
+    // A notebook card: white, with a coloured spine and two lines of writing.
+    val card = Offset(w * 0.12f, h * 0.5f)
+    val cs = Size(w * 0.5f, h * 0.38f)
+    drawRoundRect(p.glow.copy(alpha = 0.12f), card + Offset(0f, 2f * d), cs, CornerRadius(6f * d))
+    drawRoundRect(p.surface, card, cs, CornerRadius(6f * d))
+    drawRoundRect(p.lilacDeep, card, Size(4f * d, cs.height), CornerRadius(2f * d))
+    drawLine(p.inkFaint, card + Offset(9f * d, cs.height * 0.38f), card + Offset(cs.width * 0.8f, cs.height * 0.38f), 1.6f * d, cap = StrokeCap.Round)
+    drawLine(p.blue, card + Offset(9f * d, cs.height * 0.68f), card + Offset(cs.width * 0.55f, cs.height * 0.68f), 1.6f * d, cap = StrokeCap.Round)
+    // The + button in the accent's two tones.
+    val b = 18f * d
+    val bo = Offset(w * 0.86f - b, h * 0.62f)
+    drawRoundRect(Brush.linearGradient(listOf(p.accent, p.blue), start = bo, end = bo + Offset(b, b)), bo, Size(b, b), CornerRadius(6f * d))
+    val m = bo + Offset(b / 2, b / 2)
+    drawLine(p.onAccent, m - Offset(4.5f * d, 0f), m + Offset(4.5f * d, 0f), 1.8f * d, cap = StrokeCap.Round)
+    drawLine(p.onAccent, m - Offset(0f, 4.5f * d), m + Offset(0f, 4.5f * d), 1.8f * d, cap = StrokeCap.Round)
+  }
+}

@@ -213,7 +213,8 @@ private class Glide {
   }
 
   companion object {
-    private val SHADOW = Color(0xFF3B2A7A)
+    // A neutral shadow: it sits under every colour family.
+    private val SHADOW = Color(0xFF26222E)
     private val LEAD = spring(dampingRatio = 0.8f, stiffness = 750f, visibilityThreshold = 0.5f)
     private val TRAIL = spring(dampingRatio = 0.86f, stiffness = 330f, visibilityThreshold = 0.5f)
     private val EVEN = spring(dampingRatio = 0.84f, stiffness = 500f, visibilityThreshold = 0.5f)

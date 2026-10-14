@@ -776,4 +776,8 @@
     <string name="cam_take">Tirar foto</string>
     <string name="updated_from_drive_n">Em dia com o Google Drive: %1$d atualizados</string>
     <string name="made_by_n">Feito por %1$s</string>
+    <string name="colours_lilac">Lilás</string>
+    <string name="colours_sky">Céu</string>
+    <string name="colours_sage">Sálvia</string>
+    <string name="colours_peach">Pêssego</string>
 </resources>

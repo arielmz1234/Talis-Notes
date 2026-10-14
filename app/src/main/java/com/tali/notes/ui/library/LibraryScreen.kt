@@ -541,7 +541,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     }
   })
   if (tour) TourCard(onDone = { tour = false })
-  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> app.settings.update { it.copy(pdfsToLibrary = on) } }, onTour = {
+  if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onColors = vm::setColorTheme, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> app.settings.update { it.copy(pdfsToLibrary = on) } }, onTour = {
     showSettings = false
     tour = true
   }, onDismiss = { showSettings = false })
@@ -628,7 +628,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
 private fun CrashBanner(onSend: () -> Unit, onDismiss: () -> Unit) {
   val c = Tali.colors
   Row(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.horizontalGradient(listOf(c.accentSoft, c.blueSoft))).border(1.dp, Lilac.L300, RoundedCornerShape(16.dp)).padding(horizontal = 18.dp, vertical = 12.dp),
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.horizontalGradient(listOf(c.accentSoft, c.blueSoft))).border(1.dp, c.lilac, RoundedCornerShape(16.dp)).padding(horizontal = 18.dp, vertical = 12.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Column(Modifier.weight(1f)) {
@@ -840,7 +840,7 @@ private fun Wordmark(modifier: Modifier = Modifier) {
         lineTo(left - 2.dp.toPx(), top + h * 1.05f)
         close()
       }
-      drawPath(path, Brush.horizontalGradient(listOf(if (c.isDark) c.lilac else Lilac.L300, if (c.isDark) c.sky else Sky.S200), startX = left, endX = size.width))
+      drawPath(path, Brush.horizontalGradient(listOf(c.lilac, c.sky), startX = left, endX = size.width))
     }
     Text(stringResource(R.string.tali_s_notes), style = MaterialTheme.typography.headlineMedium, color = c.ink)
   }
@@ -1037,7 +1037,7 @@ private fun NotebookCard(
     Box(
       Modifier.fillMaxWidth()
         .aspectRatio(1.32f)
-        .shadow(12.dp, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6))
+        .shadow(12.dp, shape, ambientColor = c.blue.copy(alpha = 0.13f), spotColor = c.accent.copy(alpha = 0.2f))
         .clip(shape)
         .background(c.paper)
         .border(if (picked) 2.5.dp else 1.dp, edge, shape)
@@ -1143,8 +1143,8 @@ private fun EmptyLibrary(onCreate: () -> Unit) {
     Box(Modifier.size(320.dp, 190.dp), contentAlignment = Alignment.Center) {
     DriftingCloud(Modifier.align(Alignment.TopStart).offset(y = 6.dp), width = 96.dp, variant = 1, driftDp = 8f, burstable = true)
     DriftingCloud(Modifier.align(Alignment.BottomEnd).offset(y = (-4).dp), width = 110.dp, variant = 0, driftDp = 10f, periodMs = 12000, burstable = true)
-    Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = 18.dp), size = 12.dp, color = Sky.S400)
-    Box(Modifier.size(200.dp, 150.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Lilac.L50, Sky.S100)), alpha = if (c.isDark) 0.15f else 1f).padding(14.dp)) {
+    Sparkle(Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = 18.dp), size = 12.dp, color = c.blue.copy(alpha = 0.6f))
+    Box(Modifier.size(200.dp, 150.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(c.accentSoft, c.sky)), alpha = if (c.isDark) 0.15f else 1f).padding(14.dp)) {
       // Just the empty engineering page, ready to write on.
       PaperSwatch(PaperStyle.ENGINEERING, Modifier.fillMaxSize())
     }
@@ -1163,7 +1163,7 @@ private fun EmptyFolder(onCreate: () -> Unit, onNewFolder: () -> Unit) {
   val c = Tali.colors
   Column(Modifier.fillMaxWidth().padding(top = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
     Box(contentAlignment = Alignment.Center) {
-      Icon(Icons.Outlined.FolderOpen, null, tint = Sky.S400, modifier = Modifier.size(64.dp).offset(y = 18.dp))
+      Icon(Icons.Outlined.FolderOpen, null, tint = c.blue.copy(alpha = 0.6f), modifier = Modifier.size(64.dp).offset(y = 18.dp))
       DriftingCloud(Modifier.offset(x = 34.dp, y = (-22).dp), width = 72.dp, variant = 2, driftDp = 6f)
     }
     Spacer(Modifier.height(16.dp))
@@ -1268,7 +1268,7 @@ private fun FolderTile(
       Modifier.scale(scale)
         .fillMaxWidth()
         .height(76.dp)
-        .shadow(8.dp, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x2A7A4ED6))
+        .shadow(8.dp, shape, ambientColor = c.blue.copy(alpha = 0.13f), spotColor = c.accent.copy(alpha = 0.16f))
         .clip(shape)
         .background(c.surface)
         .background(Brush.horizontalGradient(listOf(tint.copy(alpha = 0.22f), tint.copy(alpha = 0.06f))))

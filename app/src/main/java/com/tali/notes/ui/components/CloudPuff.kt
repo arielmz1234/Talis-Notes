@@ -102,7 +102,7 @@ fun CloudPuff(progress: () -> Float, modifier: Modifier = Modifier, strength: Fl
   val c = Tali.colors
   // Light: white (or for [vivid], faintly lilac) wisps, the lower ones lilac like the clouds' bellies.
   // Dark: pale, thin mist.
-  val top = if (c.isDark) lerp(lerp(c.cloudTop, DUSK_LILAC, 0.4f), Color.White, 0.45f) else if (vivid) lerp(Color.White, c.cloudBelly, 0.28f) else Color.White
+  val top = if (c.isDark) lerp(lerp(c.cloudTop, c.dusk, 0.4f), Color.White, 0.45f) else if (vivid) lerp(Color.White, c.cloudBelly, 0.28f) else Color.White
   // One even tone in the dark: varied tints there read as blotches.
   val low = if (c.isDark) top else lerp(Color.White, c.cloudBelly, if (vivid) 0.85f else 0.7f)
   val belly = lerp(c.cloudBelly, c.accent, if (vivid) 0.38f else 0.22f)
@@ -292,7 +292,6 @@ private val LAYER_ROOM: Dp = 28.dp
 private val OVERFLOW: Dp = 56.dp
 
 /** A pale lilac the dark-mode mist leans towards. */
-private val DUSK_LILAC = Color(0xFFB7A6EE)
 
 /** How many tints the wisps come in, from the top of the cloud to its lilac underside. */
 private const val TONES = 4

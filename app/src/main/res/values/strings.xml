@@ -776,4 +776,8 @@
     <string name="cam_take">Take picture</string>
     <string name="updated_from_drive_n">Up to date with Google Drive: %1$d updated</string>
     <string name="made_by_n">Made by %1$s</string>
+    <string name="colours_lilac">Lilac</string>
+    <string name="colours_sky">Sky</string>
+    <string name="colours_sage">Sage</string>
+    <string name="colours_peach">Peach</string>
 </resources>

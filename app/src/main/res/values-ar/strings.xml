@@ -776,4 +776,8 @@
     <string name="cam_take">التقاط صورة</string>
     <string name="updated_from_drive_n">محدّث مع Google Drive: %1$d</string>
     <string name="made_by_n">من صنع %1$s</string>
+    <string name="colours_lilac">ليلكي</string>
+    <string name="colours_sky">سماوي</string>
+    <string name="colours_sage">أخضر هادئ</string>
+    <string name="colours_peach">خوخي</string>
 </resources>

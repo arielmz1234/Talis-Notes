@@ -84,6 +84,8 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   fun setThemeMode(mode: com.tali.notes.data.ThemeMode) = getApplication<Application>().talisApp.settings.update { it.copy(themeMode = mode) }
 
+  fun setColorTheme(theme: com.tali.notes.theme.ColorTheme) = getApplication<Application>().talisApp.settings.update { it.copy(colorTheme = theme) }
+
   fun setMinimal(on: Boolean) = getApplication<Application>().talisApp.settings.update { it.copy(minimal = on) }
 
   fun addCustomPaper(paper: com.tali.notes.model.CustomPaper) = getApplication<Application>().talisApp.settings.update { it.copy(customPapers = it.customPapers + paper) }

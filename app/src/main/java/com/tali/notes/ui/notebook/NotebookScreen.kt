@@ -267,6 +267,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   // Held upright (or on a small tablet) the top bar splits into two lines.
   val narrow = LocalConfiguration.current.screenWidthDp < 900
   // A phone: the main toolbar splits into two rows, and the notebook's name steps aside.
+  // The desk round the pages follows the colour family.
+  val deskTheme = com.tali.notes.theme.LocalColorTheme.current
   val phone = LocalConfiguration.current.screenWidthDp < com.tali.notes.ui.library.PHONE_DP
   var toolsOpen by remember { mutableStateOf(false) }
   val darkPaper = meta?.dark == true
@@ -483,7 +485,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           v.pageLayout = vm.pageLayout
           v.pageCount = vm.pageCount
           v.darkPaper = darkPaper
-          v.deskColor = (if (darkPaper) DESK_DARK_PAPER else if (systemDark) DESK_DARK else DESK_LIGHT).toArgb()
+          v.deskColor = (if (darkPaper) DESK_DARK_PAPER else if (systemDark) deskTheme.dark.desk else deskTheme.light.desk).toArgb()
           v.accentColor = c.accent.toArgb()
           v.handleColor = c.blue.toArgb()
         },
@@ -1784,8 +1786,6 @@ private fun ToolbarPuffs(tick: Int, showing: Boolean, bars: Map<String, androidx
   }
 }
 
-private val DESK_LIGHT = Color(0xFFE9E4F2)
-private val DESK_DARK = Color(0xFF2A2338)
 private val DESK_DARK_PAPER = Color(0xFF0E0C13)
 
 /** The main toolbar's height ([MainToolbar]); the bars beside it centre on its middle. */

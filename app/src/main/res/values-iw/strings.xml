@@ -777,4 +777,8 @@
     <string name="cam_take">צילום</string>
     <string name="updated_from_drive_n">מעודכן מול Google Drive: %1$d עודכנו</string>
     <string name="made_by_n">נוצר על ידי %1$s</string>
+    <string name="colours_lilac">לילך</string>
+    <string name="colours_sky">שמיים</string>
+    <string name="colours_sage">מרווה</string>
+    <string name="colours_peach">אפרסק</string>
 </resources>

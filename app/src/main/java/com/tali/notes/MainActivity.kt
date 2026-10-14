@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
         }
         onDispose { com.tali.notes.ui.components.ThemeFade.capture = null }
       }
-      TaliTheme(darkTheme = dark) {
+      TaliTheme(darkTheme = dark, theme = s.colorTheme) {
         androidx.compose.runtime.CompositionLocalProvider(com.tali.notes.theme.LocalMinimal provides s.minimal) {
           androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
             MainNavigation()

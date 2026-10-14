@@ -57,6 +57,19 @@ data class TaliColors(
   val cloudBelly: Color,
   val cloudEdge: Color,
   val cloudShadow: Color,
+  /** The sky band behind the library's heading, left to right. */
+  val skyFrom: Color = Color(0xFFBFD4FF),
+  val skyTo: Color = Color(0xFFDCCBFF),
+  /** The big sky clouds: top, belly, underside and their shadow (ARGB). */
+  val skyCloudTop: Int = 0xFFFFFFFF.toInt(),
+  val skyCloudMid: Int = 0xFFD3D9FA.toInt(),
+  val skyCloudLow: Int = 0xFFB3B8EF.toInt(),
+  val skyCloudShadow: Int = 0x296256C8,
+  /** Tinted shadows (cards, the gliding highlight) and the mist's tone in dark mode. */
+  val glow: Color = Color(0xFF3B2A7A),
+  val dusk: Color = Color(0xFFB7A6EE),
+  /** Around the pages in a notebook. */
+  val desk: Color = Color(0xFFE9E4F2),
 ) {
   /** The signature violet-to-blue used on primary buttons. */
   val accentBrush: Brush
@@ -87,7 +100,7 @@ object Sky {
   val BlueDeep = Color(0xFF2F5AD1)
 }
 
-private val Light =
+private val LilacLight =
   TaliColors(
     background = Color(0xFFF7F3FF),
     surface = Color(0xFFFFFFFF),
@@ -117,7 +130,7 @@ private val Light =
     cloudShadow = Color(0x3D6256C8),
   )
 
-internal val Dark =
+private val LilacDark =
   TaliColors(
     background = Color(0xFF15111E),
     surface = Color(0xFF211B2E),
@@ -145,14 +158,21 @@ internal val Dark =
     cloudBelly = Color(0xFF2B2548),
     cloudEdge = Color(0xFF514980),
     cloudShadow = Color(0x38000000),
+    skyFrom = Color(0xFF1D2A52),
+    skyTo = Color(0xFF30245A),
+    skyCloudTop = 0xFFE4E1F7.toInt(),
+    skyCloudMid = 0xFF9AA0DC.toInt(),
+    skyCloudLow = 0xFF7C7CC8.toInt(),
+    skyCloudShadow = 0x40000000,
+    desk = Color(0xFF2A2338),
   )
 
 /**
  * The notebook's toolbars in dark mode while the page is white: soft lilac clouds rather than
  * deep plum, so the bars sit gently on the paper instead of looking like holes in it.
  */
-private val Mist =
-  Light.copy(
+private val LilacMist =
+  LilacLight.copy(
     surface = Color(0xFFF5EFFF),
     sunken = Color(0xFFE6DBFB),
     line = Color(0xFFD5C7F2),
@@ -168,17 +188,42 @@ private val Mist =
   )
 
 /**
- * Colours for the bars over a notebook: dark ones on dark paper; on white paper the usual light
- * ones, or in dark mode the softer [Mist] lilac.
+ * The app's colour families (Settings › Colours). Each has a light and a dark look, and a soft "mist"
+ * for a notebook's bars in dark mode while the page is white. The first is Tali's original lilac.
  */
-fun notebookColors(systemDark: Boolean, darkPaper: Boolean): TaliColors =
-  when {
-    darkPaper -> Dark
-    systemDark -> Mist
-    else -> Light
-  }
+enum class ColorTheme(val light: TaliColors, val dark: TaliColors, val mist: TaliColors) {
+  /** Lilac meeting light blue: the original. */
+  LILAC(LilacLight, LilacDark, LilacMist),
+  /** Calm and neutral: cool greys with a clear blue. */
+  SKY(SkyLight, SkyDark, SkyMist),
+  /** Soft green, like fresh leaves, with a teal partner. */
+  SAGE(SageLight, SageDark, SageMist),
+  /** A warm sunset: peach, rose and apricot. */
+  PEACH(PeachLight, PeachDark, PeachMist),
+}
 
-val LocalTaliColors = staticCompositionLocalOf { Light }
+/** The family chosen in Settings, for the few places that pick a palette themselves. */
+val LocalColorTheme = staticCompositionLocalOf { ColorTheme.LILAC }
+
+/** The dark look of the chosen family (the camera always uses it). */
+val DarkColors: TaliColors
+  @Composable get() = LocalColorTheme.current.dark
+
+/**
+ * Colours for the bars over a notebook: dark ones on dark paper; on white paper the usual light
+ * ones, or in dark mode the softer mist.
+ */
+@Composable
+fun notebookColors(systemDark: Boolean, darkPaper: Boolean): TaliColors {
+  val t = LocalColorTheme.current
+  return when {
+    darkPaper -> t.dark
+    systemDark -> t.mist
+    else -> t.light
+  }
+}
+
+val LocalTaliColors = staticCompositionLocalOf { LilacLight }
 
 @OptIn(ExperimentalTextApi::class)
 private fun figtree(weight: Int) = Font(R.font.figtree, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
@@ -248,7 +293,8 @@ object Tali {
 }
 
 @Composable
-fun TaliTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) = TaliColorsScope(if (darkTheme) Dark else Light, content)
+fun TaliTheme(darkTheme: Boolean = isSystemInDarkTheme(), theme: ColorTheme = ColorTheme.LILAC, content: @Composable () -> Unit) =
+  CompositionLocalProvider(LocalColorTheme provides theme) { TaliColorsScope(if (darkTheme) theme.dark else theme.light, content) }
 
 /** The minimal look (Settings → Style): no cloud bumps, no sky clouds. */
 val LocalMinimal = androidx.compose.runtime.staticCompositionLocalOf { false }

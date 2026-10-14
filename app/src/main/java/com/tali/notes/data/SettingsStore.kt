@@ -138,6 +138,8 @@ data class AppSettings(
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
   /** The minimal look: no cloud bumps on bars and cards, no clouds in the sky, the home screen moved up. */
   val minimal: Boolean = false,
+  /** The colour family (Settings › Colours). */
+  val colorTheme: com.tali.notes.theme.ColorTheme = com.tali.notes.theme.ColorTheme.LILAC,
   /** One-time tips she has already seen. */
   val seenTips: Set<String> = emptySet(),
   /** PDFs, pictures and scans she tapped Write on: they open ready to write from then on. */

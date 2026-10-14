@@ -143,7 +143,6 @@ import com.tali.notes.camera.Look
 import com.tali.notes.camera.P
 import com.tali.notes.camera.PageImage
 import com.tali.notes.camera.Quad
-import com.tali.notes.theme.Dark
 import com.tali.notes.theme.Tali
 import com.tali.notes.theme.TaliColorsScope
 import com.tali.notes.ui.components.EaseOutStrong
@@ -198,7 +197,7 @@ internal fun CameraWindow(content: @Composable () -> Unit) {
     }
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
       // (Its words still read right to left in Hebrew and Arabic: TaliColorsScope sees the forced layout.)
-      TaliColorsScope(Dark) { content() }
+      TaliColorsScope(com.tali.notes.theme.DarkColors) { content() }
     }
   }
 }
@@ -738,7 +737,7 @@ private fun lookName(l: Look) =
 /** The picture with its four corners to drag; a magnifier shows what's under the finger. */
 @Composable
 private fun Corners(picture: ImageBitmap, quad: Quad, onQuad: (Quad) -> Unit) {
-  val accent = ACCENT
+  val accent = Tali.colors.accent
   val current by rememberUpdatedState(quad)
   var held by remember { mutableStateOf(-1) }
   var finger by remember { mutableStateOf(Offset.Zero) }
@@ -968,7 +967,6 @@ internal fun clearOld(context: Context) {
 
 internal val NIGHT = Color(0xFF0E0A18)
 private val GLASS = Color(0xFF1B1430).copy(alpha = 0.62f)
-private val ACCENT = Color(0xFFB79CFF)
 internal const val MAX_SIDE = 3000
 
 /** The language's own direction (right to left in Hebrew and Arabic), whatever the screen around it uses. */

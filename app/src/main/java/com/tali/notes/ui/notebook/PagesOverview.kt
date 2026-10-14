@@ -401,7 +401,7 @@ private fun PageTile(
       Modifier.fillMaxWidth()
         .aspectRatio(PAGE_ASPECT)
         .graphicsLayer { scaleX = 1f + 0.05f * lift; scaleY = 1f + 0.05f * lift }
-        .shadow((if (selected) 10.dp else 5.dp) + 14.dp * lift, shape, ambientColor = Color(0x224F7BE8), spotColor = Color(0x337A4ED6))
+        .shadow((if (selected) 10.dp else 5.dp) + 14.dp * lift, shape, ambientColor = Tali.colors.blue.copy(alpha = 0.13f), spotColor = Tali.colors.accent.copy(alpha = 0.2f))
         .clip(shape)
         .background(Color.White)
         .border(if (selected || picked) 2.5.dp else 1.dp, if (selected || picked) c.accent else c.line, shape)
