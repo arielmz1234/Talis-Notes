@@ -59,14 +59,14 @@ Play asks how to sign the app. Choose **"Use a different key"** › **"Export an
 > In English, Hebrew, Arabic, Spanish, French and Portuguese.
 
 **App category:** Productivity  ·  **Tags:** Note taking, Education
-**Contact email:** your choice (shown publicly)  ·  **Website:** https://arielmz1234.github.io/
-**Privacy policy:** https://arielmz1234.github.io/privacy.html
+**Contact email:** your choice (shown publicly)  ·  **Website:** https://talisnotes.github.io/
+**Privacy policy:** https://talisnotes.github.io/privacy.html
 
 ---
 
 ## App content (Policy › App content)
 
-**Privacy policy:** `https://arielmz1234.github.io/privacy.html`
+**Privacy policy:** `https://talisnotes.github.io/privacy.html`
 
 **App access:** All functionality is available without special access (no login).
 
