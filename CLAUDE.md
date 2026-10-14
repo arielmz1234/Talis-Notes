@@ -81,6 +81,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # adjust per ma
 - On a new computer, copy the `keystore/` folder over by hand (USB or a password manager, not git).
 - Without the key, `assembleRelease` falls back to the debug key. That APK **will not** update her installed app, so don't hand it to her as an update.
 - Release SHA-1: `B9:89:A0:5A:05:74:6D:3D:AD:20:3C:F2:A0:74:51:BB:08:13:CE:08` (used by Drive OAuth).
+- **Google Play signs with its own key (14 Oct 2026):** our `keystore/` key is only the *upload* key. Copies installed from Play carry Play's app signing key, SHA-1 `DA:B2:22:F7:9B:13:A5:7E:98:42:8D:B3:D4:67:E5:C4:D0:31:13:1A`, registered as the "Google Play" Android OAuth client in Google Cloud (without it Drive sign-in silently did nothing). So a Play install and a sideloaded APK can't update each other: once someone is on Play, they stay on Play updates.
 
 ## Release plan (Play Store)
 
