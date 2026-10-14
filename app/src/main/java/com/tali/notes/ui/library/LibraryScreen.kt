@@ -86,6 +86,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import com.tali.notes.data.NotesRepository
 import com.tali.notes.backup.DriveBackup
+import com.tali.notes.talisApp
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.runtime.collectAsState
@@ -151,6 +152,9 @@ private const val WELCOME_RESTORE = "welcome-restore"
 
 /** The walk through the app, shown once to someone new (after the welcome card); Settings replays it. */
 private const val TOUR = "tour"
+
+/** The "your notebooks aren't backed up" banner was put away with its ×. */
+private const val BACKUP_NUDGE = "backup-nudge"
 
 @Composable
 fun LibraryScreen(onOpen: (String) -> Unit) {
@@ -372,6 +376,28 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             CrashLog.dismiss(context)
             crashReport = null
           },
+        )
+      }
+      // Nothing backed up yet (no Drive backup, no backup file of her own): a nudge to connect Drive.
+      val driveStatus by DriveBackup.status(context).collectAsState()
+      val autoStatus by com.tali.notes.backup.AutoBackup.status(context).collectAsState()
+      val backedUp = driveStatus.enabled || autoStatus.uri != null
+      var nudge by remember { mutableStateOf(false) }
+      LaunchedEffect(backedUp, all.isNotEmpty(), BACKUP_NUDGE in settings.seenTips) {
+        if (DriveBackup.available && !backedUp && all.isNotEmpty() && BACKUP_NUDGE !in settings.seenTips) nudge = true
+      }
+      androidx.compose.animation.AnimatedVisibility(
+        nudge && !inTrash && picked == null,
+        enter = fadeIn(tween(220)) + androidx.compose.animation.expandVertically(tween(260, easing = com.tali.notes.ui.components.EaseOutStrong)),
+        exit = fadeOut(tween(150)) + androidx.compose.animation.shrinkVertically(tween(200, easing = com.tali.notes.ui.components.EaseOutStrong)),
+      ) {
+        BackupBanner(
+          onClose = {
+            nudge = false
+            context.talisApp.settings.update { it.copy(seenTips = it.seenTips + BACKUP_NUDGE) }
+          },
+          onFinished = { nudge = false },
+          modifier = Modifier.padding(top = 16.dp),
         )
       }
       Spacer(Modifier.height(18.dp))

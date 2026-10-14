@@ -98,6 +98,12 @@ interface CanvasHost {
   /** The view moved or zoomed (an open text editor follows it). */
   fun onCameraMoved() = Unit
 
+  /**
+   * Where bars float over the page, in window pixels. Ink's live layer draws above every view, so
+   * a stroke passing under a toolbar showed on top of it until the pen lifted; it's masked there.
+   */
+  fun inkCovers(): List<android.graphics.RectF> = emptyList()
+
   /** The S Pen button was double-pressed (+1, next starred pen) or triple-pressed (-1, back). */
   fun onPenCycle(step: Int) = Unit
 
@@ -871,7 +877,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     liveShape?.let { drawShapePreview(canvas, it) }
     straightPreview?.let { preview ->
       canvas.save()
-      inkAreas(preview.stroke.brush.size / 2f, pageAt(straightStart))?.let { areas -> canvas.clipPath(areaPath(areas, null)) }
+      // The same area the kept stroke is drawn in (Pages.clipFor), on screen.
+      inkAreas(pageAt(straightStart))?.let { areas -> canvas.clipPath(areaPath(areas, camera.worldToScreen)) }
       itemRenderer.draw(canvas, preview, camera.worldToScreen)
       canvas.restore()
     }
@@ -1713,6 +1720,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         snapTargets = gatherSnapTargets(setOf(shape.id))
         snap = newSnap()
         mode = Mode.HANDLE_DRAG
+        host.onSelectionChanged(null)
         return
       }
     }
@@ -1752,7 +1760,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     val effective = if (eraserOverride) Tool.ERASER else tool
     val n = pageCount
-    val onPaper = if (effective == Tool.PEN) inkAreas(0f)?.any { it.contains(p) } ?: true else n == null || pageLayout.contains(n, p.x, p.y)
+    val onPaper = if (effective == Tool.PEN) inkAreas()?.any { it.contains(p) } ?: true else n == null || pageLayout.contains(n, p.x, p.y)
     if (n != null && (effective == Tool.PEN || effective == Tool.SHAPE || effective == Tool.FILL) && !onPaper) {
       mode = Mode.IGNORE
       return
@@ -1798,13 +1806,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val se = smoother.smooth(e, idx, MotionEvent.ACTION_DOWN)
     predictor.record(se)
     predictionGuard.record(se)
-    // Ink running off the page is hidden as it's drawn, so what she sees is what's kept.
-    inProgress.maskPath = inkAreas(slot.size / 2f, pageAt(p))?.let { areas ->
-      android.graphics.Path().apply {
-        addRect(0f, 0f, width.toFloat(), height.toFloat(), android.graphics.Path.Direction.CW)
-        op(areaPath(areas, camera.worldToScreen), android.graphics.Path.Op.DIFFERENCE)
-      }
-    }
+    // What she sees while writing is what's kept: ink off the page is hidden exactly where the
+    // kept stroke is clipped (Pages.clipFor), and so is ink under the toolbars. Ink's live layer
+    // sits above every view and isn't clipped to this one, so the stroke used to show over the
+    // toolbars and status bar, then vanish on lift (a tester's video).
+    inProgress.maskPath = inkMask(inkAreas(pageAt(p)))
     val id = inProgress.startStroke(se, e.getPointerId(idx), brush, camera.screenToWorld)
     // Ink's stroke unit: how far the pen moves (cm) for one world unit, as Ink works it out.
     val unitCm = camera.scale * 2.54f / resources.displayMetrics.xdpi
@@ -2178,13 +2184,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         chipBackAt = SystemClock.uptimeMillis()
         val edited = liveEdit
         val original = edited?.let { d?.get(it.id) }
-        if (edited != null && original != null && d != null) d.commit(Change(listOf(original), listOf(edited)))
+        if (edited != null && original != null && d != null && edited != original) d.commit(Change(listOf(original), listOf(edited)))
         liveEdit = null
         tiles.hidden = emptySet()
         // It stays selected after being adjusted, ready for the next change.
         (edited?.let { d?.get(it.id) } as? ShapeItem)?.let { shape ->
           val soft = softSelection || selection.isEmpty()
-          setSelection(listOf(shape))
+          // Reshaped: the menu stays closed; a dot only tapped leaves it as it was.
+          setSelection(listOf(shape), menu = if (shape == original) null else false)
           activeShapeId = shape.id
           softSelection = soft
         }
@@ -2560,25 +2567,44 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // ---- Keeping ink on the pages ----
 
   /**
-   * Where ink may go on A4 pages, inset by [inset] (half the pen's width, so the stroke's rounded
-   * end stops at the edge): each page, or with *Write between pages* on, the whole column of pages
-   * including the gaps. Never past the sides. Null on an endless canvas.
+   * Where ink may go on A4 pages, the same areas the kept strokes are clipped to (Pages.clipFor):
+   * each page, or with *Write between pages* on, the whole column of pages including the gaps.
+   * Never past the sides. Null on an endless canvas.
    */
-  private fun inkAreas(inset: Float, startPage: Int? = null): List<Rect>? {
+  private fun inkAreas(startPage: Int? = null): List<Rect>? {
     val n = pageCount ?: return null
-    val ix = min(inset, pageLayout.width / 4f)
-    val iy = min(inset, pageLayout.height / 4f)
-    fun page(i: Int) = pageLayout.rect(i).let { r -> Rect(r.left + ix, r.top + iy, r.right - ix, r.bottom - iy) }
     return when {
-      settings.inkBetweenPages -> listOf(Rect(ix, iy, pageLayout.width - ix, pageLayout.rect(n - 1).bottom - iy))
+      settings.inkBetweenPages -> listOf(Rect(0f, 0f, pageLayout.width, pageLayout.rect(n - 1).bottom))
       // Off: a stroke stays on the page it started on; crossing onto another page doesn't count.
-      startPage != null -> listOf(page(startPage.coerceIn(0, n - 1)))
-      else -> (0 until n).map(::page)
+      startPage != null -> listOf(pageLayout.rect(startPage.coerceIn(0, n - 1)))
+      else -> (0 until n).map(pageLayout::rect)
     }
   }
 
   /** The page under [p] (the gap below a page counts as that page). */
   private fun pageAt(p: Pt): Int? = pageCount?.let { n -> pageLayout.indexAt(p.y).coerceIn(0, n - 1) }
+
+  /**
+   * The live stroke's mask: everything off [areas] (null: an endless canvas), and every bar
+   * floating over the page ([CanvasHost.inkCovers]), so the stroke looks the same as it's written
+   * as once it's kept (drawn under the bars, clipped to its page). Null when nothing is covered.
+   */
+  private fun inkMask(areas: List<Rect>?): android.graphics.Path? {
+    val loc = IntArray(2).also { getLocationInWindow(it) }
+    val covers = host.inkCovers()
+    if (areas == null && covers.isEmpty()) return null
+    val mask = android.graphics.Path()
+    if (areas != null) {
+      mask.addRect(-1e5f, -1e5f, 1e5f, 1e5f, android.graphics.Path.Direction.CW)
+      mask.op(areaPath(areas, camera.worldToScreen), android.graphics.Path.Op.DIFFERENCE)
+    }
+    if (covers.isNotEmpty()) {
+      val bars = android.graphics.Path()
+      covers.forEach { r -> bars.addRect(r.left - loc[0], r.top - loc[1], r.right - loc[0], r.bottom - loc[1], android.graphics.Path.Direction.CW) }
+      mask.op(bars, android.graphics.Path.Op.UNION)
+    }
+    return mask
+  }
 
   /** [areas] as one path, in world units, or on screen through [toScreen]. */
   private fun areaPath(areas: List<Rect>, toScreen: android.graphics.Matrix?): android.graphics.Path =
@@ -2907,7 +2933,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(near) &&
         ((loop && item.bounds.intersects(area) && lassoTouches(item, pts)) || (free && touchedBy(item, pts, reach)))
     })
-    setSelection(picked)
+    setSelection(picked, menu = true)
     if (picked.isNotEmpty()) host.onTip("lasso", if (canRotateSelection()) tr(R.string.drag_to_move_corner_dot_to) else tr(R.string.drag_to_move_corner_dot_to_2))
     if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
   }
@@ -3085,7 +3111,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Picks up [item], with the fill it outlines or the outline around it if it's a fill. */
   private fun selectGroup(item: CanvasItem) {
     val all = withFills(listOf(item))
-    if (all.size == 1) selectSingle(item) else setSelection(all)
+    if (all.size == 1) selectSingle(item) else setSelection(all, menu = true)
   }
 
   private fun isAreaFill(item: CanvasItem) = item is ImageItem && item.file.startsWith(FILL_PREFIX)
@@ -3119,13 +3145,26 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun selectSingle(item: CanvasItem) {
-    setSelection(listOf(item))
+    setSelection(listOf(item), menu = true)
     activeShapeId = (item as? ShapeItem)?.id
     invalidate()
   }
 
-  private fun setSelection(items: List<CanvasItem>) {
-    if (items.map { it.id } != selection.map { it.id }) softSelection = false
+  /** The selection menu was closed by an edit; it comes back when she taps the selection. */
+  private var menuClosed = false
+
+  /**
+   * [menu]: true shows the selection menu (she picked these up), false keeps it closed (she just
+   * moved, turned or reshaped them: the menu shouldn't sit on screen after an edit), null leaves it
+   * as it was (a change from the menu itself, an undo); something new picked up shows it.
+   */
+  private fun setSelection(items: List<CanvasItem>, menu: Boolean? = null) {
+    val same = items.map { it.id } == selection.map { it.id }
+    if (!same) softSelection = false
+    menuClosed = when (menu) {
+      null -> same && menuClosed
+      else -> !menu
+    }
     selection = items
     selectionBounds = items.map { it.bounds }.reduceOrNull(Rect::union)
     publishSelection()
@@ -3134,7 +3173,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun publishSelection() {
     val b = selectionBounds
-    if (b == null || selection.isEmpty()) {
+    if (b == null || selection.isEmpty() || menuClosed) {
       host.onSelectionChanged(null)
       return
     }
@@ -3162,6 +3201,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     selectionBounds = null
     activeShapeId = null
     softSelection = false
+    menuClosed = false
     if (had) host.onSelectionChanged(null)
     invalidate()
   }
@@ -3172,6 +3212,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     tiles.hidden = emptySet()
     dragTransform = Affine.IDENTITY
     if (t.isIdentity) {
+      // A tap on the selection: the menu again.
+      menuClosed = false
       publishSelection()
       return
     }
@@ -3179,7 +3221,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Pictures land back on a page (in the same undo step).
     pageNudge(moved)?.let { nudge -> moved = moved.map { it.transformed(nudge) } }
     d.commit(Change(selection, moved))
-    setSelection(moved)
+    setSelection(moved, menu = false)
     if (moved.size == 1 && moved[0] is ShapeItem) activeShapeId = moved[0].id
   }
 

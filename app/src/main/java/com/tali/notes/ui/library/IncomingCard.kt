@@ -260,7 +260,7 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
       val phone = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < PHONE_DP
       val tiles: @Composable (Modifier) -> Unit = { tile ->
         if (DriveBackup.available) {
-          RestoreChoice(tile, Icons.Outlined.CloudDownload, stringResource(R.string.google_drive), stringResource(R.string.every_notebook_the_app_backed_up)) {
+          RestoreChoice(tile, Icons.Outlined.CloudDownload, stringResource(R.string.google_drive), stringResource(R.string.every_notebook_the_app_backed_up), recommended = true) {
             drive(later(R.string.restoring_from_drive)) { token ->
               val r = DriveBackup.restore(context, token)
               DriveBackup.enable(context)
@@ -287,11 +287,12 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
 }
 
 /**
- * One way to restore: a tile with an icon, a name and a line about it. All three look the same until
- * touched (none is picked for her); pressed, a tile washes lilac and sinks in a little.
+ * One way to restore: a tile with an icon, a name and a line about it. Pressed, a tile washes lilac
+ * and sinks in a little. The [recommended] one (Google Drive, which keeps backing up afterwards)
+ * wears an accent outline and a small *Recommended* tag, but isn't picked for her.
  */
 @Composable
-private fun RestoreChoice(modifier: Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, onClick: () -> Unit) {
+private fun RestoreChoice(modifier: Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, recommended: Boolean = false, onClick: () -> Unit) {
   val c = Tali.colors
   val tint = Color(if (c.isDark) 0xFF6FD3B5 else 0xFF1C8466)
   val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -300,9 +301,20 @@ private fun RestoreChoice(modifier: Modifier, icon: androidx.compose.ui.graphics
   val sink by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.97f else 1f, tween(if (pressed) 90 else 220), label = "sink")
   Column(
     modifier.graphicsLayer { scaleX = sink; scaleY = sink }.clip(RoundedCornerShape(18.dp)).background(wash)
-      .border(1.dp, c.line, RoundedCornerShape(18.dp)).clickable(interactionSource = press, indication = null, onClick = onClick).padding(14.dp),
+      .border(if (recommended) 1.5.dp else 1.dp, if (recommended) c.accent else c.line, RoundedCornerShape(18.dp)).clickable(interactionSource = press, indication = null, onClick = onClick).padding(14.dp),
   ) {
-    Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
+      if (recommended) {
+        Spacer(Modifier.weight(1f))
+        Text(
+          stringResource(R.string.recommended),
+          style = MaterialTheme.typography.labelSmall,
+          color = c.onAccent,
+          modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accentBrush).padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+      }
+    }
     Spacer(Modifier.height(8.dp))
     Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink)
     Spacer(Modifier.height(2.dp))

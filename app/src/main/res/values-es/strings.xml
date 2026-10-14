@@ -780,4 +780,8 @@
     <string name="colours_sky">Cielo</string>
     <string name="colours_sage">Salvia</string>
     <string name="colours_peach">Melocotón</string>
+    <string name="recommended">Recomendado</string>
+    <string name="your_notebooks_aren_t_backed_up">Tus cuadernos no tienen copia de seguridad</string>
+    <string name="connect_your_google_drive_to_back">Conecta tu Google Drive y se guardarán solos.</string>
+    <string name="connect_drive">Conectar Drive</string>
 </resources>

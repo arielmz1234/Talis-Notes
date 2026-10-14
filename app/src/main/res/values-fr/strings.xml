@@ -780,4 +780,8 @@
     <string name="colours_sky">Ciel</string>
     <string name="colours_sage">Sauge</string>
     <string name="colours_peach">Pêche</string>
+    <string name="recommended">Recommandé</string>
+    <string name="your_notebooks_aren_t_backed_up">Vos carnets ne sont pas sauvegardés</string>
+    <string name="connect_your_google_drive_to_back">Connectez votre Google Drive et ils se sauvegarderont tout seuls.</string>
+    <string name="connect_drive">Connecter Drive</string>
 </resources>

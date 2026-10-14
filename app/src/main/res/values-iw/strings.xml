@@ -781,4 +781,8 @@
     <string name="colours_sky">שמיים</string>
     <string name="colours_sage">מרווה</string>
     <string name="colours_peach">אפרסק</string>
+    <string name="recommended">מומלץ</string>
+    <string name="your_notebooks_aren_t_backed_up">המחברות שלך לא מגובות</string>
+    <string name="connect_your_google_drive_to_back">חברו את Google Drive והן יגובו לבד.</string>
+    <string name="connect_drive">חיבור Drive</string>
 </resources>

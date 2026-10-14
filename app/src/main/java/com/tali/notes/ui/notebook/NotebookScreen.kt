@@ -168,6 +168,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
@@ -410,6 +411,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     holder.view?.let { if (it.width > 0) vm.persistView(it.viewport(), it.visibleWorld()) }
   }
 
+  // Where the bars float over the page (window pixels): the live stroke is hidden under them.
+  val inkCovers = remember { HashMap<String, android.graphics.RectF>() }
   Box(Modifier.fillMaxSize().background(if (darkPaper) Color(com.tali.notes.canvas.PaperRenderer.DARK_PAPER) else c.paper)) {
     if (doc != null) {
       AndroidView(
@@ -462,6 +465,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                 override fun onCameraMoved() {
                   vm.cameraTick++
                 }
+
+                override fun inkCovers(): List<android.graphics.RectF> = inkCovers.values.toList()
               },
             )
             .also {
@@ -569,7 +574,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       // which she kept pressing by accident when it sat next to redo.
       val recent by vm.recent.collectAsState()
       val titlePill: @Composable () -> Unit = {
-        Box(Modifier.bar("title", 0)) {
+        Box(Modifier.bar("title", 0).inkCover(inkCovers, "title")) {
           TitlePill(
             onBack = { leave(onBack) },
             canUndo = vm.canUndo,
@@ -585,7 +590,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
       val tools: @Composable () -> Unit = {
-        Column(Modifier.bar("", 1), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.bar("", 1).inkCover(inkCovers, "tools"), horizontalAlignment = Alignment.CenterHorizontally) {
           val toolbar: @Composable (Modifier, ToolbarPart, (@Composable () -> Unit)?) -> Unit = { m, part, trailing ->
             MainToolbar(
               modifier = m,
@@ -673,7 +678,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       val undoBar: @Composable () -> Unit = {
         // The notebook's name (it shortens first when space is short), then the eye, then ⋯ always
         // in the top-right corner.
-        Row(Modifier.bar("undo", 2), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.bar("undo", 2).inkCover(inkCovers, "undo"), verticalAlignment = Alignment.CenterVertically) {
           if (!phone) NamePill(meta?.title ?: "", Modifier.weight(1f, fill = false)) { renaming = true }
           Spacer(Modifier.width(10.dp))
           FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
@@ -769,7 +774,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       Box(Modifier.fillMaxWidth().bar("", 3, fromBelow = true)) {
         // On a phone the tip sits above the page and zoom chips instead of over them.
         HintPill(vm.hint, onDone = { vm.hint = null }, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (phone) 56.dp else 0.dp))
-        Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.align(Alignment.BottomEnd).inkCover(inkCovers, "chips"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
           val (page, pages) = vm.page
           if (page >= 0) PageChip(page, pages, onOverview = if (paged) ({ pagesOpen = true }) else null) { target -> holder.view?.runSafely { goToPage(target) } }
           ZoomChip(vm.zoom) { holder.view?.runSafely { setZoom(1f) } }
@@ -1893,5 +1898,18 @@ private fun SideScroller(tick: Int, span: () -> com.tali.notes.canvas.NoteCanvas
         contentAlignment = Alignment.Center,
       ) { Text("${page.first + 1} / ${page.second}", style = MaterialTheme.typography.labelLarge, color = c.ink, maxLines = 1) }
     }
+  }
+}
+
+/**
+ * Records where this bar sits (in window pixels) under [key] in [covers], and forgets it when the
+ * bar leaves the screen (toolbars hidden), so the canvas masks the live stroke under it.
+ */
+@Composable
+private fun Modifier.inkCover(covers: HashMap<String, android.graphics.RectF>, key: String): Modifier {
+  androidx.compose.runtime.DisposableEffect(key) { onDispose { covers.remove(key) } }
+  return onGloballyPositioned { at ->
+    val r = at.boundsInWindow()
+    covers[key] = android.graphics.RectF(r.left, r.top, r.right, r.bottom)
   }
 }

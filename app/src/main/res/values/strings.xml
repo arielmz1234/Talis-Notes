@@ -780,4 +780,8 @@
     <string name="colours_sky">Sky</string>
     <string name="colours_sage">Sage</string>
     <string name="colours_peach">Peach</string>
+    <string name="recommended">Recommended</string>
+    <string name="your_notebooks_aren_t_backed_up">Your notebooks aren\'t backed up</string>
+    <string name="connect_your_google_drive_to_back">Connect your Google Drive and they\'ll back up by themselves.</string>
+    <string name="connect_drive">Connect Drive</string>
 </resources>
