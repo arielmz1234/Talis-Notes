@@ -2,7 +2,7 @@
 
 A handwriting notes app for Android tablets, made first for Tali, a civil-engineering student, writing with an S Pen.
 - For now it is sideloaded to her as an APK. It replaces Notewise for her.
-- **Heading for a public release (decided 11 Oct 2026):** Play Store, **tablets only** at first, **free** (no billing). See *Release plan* below. New work should suit strangers too, not only Tali: no personal names in the UI, nothing that needs the owner to explain it.
+- **Heading for a public release (decided 11 Oct 2026):** Play Store, **free** (no billing). Tablets only at first was the plan; on 15 Oct 2026 the owner chose **tablets and phones** (the phone layout, item 67, works; revisit if phone testers' feedback is poor). See *Release plan* below. New work should suit strangers too, not only Tali: no personal names in the UI, nothing that needs the owner to explain it.
 - Devices: Galaxy Tab S6 Lite and newer (she has a Tab S9 FE).
 
 [README.md](README.md) lists the features and has a code map, so read it first. [BACKUP_SETUP.md](BACKUP_SETUP.md) covers signing and Google Drive.
