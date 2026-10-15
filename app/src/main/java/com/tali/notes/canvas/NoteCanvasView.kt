@@ -597,8 +597,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   override fun onStrokesFinished(finished: Map<InProgressStrokeId, Stroke>) {
+    // Parts of a stroke that went off its page: drawn here until the whole stroke is kept.
+    val parts = finished.filterKeys { it in splitParts }
+    if (parts.isNotEmpty()) {
+      parts.forEach { (id, s) ->
+        val g = splitParts.remove(id)!!
+        val pen = strokePens.remove(id)
+        if (pen != null && !g.dropped) g.handed += InkItem("part-$id", 0L, pen, realColoured(id, pen, s))
+        strokeColors.remove(id)
+        g.parts.remove(id)
+        if (g.ended && g.parts.isEmpty()) keepWhole(g)
+      }
+      inProgress.removeFinishedStrokes(parts.keys)
+      parts.keys.forEach { shadows.remove(it) }
+      invalidate()
+    }
     // Only strokes not handed over yet (Ink may report a stroke already taken).
-    val strokes = finished.filterKeys { strokePens.containsKey(it) }
+    val strokes = finished.filterKeys { strokePens.containsKey(it) && it !in parts }
     if (strokes.isEmpty()) {
       inProgress.removeFinishedStrokes(finished.keys)
       finished.keys.forEach { shadows.remove(it) }
@@ -625,6 +640,187 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     inProgress.removeFinishedStrokes(strokes.keys)
     finished.keys.forEach { shadows.remove(it) }
     invalidate()
+  }
+
+  // ---- Strokes that leave their page ----
+  //
+  // Ink hides ink with its mask by drawing the stroke and then clearing the masked area, on a
+  // front buffer the screen shows as it's drawn. On some phones that showed: a stroke run off its
+  // page (into the next page, or under a toolbar) appeared there and flickered (a tester's video,
+  // 15 Oct 2026). So Ink is never given what's off the stroke's page: each stretch on the page is
+  // shown as an Ink stroke of its own (a "part"), every sample of the whole stroke is recorded
+  // ([Gesture.full]), and once she lifts and Ink has handed every part over, the stroke is kept
+  // whole from those samples, exactly as an unbroken one would be, still clipped to its page.
+
+  /** The stroke being written: its look, where its ink may show, and every sample of it. */
+  private class Gesture(
+    val pen: PenType,
+    val color: Int,
+    val brush: androidx.ink.brush.Brush,
+    val unitCm: Float,
+    /** Where its ink may show, in world units (its page, inset by half the pen), or null for anywhere. */
+    val areas: List<Rect>?,
+    /** Bars over the page, in this view's pixels, widened by half the pen. */
+    val covers: List<android.graphics.RectF>,
+    val full: InkShadow,
+  ) {
+    /** Ink strokes it was shown as that Ink hasn't handed over yet. */
+    val parts = LinkedHashSet<InProgressStrokeId>()
+    /** It left its area at least once: kept from [full] instead of from Ink's stroke. */
+    var split = false
+    var ended = false
+    var dropped = false
+    /** Parts Ink already handed over, drawn here until the whole stroke is kept. */
+    val handed = ArrayList<InkItem>()
+    /** The last sample shown, where a part ends when the pen leaves. */
+    val lastCoords = MotionEvent.PointerCoords()
+    var lastTime = 0L
+  }
+
+  private var gesture: Gesture? = null
+
+  /** Each part of a split stroke, to its stroke. */
+  private val splitParts = HashMap<InProgressStrokeId, Gesture>()
+
+  /** Split strokes whose handed-over parts are drawn here (see [Gesture.handed]). */
+  private val splitShown = ArrayList<Gesture>()
+
+  private val partProps = arrayOf(MotionEvent.PointerProperties())
+  private val partCoords = arrayOf(MotionEvent.PointerCoords())
+
+  /** Samples [from]..[to] of the one-pointer event [se] as an event with [action]. Recycle it. */
+  private fun samples(se: MotionEvent, from: Int, to: Int, action: Int): MotionEvent {
+    se.getPointerProperties(0, partProps[0])
+    var out: MotionEvent? = null
+    for (h in from..to) {
+      val latest = h >= se.historySize
+      if (latest) se.getPointerCoords(0, partCoords[0]) else se.getHistoricalPointerCoords(0, h, partCoords[0])
+      val time = if (latest) se.eventTime else se.getHistoricalEventTime(h)
+      val o = out
+      if (o == null) out = MotionEvent.obtain(se.downTime, time, action, 1, partProps, partCoords, se.metaState, se.buttonState, se.xPrecision, se.yPrecision, se.deviceId, 0, se.source, se.flags)
+      else o.addBatch(time, partCoords, se.metaState)
+    }
+    return out!!
+  }
+
+  private fun sampleX(e: MotionEvent, h: Int) = if (h < e.historySize) e.getHistoricalX(0, h) else e.x
+
+  private fun sampleY(e: MotionEvent, h: Int) = if (h < e.historySize) e.getHistoricalY(0, h) else e.y
+
+  /** Whether ink at ([x], [y]) on screen shows: on its area and not under a bar. */
+  private fun shows(g: Gesture, x: Float, y: Float): Boolean {
+    if (g.covers.any { it.contains(x, y) }) return false
+    val areas = g.areas ?: return true
+    val w = camera.toWorld(x, y)
+    return areas.any { it.contains(w) }
+  }
+
+  /**
+   * Gives Ink the samples of [se] (one pointer, smoothed) that show, starting a part where the pen
+   * comes onto its area and ending one where it leaves; every sample goes into [Gesture.full].
+   * [last] ends the stroke.
+   */
+  private fun feedInk(g: Gesture, se: MotionEvent, prediction: MotionEvent?, last: Boolean) {
+    val n = se.historySize
+    for (h in 0..n) g.full.add(se, 0, h)
+    // A guess at where the pen goes next, only while it stays where ink shows.
+    val guess = prediction?.takeIf { pr -> !last && (0..pr.historySize).all { k -> shows(g, sampleX(pr, k), sampleY(pr, k)) } }
+    var h = 0
+    while (h <= n) {
+      val on = shows(g, sampleX(se, h), sampleY(se, h))
+      // The run of samples with the same answer.
+      var end = h
+      while (end + 1 <= n && shows(g, sampleX(se, end + 1), sampleY(se, end + 1)) == on) end++
+      if (on) {
+        val sid = strokeId
+        if (sid == null) {
+          // On its area (at the start, or back on it): a new part.
+          val ev = samples(se, h, end, MotionEvent.ACTION_DOWN)
+          val id = inProgress.startStroke(ev, se.getPointerId(0), g.brush, camera.screenToWorld)
+          shadows[id] = InkShadow(g.pen, g.brush, ev.eventTime, g.unitCm, android.graphics.Matrix(camera.screenToWorld)).also { sh -> for (k in 0..ev.historySize) sh.add(ev, 0, k) }
+          ev.recycle()
+          strokeId = id
+          strokePens[id] = g.pen
+          if (darkPaper) strokeColors[id] = g.color
+          g.parts += id
+          if (g.split) splitParts[id] = g
+        } else {
+          val ev = samples(se, h, end, MotionEvent.ACTION_MOVE)
+          inProgress.addToStroke(ev, se.getPointerId(0), sid, if (end == n) guess else null)
+          shadows[sid]?.let { sh -> for (k in 0..ev.historySize) sh.add(ev, 0, k) }
+          ev.recycle()
+        }
+        if (end < n) se.getHistoricalPointerCoords(0, end, g.lastCoords) else se.getPointerCoords(0, g.lastCoords)
+        g.lastTime = if (end < n) se.getHistoricalEventTime(end) else se.eventTime
+      } else {
+        if (!g.split) {
+          g.split = true
+          g.parts.forEach { splitParts[it] = g }
+        }
+        endPart(g, se)
+      }
+      h = end + 1
+    }
+    if (last) {
+      endPart(g, se)
+      g.ended = true
+      if (g.split && g.parts.isEmpty()) keepWhole(g)
+    }
+    if (g.split && !g.dropped && (!g.ended || g.parts.isNotEmpty()) && g !in splitShown) splitShown += g
+  }
+
+  /** Ends the part being shown (if any) at the last sample shown. */
+  private fun endPart(g: Gesture, se: MotionEvent) {
+    val sid = strokeId ?: return
+    se.getPointerProperties(0, partProps[0])
+    partCoords[0].copyFrom(g.lastCoords)
+    val up = MotionEvent.obtain(se.downTime, g.lastTime, MotionEvent.ACTION_UP, 1, partProps, partCoords, se.metaState, se.buttonState, se.xPrecision, se.yPrecision, se.deviceId, 0, se.source, se.flags)
+    inProgress.finishStroke(up, se.getPointerId(0), sid)
+    shadows[sid]?.finished = true
+    up.recycle()
+    strokeId = null
+  }
+
+  /** Every part handed over: the stroke kept whole from all its samples, in the frame its parts go. */
+  private fun keepWhole(g: Gesture) {
+    splitShown.remove(g)
+    val d = doc
+    if (!g.dropped && d != null) {
+      try {
+        val built = androidx.ink.strokes.Stroke(g.brush, g.full.inputs)
+        val stroke = if (darkPaper) built.copy(built.brush.copyWithColorIntArgb(Brushes.inkColor(g.pen, g.color))) else built
+        d.commit(Change(emptyList(), listOf(InkItem(d.newId(), d.nextZ(), g.pen, stroke))))
+      } catch (t: Throwable) {
+        com.tali.notes.CrashLog.recovered(context, t)
+      }
+    }
+    g.handed.clear()
+    invalidate()
+  }
+
+  /**
+   * The stroke being written goes without being kept (a tap that opened something, hold-to-shape,
+   * paste, a second finger): its part on screen is cancelled, and parts already finished are
+   * dropped as Ink hands them over.
+   */
+  private fun dropStroke(e: MotionEvent?) {
+    strokeId?.let {
+      inProgress.cancelStroke(it, e)
+      strokePens.remove(it)
+      strokeColors.remove(it)
+      splitParts.remove(it)
+      gesture?.parts?.remove(it)
+    }
+    strokeId = null
+    gesture?.let { g ->
+      g.dropped = true
+      g.handed.clear()
+      splitShown.remove(g)
+      // Parts Ink hasn't handed over yet are dropped when it does (onStrokesFinished).
+      g.parts.forEach { splitParts[it] = g }
+    }
+    gesture = null
+    inkLayerIdle()
   }
 
   /** On dark paper the live stroke used the light version of the colour: the stroke in its real one. */
@@ -871,14 +1067,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     }
     restylePreview?.let { itemRenderer.drawAll(canvas, it, camera.worldToScreen) }
+    // Parts of a stroke that left its page, already handed over by Ink, until it's kept whole.
+    splitShown.forEach { g -> if (g.handed.isNotEmpty()) itemRenderer.drawAll(canvas, g.handed, camera.worldToScreen) }
     // Strokes still waiting for Ink's hand-off when the page moved, drawn here in Ink's place.
     if (shadows.isNotEmpty()) shadows.values.mapNotNull { it.item }.takeIf { it.isNotEmpty() }?.let { itemRenderer.drawAll(canvas, it, camera.worldToScreen) }
     if (mode == Mode.LIVE_SHAPE) updateLiveShape()
     liveShape?.let { drawShapePreview(canvas, it) }
     straightPreview?.let { preview ->
       canvas.save()
-      // The same area the kept stroke is drawn in (Pages.clipFor), on screen.
-      inkAreas(pageAt(straightStart))?.let { areas -> canvas.clipPath(areaPath(areas, camera.worldToScreen)) }
+      // The same area the kept stroke is drawn in (Pages.clipFor); the canvas is in world units here.
+      inkAreas(pageAt(straightStart))?.let { areas -> canvas.clipPath(areaPath(areas, null)) }
       itemRenderer.draw(canvas, preview, camera.worldToScreen)
       canvas.restore()
     }
@@ -1812,15 +2010,28 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // kept stroke is clipped (Pages.clipFor), and so is ink under the toolbars. Ink's live layer
     // sits above every view and isn't clipped to this one, so the stroke used to show over the
     // toolbars and status bar, then vanish on lift (a tester's video).
-    inProgress.maskPath = inkMask(inkAreas(pageAt(p)))
-    val id = inProgress.startStroke(se, e.getPointerId(idx), brush, camera.screenToWorld)
+    val areas = inkAreas(pageAt(p))
+    inProgress.maskPath = inkMask(areas)
     // Ink's stroke unit: how far the pen moves (cm) for one world unit, as Ink works it out.
     val unitCm = camera.scale * 2.54f / resources.displayMetrics.xdpi
-    shadows[id] = InkShadow(slot.type, brush, e.eventTime, unitCm, android.graphics.Matrix(camera.screenToWorld)).also { it.add(se, 0, se.historySize) }
+    // Half the pen in, so a stretch shown never reaches past the edge (nothing for the mask to clear).
+    val half = slot.size / 2f
+    val halfScreen = half * camera.scale
+    val loc = IntArray(2).also { getLocationInWindow(it) }
+    val covers = host.inkCovers().map { r -> android.graphics.RectF(r.left - loc[0] - halfScreen, r.top - loc[1] - halfScreen, r.right - loc[0] + halfScreen, r.bottom - loc[1] + halfScreen) }
+    val g = Gesture(
+      slot.type,
+      slot.color,
+      brush,
+      unitCm,
+      areas?.map { r -> Rect(r.left + half, r.top + half, r.right - half, r.bottom - half) },
+      covers,
+      InkShadow(slot.type, brush, e.eventTime, unitCm, android.graphics.Matrix(camera.screenToWorld)),
+    )
+    gesture = g
+    strokeId = null
+    feedInk(g, se, null, last = false)
     se.recycle()
-    strokeId = id
-    strokePens[id] = slot.type
-    if (darkPaper) strokeColors[id] = slot.color
     strokePoints.clear()
     strokePoints += p
     holdAnchor = p
@@ -1843,10 +2054,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         predictor.record(se)
         predictionGuard.record(se)
         val prediction = predictionGuard.tame(predictor.predict())
-        strokeId?.let { sid ->
-          inProgress.addToStroke(se, drawPointer, sid, prediction)
-          shadows[sid]?.let { s -> for (h in 0..se.historySize) s.add(se, 0, h) }
-        }
+        gesture?.let { g -> feedInk(g, se, prediction, last = false) }
         prediction?.recycle()
         se.recycle()
         for (h in 0 until e.historySize) addInkPoint(camera.toWorld(e.getHistoricalX(idx, h), e.getHistoricalY(idx, h)))
@@ -2086,11 +2294,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     val slot = settings.activeSlot
     val pen = strokePens[id] ?: slot.type
-    inProgress.cancelStroke(id, null)
-    strokePens.remove(id)
-    strokeColors.remove(id)
-    strokeId = null
-    inkLayerIdle()
+    dropStroke(null)
     liveShape = ShapeItem(d.newId(), d.nextZ(), pen, slot.color, slot.size, geometry, line = slot.lineStyle)
     liveBase = liveShape
     liveAnchor = strokePoints.lastOrNull() ?: Pt(0f, 0f)
@@ -2125,40 +2329,31 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val tapped = if (quickTap && text == null) shapeTappedByPen() else null
         if (text != null) {
           // A quick tap on a text box opens it for typing.
-          strokeId?.let {
-            inProgress.cancelStroke(it, e)
-            strokePens.remove(it)
-            strokeColors.remove(it)
-          }
-          strokeId = null
-          inkLayerIdle()
+          dropStroke(e)
           post { editText(text.id) }
         } else if (tapped != null) {
           // A quick tap on a shape's outline picks the shape up to change it, rather than leaving a dot.
-          strokeId?.let {
-            inProgress.cancelStroke(it, e)
-            strokePens.remove(it)
-            strokeColors.remove(it)
-          }
-          strokeId = null
-          inkLayerIdle()
+          dropStroke(e)
           selectShape(tapped)
         } else {
-          strokeId?.let { sid ->
-            if (idx >= 0) {
-              val se = smoother.smooth(e, idx, MotionEvent.ACTION_UP)
-              inProgress.finishStroke(se, drawPointer, sid)
-              shadows[sid]?.apply {
-                add(se, 0, se.historySize)
-                finished = true
-              }
-              se.recycle()
-            } else {
+          val g = gesture
+          if (g != null && idx >= 0) {
+            val se = smoother.smooth(e, idx, MotionEvent.ACTION_UP)
+            feedInk(g, se, null, last = true)
+            se.recycle()
+          } else {
+            strokeId?.let { sid ->
               inProgress.finishStroke(e, drawPointer, sid)
               shadows[sid]?.finished = true
             }
+            strokeId = null
+            g?.let {
+              it.ended = true
+              if (it.split && it.parts.isEmpty()) keepWhole(it)
+            }
           }
           strokeId = null
+          gesture = null
         }
       }
       Mode.LIVE_SHAPE -> {
@@ -2235,13 +2430,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     endSnap()
     removeCallbacks(holdRunnable)
     removeCallbacks(pasteHold)
-    strokeId?.let {
-      inProgress.cancelStroke(it, null)
-      strokePens.remove(it)
-      strokeColors.remove(it)
-    }
-    strokeId = null
-    inkLayerIdle()
+    dropStroke(null)
     liveShape = null
     liveBase = null
     liveEdit = null
@@ -3289,13 +3478,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         longPressed = true
       }
       Mode.INK -> {
-        strokeId?.let {
-          inProgress.cancelStroke(it, null)
-          strokePens.remove(it)
-          strokeColors.remove(it)
-        }
-        strokeId = null
-        inkLayerIdle()
+        dropStroke(null)
         strokePoints.clear()
         mode = Mode.IGNORE
       }

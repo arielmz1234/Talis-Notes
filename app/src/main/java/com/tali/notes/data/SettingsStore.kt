@@ -134,8 +134,13 @@ data class AppSettings(
   val pdfsToLibrary: Boolean = false,
   /** How many colours a pen shows beside the pens until she sets its own number (`PenSlot.toolbarColors`). */
   val toolbarColors: Int = 3,
-  /** Light, dark, or following the tablet. */
-  val themeMode: ThemeMode = ThemeMode.SYSTEM,
+  /**
+   * Light, dark, or following the tablet. Light to start with (the owner's call, 15 Oct 2026);
+   * always written, so a chosen System default is kept even though it isn't the default.
+   */
+  @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+  @kotlinx.serialization.EncodeDefault
+  val themeMode: ThemeMode = ThemeMode.LIGHT,
   /** The minimal look: no cloud bumps on bars and cards, no clouds in the sky, the home screen moved up. */
   val minimal: Boolean = false,
   /** The colour family (Settings › Colours). */
