@@ -90,11 +90,33 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
    * that way until she taps Write ([com.tali.notes.data.AppSettings.writeOn]); any of them, notebooks
    * too, can be set to View only and back in the ⋯ menu ([com.tali.notes.data.AppSettings.viewOnly]
    * for notebooks). Either choice is kept for next time.
+   *
+   * On a phone everything opens just for looking (people mostly read there) until she taps Write
+   * for it ([writingHere]). That choice is kept on the phone only (its own prefs, [PHONE_PREFS]), not
+   * in the settings Drive carries to her tablet, so the tablet keeps its own choices.
    */
   fun viewOnlyIn(s: com.tali.notes.data.AppSettings, m: NotebookMeta?): Boolean =
-    m != null && if (m.kind != com.tali.notes.data.DocKind.NOTEBOOK) notebookId !in s.writeOn else notebookId in s.viewOnly
+    m != null && when {
+      onPhone -> !writingHere
+      m.kind != com.tali.notes.data.DocKind.NOTEBOOK -> notebookId !in s.writeOn
+      else -> notebookId in s.viewOnly
+    }
+
+  /** A phone (the screen's shorter side under [com.tali.notes.ui.library.PHONE_DP], whichever way it's held). */
+  private val onPhone = getApplication<Application>().resources.configuration.smallestScreenWidthDp < com.tali.notes.ui.library.PHONE_DP
+
+  private val phonePrefs = getApplication<Application>().getSharedPreferences(PHONE_PREFS, android.content.Context.MODE_PRIVATE)
+
+  /** On a phone: she chose to write in this one. */
+  private var writingHere by mutableStateOf(notebookId in phonePrefs.getStringSet(PHONE_WRITING, emptySet()).orEmpty())
 
   fun setViewOnly(on: Boolean) {
+    if (onPhone) {
+      writingHere = !on
+      val ids = phonePrefs.getStringSet(PHONE_WRITING, emptySet()).orEmpty()
+      phonePrefs.edit().putStringSet(PHONE_WRITING, if (on) ids - notebookId else ids + notebookId).apply()
+      return
+    }
     val document = meta.value?.kind.let { it != null && it != com.tali.notes.data.DocKind.NOTEBOOK }
     store.update {
       if (document) it.copy(writeOn = if (on) it.writeOn - notebookId else it.writeOn + notebookId)
@@ -746,3 +768,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       }?.also { exported[key] = it }
     }
 }
+
+/** A phone keeps which items she writes in on its own (see [NotebookViewModel.viewOnlyIn]); never synced. */
+private const val PHONE_PREFS = "phone_view"
+private const val PHONE_WRITING = "writing"
