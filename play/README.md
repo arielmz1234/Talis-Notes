@@ -4,7 +4,7 @@ Files to upload are in `store/`:
 
 | What | File | Where in the Play Console |
 | --- | --- | --- |
-| App bundle | `store/Talis-Notes-1.0.1.aab` (version 1.0.1, code 11; 1.0 / code 10 is already uploaded) | Test and release › Closed testing › Alpha › Create new release › Upload |
+| App bundle | `store/Talis-Notes-1.0.2.aab` (version 1.0.2, code 12; codes 10 and 11 are already uploaded) | Test and release › Closed testing › Alpha › Create new release › Upload |
 | App icon (512 × 512) | `store/icon-512.png` | Grow › Store listing › App icon |
 | Feature graphic (1024 × 500) | `store/feature-graphic.png` | Store listing › Feature graphic |
 | Phone screenshots | `store/phone/1-library.png`, `2-notes.png` | Store listing › Phone screenshots |

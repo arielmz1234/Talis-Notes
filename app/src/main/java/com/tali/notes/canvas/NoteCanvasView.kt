@@ -1684,6 +1684,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun beginDraw(e: MotionEvent, idx: Int) {
     val d = doc ?: return
+    // Another touch before the menu came back: it waits until she's done again.
+    removeCallbacks(menuBack)
     drawPointer = e.getPointerId(idx)
     drawIsFinger = e.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER
     val p = world(e, idx)
@@ -2221,6 +2223,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     endSnap()
     mode = Mode.NONE
     drawPointer = -1
+    // Whatever this touch was, once she's done the menu comes back to a selection still held.
+    if (menuClosed && selection.isNotEmpty()) {
+      removeCallbacks(menuBack)
+      postDelayed(menuBack, MENU_BACK_MS)
+    }
     invalidate()
   }
 
@@ -3150,13 +3157,24 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
 
-  /** The selection menu was closed by an edit; it comes back when she taps the selection. */
+  /**
+   * The selection menu steps aside while she edits (moves, resizes, turns, drags a dot) and comes
+   * back on its own once she's stopped for [MENU_BACK_MS], still beside the selection ([menuBack]).
+   */
   private var menuClosed = false
 
+  private val menuBack = Runnable {
+    if (menuClosed && mode == Mode.NONE && selection.isNotEmpty()) {
+      menuClosed = false
+      publishSelection()
+    }
+  }
+
   /**
-   * [menu]: true shows the selection menu (she picked these up), false keeps it closed (she just
-   * moved, turned or reshaped them: the menu shouldn't sit on screen after an edit), null leaves it
-   * as it was (a change from the menu itself, an undo); something new picked up shows it.
+   * [menu]: true shows the selection menu (she picked these up), false keeps it away for a moment
+   * (she just moved, turned or reshaped them; it returns after [MENU_BACK_MS] without another
+   * edit), null leaves it as it was (a change from the menu itself, an undo); something new picked
+   * up shows it.
    */
   private fun setSelection(items: List<CanvasItem>, menu: Boolean? = null) {
     val same = items.map { it.id } == selection.map { it.id }
@@ -3165,6 +3183,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       null -> same && menuClosed
       else -> !menu
     }
+    removeCallbacks(menuBack)
+    if (menuClosed) postDelayed(menuBack, MENU_BACK_MS)
     selection = items
     selectionBounds = items.map { it.bounds }.reduceOrNull(Rect::union)
     publishSelection()
@@ -3202,6 +3222,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     activeShapeId = null
     softSelection = false
     menuClosed = false
+    removeCallbacks(menuBack)
     if (had) host.onSelectionChanged(null)
     invalidate()
   }
@@ -4501,6 +4522,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val SHAPE_START_DP = 12f
     /** How long the resize chip takes to come back after a move or a dot drag. */
     private const val CHIP_BACK_MS = 160L
+
+    /** How long after an edit, with nothing else done, the selection menu comes back. */
+    private const val MENU_BACK_MS = 450L
     /** Carrying something this close to an edge (dp) scrolls that way, after [EDGE_DWELL_MS]. */
     private const val EDGE_ZONE_DP = 100f
     private const val EDGE_DWELL_MS = 120L
