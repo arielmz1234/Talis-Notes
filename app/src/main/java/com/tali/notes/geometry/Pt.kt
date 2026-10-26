@@ -289,6 +289,17 @@ object Geo {
     return kotlin.math.acos(u.dot(v).coerceIn(-1f, 1f))
   }
 
+  /** The signed area of the polygon [poly] (shoelace; its sign follows the winding). */
+  fun polygonArea(poly: List<Pt>): Float {
+    var a = 0f
+    for (i in poly.indices) {
+      val p = poly[i]
+      val q = poly[(i + 1) % poly.size]
+      a += p.x * q.y - q.x * p.y
+    }
+    return a / 2f
+  }
+
   fun pointInPolygon(p: Pt, poly: List<Pt>): Boolean {
     var inside = false
     var j = poly.size - 1

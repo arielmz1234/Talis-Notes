@@ -421,6 +421,47 @@ object Snap {
     return Pt(p.x + if (wx.isNotEmpty()) bx.delta else 0f, p.y + if (wy.isNotEmpty()) by.delta else 0f) to show(wx + wy, s)
   }
 
+  fun alongAngle(from: Pt, to: Pt, targets: List<SnapFeatures>, tol: Float): Pair<Pt, List<SnapGuide>> = alongAngle(from, to, targets, SnapSession(tol))
+
+  /**
+   * A line's end at [to], on a tidy angle from [from], slides along the line (keeping its angle) to
+   * line up with the sides, middles and corners of [targets]: a level line's end stops right above
+   * a box's side or middle, an upright one level with it. Returns where it goes and the guides
+   * (none when nothing lines up).
+   */
+  fun alongAngle(from: Pt, to: Pt, targets: List<SnapFeatures>, s: SnapSession): Pair<Pt, List<SnapGuide>> {
+    val len = to.dist(from)
+    if (len < 1e-3f) return to to emptyList()
+    val dir = (to - from) * (1f / len)
+    val best = Best()
+    val reach = s.reach
+    // The end moved along the line to x = v (a vertical guide) or y = v (a level one).
+    fun offer(vertical: Boolean, v: Float, k: Long, middle: Boolean, spanFrom: Float, spanTo: Float) {
+      val d = if (vertical) dir.x else dir.y
+      if (abs(d) < 0.2f) return
+      val t = ((v - if (vertical) from.x else from.y) / d)
+      if (t <= 0f) return
+      val shift = t - len
+      if (abs(shift) >= reach || !s.catches(k, abs(shift), middle)) return
+      val q = from + dir * t
+      val guide = if (vertical) SnapGuide.Align(true, v, min(q.y, spanFrom), max(q.y, spanTo)) else SnapGuide.Align(false, v, min(q.x, spanFrom), max(q.x, spanTo))
+      best.offer(abs(shift) * if (middle) MIDDLE_BIAS else 1f, shift, guide, k)
+    }
+    targets.forEachIndexed { ti, t ->
+      t.box?.let { tb ->
+        floatArrayOf(tb.left, tb.center.x, tb.right).forEachIndexed { vi, v -> offer(true, v, key(K_ALIGN_X, ti, vi), vi == 1, tb.top, tb.bottom) }
+        floatArrayOf(tb.top, tb.center.y, tb.bottom).forEachIndexed { vi, v -> offer(false, v, key(K_ALIGN_Y, ti, vi), vi == 1, tb.left, tb.right) }
+      }
+      t.points.forEachIndexed { qi, q ->
+        offer(true, q.x, key(K_DOT_X, ti, qi), false, q.y, q.y)
+        offer(false, q.y, key(K_DOT_Y, ti, qi), false, q.x, q.x)
+      }
+    }
+    val win = best.winners()
+    if (win.isEmpty()) return to to emptyList()
+    return from + dir * (len + best.delta) to show(win, s)
+  }
+
   fun corner(p: Pt, targets: List<SnapFeatures>, tol: Float): Pt? = corner(p, targets, SnapSession(tol))
 
   /** The nearest end or corner of [targets] that catches [p]. */

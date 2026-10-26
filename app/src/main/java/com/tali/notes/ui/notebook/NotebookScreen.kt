@@ -436,6 +436,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                   pasteOffer = offer
                 }
 
+                override fun onInkWaiting() = vm.inkWaiting()
+
                 override fun onDropped(drop: NoteCanvasView.Dropped) {
                   val text = drop.text
                   if (text != null) {
@@ -948,7 +950,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       hasPdfPages = remember(doc) { doc?.all?.any { it is com.tali.notes.model.ImageItem && it.pdfPage } == true },
       onDismiss = { exporting = false },
       prepare = vm::exportPdf,
-      onExport = { layout, quality, share ->
+      onExport = { layout, quality, action ->
         exporting = false
         vm.showHint(tr(R.string.preparing_pdf))
         scope.launch {
@@ -958,7 +960,9 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
             return@launch
           }
           vm.hint = null
-          if (share) {
+          if (action == PdfAction.PRINT) {
+            printPdf(context, file, vm.meta.value?.landscape == true)
+          } else if (action == PdfAction.SHARE) {
             val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
             val send = Intent(Intent.ACTION_SEND).apply {
               type = "application/pdf"
@@ -1686,7 +1690,7 @@ private fun sizeLabel(bytes: Long): String =
  * Notebooks with imported slides on an endless canvas can also export the slides' own pages.
  */
 @Composable
-private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> Unit, prepare: suspend (PdfLayout, PdfQuality) -> File?, onExport: (PdfLayout, PdfQuality, share: Boolean) -> Unit) {
+private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> Unit, prepare: suspend (PdfLayout, PdfQuality) -> File?, onExport: (PdfLayout, PdfQuality, PdfAction) -> Unit) {
   val c = Tali.colors
   val pageLayouts = if (hasPdfPages && !paged) listOf(PdfLayout.PDF_PAGES, PdfLayout.A4_PAGES) else listOf(PdfLayout.A4_PAGES)
   var pagesLayout by remember { mutableStateOf(pageLayouts.first()) }
@@ -1721,12 +1725,53 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
     )
     }
     Spacer(Modifier.height(24.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    // Wraps onto a second line on a phone rather than squeezing a button.
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(10.dp)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
-      QuietButton(stringResource(R.string.save_to_files)) { onExport(layout, choice.quality, false) }
-      PrimaryButton(stringResource(R.string.share)) { onExport(layout, choice.quality, true) }
+      QuietButton(stringResource(R.string.save_to_files)) { onExport(layout, choice.quality, PdfAction.SAVE) }
+      // Pages print on A4 as they are (the print screen starts on A4, the notebook's way round).
+      if (layout != PdfLayout.ONE_PAGE) QuietButton(stringResource(R.string.print_pdf)) { onExport(layout, choice.quality, PdfAction.PRINT) }
+      PrimaryButton(stringResource(R.string.share)) { onExport(layout, choice.quality, PdfAction.SHARE) }
     }
   }
+}
+
+/** What the export card does with the PDF. */
+private enum class PdfAction { SAVE, SHARE, PRINT }
+
+/**
+ * Opens Android's print screen for [file], set to A4 the way round the pages are ([landscape]) and
+ * no margins, so a page prints at its real size. Left to the printer's own default (often US
+ * Letter), an A4 page was shrunk to fit and left a white band (a tester's printout).
+ */
+private fun printPdf(context: android.content.Context, file: File, landscape: Boolean) {
+  var ctx = context
+  while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) ctx = ctx.baseContext
+  val pm = ctx.getSystemService(android.print.PrintManager::class.java) ?: return
+  val adapter = object : android.print.PrintDocumentAdapter() {
+    override fun onLayout(old: android.print.PrintAttributes?, new: android.print.PrintAttributes, cancel: android.os.CancellationSignal?, callback: LayoutResultCallback, extras: android.os.Bundle?) {
+      if (cancel?.isCanceled == true) {
+        callback.onLayoutCancelled()
+        return
+      }
+      callback.onLayoutFinished(android.print.PrintDocumentInfo.Builder(file.name).setContentType(android.print.PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).build(), old != new)
+    }
+
+    override fun onWrite(pages: Array<out android.print.PageRange>, destination: android.os.ParcelFileDescriptor, cancel: android.os.CancellationSignal?, callback: WriteResultCallback) {
+      try {
+        file.inputStream().use { input -> java.io.FileOutputStream(destination.fileDescriptor).use { input.copyTo(it) } }
+        callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
+      } catch (t: Throwable) {
+        callback.onWriteFailed(t.message)
+      }
+    }
+  }
+  val a4 = android.print.PrintAttributes.MediaSize.ISO_A4
+  val attributes = android.print.PrintAttributes.Builder()
+    .setMediaSize(if (landscape) a4.asLandscape() else a4.asPortrait())
+    .setMinMargins(android.print.PrintAttributes.Margins.NO_MARGINS)
+    .build()
+  runCatching { pm.print(file.nameWithoutExtension, adapter, attributes) }
 }
 
 /**

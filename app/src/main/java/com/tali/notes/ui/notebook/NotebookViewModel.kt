@@ -154,6 +154,11 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   var canUndo by mutableStateOf(false)
     private set
 
+  /** A stroke just finished (still waiting for Ink's hand-off): undo can already take it. */
+  fun inkWaiting() {
+    canUndo = true
+  }
+
   var canRedo by mutableStateOf(false)
     private set
 

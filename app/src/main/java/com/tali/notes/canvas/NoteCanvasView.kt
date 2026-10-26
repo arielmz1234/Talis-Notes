@@ -115,6 +115,9 @@ interface CanvasHost {
 
   /** Something was dragged in from another app and let go on the page. */
   fun onDropped(drop: NoteCanvasView.Dropped) = Unit
+
+  /** A stroke was finished and is waiting for Ink's hand-off: undo can already take it. */
+  fun onInkWaiting() = Unit
 }
 
 /** Paste offered at [screenX], [screenY] (pixels in the canvas), which is [at] in the world. */
@@ -630,7 +633,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
             // Kept whole: on A4 pages the part past its page is only hidden (ItemRenderer.clipFor).
             listOf(InkItem(d.newId(), d.nextZ(), pen, stroke))
           }
-        if (added.isNotEmpty()) d.commit(Change(emptyList(), added))
+        // Each stroke its own undo step, even when Ink hands several over at once.
+        added.forEach { d.commit(Change(emptyList(), listOf(it))) }
       } catch (t: Throwable) {
         com.tali.notes.CrashLog.recovered(context, t)
       }
@@ -821,6 +825,46 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     gesture = null
     inkLayerIdle()
+  }
+
+  /**
+   * Strokes she finished that Ink hasn't handed over yet (it does at most every half second) go
+   * into the notebook now, built from their recorded inputs, before anything that acts on what's
+   * there: undo, redo, the eraser, the lasso. Two quick strokes then two quick undos used to undo
+   * the first stroke and leave the second (a tester's video), since the second wasn't in yet.
+   * Ink's layer is cleared, and its hand-off later finds them already taken.
+   */
+  private fun commitWaitingInk() {
+    if (mode == Mode.INK || strokeId != null) return
+    val d = doc ?: return
+    var any = false
+    // Strokes that left their page, ended, with parts still on Ink's layer: kept whole now.
+    splitShown.filter { it.ended && !it.dropped && it.parts.isNotEmpty() }.forEach { g ->
+      keepWhole(g)
+      g.dropped = true
+      // Its parts aren't drawn here again if the page moves before Ink hands them over.
+      g.parts.forEach { shadows.remove(it) }
+      any = true
+    }
+    val waiting = shadows.entries.filter { (id, sh) -> sh.finished && strokePens.containsKey(id) && id !in splitParts }
+    for ((id, sh) in waiting) {
+      val pen = strokePens[id] ?: continue
+      val stroke = runCatching { androidx.ink.strokes.Stroke(sh.brush, sh.inputs) }.getOrNull() ?: continue
+      try {
+        d.commit(Change(emptyList(), listOf(InkItem(d.newId(), d.nextZ(), pen, realColoured(id, pen, stroke)))))
+      } catch (t: Throwable) {
+        com.tali.notes.CrashLog.recovered(context, t)
+        continue
+      }
+      strokePens.remove(id)
+      strokeColors.remove(id)
+      shadows.remove(id)
+      any = true
+    }
+    if (any) {
+      hideInkLayer()
+      invalidate()
+    }
   }
 
   /** On dark paper the live stroke used the light version of the colour: the stroke in its real one. */
@@ -1179,9 +1223,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun fillAt(p: Pt) {
     val d = doc ?: return
     val colour = settings.fillArgb
-    // 1. The topmost closed shape the tap is inside.
+    // 1. The topmost closed shape the tap is inside. Nothing running through it: it gets a fill
+    // of its own. A line (or anything) through it splits it, so the area round the tap is filled
+    // instead (step 3), unless that turns out to be nearly the whole shape (a label inside it).
     val shape = d.all.toList().asReversed().firstOrNull { it is ShapeItem && !it.locked && it.closed && it.bounds.contains(p) && Geo.pointInPolygon(p, it.outline) } as ShapeItem?
-    if (shape != null) {
+    val split = shape != null && runsThrough(d, shape)
+    if (shape != null && (!split || colour == null && shape.fill != null)) {
       if (shape.fill == colour) return
       d.commit(Change(listOf(shape), listOf(shape.filled(colour))))
       return
@@ -1200,9 +1247,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val page = if (n != null) pageLayout.rect(pageLayout.indexAt(p.y).coerceIn(0, n - 1)) else null
     var window = Rect(p.x - FILL_REACH, p.y - FILL_REACH, p.x + FILL_REACH, p.y + FILL_REACH)
     if (page != null) window = Rect(maxOf(window.left, page.left), maxOf(window.top, page.top), minOf(window.right, page.right), minOf(window.bottom, page.bottom))
-    val walls = d.intersecting(window).filter { it !is ImageItem }
+    // Shapes' own fills aren't walls: only their outlines close an area in.
+    val walls = d.intersecting(window).filter { it !is ImageItem }.map { if (it is ShapeItem && it.fill != null) it.filled(null) else it }
+    // A shape split by a line: filling nearly all of it (90%) still gives it a fill of its own.
+    val whole = if (shape != null) abs(Geo.polygonArea(shape.outline)) * 0.9f else null
     fillWorker.execute {
-      val made = runCatching { fillPicture(p, window, walls, colour) }.getOrNull()
+      val made = runCatching { fillPicture(p, window, walls, colour, whole) }.getOrNull()
       post {
         filling = false
         val dd = doc ?: return@post
@@ -1211,10 +1261,34 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           host.onHint(if (walls.isEmpty()) tr(R.string.draw_around_an_area_first_or) else tr(R.string.that_area_isn_t_closed_close))
           return@post
         }
+        val live = shape?.let { dd[it.id] as? ShapeItem }
+        if (made === WHOLE_SHAPE) {
+          if (live != null && live.fill != colour) dd.commit(Change(listOf(live), listOf(live.filled(colour))))
+          return@post
+        }
         val (file, rect, outline) = made
         val item = ImageItem(dd.newId(), dd.nextZ(), file, rect, walls = outline)
-        dd.commit(Change(oldFills.filter { dd[it.id] != null }, listOf(item)))
+        // The shape's own fill would cover the part filled now (fill pictures sit behind shapes): it goes.
+        val unfill = if (live?.fill != null) listOf(live to live.filled(null)) else emptyList()
+        dd.commit(Change(oldFills.filter { dd[it.id] != null } + unfill.map { it.first }, listOf(item) + unfill.map { it.second }))
       }
+    }
+  }
+
+  /**
+   * Whether writing or another shape runs through the inside of [shape] (a line across a box),
+   * so a tap there means the part it splits off, not the whole shape.
+   */
+  private fun runsThrough(d: Document, shape: ShapeItem): Boolean {
+    val outline = shape.outline
+    fun inside(q: Pt) = Geo.pointInPolygon(q, outline) && shape.bounds.contains(q)
+    return d.intersecting(shape.bounds).any { item ->
+      item.id != shape.id &&
+        when (item) {
+          is InkItem -> StrokeFactory.points(item.stroke).any(::inside)
+          is ShapeItem -> item.geometry.paths(item.size).any { path -> path.any(::inside) }
+          else -> false
+        }
     }
   }
 
@@ -1233,7 +1307,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * Draws the writing in [window] into a mask, finds the area around [p] it encloses and returns a
    * picture of that area in [colour] (saved, with its place in the world), or null if it isn't closed.
    */
-  private fun fillPicture(p: Pt, window: Rect, walls: List<CanvasItem>, colour: Int): Triple<String, Rect, Set<String>>? {
+  private fun fillPicture(p: Pt, window: Rect, walls: List<CanvasItem>, colour: Int, whole: Float? = null): Triple<String, Rect, Set<String>>? {
     val k = minOf(1f, FILL_PIXELS / maxOf(window.width, window.height))
     val w = (window.width * k).toInt().coerceAtLeast(8)
     val h = (window.height * k).toInt().coerceAtLeast(8)
@@ -1261,6 +1335,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       if (y > y1) y1 = y
     }
     if (x1 < x0) return null
+    // Nearly the whole shape it's in: that shape gets a fill of its own instead (see fillAt).
+    if (whole != null && filled.count { it } / (k * k) >= whole) return WHOLE_SHAPE
     val bw = x1 - x0 + 1
     val bh = y1 - y0 + 1
     val out = IntArray(bw * bh)
@@ -2130,11 +2206,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         // A dot dragged onto another shape's corner or edge locks on there (a line meeting a line).
         val stuck = if (bg is LineShape) lineEndAt(if (handleIndex == 0) bg.b else bg.a, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snap)
         // Not touching anything: the dot lines up with other shapes' sides, middles and corners
-        // (and with its own shape's other corners), unless a line's end is already on a tidy angle.
+        // (and with its own shape's other corners). A line's end on a tidy angle keeps the angle
+        // and slides along the line to line up (above a box's side or middle, level with a corner).
         var aligned: Pair<Pt, List<SnapGuide>>? = null
         if (stuck == null) {
-          val angled = bg is LineShape && ShapeRecognizer.snappedLine(if (handleIndex == 0) bg.b else bg.a, raw).b.dist(raw) > 0.01f
-          if (!angled) aligned = Snap.alignPoint(raw, snapTargets + ownCorners(bg, handleIndex), snap).takeIf { it.second.isNotEmpty() }
+          val fixed = if (handleIndex == 0) (bg as? LineShape)?.b else (bg as? LineShape)?.a
+          val tidy = fixed?.let { ShapeRecognizer.snappedLine(it, raw).b }?.takeIf { it.dist(raw) > 0.01f }
+          aligned =
+            if (fixed != null && tidy != null) Snap.alongAngle(fixed, tidy, snapTargets, snap).takeIf { it.second.isNotEmpty() }
+            else Snap.alignPoint(raw, snapTargets + ownCorners(bg, handleIndex), snap).takeIf { it.second.isNotEmpty() }
         }
         val at = stuck ?: aligned?.first
         var g = when {
@@ -2169,8 +2249,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           asLine -> lineEndAt(shapeStart, raw).let { (p, on) ->
             when {
               on -> p to listOf<SnapGuide>(SnapGuide.Touch(p))
-              // On a tidy angle already: that wins. Otherwise its end lines up like any corner.
-              p.dist(raw) > 0.01f -> raw to emptyList()
+              // On a tidy angle already: it keeps it, sliding along to line up with other shapes.
+              // Otherwise its end lines up like any corner.
+              p.dist(raw) > 0.01f -> Snap.alongAngle(shapeStart, p, snapTargets, snap).takeIf { it.second.isNotEmpty() } ?: (raw to emptyList())
               else -> Snap.alignPoint(raw, snapTargets, snap)
             }
           }
@@ -2214,8 +2295,16 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       // Its end locks onto another shape's corner or edge, else it snaps to the usual angles.
       val (end, on) = lineEndAt(g.a, pen)
       val stuck = end.takeIf { on }
-      liveShape = shape.withGeometry(if (stuck != null) g.copy(b = stuck) else ShapeRecognizer.snappedLine(g.a, pen))
-      showSnap(listOfNotNull(g.a.takeIf { liveStartStuck }?.let { SnapGuide.Touch(it) }, stuck?.let { SnapGuide.Touch(it) }))
+      // On its tidy angle, its end slides along to line up with other shapes' sides, middles and corners.
+      val lined = if (stuck == null) Snap.alongAngle(g.a, end, snapTargets, snap).takeIf { it.second.isNotEmpty() } else null
+      liveShape = shape.withGeometry(
+        when {
+          stuck != null -> g.copy(b = stuck)
+          lined != null -> g.copy(b = lined.first)
+          else -> ShapeRecognizer.snappedLine(g.a, pen)
+        },
+      )
+      showSnap(listOfNotNull(g.a.takeIf { liveStartStuck }?.let { SnapGuide.Touch(it) }, stuck?.let { SnapGuide.Touch(it) }) + lined?.second.orEmpty())
       invalidate()
     } else {
       // Any other shape grows or shrinks with the pen, evenly around its middle (a circle's edge
@@ -2337,6 +2426,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           selectShape(tapped)
         } else {
           val g = gesture
+          // Undo lights up now, not when Ink hands the stroke over (a quick tap on it was lost).
+          if (g != null) host.onInkWaiting()
           if (g != null && idx >= 0) {
             val se = smoother.smooth(e, idx, MotionEvent.ACTION_UP)
             feedInk(g, se, null, last = true)
@@ -2930,6 +3021,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // ---- Eraser ----
 
   private fun startErase(p: Pt) {
+    // The last strokes, if Ink hasn't handed them over yet, can be erased or picked up too.
+    commitWaitingInk()
     erasedOriginals.clear()
     erasePieces.clear()
     dropFillEdits()
@@ -3100,6 +3193,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // ---- Lasso and selection ----
 
   private fun startLasso(p: Pt) {
+    // The last strokes, if Ink hasn't handed them over yet, can be erased or picked up too.
+    commitWaitingInk()
     lassoPoints.clear()
     lassoPoints += p
     mode = Mode.LASSO
@@ -3463,7 +3558,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Starts waiting for a hold at [screen] ([p] in the world) to offer Paste, if something's copied and it isn't on a locked item. */
   private fun armPasteHold(screen: Pt, p: Pt) {
     removeCallbacks(pasteHold)
-    if (Clipboard.items.isEmpty()) return
+    if (!canPaste()) return
     if (hitTest(p, locked = true) { true }?.locked == true) return
     pasteHoldAt = screen
     postDelayed(pasteHold, PASTE_HOLD_MS)
@@ -3471,7 +3566,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   /** The hold came: whatever the touch had started (a dot of ink, a lasso, a shape) is dropped, and Paste is offered. */
   private fun offerPaste() {
-    if (Clipboard.items.isEmpty()) return
+    if (!canPaste()) return
     when (mode) {
       Mode.FINGER_PENDING -> {
         if (maxPointers != 1) return
@@ -3492,13 +3587,40 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     removeCallbacks(holdRunnable)
     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-    host.onPasteOffer(PasteOffer(pasteHoldAt.x, pasteHoldAt.y, camera.toWorld(pasteHoldAt.x, pasteHoldAt.y), Clipboard.items.size))
+    host.onPasteOffer(PasteOffer(pasteHoldAt.x, pasteHoldAt.y, camera.toWorld(pasteHoldAt.x, pasteHoldAt.y), if (tabletClipNewer()) 1 else Clipboard.items.size))
     invalidate()
+  }
+
+  private fun canPaste() = Clipboard.items.isNotEmpty() || tabletClipNewer()
+
+  /**
+   * Whether the tablet's own clipboard holds a picture, PDF or text copied in another app after
+   * anything copied here (and within [TABLET_CLIP_MS], so a hold doesn't offer something copied
+   * long ago). Only its description is read, so Android doesn't announce a paste.
+   */
+  private fun tabletClipNewer(): Boolean {
+    if (viewOnly) return false
+    val desc = runCatching { context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClipDescription }.getOrNull() ?: return false
+    if (listOf("image/*", "application/pdf", "text/plain", "text/html").none { desc.hasMimeType(it) }) return false
+    val at = desc.timestamp
+    return at > Clipboard.copiedAt && System.currentTimeMillis() - at < TABLET_CLIP_MS
+  }
+
+  /** Pastes what's on the tablet's clipboard at [at], the way a drop from another app lands. Whether there was something. */
+  private fun pasteFromTablet(at: Pt): Boolean {
+    val clip = runCatching { context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip }.getOrNull() ?: return false
+    val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+    val text = if (uris.isEmpty()) (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).coerceToText(context)?.toString() }.joinToString("\n").ifBlank { null } else null
+    if (uris.isEmpty() && text == null) return false
+    host.onDropped(Dropped(uris, text, at))
+    return true
   }
 
   /** Pastes the clipboard centred on [at] (the middle of the screen if null), selected so it can be moved into place. */
   fun paste(at: Pt? = null) {
     val d = doc ?: return
+    // Copied in another app since: that comes in (a picture, a PDF's pages, text).
+    if (tabletClipNewer() && pasteFromTablet(at ?: camera.visibleWorld(width, height).center)) return
     val items = Clipboard.items
     val bounds = items.map { it.bounds }.reduceOrNull(Rect::union) ?: return
     val c = at ?: camera.visibleWorld(width, height).center
@@ -4306,11 +4428,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   fun undo() {
+    commitWaitingInk()
     clearSelection()
     doc?.undo()
   }
 
   fun redo() {
+    commitWaitingInk()
     clearSelection()
     doc?.redo()
   }
@@ -4663,6 +4787,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** Fill pictures are saved with this prefix, so the fill tool can recognise (and replace) them. */
     const val FILL_PREFIX = "fill-"
+
+    /** Something copied in another app is offered by a hold for this long (an hour). */
+    private const val TABLET_CLIP_MS = 60 * 60 * 1000L
+
+    /** [fillPicture]'s answer when the area is nearly the whole shape it's in (that shape gets the fill). */
+    private val WHOLE_SHAPE = Triple("", Rect(0f, 0f, 0f, 0f), emptySet<String>())
     /** How far from the tap a fill looks for the edges of its area, in world units. */
     private const val FILL_REACH = 1100f
     /** The largest mask side, in pixels. */

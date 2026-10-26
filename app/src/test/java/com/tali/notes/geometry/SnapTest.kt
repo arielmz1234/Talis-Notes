@@ -95,6 +95,30 @@ class SnapTest {
   }
 
   @Test
+  fun aLevelLinesEndSlidesAlongToLineUpWithABox() {
+    // A level line above a box (a tester's video): its end lines up with the box's side and middle, staying level.
+    val box = rect(0f, 100f, 200f, 200f).snapFeatures()
+    val (side, sideGuides) = Snap.alongAngle(Pt(-80f, 40f), Pt(205f, 40f), listOf(box), tol = 8f)
+    assertEquals(200f, side.x, 0.01f)
+    assertEquals(40f, side.y, 0.01f)
+    assertTrue((sideGuides.single() as SnapGuide.Align).vertical)
+    val (middle, _) = Snap.alongAngle(Pt(-80f, 40f), Pt(96f, 40f), listOf(box), tol = 8f)
+    assertEquals(100f, middle.x, 0.01f)
+    assertEquals(40f, middle.y, 0.01f)
+    // An upright line's end stops level with the box's top; a 45° line keeps its angle.
+    val (up, _) = Snap.alongAngle(Pt(300f, 400f), Pt(300f, 104f), listOf(box), tol = 8f)
+    assertEquals(300f, up.x, 0.01f)
+    assertEquals(100f, up.y, 0.01f)
+    val (diag, _) = Snap.alongAngle(Pt(-100f, -100f), Pt(-3f, -3f), listOf(box), tol = 8f)
+    assertEquals(diag.x, diag.y, 0.01f)
+    assertEquals(0f, diag.x, 0.01f)
+    // Nothing near: it stays where it was.
+    val (free, none) = Snap.alongAngle(Pt(-80f, 40f), Pt(150f, 40f), listOf(box), tol = 8f)
+    assertEquals(150f, free.x, 0.01f)
+    assertTrue(none.isEmpty())
+  }
+
+  @Test
   fun aDotLinesUpWithAnotherShapesSide() {
     val box = rect(0f, 0f, 100f, 50f).snapFeatures()
     val (p, guides) = Snap.alignPoint(Pt(103f, 200f), listOf(box), tol = 6f)
