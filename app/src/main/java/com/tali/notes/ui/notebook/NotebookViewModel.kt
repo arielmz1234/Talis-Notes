@@ -130,7 +130,12 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   private var discardOnLeave = false
 
   /** Keeps the PDF she was looking at as one of her notebooks, called [title]. */
-  fun saveAsNotebook(title: String) {
+  /** Her folders, for choosing where a PDF or picture she saves goes. */
+  val folders = repo.folders
+
+  fun saveAsNotebook(title: String, folderId: String? = null) {
+    // Into the folder she chose first, so its name is kept apart from that folder's others.
+    if (folderId != null) repo.moveToFolder(notebookId, folderId)
     repo.saveDraft(notebookId, title.trim().ifBlank { com.tali.notes.english(R.string.untitled) })
     savedNow = true
     // Saved to write on it: the toolbars come straight away, and next time too.
@@ -660,9 +665,9 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
     }
   }
 
-  /** Portrait or landscape A4 pages, as chosen when the notebook was made. */
+  /** Portrait or landscape A4 pages, as chosen when the notebook was made (a PDF or picture item: its own page shape). */
   val pageLayout: com.tali.notes.canvas.Pages
-    get() = com.tali.notes.canvas.Pages.of(meta.value?.landscape == true)
+    get() = com.tali.notes.canvas.Pages.of(meta.value?.landscape == true, meta.value?.pageAspect)
 
   fun rename(title: String) = repo.rename(notebookId, title.ifBlank { com.tali.notes.english(R.string.untitled) })
 
@@ -723,10 +728,11 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
         // A paged notebook previews the top of its first page, like a notebook's cover page (it
         // still opens where she left off: that's the saved viewport, not the preview).
         val page = pageLayout.rect(0)
-        val region = Rect(page.left, page.top, page.right, minOf(page.bottom, page.top + page.width / 1.32f))
+        val region = Exporter.previewRegion(page)
+        val onPage = items.filter { it.bounds.intersects(page) }
         // Pictures not decoded yet (left right after opening) would be missing from the preview.
-        items.forEach { if (it is com.tali.notes.model.ImageItem && it.bounds.intersects(region)) repo.images.loadNow(it.file) }
-        val bmp = runCatching { Exporter.thumbnail(items, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page, clip = pageClip()) }.getOrNull() ?: return@launch
+        onPage.forEach { if (it is com.tali.notes.model.ImageItem && it.bounds.intersects(region)) repo.images.loadNow(it.file) }
+        val bmp = runCatching { Exporter.thumbnail(onPage, region, paper, 640, repo.images, dark, originY = page.top, custom = custom, page = page, clip = pageClip()) }.getOrNull() ?: return@launch
         repo.saveThumbnail(notebookId, bmp)
         return@launch
       }
@@ -762,14 +768,14 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       val dark = m?.dark == true
       val custom = customPaperOf(m, settings.value)
       val landscape = m?.landscape == true
-      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, settings.value.paperLineWeight, settings.value.paperWeights, settings.value.paperLooks).joinToString("|")
+      val key = listOf(layout, quality, revision, pages, paper, dark, custom, m?.title, settings.value.pageGuides, landscape, m?.pageAspect, settings.value.paperLineWeight, settings.value.paperWeights, settings.value.paperLooks).joinToString("|")
       exported[key]?.takeIf { it.exists() }?.let { return@withLock it }
       val items = doc.all.toList()
       val title = (m?.title ?: tr(R.string.notebook)).replace(Regex("[^\\p{L}\\p{N} _-]"), "").ifBlank { tr(R.string.notebook) }
       withContext(Dispatchers.Default) {
         // One folder per choice, so the file she shares is still called after the notebook.
         val out = File(File(File(getApplication<Application>().cacheDir, "exports"), "${layout.name}-${quality.name}"), "$title.pdf")
-        runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality, landscape = landscape, inkBetweenPages = settings.value.inkBetweenPages) }.map { out }.getOrNull()
+        runCatching { Exporter.pdf(items, paper, layout, out, repo.images, fixedPages = settings.value.pageGuides, pageCount = pages, dark = dark, custom = custom, quality = quality, landscape = landscape, inkBetweenPages = settings.value.inkBetweenPages, pageAspect = m?.pageAspect) }.map { out }.getOrNull()
       }?.also { exported[key] = it }
     }
 }

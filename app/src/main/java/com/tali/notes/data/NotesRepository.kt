@@ -58,6 +58,8 @@ data class NotebookMeta(
   val draft: Boolean = false,
   /** A notebook she started, or a PDF, picture or scan she added (shown as one in the library). */
   val kind: DocKind = DocKind.NOTEBOOK,
+  /** Its pages' shape (width over height) when they aren't A4: a PDF or picture added on its own. */
+  val pageAspect: Float? = null,
 )
 
 /**
@@ -148,7 +150,7 @@ class NotesRepository(private val context: Context) {
 
   private fun reload() {
     val list = mutableListOf<NotebookMeta>()
-    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,draft,kind FROM notebooks ORDER BY updated DESC", null).use { c ->
+    db.readableDatabase.rawQuery("SELECT id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,draft,kind,page_aspect FROM notebooks ORDER BY updated DESC", null).use { c ->
       while (c.moveToNext()) {
         list +=
           NotebookMeta(
@@ -168,6 +170,7 @@ class NotesRepository(private val context: Context) {
             customPaper = c.getString(5).takeIf { it.startsWith(CustomPaper.PREFIX) }?.removePrefix(CustomPaper.PREFIX),
             draft = c.getInt(13) != 0,
             kind = DocKind.of(c.getString(14)),
+            pageAspect = if (c.isNull(15)) null else c.getFloat(15),
           )
       }
     }
@@ -193,6 +196,7 @@ class NotesRepository(private val context: Context) {
     landscape: Boolean = false,
     draft: Boolean = false,
     kind: DocKind = DocKind.NOTEBOOK,
+    pageAspect: Float? = null,
   ): NotebookMeta =
     withContext(writer) {
       val now = System.currentTimeMillis()
@@ -216,6 +220,7 @@ class NotesRepository(private val context: Context) {
           put("landscape", if (landscape) 1 else 0)
           put("draft", if (draft) 1 else 0)
           put("kind", kind.stored)
+          put("page_aspect", pageAspect)
         },
       )
       reload()
@@ -493,7 +498,7 @@ class NotesRepository(private val context: Context) {
       w.beginTransaction()
       try {
         w.execSQL(
-          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id,pages,dark,landscape,kind) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id,pages,dark,landscape,kind FROM notebooks WHERE id=?",
+          "INSERT INTO notebooks(id,title,created,updated,cover,paper,viewport,thumb,folder_id,pages,dark,landscape,kind,page_aspect) SELECT ?,?,?,?,cover,paper,viewport,0,folder_id,pages,dark,landscape,kind,page_aspect FROM notebooks WHERE id=?",
           arrayOf<Any>(newId, freeTitle(src.title, src.folderId, except = null), now, now, id),
         )
         readRows(id).forEach { w.insertOrThrow("items", null, it.toValues(newId).apply { put("id", UUID.randomUUID().toString()) }) }
@@ -683,6 +688,7 @@ class NotesRepository(private val context: Context) {
           val darkCol = if ("dark" in bkNotebook) "dark" else "0"
           val landscapeCol = if ("landscape" in bkNotebook) "landscape" else "0"
           val kindCol = if ("kind" in bkNotebook) "kind" else "NULL"
+          val aspectCol = if ("page_aspect" in bkNotebook) "page_aspect" else "NULL"
           val parentCol = if ("parent_id" in columns(w, "folders")) "parent_id" else "NULL"
           w.execSQL("INSERT OR IGNORE INTO folders (id,name,color,created,position,parent_id) SELECT id,name,color,created,position,$parentCol FROM bk.folders")
           // A PDF that was only being looked at (never saved) isn't brought back.
@@ -704,7 +710,7 @@ class NotesRepository(private val context: Context) {
               w.execSQL("DELETE FROM main.notebooks WHERE id = ?", arrayOf(id))
             }
             w.execSQL(
-              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,kind) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id,NULL,$pagesCol,$darkCol,$landscapeCol,$kindCol FROM bk.notebooks WHERE id = ?",
+              "INSERT INTO main.notebooks (id,title,created,updated,cover,paper,viewport,thumb,folder_id,deleted,pages,dark,landscape,kind,page_aspect) SELECT id,title,created,updated,cover,paper,viewport,thumb+1,folder_id,NULL,$pagesCol,$darkCol,$landscapeCol,$kindCol,$aspectCol FROM bk.notebooks WHERE id = ?",
               arrayOf(id),
             )
             w.execSQL("INSERT OR REPLACE INTO main.items SELECT * FROM bk.items WHERE notebook_id = ?", arrayOf(id))

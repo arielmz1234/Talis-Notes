@@ -192,6 +192,43 @@ class ShapeRecognizerTest {
     assertTrue("got $shape", shape is PolyShape && shape.points.size == 10)
   }
 
+  /** An arch over [sweepDeg] of a circle of radius [r], drawn from the left, with tremor. */
+  private fun arch(r: Float, sweepDeg: Double, hooks: Boolean = false): List<Pt> {
+    val half = sweepDeg / 2 * PI / 180
+    val pts = List(90) { i -> val a = PI + (PI / 2 - half) + 2 * half * i / 89; Pt(r * cos(a).toFloat() + rnd.nextFloat() * 2f, r * sin(a).toFloat() + rnd.nextFloat() * 2f) }
+    if (!hooks) return pts
+    // A little hook where the pen lands and where it lifts.
+    val first = pts.first()
+    val last = pts.last()
+    return listOf(first + Pt(8f, 6f), first + Pt(4f, 3f)) + pts + listOf(last + Pt(-5f, -2f), last + Pt(-9f, -3f))
+  }
+
+  @Test
+  fun anArchBecomesAnArc() {
+    // Tali's video (26 Oct 2026): held arches came out as jagged polylines.
+    val g = ShapeRecognizer.recognize(arch(100f, 140.0))
+    assertTrue("got $g", g is com.tali.notes.model.ArcShape)
+    assertEquals(100f, (g as com.tali.notes.model.ArcShape).radius, 6f)
+    // Nearly a half circle: exactly one, its ends level.
+    val half = ShapeRecognizer.recognize(arch(120f, 172.0)) as com.tali.notes.model.ArcShape
+    assertEquals(PI.toFloat(), abs(half.sweep), 0.001f)
+    val ends = half.paths(1f).first()
+    assertEquals(ends.first().y, ends.last().y, 0.5f)
+    // Hooks where the pen lands and lifts don't spoil it.
+    val hooked = ShapeRecognizer.recognize(arch(100f, 160.0, hooks = true))
+    assertTrue("got $hooked", hooked is com.tali.notes.model.ArcShape)
+  }
+
+  @Test
+  fun manyJointedStrokesStayInk() {
+    // A zigzag of six sides and a lopsided closed five-sider aren't shapes she meant.
+    val zigzag = wobbly(Pt(0f, 0f), Pt(40f, 80f), Pt(80f, 0f), Pt(120f, 80f), Pt(160f, 0f), Pt(200f, 80f), Pt(240f, 0f), jitter = 1.5f)
+    assertNull(ShapeRecognizer.recognize(zigzag))
+    val lopsided = wobbly(Pt(0f, 0f), Pt(200f, 10f), Pt(230f, 120f), Pt(90f, 200f), Pt(-20f, 90f), Pt(0f, 0f), jitter = 1.5f)
+    val g = ShapeRecognizer.recognize(lopsided)
+    assertTrue("got $g", g !is com.tali.notes.model.PolyShape || g.points.size != 5)
+  }
+
   @Test
   fun scribbleStaysInk() {
     val scribble = List(120) { i -> Pt(i * 3f, if (i % 2 == 0) 0f else 60f + rnd.nextFloat() * 40f) }

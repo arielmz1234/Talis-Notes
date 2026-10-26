@@ -5,6 +5,23 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.tali.notes.ui.components.cloudSurface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -16,6 +33,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.tali.notes.ui.library.IncomingCard
 import com.tali.notes.ui.library.LibraryScreen
 import com.tali.notes.ui.notebook.NotebookScreen
@@ -32,43 +51,37 @@ fun MainNavigation() {
   // The library always stays at the bottom: Back there leaves the app, and a quick double tap on a
   // notebook's back arrow can't pop it too (an empty stack would crash).
   val back: () -> Unit = { if (backStack.size > 1) backStack.removeLastOrNull() else activity?.finish() }
-  // A PDF, pictures or a backup from another app: she picks where they go, then that notebook opens
-  // (in place of one already open, so Back still goes to the library) and adds them.
+  // A PDF or pictures from another app open as themselves (a PDF item or a Picture item, built like
+  // + › File: its own pages on plain paper), never into a notebook: from a notebook she can add
+  // them herself. Until she saves it, it's just for looking (unless *Add them to my notebooks* is
+  // on). It opens on top of whatever was open, so leaving goes back there. A backup asks to restore.
   val offer = Incoming.offer.collectAsState().value
   val app = androidx.compose.ui.platform.LocalContext.current.talisApp
-  if (offer != null && offer.kind == Incoming.Kind.PDF) {
-    // A PDF always opens in a new notebook she's just looking at, until she saves it. It opens on
-    // top of whatever was open, so leaving it goes back there.
+  var opening by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+  if (offer != null && offer.kind != Incoming.Kind.BACKUP) {
     androidx.compose.runtime.LaunchedEffect(offer) {
-      val id = runCatching { com.tali.notes.ui.library.openPdfDraft(app, offer) }.getOrNull()
+      val draft = !app.settings.settings.value.pdfsToLibrary
+      val id = runCatching {
+        if (offer.kind == Incoming.Kind.PDF) {
+          opening = com.tali.notes.tr(R.string.opening_pdf)
+          // Several PDFs at once are each kept (only one can be looked at); the first opens.
+          val many = offer.uris.size > 1
+          offer.uris.map { uri ->
+            com.tali.notes.Imports.pdf(app, uri, null, draft = draft && !many) { done, total -> opening = com.tali.notes.tr(R.string.adding_pages_n_of_n, done, total) }.id
+          }.first()
+        } else {
+          opening = com.tali.notes.tr(R.string.adding_pictures)
+          com.tali.notes.Imports.pictures(app, offer.uris, null, draft)?.id
+        }
+      }.onFailure { com.tali.notes.CrashLog.recovered(app, it) }.getOrNull()
+      opening = null
       Incoming.offer.value = null
-      if (id != null) {
-        Incoming.sendTo(id, offer)
-        backStack.add(Notebook(id))
-      }
+      if (id != null) backStack.add(Notebook(id))
     }
   } else if (offer != null) {
-    val open = (backStack.lastOrNull() as? Notebook)?.id
-    IncomingCard(
-      offer,
-      openNotebook = open,
-      onGo = { id ->
-        Incoming.offer.value = null
-        Incoming.sendTo(id, offer)
-        when {
-          id == open -> Unit
-          open != null -> backStack[backStack.lastIndex] = Notebook(id)
-          else -> backStack.add(Notebook(id))
-        }
-      },
-      // Made into a Picture item of its own (already holding them): just open it.
-      onMade = { id ->
-        Incoming.offer.value = null
-        if (open != null) backStack[backStack.lastIndex] = Notebook(id) else backStack.add(Notebook(id))
-      },
-      onDismiss = { Incoming.offer.value = null },
-    )
+    IncomingCard(offer, onDismiss = { Incoming.offer.value = null })
   }
+  Box(Modifier.fillMaxSize()) {
   NavDisplay(
     backStack = backStack,
     onBack = back,
@@ -94,6 +107,23 @@ fun MainNavigation() {
         }
       },
   )
+  // While a PDF or pictures from another app are being made into an item: what's happening.
+  opening?.let { words -> OpeningPill(words, Modifier.align(Alignment.BottomCenter)) }
+  }
+}
+
+/** A small frosted pill near the bottom: a turning ring and [words] ("Adding pages… 12 of 59"). */
+@Composable
+private fun OpeningPill(words: String, modifier: Modifier) {
+  val c = com.tali.notes.theme.Tali.colors
+  Row(
+    modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 40.dp).cloudSurface(20.dp).padding(horizontal = 18.dp, vertical = 12.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
+    Spacer(Modifier.width(12.dp))
+    Text(words, style = MaterialTheme.typography.labelLarge, color = c.ink)
+  }
 }
 
 private const val SCREEN_FADE_MS = 420

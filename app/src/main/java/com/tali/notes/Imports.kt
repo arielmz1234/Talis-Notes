@@ -15,26 +15,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * PDFs, pictures and scans added from the library's + menu, each made into an item of its own
+ * PDFs, pictures and scans added from the library's + menu or opened from another app, each made into an item of its own
  * straight away (no need to open it): every page or picture on an A4 page of its own, on blank paper,
  * with its preview drawn, so it shows in the library as what it is ([DocKind]). Underneath it's like
  * any notebook: she can open it and write on it.
  */
 object Imports {
   /** A PDF from her files: its pages, named after the file. */
-  suspend fun pdf(app: TalisApp, uri: Uri, folderId: String?, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): NotebookMeta {
+  suspend fun pdf(app: TalisApp, uri: Uri, folderId: String?, draft: Boolean = false, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): NotebookMeta {
     val pages = app.repository.importPdf(uri, onProgress)
     if (pages.isEmpty()) throw com.tali.notes.data.NotesRepository.PdfImportException(tr(R.string.that_pdf_has_no_pages))
     val name = Incoming.nameOf(app, uri)?.substringBeforeLast('.')?.takeIf { it.isNotBlank() } ?: "PDF"
-    return build(app, DocKind.PDF, name, folderId, pages)
+    return build(app, DocKind.PDF, name, folderId, pages, draft)
   }
 
   /** Pictures picked together: one item, a picture on each page. Null if none could be opened. */
-  suspend fun pictures(app: TalisApp, uris: List<Uri>, folderId: String?): NotebookMeta? {
+  suspend fun pictures(app: TalisApp, uris: List<Uri>, folderId: String?, draft: Boolean = false): NotebookMeta? {
     val pages = stored(app, uris)
     if (pages.isEmpty()) return null
     val title = if (pages.size > 1) english(R.string.n_pictures, pages.size) else english(R.string.picture)
-    return build(app, DocKind.PICTURE, title, folderId, pages)
+    return build(app, DocKind.PICTURE, title, folderId, pages, draft)
   }
 
   /** Copies pictures into the app, upright and downscaled; their size in pixels stands in for the page size. */
@@ -45,30 +45,23 @@ object Imports {
       ImportedPage(file, bmp.width.toFloat(), bmp.height.toFloat())
     }
 
-  private suspend fun build(app: TalisApp, kind: DocKind, title: String, folderId: String?, pages: List<ImportedPage>): NotebookMeta {
+  /** [draft]: opened from another app, just for looking until she saves it (see NotebookMeta.draft). */
+  private suspend fun build(app: TalisApp, kind: DocKind, title: String, folderId: String?, pages: List<ImportedPage>, draft: Boolean = false): NotebookMeta {
     val repo = app.repository
-    // Wide pages (slides, a photo taken sideways) lie on landscape A4 pages.
-    val landscape = pages.count { it.widthPt > it.heightPt } * 2 > pages.size
-    val layout = Pages.of(landscape)
-    val meta = repo.create(title, PaperStyle.BLANK, folderId = folderId, pages = pages.size, landscape = landscape, kind = kind)
+    // Its pages are the shape of its first page or picture (a slide deck's pages are slide-shaped),
+    // with nothing round it: not A4 sheets with paper left over. Pages of another shape fit inside.
+    val first = pages.first()
+    val aspect = first.widthPt / first.heightPt
+    val layout = Pages.of(aspect > 1f, aspect)
+    val meta = repo.create(title, PaperStyle.BLANK, folderId = folderId, pages = pages.size, landscape = layout.landscape, draft = draft, kind = kind, pageAspect = aspect)
     val items =
       pages.mapIndexed { i, p ->
         val r = layout.rect(i)
-        val rect =
-          if (kind == DocKind.PICTURE) {
-            // A picture sits in the middle of its page with a margin round it, like a print.
-            val room = Rect(r.left + MARGIN, r.top + MARGIN, r.right - MARGIN, r.bottom - MARGIN)
-            val s = minOf(room.width / p.widthPt, room.height / p.heightPt)
-            val w = p.widthPt * s
-            val h = p.heightPt * s
-            Rect(room.center.x - w / 2, room.center.y - h / 2, room.center.x + w / 2, room.center.y + h / 2)
-          } else {
-            // A PDF page or a scan fills its page's width from the top (as a PDF added to a notebook
-            // does), leaving room below a wide slide for notes.
-            val s = minOf(r.width / p.widthPt, r.height / p.heightPt)
-            val x = r.left + (r.width - p.widthPt * s) / 2f
-            Rect(x, r.top, x + p.widthPt * s, r.top + p.heightPt * s)
-          }
+        // Fills its page (one of another shape sits in the middle of it).
+        val s = minOf(r.width / p.widthPt, r.height / p.heightPt)
+        val w = p.widthPt * s
+        val h = p.heightPt * s
+        val rect = Rect(r.center.x - w / 2, r.center.y - h / 2, r.center.x + w / 2, r.center.y + h / 2)
         ImageItem(UUID.randomUUID().toString(), i.toLong(), p.file, rect, pdfPage = kind != DocKind.PICTURE)
       }
     repo.applyChange(meta.id, Change(emptyList(), items))
@@ -76,17 +69,15 @@ object Imports {
     withContext(Dispatchers.Default) {
       runCatching {
         val page = layout.rect(0)
-        val region = Rect(page.left, page.top, page.right, minOf(page.bottom, page.top + page.width / 1.32f))
-        items.filter { it.bounds.intersects(region) }.forEach { repo.images.loadNow(it.file) }
-        val bmp = Exporter.thumbnail(items, region, PaperStyle.BLANK, 640, repo.images, originY = page.top, page = page, clip = { layout.clipFor(it, pages.size, false) })
+        val region = Exporter.previewRegion(page)
+        val onPage = items.filter { it.bounds.intersects(page) }
+        onPage.forEach { repo.images.loadNow(it.file) }
+        val bmp = Exporter.thumbnail(onPage, region, PaperStyle.BLANK, 640, repo.images, originY = page.top, page = page, clip = { layout.clipFor(it, pages.size, false) })
         repo.saveThumbnail(meta.id, bmp)
       }
     }
     // Something new (a photo, a scan, a PDF): to Drive straight away, so her other devices get it.
-    com.tali.notes.backup.DriveBackup.backupSoon(app)
+    if (!draft) com.tali.notes.backup.DriveBackup.backupSoon(app)
     return meta
   }
-
-  /** Room round a picture on its page, in page units (about 1 cm). */
-  private const val MARGIN = 48f
 }

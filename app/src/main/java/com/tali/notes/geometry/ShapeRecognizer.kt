@@ -1,5 +1,6 @@
 package com.tali.notes.geometry
 
+import com.tali.notes.model.ArcShape
 import com.tali.notes.model.CURVE_DOTS
 import com.tali.notes.model.CurveShape
 import com.tali.notes.model.CustomShape
@@ -21,9 +22,10 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Turns a hand-drawn stroke into clean geometry: lines, arrows, open polylines, circles, ellipses,
- * triangles, rectangles, squares, diamonds and other polygons, and stars. Returns null when the
- * stroke doesn't look like any of them, so the ink stays as drawn.
+ * Turns a hand-drawn stroke into clean geometry: lines, arrows, arcs, curves, an L or Z, circles,
+ * ellipses, triangles, rectangles, squares, diamonds and other polygons, and stars. Returns null
+ * when the stroke doesn't clearly look like any of them, so the ink stays as drawn: a shape she
+ * didn't mean is worse than none (Tali, 26 Oct 2026: a held arch came out as a jagged polyline).
  */
 object ShapeRecognizer {
   private const val DEG = (PI / 180).toFloat()
@@ -31,6 +33,18 @@ object ShapeRecognizer {
   private const val GENTLE_BEND = 0.14f
   /** A turn sharper than this from one step of the finely sampled stroke to the next is a corner, not a bend. */
   private val CORNER_TURN = (40 * PI / 180).toFloat()
+  /** An L's or Z's corners turn at least this much. */
+  private val SHARP_CORNER = (35 * PI / 180).toFloat()
+  /** A hook is a turn sharper than this within the first or last [HOOK] of the stroke. */
+  private val HOOK_TURN = (50 * PI / 180).toFloat()
+  private const val HOOK = 0.08f
+  /** Arcs go between these sweeps; less is barely bent, more is nearly a circle. */
+  private val ARC_MIN = (40 * PI / 180).toFloat()
+  private val ARC_MAX = (300 * PI / 180).toFloat()
+  /** Within this of a half circle, it's exactly one. */
+  private val HALF_SNAP = (15 * PI / 180).toFloat()
+  /** A half circle's ends this close to level or upright are made so. */
+  private val LEVEL_SNAP = (10 * PI / 180).toFloat()
 
   /**
    * Like [recognize], but also tries her own saved shapes. A straight line always stays a line (so
@@ -138,14 +152,97 @@ object ShapeRecognizer {
     val simplified = Geo.simplify(points, max(0.08f * diag, 5f))
     arrow(simplified)?.let { return it }
 
+    // The little hooks where the pen lands and lifts aren't part of what she drew.
+    val body = withoutHooks(points)
+    // A stroke along part of a circle (an arch, a semicircle) becomes an Arc: the most specific
+    // smooth shape, so it's tried before the general Curve.
+    fitArc(body, diag)?.let { return it }
     // A stroke that bends without corners (up and down, an S, a bow) becomes a Curve.
-    if (!hasCorner(points)) fitCurve(points, diag)?.let { return it }
+    if (!hasCorner(body)) fitCurve(body, diag)?.let { return it }
 
-    if (simplified.size in 3..8) {
+    // An open polyline only when it's clearly two or three straight sides meeting at real corners
+    // (an L, a Z); anything else stays as she wrote it.
+    if (simplified.size in 3..4) {
       val fit = Geo.meanDistToPolyline(points, simplified, closed = false)
-      if (fit < 0.035f * diag) return PolyShape(simplified.map { it }, closed = false)
+      val sides = (0 until simplified.size - 1).map { simplified[it].dist(simplified[it + 1]) }
+      val sharp = (1 until simplified.size - 1).all { i -> turnAt(simplified[i - 1], simplified[i], simplified[i + 1]) > SHARP_CORNER }
+      if (fit < 0.03f * diag && sharp && sides.all { it > 0.15f * length }) return PolyShape(simplified.map { it }, closed = false)
     }
     return null
+  }
+
+  /** How much the path turns at [b] coming from [a] and going on to [c] (radians, 0 = straight on). */
+  private fun turnAt(a: Pt, b: Pt, c: Pt): Float {
+    var t = abs((c - b).angle() - (b - a).angle())
+    if (t > PI.toFloat()) t = 2 * PI.toFloat() - t
+    return t
+  }
+
+  /**
+   * The stroke without a hook at either end: within the first or last [HOOK] of its length, a
+   * sharp turn (the pen landing or lifting) and everything beyond it are dropped.
+   */
+  private fun withoutHooks(points: List<Pt>): List<Pt> {
+    val r = Geo.resample(points, 100)
+    if (r.size < 100) return points
+    val reach = (HOOK * 100).toInt()
+    var from = 0
+    var to = r.size - 1
+    for (i in 1..reach) if (turnAt(r[i - 1], r[i], r[i + 1]) > HOOK_TURN) from = i
+    for (i in r.size - 2 downTo r.size - 1 - reach) if (turnAt(r[i - 1], r[i], r[i + 1]) > HOOK_TURN) to = i
+    return r.subList(from, to + 1)
+  }
+
+  /**
+   * An arc of a circle through the stroke (fitted by least squares), or null when it doesn't follow
+   * one closely, turns back on itself, or covers too little or too much of a circle. Close to a
+   * half circle it becomes exactly one, its ends level or upright when they nearly are.
+   */
+  private fun fitArc(points: List<Pt>, diag: Float): ArcShape? {
+    val r = Geo.resample(points, 64)
+    if (r.size < 8) return null
+    // Kåsa fit: x² + y² + Dx + Ey + F = 0, least squares (centred on the mean for accuracy).
+    val mx = r.sumOf { it.x.toDouble() } / r.size
+    val my = r.sumOf { it.y.toDouble() } / r.size
+    var suu = 0.0; var suv = 0.0; var svv = 0.0; var suuu = 0.0; var svvv = 0.0; var suvv = 0.0; var svuu = 0.0
+    for (p in r) {
+      val u = p.x - mx
+      val v = p.y - my
+      suu += u * u; suv += u * v; svv += v * v
+      suuu += u * u * u; svvv += v * v * v; suvv += u * v * v; svuu += v * u * u
+    }
+    val det = suu * svv - suv * suv
+    if (abs(det) < 1e-9) return null
+    val bu = (suuu + suvv) / 2
+    val bv = (svvv + svuu) / 2
+    val uc = (bu * svv - bv * suv) / det
+    val vc = (bv * suu - bu * suv) / det
+    val center = Pt((uc + mx).toFloat(), (vc + my).toFloat())
+    val radius = sqrt(uc * uc + vc * vc + (suu + svv) / r.size).toFloat()
+    // Nearly straight (a huge circle) is a line's or a curve's business.
+    if (radius > 1.5f * diag || radius < 4f) return null
+    val off = r.map { abs(it.dist(center) - radius) }
+    if (off.max() > 0.06f * diag || off.average() > 0.02f * diag) return null
+    // How far round it goes, and that it keeps going one way.
+    var sweep = 0f
+    var travel = 0f
+    for (i in 1 until r.size) {
+      var d = (r[i] - center).angle() - (r[i - 1] - center).angle()
+      if (d > PI) d -= 2 * PI.toFloat()
+      if (d < -PI) d += 2 * PI.toFloat()
+      sweep += d
+      travel += abs(d)
+    }
+    if (travel > abs(sweep) * 1.15f) return null
+    if (abs(sweep) < ARC_MIN || abs(sweep) > ARC_MAX) return null
+    var start = (r.first() - center).angle()
+    if (abs(abs(sweep) - PI.toFloat()) < HALF_SNAP) {
+      sweep = if (sweep > 0) PI.toFloat() else -PI.toFloat()
+      val quarter = (PI / 2).toFloat()
+      val snapped = round(start / quarter) * quarter
+      if (abs(start - snapped) < LEVEL_SNAP) start = snapped
+    }
+    return ArcShape(center, radius, start, sweep)
   }
 
   /**
@@ -250,7 +347,7 @@ object ShapeRecognizer {
 
     val useEllipse = ellipse != null && ellipse.second < 0.12f && (polygon == null || polygon.size > 6 || ellipse.second < polyErr)
     if (useEllipse) return beautifyEllipse(ellipse.first)
-    if (polygon != null && polyErr < 0.09f) return beautifyPolygon(polygon)
+    if (polygon != null && polyErr < 0.09f) beautifyPolygon(polygon)?.let { return it }
     if (ellipse != null && ellipse.second < 0.16f) return beautifyEllipse(ellipse.first)
     return null
   }
@@ -336,14 +433,19 @@ object ShapeRecognizer {
     return poly
   }
 
-  private fun beautifyPolygon(poly: List<Pt>): ShapeGeometry {
+  /**
+   * The clean polygon, or null for a many-cornered or lopsided one: only triangles, four-sided
+   * shapes, even pentagons and hexagons, and stars are made; anything else was more likely a
+   * rounded shape or writing than a polygon she meant.
+   */
+  private fun beautifyPolygon(poly: List<Pt>): ShapeGeometry? {
     val c = Geo.centroid(poly)
     return when (poly.size) {
       3 -> beautifyTriangle(poly)
       4 -> beautifyQuad(poly)
-      5, 6 -> if (isNearlyRegular(poly, c)) regularFrom(poly, c) else PolyShape(poly, true)
-      10 -> starFrom(poly, c) ?: PolyShape(poly, true)
-      else -> PolyShape(poly, true)
+      5, 6 -> if (isNearlyRegular(poly, c)) regularFrom(poly, c) else null
+      10 -> starFrom(poly, c)
+      else -> null
     }
   }
 

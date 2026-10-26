@@ -143,6 +143,7 @@ import com.tali.notes.ui.library.CardBody
 import com.tali.notes.theme.TaliColorsScope
 import com.tali.notes.theme.notebookColors
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.DarkMode
 import com.tali.notes.ui.components.CloudCrown
 import com.tali.notes.ui.components.ColorDot
@@ -874,8 +875,9 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
     }
   }
   savingPdf?.let { then ->
-    SavePdfDialog(meta?.title ?: "", onDismiss = { savingPdf = null }) { name ->
-      vm.saveAsNotebook(name)
+    val folders by vm.folders.collectAsState()
+    SavePdfDialog(meta?.title ?: "", folders, onDismiss = { savingPdf = null }) { name, folderId ->
+      vm.saveAsNotebook(name, folderId)
       savingPdf = null
       vm.showHint(tr(R.string.saved_to_your_notebooks))
       then()
@@ -1114,19 +1116,63 @@ private fun PdfViewerBar(
 
 /** Saving a PDF she opened from another app: its name to start with, ready to change. */
 @Composable
-private fun SavePdfDialog(title: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+private fun SavePdfDialog(title: String, folders: List<com.tali.notes.data.Folder>, onDismiss: () -> Unit, onSave: (String, String?) -> Unit) {
   val c = Tali.colors
   var name by remember { mutableStateOf(TextFieldValue(title, androidx.compose.ui.text.TextRange(0, title.length))) }
+  // Where it goes in the library (Tali asked to choose before saving).
+  var folderId by remember { mutableStateOf<String?>(null) }
   com.tali.notes.ui.library.DialogCard(onDismiss, width = 460) {
     Text(stringResource(R.string.save_to_your_notebooks), style = MaterialTheme.typography.titleLarge, color = c.ink)
     Spacer(Modifier.height(6.dp))
     Text(stringResource(R.string.it_goes_into_your_notebooks_ready), style = MaterialTheme.typography.bodySmall, color = c.inkMuted)
     Spacer(Modifier.height(16.dp))
-    TitleField(name, { name = it }, placeholder = stringResource(R.string.notebook_name)) { onSave(name.text) }
+    TitleField(name, { name = it }, placeholder = stringResource(R.string.notebook_name)) { onSave(name.text, folderId) }
+    if (folders.isNotEmpty()) {
+      Spacer(Modifier.height(14.dp))
+      FolderChoice(folders, folderId) { folderId = it }
+    }
     Spacer(Modifier.height(20.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
-      PrimaryButton(stringResource(R.string.save)) { onSave(name.text) }
+      PrimaryButton(stringResource(R.string.save)) { onSave(name.text, folderId) }
+    }
+  }
+}
+
+/** *Folder* beside a button naming the chosen one (or No folder), which drops down her folders, nested. */
+@Composable
+private fun FolderChoice(folders: List<com.tali.notes.data.Folder>, chosen: String?, onChoose: (String?) -> Unit) {
+  val c = Tali.colors
+  var open by remember { mutableStateOf(false) }
+  val current = folders.firstOrNull { it.id == chosen }
+  Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Text(stringResource(R.string.folder), style = MaterialTheme.typography.titleSmall, color = c.inkMuted, modifier = Modifier.weight(1f))
+    Box {
+      Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).background(c.accentSoft).clickable { open = true }.padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Icon(if (current != null) Icons.Outlined.Folder else Icons.Outlined.AutoStories, null, tint = if (current != null) Color(current.color) else c.inkMuted, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(current?.name ?: stringResource(R.string.no_folder), style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 200.dp))
+        Spacer(Modifier.width(4.dp))
+        Icon(Icons.Outlined.KeyboardArrowDown, null, tint = c.inkMuted, modifier = Modifier.size(18.dp))
+      }
+      DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
+        DropdownMenuItem(
+          text = { Text(stringResource(R.string.no_folder)) },
+          leadingIcon = { Icon(Icons.Outlined.AutoStories, null, tint = c.inkMuted) },
+          onClick = { onChoose(null); open = false },
+        )
+        com.tali.notes.ui.library.folderTree(folders).forEach { (f, depth) ->
+          DropdownMenuItem(
+            text = { Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = Color(f.color)) },
+            onClick = { onChoose(f.id); open = false },
+            modifier = Modifier.padding(start = (depth * 18).dp),
+          )
+        }
+      }
     }
   }
 }

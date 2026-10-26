@@ -5,13 +5,15 @@ import com.tali.notes.geometry.Rect
 import kotlin.math.floor
 
 /**
- * Where the A4 pages of a paged notebook sit on the canvas: one column of pages starting at the
- * origin, with a small gap between them, upright ([PORTRAIT]) or on their side ([LANDSCAPE]) as
- * chosen when the notebook was made. Everything is in world units (dp).
+ * Where the pages of a paged notebook sit on the canvas: one column of pages starting at the
+ * origin, with a small gap between them. A notebook's pages are A4, upright ([PORTRAIT]) or on their
+ * side ([LANDSCAPE]) as chosen when it was made; a PDF or picture added on its own has pages the
+ * shape of its own first page or picture ([of] with an aspect), as long on their long side as A4.
+ * Everything is in world units (dp).
  */
-class Pages private constructor(val landscape: Boolean) {
-  val width = if (landscape) Exporter.A4_HEIGHT else Exporter.A4_WIDTH
-  val height = if (landscape) Exporter.A4_WIDTH else Exporter.A4_HEIGHT
+data class Pages private constructor(val width: Float, val height: Float) {
+  val landscape: Boolean
+    get() = width > height
   val pitch = height + GAP
 
   /** Width over height. */
@@ -66,9 +68,14 @@ class Pages private constructor(val landscape: Boolean) {
       }
 
     const val GAP = 40f
-    val PORTRAIT = Pages(false)
-    val LANDSCAPE = Pages(true)
+    val PORTRAIT = Pages(Exporter.A4_WIDTH, Exporter.A4_HEIGHT)
+    val LANDSCAPE = Pages(Exporter.A4_HEIGHT, Exporter.A4_WIDTH)
 
-    fun of(landscape: Boolean) = if (landscape) LANDSCAPE else PORTRAIT
+    /** A4 pages, or with [aspect] (width over height, from a PDF's page or a picture) pages of that shape. */
+    fun of(landscape: Boolean, aspect: Float? = null): Pages {
+      val a = aspect?.takeIf { it.isFinite() && it > 0f }?.coerceIn(0.25f, 4f) ?: return if (landscape) LANDSCAPE else PORTRAIT
+      val long = Exporter.A4_HEIGHT
+      return if (a >= 1f) Pages(long, long / a) else Pages(long * a, long)
+    }
   }
 }

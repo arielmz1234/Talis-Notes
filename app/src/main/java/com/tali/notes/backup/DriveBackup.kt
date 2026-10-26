@@ -332,6 +332,7 @@ object DriveBackup {
           quality = PdfQuality.BALANCED,
           landscape = nb.landscape,
           inkBetweenPages = s.inkBetweenPages,
+          pageAspect = nb.pageAspect,
         )
       }
       .onFailure { CrashLog.recovered(context, it) }

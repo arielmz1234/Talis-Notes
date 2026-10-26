@@ -59,6 +59,22 @@ object Exporter {
    * Renders the region [world] into a bitmap of the given width, keeping the aspect ratio. [page] is
    * the A4 page the region lies on in a paged notebook (a picture background fills it).
    */
+  /**
+   * What a paged notebook's library card shows of its first [page]: its top, card-shaped. A page
+   * much wider than the card (a slide) is shown whole, with blank above and below, rather than
+   * cut at the sides; draw only the items on [page] then.
+   */
+  fun previewRegion(page: Rect): Rect =
+    if (page.width / page.height > 1.5f) {
+      val h = page.width / CARD_ASPECT
+      Rect(page.left, page.center.y - h / 2, page.right, page.center.y + h / 2)
+    } else {
+      Rect(page.left, page.top, page.right, minOf(page.bottom, page.top + page.width / CARD_ASPECT))
+    }
+
+  /** A library card's preview, width over height. */
+  private const val CARD_ASPECT = 1.32f
+
   fun thumbnail(
     items: Collection<CanvasItem>,
     world: Rect,
@@ -161,8 +177,10 @@ object Exporter {
     quality: PdfQuality = PdfQuality.BEST,
     landscape: Boolean = false,
     inkBetweenPages: Boolean = false,
+    pageAspect: Float? = null,
   ) {
-    val pageLayout = Pages.of(landscape)
+    // A notebook's pages are A4; a PDF or picture item's are its own shape, and so are the PDF's.
+    val pageLayout = Pages.of(landscape, pageAspect)
     val content = items.map { it.bounds }.reduceOrNull(Rect::union)?.outset(MARGIN_DP) ?: Rect(0f, 0f, 1322f, 1871f)
     val pages: List<Rect> =
       when (layout) {
