@@ -62,7 +62,8 @@ object Imports {
         val w = p.widthPt * s
         val h = p.heightPt * s
         val rect = Rect(r.center.x - w / 2, r.center.y - h / 2, r.center.x + w / 2, r.center.y + h / 2)
-        ImageItem(UUID.randomUUID().toString(), i.toLong(), p.file, rect, pdfPage = kind != DocKind.PICTURE)
+        // Each one is its page, like a PDF's (never picked up by the lasso).
+        ImageItem(UUID.randomUUID().toString(), i.toLong(), p.file, rect, pdfPage = true)
       }
     repo.applyChange(meta.id, Change(emptyList(), items))
     // Its preview: the top of the first page, as the library shows notebooks.

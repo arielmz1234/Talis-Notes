@@ -3210,8 +3210,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       return
     }
     if (lengthPx < 12f * density) {
-      // A tap with the lasso picks up whatever is under it.
-      hitTest(end ?: pts.firstOrNull() ?: return, anyLock = settings.lassoLocked, filter = settings::lassoHits)?.let { selectGroup(it) }
+      // A tap with the lasso picks up whatever is under it, never a whole PDF page.
+      hitTest(end ?: pts.firstOrNull() ?: return, pages = false, anyLock = settings.lassoLocked, filter = settings::lassoHits)?.let { selectGroup(it) }
       return
     }
     val area = Rect.around(pts) ?: return
@@ -3334,30 +3334,18 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
 
   /**
-   * Whether the lasso loop [poly] picks up [item]: anything it touches (see [Lasso]). Imported PDF
-   * pages still need to be mostly inside, so lassoing writing on a slide doesn't take the slide.
+   * Whether the lasso loop [poly] picks up [item]: anything it touches (see [Lasso]). A whole PDF
+   * page (or a picture item's page) is never picked up, however much of it the loop holds: it's the
+   * page itself, and lassoing writing on a slide kept taking the slide (a tester's video).
    */
   private fun lassoTouches(item: CanvasItem, poly: List<Pt>): Boolean =
     when (item) {
       is InkItem -> Lasso.touchesPath(StrokeFactory.points(item.stroke), poly)
       is ShapeItem -> item.geometry.paths(item.size).any { Lasso.touchesPath(it, poly) }
-      is ImageItem -> if (item.pdfPage) insideFraction(item, poly) >= 0.5f else Lasso.touchesRect(item.rect, poly)
+      is ImageItem -> !item.pdfPage && Lasso.touchesRect(item.rect, poly)
       is TextItem -> Lasso.touchesRect(item.bounds, poly)
       is AudioItem -> false
     }
-
-  private fun insideFraction(item: CanvasItem, poly: List<Pt>): Float {
-    val samples: List<Pt> =
-      when (item) {
-        is InkItem -> StrokeFactory.points(item.stroke).let { pts -> if (pts.size > 40) pts.filterIndexed { i, _ -> i % (pts.size / 40) == 0 } else pts }
-        is ShapeItem -> item.geometry.paths(item.size).flatten()
-        is ImageItem -> item.rect.let { r -> listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom), r.center) }
-        is TextItem -> item.bounds.let { r -> listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom), r.center) }
-        is AudioItem -> emptyList()
-      }
-    if (samples.isEmpty()) return 0f
-    return samples.count { Geo.pointInPolygon(it, poly) }.toFloat() / samples.size
-  }
 
   /**
    * The item under [p]. Writing wins over pictures, since pictures are drawn underneath it; imported
