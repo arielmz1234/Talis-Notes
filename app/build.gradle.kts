@@ -14,8 +14,8 @@ android {
     // Android 10: the oldest Galaxy Tab S6 Lite firmware, and the floor for low-latency inking.
     minSdk = 29
     targetSdk = 36
-    versionCode = 18
-    versionName = "1.0.8"
+    versionCode = 19
+    versionName = "1.0.9"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     // Google Drive backup needs a one-time OAuth client in Google Cloud (see BACKUP_SETUP.md).
     // Set this to true once that exists; until then the Drive option stays hidden.

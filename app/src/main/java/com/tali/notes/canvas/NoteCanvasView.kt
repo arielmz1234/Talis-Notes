@@ -640,8 +640,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
     }
     // Hand-off in the same frame the tiles pick the strokes up, so there's no flicker (and our own
-    // copies of them, if the page moved meanwhile, go in that same frame).
-    inProgress.removeFinishedStrokes(strokes.keys)
+    // copies of them, if the page moved meanwhile, go in that same frame). Every stroke Ink handed
+    // over goes, not only the ones kept now: one already taken (undo, the eraser or the lasso right
+    // after writing, see commitWaitingInk) and handed over together with a newer one stayed on Ink's
+    // layer for good, a stroke that couldn't be erased or picked up until the notebook was reopened.
+    inProgress.removeFinishedStrokes(finished.keys)
     finished.keys.forEach { shadows.remove(it) }
     invalidate()
   }
