@@ -102,6 +102,49 @@ object StrokeFactory {
     return Stroke(brush, batch)
   }
 
+  /**
+   * The straight highlighter's line from [a] to [b], looking the same as [strokeAlong] at a cost
+   * that doesn't grow with its length. [strokeAlong] feeds Ink a sample every few units at a slow
+   * pen speed, and Ink fills in more between them by time, so a line across a page zoomed out took
+   * 100-200 ms to build; rebuilt as the pen moved, the line followed in jumps (Tali's video,
+   * 2 Nov 2026). Here the samples come quickly (no filling in), finely spaced near both ends,
+   * where Ink's smoothing would otherwise pull the ends in, and far apart along the middle.
+   */
+  fun straightLine(a: Pt, b: Pt, brush: Brush): Stroke {
+    val len = a.dist(b)
+    val batch = MutableStrokeInputBatch()
+    var t = 0L
+    var last: Pt? = null
+    fun add(p: Pt) {
+      if (last?.let { it.dist(p) < 0.01f } == true) return
+      batch.add(InputToolType.STYLUS, p.x, p.y, t, pressure = 0.55f)
+      t += LINE_STEP_MS
+      last = p
+    }
+    if (len < 0.01f) {
+      add(a)
+      return Stroke(brush, batch)
+    }
+    val end = minOf(LINE_END_RUN, len / 2f)
+    fun at(d: Float) = a + (b - a) * (d / len)
+    // Fine steps over the first stretch, a few long ones across the middle, fine steps to the end.
+    var d = 0f
+    while (d < end) { add(at(d)); d += LINE_FINE }
+    val middle = len - 2f * end
+    val n = ceil(middle / maxOf(len / LINE_MIDDLE_STEPS, LINE_FINE)).toInt().coerceAtLeast(1)
+    for (k in 0 until n) add(at(end + middle * k / n))
+    d = len - end
+    while (d < len) { add(at(d)); d += LINE_FINE }
+    add(b)
+    return Stroke(brush, batch)
+  }
+
+  /** [straightLine]: ms between samples (under Ink's 360 Hz, so it adds none), fine spacing near the ends, how far that runs, and steps across the middle. */
+  private const val LINE_STEP_MS = 2L
+  private const val LINE_FINE = 0.25f
+  private const val LINE_END_RUN = 8f
+  private const val LINE_MIDDLE_STEPS = 24f
+
   /** A gentle S-curve with rising and falling pressure, used to preview a pen in its settings. */
   fun previewStroke(brush: Brush, width: Float, height: Float): Stroke {
     val batch = MutableStrokeInputBatch()

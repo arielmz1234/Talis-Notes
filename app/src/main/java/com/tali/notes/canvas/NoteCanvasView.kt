@@ -2776,7 +2776,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (end.dist(straightStart) < 0.1f) end = straightStart + Pt(0.1f, 0f)
     val color = if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color
     val brush = Brushes.brush(slot.type, color, slot.size, LineStyle.SOLID, slot.square)
-    straightPreview = InkItem("straight", Long.MAX_VALUE, slot.type, StrokeFactory.strokeAlong(listOf(straightStart, end), brush))
+    // Rebuilt as the pen moves, so it must stay quick however long the line is (see straightLine).
+    straightPreview = InkItem("straight", Long.MAX_VALUE, slot.type, StrokeFactory.straightLine(straightStart, end, brush))
     invalidate()
   }
 
