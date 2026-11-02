@@ -97,13 +97,15 @@
   .c1 { width: 250px; top: 46px; left: -50px; --d: 8px; --p: 14s; }
   .c2 { width: 330px; top: 4px; left: 36%; --d: 14px; --p: 20s; --delay: -6s; }
   .c3 { width: 230px; top: 60px; right: -30px; --d: 8px; --p: 12s; --delay: -3s; }
-  .c4 { width: 120px; top: 150px; left: 20%; --d: 5px; --p: 23s; --delay: -9s; }
-  .c5 { width: 110px; top: 196px; right: 22%; --d: 4px; --p: 26s; --delay: -4s; }
+  .c4 { width: 120px; top: 126px; left: 20%; --d: 5px; --p: 23s; --delay: -9s; }
+  .c5 { width: 110px; top: 128px; right: 23%; --d: 4px; --p: 26s; --delay: -4s; }
   .sparkle { position: absolute; width: 12px; height: 12px; color: #fff; opacity: 0.9; }
   @media (prefers-reduced-motion: reduce) { .cloud { animation: none; } html { scroll-behavior: auto; } }
   /* The header's own layers let taps through to the clouds, except on the things in them. */
   nav, .hero, .hero > div { pointer-events: none; }
-  nav a, nav button, .hero a, .hero h1, .hero p, .device { pointer-events: auto; }
+  /* Only the buttons and the picture catch taps: the headline and lines span the full width and
+     would sit in front of a low cloud. */
+  nav a, nav button, .hero a, .device { pointer-events: auto; }
   nav, .hero { z-index: 4; }
 
   /* The mist of a burst cloud, drawn over everything (it never blocks a tap). */
@@ -557,19 +559,24 @@
   }
   const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
   // The app's tones: white wisps leaning lilac lower down by day, one pale even mist by night.
-  function tones(dark) {
+  function tones(dark, vivid = false) {
     if (dark) {
       const top = mix(mix([0x3a, 0x33, 0x5e], [0xb7, 0xa6, 0xee], 0.4), [255, 255, 255], 0.45);
-      return { tints: Array(TONES).fill(top.join(",")), shade: null, peak: 0.26, smooth: true };
+      return { tints: Array(TONES).fill(top.join(",")), shade: null, peak: vivid ? 0.38 : 0.26, smooth: true, hold: 0, underside: 0.4, vivid };
     }
+    // Vivid: faintly lilac wisps with a deeper lilac belly that holds a moment (the app's deletion mist).
     const white = [255, 255, 255], belly = [0xe3, 0xe8, 0xfc], accent = [0x7a, 0x4e, 0xd6];
-    const low = mix(white, belly, 0.7);
-    return { tints: [...Array(TONES)].map((_, i) => mix(white, low, i / (TONES - 1)).join(",")), shade: mix(belly, accent, 0.22).join(","), peak: 0.95, smooth: false };
+    // On the light sky the switch's small puff leans further into lilac, or it vanishes into the sky.
+    const lilac = [0xc9, 0xb6, 0xff];
+    const top = vivid ? mix(white, lilac, 0.4) : white;
+    const low = vivid ? mix(white, lilac, 0.8) : mix(white, belly, 0.7);
+    return { tints: [...Array(TONES)].map((_, i) => mix(top, low, i / (TONES - 1)).join(",")), shade: mix(belly, accent, vivid ? 0.55 : 0.22).join(","),
+             peak: vivid ? 1 : 0.95, smooth: false, hold: vivid ? 0.18 : 0, underside: vivid ? 0.7 : 0.4, vivid };
   }
   const puffs = [];
   /** Plays a burst's mist over [rect] (page coordinates), over [ms]. */
-  function burst(rect, dark, ms = 640) {
-    const t = tones(dark);
+  function burst(rect, dark, ms = 640, vivid = false) {
+    const t = tones(dark, vivid);
     puffs.push({ cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2, w: rect.width, h: rect.height,
                  wisps: mist(rect.width, rect.height, t.smooth), t, start: performance.now(), ms });
     if (puffs.length === 1) requestAnimationFrame(drawMist);
@@ -585,19 +592,19 @@
       if (t >= 1) { puffs.splice(k, 1); continue; }
       if (t <= 0) continue;
       const cx = p.cx - scrollX, cy = p.cy - scrollY;
-      const lift = -Math.min(p.h, p.w) * 0.28 * easeOut(t);
-      const swell = 1 + 0.22 * easeOut(t);
+      const lift = -Math.min(p.h, p.w) * (p.t.vivid ? 0.22 : 0.28) * easeOut(t);
+      const swell = 1 + (p.t.vivid ? 0.14 : 0.22) * easeOut(t);
       for (let pass = p.t.shade ? 0 : 1; pass <= 1; pass++) for (const w of p.wisps) {
         if (pass === 0 && w.tone < TONES / 2) continue;
         const local = Math.min(1, Math.max(0, (t - w.delay) / (1 - w.delay)));
         if (local <= 0) continue;
         const go = easeOut(local);
-        const a = p.t.peak * w.weight * easeOut(Math.min(1, local / 0.12)) * (1 - easeInOutSoft(local));
+        const a = p.t.peak * w.weight * easeOut(Math.min(1, local / 0.12)) * (1 - easeInOutSoft(Math.min(1, Math.max(0, (local - p.t.hold) / (1 - p.t.hold)))));
         if (a <= 0.004) continue;
         const x = cx + w.x * swell + w.dx * go;
         const y = cy + w.y * swell + w.dy * go + lift + (pass === 0 ? w.r * 0.3 : 0);
-        const r = w.r * (0.9 + 0.45 * go);
-        mctx.globalAlpha = Math.min(1, pass === 0 ? a * 0.4 : a);
+        const r = w.r * (p.t.vivid ? 0.82 + 0.36 * go : 0.9 + 0.45 * go);
+        mctx.globalAlpha = Math.min(1, pass === 0 ? a * p.t.underside : a);
         mctx.drawImage(dot(pass === 0 ? p.t.shade : p.t.tints[w.tone]), x - r, y - r, 2 * r, 2 * r);
       }
     }
@@ -624,7 +631,6 @@
     hintGone = true;
     clearTimeout(hintTimer);
     if (hint.classList.contains("on")) { hint.classList.replace("on", "off"); }
-    try { localStorage.setItem("cloudTapped", "1"); } catch (e) {}
   }
   document.querySelectorAll(".face").forEach((face) => {
     face.addEventListener("click", (e) => {
@@ -638,10 +644,8 @@
       setTimeout(() => face.classList.remove("gone"), 200 + 4000);
     });
   });
-  // A moment after the page opens, a tap pulses on the big cloud, until someone has burst one.
-  let seenTap = false;
-  try { seenTap = localStorage.getItem("cloudTapped") === "1"; } catch (e) {}
-  const hintTimer = seenTap ? 0 : setTimeout(() => {
+  // A moment after the page opens, rings ripple on the big cloud (every visit, until one is tapped).
+  const hintTimer = setTimeout(() => {
     if (hintGone) return;
     hint.classList.add("on");
     // It shows for a few pulses, then steps aside on its own.
@@ -654,7 +658,11 @@
   sky.addEventListener("click", () => {
     const wasDark = isDark();
     const next = wasDark ? "light" : "dark";
-    burst(pageRect(switchCloud), wasDark, 520);
+    // Its mist is in the colours of the sky being switched to, so it shows against it: white on
+    // the night sky; on the light sky the app's fuller lilac mist (pale night mist vanished there).
+    const r = pageRect(switchCloud);
+    // A touch larger than the little cloud itself, so the burst reads at this size.
+    burst(wasDark ? { left: r.left - r.width * 0.2, top: r.top - r.height * 0.2, width: r.width * 1.4, height: r.height * 1.4 } : r, !wasDark, 560, wasDark);
     switchCloud.classList.remove("forming");
     switchCloud.classList.add("gone");
     root.classList.add("turning");
