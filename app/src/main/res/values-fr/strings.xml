@@ -784,4 +784,9 @@
     <string name="your_notebooks_aren_t_backed_up">Vos carnets ne sont pas sauvegardés</string>
     <string name="connect_your_google_drive_to_back">Connectez votre Google Drive et ils se sauvegarderont tout seuls.</string>
     <string name="connect_drive">Connecter Drive</string>
+    <string name="star">Ajouter une étoile</string>
+    <string name="remove_star">Retirer l’étoile</string>
+    <string name="no_starred_notebooks_yet">Aucun carnet favori pour l’instant</string>
+    <string name="hold_a_notebook_and_choose_star">Maintenez un carnet et choisissez Ajouter une étoile pour le retrouver ici.</string>
+    <string name="starred_notebooks">Favoris</string>
 </resources>

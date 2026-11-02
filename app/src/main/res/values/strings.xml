@@ -784,4 +784,9 @@
     <string name="your_notebooks_aren_t_backed_up">Your notebooks aren\'t backed up</string>
     <string name="connect_your_google_drive_to_back">Connect your Google Drive and they\'ll back up by themselves.</string>
     <string name="connect_drive">Connect Drive</string>
+    <string name="star">Star</string>
+    <string name="remove_star">Remove star</string>
+    <string name="no_starred_notebooks_yet">No starred notebooks yet</string>
+    <string name="hold_a_notebook_and_choose_star">Hold a notebook and choose Star to keep it here.</string>
+    <string name="starred_notebooks">Starred</string>
 </resources>

@@ -784,4 +784,9 @@
     <string name="your_notebooks_aren_t_backed_up">Seus cadernos não têm backup</string>
     <string name="connect_your_google_drive_to_back">Conecte seu Google Drive e o backup será feito sozinho.</string>
     <string name="connect_drive">Conectar Drive</string>
+    <string name="star">Marcar com estrela</string>
+    <string name="remove_star">Remover estrela</string>
+    <string name="no_starred_notebooks_yet">Nenhum caderno com estrela ainda</string>
+    <string name="hold_a_notebook_and_choose_star">Segure um caderno e escolha Marcar com estrela para mantê-lo aqui.</string>
+    <string name="starred_notebooks">Com estrela</string>
 </resources>

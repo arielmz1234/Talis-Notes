@@ -784,4 +784,9 @@
     <string name="your_notebooks_aren_t_backed_up">دفاترك غير محفوظة احتياطيًا</string>
     <string name="connect_your_google_drive_to_back">اربط Google Drive وستُحفظ احتياطيًا تلقائيًا.</string>
     <string name="connect_drive">ربط Drive</string>
+    <string name="star">تمييز بنجمة</string>
+    <string name="remove_star">إزالة النجمة</string>
+    <string name="no_starred_notebooks_yet">لا توجد دفاتر مميزة بنجمة بعد</string>
+    <string name="hold_a_notebook_and_choose_star">اضغط مطولًا على دفتر واختر تمييز بنجمة ليظهر هنا.</string>
+    <string name="starred_notebooks">المميزة بنجمة</string>
 </resources>

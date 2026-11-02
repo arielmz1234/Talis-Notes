@@ -784,4 +784,9 @@
     <string name="your_notebooks_aren_t_backed_up">Tus cuadernos no tienen copia de seguridad</string>
     <string name="connect_your_google_drive_to_back">Conecta tu Google Drive y se guardarán solos.</string>
     <string name="connect_drive">Conectar Drive</string>
+    <string name="star">Destacar</string>
+    <string name="remove_star">Quitar estrella</string>
+    <string name="no_starred_notebooks_yet">Aún no hay cuadernos destacados</string>
+    <string name="hold_a_notebook_and_choose_star">Mantén pulsado un cuaderno y elige Destacar para tenerlo aquí.</string>
+    <string name="starred_notebooks">Destacados</string>
 </resources>

@@ -16,9 +16,9 @@ import kotlin.math.hypot
  */
 class PenSmoother(
   /** How smooth it is at rest (Hz; lower = smoother, with more lag while moving slowly). */
-  private val minCutoff: Float = MIN_CUTOFF,
+  private var minCutoff: Float = MIN_CUTOFF,
   /** How quickly smoothing eases off with speed (per px/s). */
-  private val beta: Float = BETA,
+  private var beta: Float = BETA,
   private val speedCutoff: Float = 1.2f,
 ) {
   private var x = 0f
@@ -29,7 +29,10 @@ class PenSmoother(
   private val props = arrayOf(MotionEvent.PointerProperties())
   private val coords = arrayOf(MotionEvent.PointerCoords())
 
-  fun reset() {
+  /** Starts a new stroke, smoothed by [minCutoff] and [beta] (see [forHighlighter]). */
+  fun reset(minCutoff: Float = MIN_CUTOFF, beta: Float = BETA) {
+    this.minCutoff = minCutoff
+    this.beta = beta
     lastNanos = Long.MIN_VALUE
   }
 
@@ -96,5 +99,13 @@ class PenSmoother(
   companion object {
     const val MIN_CUTOFF = 2.5f
     const val BETA = 0.04f
+
+    /**
+     * The highlighter's smoothing at [zoom]: a highlighter is a broad swipe where a little more lag
+     * doesn't show, and zoomed out it's thin on screen, so the same hand and digitizer jitter is a
+     * bigger share of its width and showed as a wobbly edge (November 2026). It smooths more at
+     * rest, and more again the further out it's zoomed (down to half).
+     */
+    fun forHighlighter(zoom: Float): Pair<Float, Float> = 1.5f * zoom.coerceIn(0.5f, 1f) to 0.03f
   }
 }

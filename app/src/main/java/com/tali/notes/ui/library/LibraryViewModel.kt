@@ -23,7 +23,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   val query = MutableStateFlow("")
 
-  /** null shows every notebook; otherwise the id of the open folder, or [TRASH]. */
+  /** null shows every notebook; otherwise the id of the open folder, [STARRED] or [TRASH]. */
   val selectedFolder = MutableStateFlow<String?>(null)
 
   val folders: StateFlow<List<Folder>> = repo.folders
@@ -35,7 +35,12 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   val notebooks: StateFlow<List<NotebookMeta>> =
     combine(repo.notebooks, repo.trash, query, selectedFolder, settings) { list, trash, q, folder, s ->
         // Recently deleted stays in the order things were deleted; the rest follow her sort.
-        val source = if (folder == TRASH) trash else sortNotebooks(list.filter { folder == null || it.folderId == folder }, s.librarySort, s.librarySortReversed, s.recentNotebooks)
+        val source =
+          when (folder) {
+            TRASH -> trash
+            STARRED -> sortNotebooks(list.filter { it.id in s.starredNotebooks }, s.librarySort, s.librarySortReversed, s.recentNotebooks)
+            else -> sortNotebooks(list.filter { folder == null || it.folderId == folder }, s.librarySort, s.librarySortReversed, s.recentNotebooks)
+          }
         source.filter { q.isBlank() || it.title.contains(q.trim(), ignoreCase = true) }
       }
       .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -53,7 +58,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
    * "New notebook 2" among the notebooks in the folder it goes into. (Her own names may repeat.)
    */
   fun freeNotebookName(): String {
-    val folder = selectedFolder.value?.takeIf { it != TRASH }
+    val folder = folder()
     return nextFreeName(com.tali.notes.english(R.string.new_notebook), repo.notebooks.value.filter { it.folderId == folder }.map { it.title })
   }
 
@@ -66,13 +71,15 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         repo.create(
           n.title.ifBlank { freeNotebookName() },
           n.paper,
-          selectedFolder.value?.takeIf { it != TRASH },
+          folder(),
           pages = if (n.paged) 1 else null,
           customPaper = n.customPaper,
           dark = n.dark,
           cover = n.cover,
           landscape = n.landscape,
         )
+      // Made while looking at Starred: it's starred, so it shows there.
+      if (selectedFolder.value == STARRED) setStarred(meta.id, true)
       // The next notebook starts the same way.
       getApplication<Application>().talisApp.settings.update { it.copy(defaultPaper = n.paper, defaultCustomPaper = n.customPaper, defaultPaged = n.paged, defaultLandscape = if (n.paged) n.landscape else it.defaultLandscape) }
       onCreated(meta.id)
@@ -99,6 +106,9 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   fun setCover(id: String, color: Int) = repo.setCover(id, color)
 
+  fun setStarred(id: String, on: Boolean) =
+    getApplication<Application>().talisApp.settings.update { s -> s.copy(starredNotebooks = if (on) s.starredNotebooks + id else s.starredNotebooks - id) }
+
   fun delete(id: String) = repo.delete(id)
 
   fun restoreFromTrash(id: String) = repo.restoreFromTrash(id)
@@ -113,6 +123,9 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   companion object {
     /** The "folder" id that shows Recently deleted. */
     const val TRASH = "trash"
+
+    /** The "folder" id that shows the starred notebooks. */
+    const val STARRED = "starred"
   }
 
   /** What the + menu is adding, shown in a pill at the bottom of the library: words (`later`), and whether it went wrong. */
@@ -175,7 +188,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     finishSoon()
   }
 
-  private fun folder(): String? = selectedFolder.value?.takeIf { it != TRASH }
+  private fun folder(): String? = selectedFolder.value?.takeIf { it != TRASH && it != STARRED }
 
   /** Runs one adding job at a time; [block] returns what was made (for "Added …" and Open), or null. */
   private fun run(block: suspend () -> NotebookMeta?) {

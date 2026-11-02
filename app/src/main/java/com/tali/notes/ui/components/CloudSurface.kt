@@ -7,6 +7,7 @@ import android.graphics.Shader
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -83,7 +84,10 @@ fun Modifier.cloudSurface(radius: Dp = 22.dp, crown: CloudCrown = CloudCrown.NON
   val shadow = c.cloudShadow.toArgb()
   // The minimal look keeps the soft surface and shadow but drops the cloud bumps.
   val crown = if (com.tali.notes.theme.LocalMinimal.current) CloudCrown.NONE else crown
-  return drawWithCache {
+  // A surface is solid to touch: a pen or finger landing on it (between its buttons too) stays
+  // with it and never reaches what's underneath, so a stroke can't start on a toolbar. Only its
+  // own box counts, not the crown's bumps or the shadow, so the page right beside it still writes.
+  return pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }.drawWithCache {
     val d = density
     val w = size.width
     val h = size.height

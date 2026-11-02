@@ -2080,7 +2080,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val slot = settings.activeSlot
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
     // The pen's path is smoothed before Ink sees it (see PenSmoother); the predictor follows the smoothed path too.
-    smoother.reset()
+    if (slot.type.isHighlighter) com.tali.notes.ink.PenSmoother.forHighlighter(camera.zoom).let { (cutoff, beta) -> smoother.reset(cutoff, beta) } else smoother.reset()
     predictionGuard.reset()
     val se = smoother.smooth(e, idx, MotionEvent.ACTION_DOWN)
     predictor.record(se)

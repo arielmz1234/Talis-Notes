@@ -61,6 +61,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.animation.core.spring
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AutoStories
@@ -208,6 +211,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
   var showSettings by remember { mutableStateOf(false) }
   val currentFolder = folders.firstOrNull { it.id == selected }
   val inTrash = selected == LibraryViewModel.TRASH
+  val inStarred = selected == LibraryViewModel.STARRED
   // Picking several notebooks at once (to move, duplicate or delete them together).
   var picked by remember { mutableStateOf<Set<String>?>(null) }
   var deletingPicked by remember { mutableStateOf(false) }
@@ -237,6 +241,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     Sidebar(
       folders = folders,
       notebooks = all,
+      starredCount = all.count { it.id in settings.starredNotebooks },
       trashCount = trash.size,
       selected = selected,
       onSelect = { vm.selectedFolder.value = it; drawer = false },
@@ -276,10 +281,10 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
             Breadcrumb(path, onSelect = { vm.selectedFolder.value = it })
             Spacer(Modifier.height(4.dp))
           }
-          com.tali.notes.ui.components.FitText(if (inTrash) stringResource(R.string.recently_deleted) else currentFolder?.name ?: stringResource(R.string.all_notebooks), style = MaterialTheme.typography.displayLarge, color = c.ink)
+          com.tali.notes.ui.components.FitText(if (inTrash) stringResource(R.string.recently_deleted) else if (inStarred) stringResource(R.string.starred_notebooks) else currentFolder?.name ?: stringResource(R.string.all_notebooks), style = MaterialTheme.typography.displayLarge, color = c.ink)
           Spacer(Modifier.height(6.dp))
           val today = remember { com.tali.notes.appLocale().let { SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(it, "EEEEdMMMM"), it) }.format(Date()) }
-          val count = if (currentFolder == null) all.size else all.count { it.folderId == currentFolder.id }
+          val count = if (inStarred) all.count { it.id in settings.starredNotebooks } else if (currentFolder == null) all.size else all.count { it.folderId == currentFolder.id }
           val inside = if (currentFolder == null) 0 else folders.count { it.parentId == currentFolder.id }
           val counts = (if (count == 1) stringResource(R.string.t_1_notebook) else stringResource(R.string.n_notebooks, count)) + when (inside) {
             0 -> ""
@@ -409,6 +414,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
       when {
         all.isEmpty() && !inTrash && folders.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
         notebooks.isEmpty() && query.isNotBlank() -> Text(stringResource(R.string.no_notebooks_match_n, query), style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
+        notebooks.isEmpty() && inStarred -> EmptyStarred()
         notebooks.isEmpty() && subfolders.isEmpty() && currentFolder != null -> EmptyFolder(onCreate = { creating = true }, onNewFolder = { newFolder = NewFolderRequest(currentFolder.id) })
         notebooks.isEmpty() && subfolders.isEmpty() -> EmptyLibrary(onCreate = { creating = true })
         else -> {
@@ -463,6 +469,8 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
                 onRename = { renaming = nb },
                 onDuplicate = { vm.duplicate(nb.id) },
                 onCover = { vm.setCover(nb.id, it) },
+                starred = nb.id in settings.starredNotebooks,
+                onStar = { vm.setStarred(nb.id, it) },
                 onMove = { vm.moveToFolder(nb.id, it) },
                 onDelete = { deleting = nb },
                 inTrash = inTrash,
@@ -673,6 +681,7 @@ private fun CrashBanner(onSend: () -> Unit, onDismiss: () -> Unit) {
 private fun Sidebar(
   folders: List<Folder>,
   notebooks: List<NotebookMeta>,
+  starredCount: Int,
   trashCount: Int,
   selected: String?,
   onSelect: (String?) -> Unit,
@@ -708,6 +717,16 @@ private fun Sidebar(
       nav = nav,
       key = ALL_NOTEBOOKS,
       onClick = { onSelect(null) },
+    )
+    Spacer(Modifier.height(4.dp))
+    NavRow(
+      icon = { Icon(if (selected == LibraryViewModel.STARRED) Icons.Filled.Star else Icons.Outlined.StarBorder, null, tint = if (selected == LibraryViewModel.STARRED) STAR_GOLD else c.inkMuted, modifier = Modifier.size(20.dp)) },
+      label = stringResource(R.string.starred_notebooks),
+      count = starredCount,
+      selected = selected == LibraryViewModel.STARRED,
+      nav = nav,
+      key = LibraryViewModel.STARRED,
+      onClick = { onSelect(LibraryViewModel.STARRED) },
     )
     Spacer(Modifier.height(22.dp))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
@@ -1038,6 +1057,8 @@ private fun NotebookCard(
   onMove: (String?) -> Unit,
   onDelete: () -> Unit,
   inTrash: Boolean = false,
+  starred: Boolean = false,
+  onStar: (Boolean) -> Unit = {},
 ) {
   val c = Tali.colors
   var menu by remember { mutableStateOf(false) }
@@ -1099,6 +1120,17 @@ private fun NotebookCard(
           }
         }
       }
+      // A starred notebook wears a small gold star in its bottom corner; it pops in when starred.
+      androidx.compose.animation.AnimatedVisibility(
+        starred && !inTrash,
+        modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+        enter = fadeIn(tween(140)) + androidx.compose.animation.scaleIn(spring(dampingRatio = 0.5f, stiffness = 700f), initialScale = 0.6f),
+        exit = fadeOut(tween(110)) + androidx.compose.animation.scaleOut(tween(110), targetScale = 0.85f),
+      ) {
+        Box(Modifier.size(26.dp).shadow(2.dp, CircleShape).clip(CircleShape).background(c.surface.copy(alpha = 0.92f)), contentAlignment = Alignment.Center) {
+          Icon(Icons.Filled.Star, stringResource(R.string.starred), tint = STAR_GOLD, modifier = Modifier.size(16.dp))
+        }
+      }
       // While picking, a check circle in the corner: filled when picked.
       androidx.compose.animation.AnimatedVisibility(
         picking,
@@ -1117,6 +1149,11 @@ private fun NotebookCard(
       DropdownMenu(expanded = menu, onDismissRequest = { menu = false; moving = false }, shape = RoundedCornerShape(16.dp), containerColor = c.surface) {
         if (!moving) {
           DropdownMenuItem(text = { Text(stringResource(R.string.select)) }, leadingIcon = { Icon(Icons.Outlined.CheckCircle, null) }, onClick = { menu = false; onPick() })
+          DropdownMenuItem(
+            text = { Text(if (starred) stringResource(R.string.remove_star) else stringResource(R.string.star)) },
+            leadingIcon = { Icon(if (starred) Icons.Filled.Star else Icons.Outlined.StarBorder, null) },
+            onClick = { menu = false; onStar(!starred) },
+          )
           DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
           DropdownMenuItem(text = { Text(stringResource(R.string.duplicate)) }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, onClick = { menu = false; onDuplicate() })
           DropdownMenuItem(
@@ -1183,6 +1220,23 @@ private fun EmptyLibrary(onCreate: () -> Unit) {
     PrimaryButton(stringResource(R.string.new_notebook), Icons.Outlined.Add, onClick = onCreate)
   }
 }
+
+@Composable
+private fun EmptyStarred() {
+  val c = Tali.colors
+  Column(Modifier.fillMaxWidth().padding(top = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(contentAlignment = Alignment.Center) {
+      Icon(Icons.Outlined.StarBorder, null, tint = STAR_GOLD, modifier = Modifier.size(64.dp).offset(y = 18.dp))
+      DriftingCloud(Modifier.offset(x = 34.dp, y = (-22).dp), width = 72.dp, variant = 2, driftDp = 6f)
+    }
+    Spacer(Modifier.height(16.dp))
+    Text(stringResource(R.string.no_starred_notebooks_yet), style = MaterialTheme.typography.headlineMedium, color = c.ink)
+    Spacer(Modifier.height(8.dp))
+    Text(stringResource(R.string.hold_a_notebook_and_choose_star), style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
+  }
+}
+
+private val STAR_GOLD = Color(0xFFF5B83D)
 
 @Composable
 private fun EmptyFolder(onCreate: () -> Unit, onNewFolder: () -> Unit) {

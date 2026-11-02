@@ -785,4 +785,9 @@
     <string name="your_notebooks_aren_t_backed_up">המחברות שלך לא מגובות</string>
     <string name="connect_your_google_drive_to_back">חברו את Google Drive והן יגובו לבד.</string>
     <string name="connect_drive">חיבור Drive</string>
+    <string name="star">סימון בכוכב</string>
+    <string name="remove_star">הסרת הכוכב</string>
+    <string name="no_starred_notebooks_yet">עדיין אין מחברות מסומנות בכוכב</string>
+    <string name="hold_a_notebook_and_choose_star">יש ללחוץ לחיצה ארוכה על מחברת ולבחור \"סימון בכוכב\" כדי שתופיע כאן.</string>
+    <string name="starred_notebooks">מסומנים בכוכב</string>
 </resources>
