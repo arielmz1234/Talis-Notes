@@ -1723,7 +1723,7 @@ private enum class ExportChoice(private val labelRes: Int, val quality: PdfQuali
 
 private fun sizeLabel(bytes: Long): String =
   when {
-    bytes >= 1_000_000 -> String.format(java.util.Locale.UK, tr(R.string.file_size_1f_mb), bytes / 1_000_000.0)
+    bytes >= 1_000_000 -> tr(R.string.file_size_1f_mb, bytes / 1_000_000.0)
     bytes >= 1_000 -> tr(R.string.file_size_n_kb, (bytes / 1_000.0).roundToInt())
     else -> tr(R.string.file_size_under_1_kb)
   }

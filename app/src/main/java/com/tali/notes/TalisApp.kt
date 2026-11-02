@@ -49,7 +49,8 @@ private lateinit var instance: TalisApp
  * Text from the app's strings in the language she chose, for code outside the screens (hints from
  * the canvas, backup messages, shape names). On screen, prefer `stringResource`.
  */
-fun tr(@androidx.annotation.StringRes id: Int, vararg args: Any): String = appContext().getString(id, *args)
+fun tr(@androidx.annotation.StringRes id: Int, vararg args: Any): String =
+  if (args.isEmpty()) appContext().getString(id) else appContext().getString(id, *args)
 
 /**
  * Names the app makes up (a new notebook's or folder's, "Picture", "Scan Oct 12") are English in
