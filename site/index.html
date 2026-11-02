@@ -9,6 +9,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<script>
+  try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <style>
   :root {
     --bg: #f7f4ff;
@@ -28,6 +31,7 @@
     --shadow: rgba(108, 71, 217, 0.16);
     --cloud-opacity: 1;
     --cloud-filter: none;
+    --is-day: 1;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -48,13 +52,14 @@
       --shadow: rgba(0, 0, 0, 0.35);
       --cloud-opacity: 0;
       --cloud-filter: saturate(0.8);
+      --is-day: 0;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
     --bg: #14111d; --sky-from: #1d2140; --sky-to: #2a1f45; --surface: #201b2d; --surface-soft: rgba(32, 27, 45, 0.78);
     --ink: #f1edfa; --muted: #b6aecb; --faint: #8d85a3; --accent: #b79bff; --accent-2: #9a7cf5; --accent-soft: #2e2645;
-    --blue: #8fb0ff; --line: #342c48; --shadow: rgba(0, 0, 0, 0.35); --cloud-opacity: 0; --cloud-filter: saturate(0.8); color-scheme: dark;
+    --blue: #8fb0ff; --line: #342c48; --shadow: rgba(0, 0, 0, 0.35); --cloud-opacity: 0; --cloud-filter: saturate(0.8); --is-day: 0; color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
@@ -91,7 +96,60 @@
   nav { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 1.2rem; }
   .brand img { width: 36px; height: 36px; }
-  .navlinks { display: flex; gap: 6px; flex-wrap: wrap; }
+  .navlinks { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+  /* The theme switch: a little window of sky. Turning it to night sets the sun under the horizon
+     on one side while the moon rises on the other, the stars come out and the cloud drifts off. */
+  .sky-switch {
+    --day: var(--is-day); /* 1 by day, 0 by night */
+    position: relative; flex: none; width: 66px; height: 36px; padding: 0; border: 0; cursor: pointer;
+    border-radius: 18px; overflow: hidden; isolation: isolate;
+    background: linear-gradient(180deg, #2a2350 0%, #4b3a86 100%);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.18);
+    transition: transform 160ms cubic-bezier(.23,1,.32,1);
+  }
+  .sky-switch::before { /* the day sky, faded over the night one */
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background: linear-gradient(180deg, #9cc4ff 0%, #d9ccff 100%);
+    opacity: var(--day); transition: opacity 520ms ease;
+  }
+  .sky-switch:active { transform: scale(0.95); }
+  .sky-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  /* Sun and moon ride one wheel turning about a point below the window. */
+  .orbit {
+    position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+    transform: translate(0, 34px) rotate(calc((1 - var(--day)) * 180deg));
+    transition: transform 620ms cubic-bezier(.65,0,.25,1);
+  }
+  .sun, .moon { position: absolute; width: 18px; height: 18px; border-radius: 50%; left: -9px; top: -9px; }
+  .sun {
+    transform: translateY(-34px);
+    background: radial-gradient(circle at 35% 35%, #fff6c9, #ffd45c 60%, #f7a93b);
+    box-shadow: 0 0 10px 3px rgba(255, 200, 80, 0.55);
+  }
+  .moon {
+    transform: translateY(34px) rotate(180deg);
+    background: radial-gradient(circle at 40% 40%, #ffffff, #e6e1ff 70%);
+    box-shadow: 0 0 10px 2px rgba(220, 210, 255, 0.45);
+  }
+  .moon::after { /* the crescent's bite, in the night sky's colour */
+    content: ""; position: absolute; width: 15px; height: 15px; border-radius: 50%; top: -3px; left: 6px; background: #3a2e6c;
+  }
+  .star { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff; opacity: calc(1 - var(--day)); transform: scale(calc(1 - var(--day) * 0.6)); transition: opacity 300ms ease, transform 300ms ease; }
+  .s1 { left: 12px; top: 9px; transition-delay: calc((1 - var(--day)) * 300ms); }
+  .s2 { left: 22px; top: 21px; width: 2px; height: 2px; transition-delay: calc((1 - var(--day)) * 380ms); }
+  .s3 { left: 47px; top: 7px; width: 2px; height: 2px; transition-delay: calc((1 - var(--day)) * 450ms); }
+  .puff { /* a small cloud that drifts off at night */
+    position: absolute; left: 34px; top: 20px; width: 20px; height: 8px; border-radius: 6px; background: #fff;
+    box-shadow: 6px -4px 0 1px #fff, -1px -2px 0 0 #fff;
+    opacity: var(--day); transform: translateX(calc((1 - var(--day)) * 26px));
+    transition: opacity 360ms ease, transform 520ms cubic-bezier(.23,1,.32,1);
+  }
+  .horizon { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; background: linear-gradient(180deg, transparent, rgba(40, 20, 90, 0.35)); }
+  @media (prefers-reduced-motion: reduce) { .sky-switch *, .sky-switch::before { transition: none !important; } }
+
+  /* While the theme turns, the page's colours ease over with it instead of flipping at once. */
+  html.turning, html.turning * { transition: background-color 420ms ease, color 420ms ease, border-color 420ms ease, opacity 420ms ease, box-shadow 420ms ease !important; }
   .navlinks a { color: var(--ink); text-decoration: none; font-weight: 600; font-size: 0.95rem; padding: 8px 12px; border-radius: 12px; }
   .navlinks a:hover { background: var(--surface-soft); }
 
@@ -184,6 +242,7 @@
 
   @media (max-width: 600px) {
     .navlinks { display: none; }
+    .sky-switch { margin-left: auto; }
     .hero { padding-block: 96px 40px; }
     .c2 { width: 200px; left: 40%; }
     .c4, .c5 { display: none; }
@@ -220,6 +279,12 @@
         <a href="#support">Support</a>
         <a href="#contact">Contact</a>
       </div>
+      <button class="sky-switch" id="skySwitch" type="button" aria-label="Switch to dark mode">
+        <span class="orbit" aria-hidden="true"><span class="sun"></span><span class="moon"></span></span>
+        <span class="star s1" aria-hidden="true"></span><span class="star s2" aria-hidden="true"></span><span class="star s3" aria-hidden="true"></span>
+        <span class="puff" aria-hidden="true"></span>
+        <span class="horizon" aria-hidden="true"></span>
+      </button>
     </nav>
 
     <div class="hero">
@@ -417,6 +482,25 @@
   const kofi = document.getElementById("kofi");
   if (KOFI_URL) kofi.href = KOFI_URL;
   else { kofi.removeAttribute("href"); kofi.setAttribute("aria-disabled", "true"); }
+
+  // The sky switch: the page shows the visitor's own setting until they choose; the choice is remembered.
+  const root = document.documentElement;
+  const sky = document.getElementById("skySwitch");
+  const systemDark = matchMedia("(prefers-color-scheme: dark)");
+  const isDark = () => root.dataset.theme ? root.dataset.theme === "dark" : systemDark.matches;
+  const label = () => sky.setAttribute("aria-label", isDark() ? "Switch to light mode" : "Switch to dark mode");
+  label();
+  systemDark.addEventListener("change", label);
+  let turning;
+  sky.addEventListener("click", () => {
+    const next = isDark() ? "light" : "dark";
+    root.classList.add("turning");
+    root.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch (e) {}
+    label();
+    clearTimeout(turning);
+    turning = setTimeout(() => root.classList.remove("turning"), 650);
+  });
 
   // Each way to write opens an email with its own subject and a start to fill in.
   // The address is put together here rather than written in the page, so bots that harvest
