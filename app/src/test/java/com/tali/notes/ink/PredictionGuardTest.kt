@@ -45,6 +45,19 @@ class PredictionGuardTest {
   }
 
   @Test
+  fun aThinMarkersGuessStaysInsideItsTip() {
+    // Zoomed out the marker is thin on screen: its guess may reach only half its width (4 px here).
+    val g = PredictionGuard(maxReachPx = 30f)
+    g.reset(maxReach = 4f)
+    listOf(0f, 5f, 10f, 15f, 20f).forEachIndexed { i, x -> at(x, 0f, i.toLong()).also { g.record(it) }.recycle() }
+    assertEquals(24f, g.tame(at(80f, 0f))!!.x, 0.01f)
+    // The next stroke with the usual reach goes back to the usual cap.
+    g.reset()
+    listOf(0f, 5f, 10f, 15f, 20f).forEachIndexed { i, x -> at(x, 0f, i.toLong()).also { g.record(it) }.recycle() }
+    assertEquals(44f, g.tame(at(80f, 0f))!!.x, 0.01f)
+  }
+
+  @Test
   fun standingStillDrawsNoGuess() {
     val g = guardAfter(10f to 10f, 10.2f to 10f, 10.4f to 10.1f, 10.5f to 10f, 10.6f to 10f)
     assertNull(g.tame(at(14f, 10f)))

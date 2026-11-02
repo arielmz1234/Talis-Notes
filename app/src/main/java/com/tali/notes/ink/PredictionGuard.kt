@@ -19,8 +19,13 @@ class PredictionGuard(private val maxReachPx: Float) {
   private val props = arrayOf(MotionEvent.PointerProperties())
   private val coords = arrayOf(MotionEvent.PointerCoords())
 
-  fun reset() {
+  /** The furthest a guess may reach for the stroke starting now (px); null for the usual [maxReachPx]. */
+  private var reachPx = maxReachPx
+
+  /** Starts a new stroke, its guesses reaching at most [maxReach] px ahead (null: the usual). */
+  fun reset(maxReach: Float? = null) {
     count = 0
+    reachPx = maxReach?.coerceAtMost(maxReachPx) ?: maxReachPx
   }
 
   /** Records the (smoothed, single-pointer) samples Ink is about to get. */
@@ -62,7 +67,7 @@ class PredictionGuard(private val maxReachPx: Float) {
     if (reach < 0.5f) return prediction
     // Turning back or sharply aside: the guess would overshoot the turn.
     if ((vx * dx + vy * dy) / (reach * travel) < MIN_COS) return drop(prediction)
-    val cap = minOf(maxReachPx, travel * REACH_OF_TRAVEL)
+    val cap = minOf(reachPx, travel * REACH_OF_TRAVEL)
     if (reach <= cap) return prediction
     // Too far ahead: the same direction, cut to the cap.
     val k = cap / reach

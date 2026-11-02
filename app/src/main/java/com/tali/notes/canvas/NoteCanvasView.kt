@@ -2080,8 +2080,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val slot = settings.activeSlot
     val brush = Brushes.brush(slot.type, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, slot.lineStyle, slot.square)
     // The pen's path is smoothed before Ink sees it (see PenSmoother); the predictor follows the smoothed path too.
-    if (slot.type.isHighlighter) com.tali.notes.ink.PenSmoother.forHighlighter(camera.zoom).let { (cutoff, beta) -> smoother.reset(cutoff, beta) } else smoother.reset()
-    predictionGuard.reset()
+    smoother.reset()
+    // The guess ahead of the pen is a few millimetres on screen; the marker is wide, so zoomed in it
+    // stays inside the tip, but zoomed out the marker is thin and the guess stuck out past it as a
+    // pointed tail, often at an angle (the owner's video, 2 Nov 2026). For the marker it reaches at
+    // most half the tip's width on screen.
+    predictionGuard.reset(if (slot.type.isHighlighter) slot.size * camera.scale * 0.5f else null)
     val se = smoother.smooth(e, idx, MotionEvent.ACTION_DOWN)
     predictor.record(se)
     predictionGuard.record(se)
