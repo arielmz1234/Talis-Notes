@@ -4059,15 +4059,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val t = ((now - c.since).toFloat() / span).coerceIn(0f, 1f)
       val path = pathThrough(screen, close = false)
       circleGlow.color = accentColor
-      circleGlow.alpha = (70 * easeOut(min(1f, t * 2.5f))).toInt()
-      circleGlow.strokeWidth = pen + 16f * density
+      circleGlow.alpha = (28 * easeOut(min(1f, t * 2.5f))).toInt()
+      circleGlow.strokeWidth = pen + 14f * density
       canvas.drawPath(path, circleGlow)
       circleMeasure.setPath(path, false)
       circleTrace.rewind()
       val run = t * t * (3f - 2f * t)
       circleMeasure.getSegment(0f, circleMeasure.length * run, circleTrace, true)
-      circleGlow.alpha = 140
-      circleGlow.strokeWidth = pen + 7f * density
+      circleGlow.alpha = 55
+      circleGlow.strokeWidth = pen + 4f * density
       canvas.drawPath(circleTrace, circleGlow)
       postInvalidateOnAnimation()
       return
@@ -4100,7 +4100,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     circleFill.alpha = (lassoFill.alpha * turn * (1f - pull)).toInt()
     canvas.drawPath(path, circleFill)
     circleGlow.color = accentColor
-    circleGlow.alpha = (110 * (1f - turn) * (1f - gone)).toInt()
+    circleGlow.alpha = (45 * (1f - turn) * (1f - gone)).toInt()
+
     circleGlow.strokeWidth = pen + 12f * density
     circleGlow.pathEffect = null
     canvas.drawPath(path, circleGlow)
