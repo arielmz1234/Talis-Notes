@@ -475,9 +475,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   init {
     setWillNotDraw(false)
     addView(inProgress, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-    inProgress.addFinishedStrokesListener(this)
-    inProgress.textureBitmapStore = Brushes.textureStore
-    inProgress.rendererFactory = { Brushes.renderer() }
+    setUpInkLayer(inProgress)
     tiles.boundsOf = { id -> doc?.get(id)?.bounds }
     isFocusable = true
     // Ink sets up its front-buffered drawing surface on the first stroke unless asked earlier,
@@ -558,6 +556,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     cameraAnimator?.cancel()
     stopFling()
     stopHolds()
+    removeCallbacks(stallCheck)
     detach()
   }
 
@@ -608,6 +607,100 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     if (activeShapeId != null && d?.get(activeShapeId!!) == null) activeShapeId = null
     invalidate()
+  }
+
+  private fun setUpInkLayer(v: InProgressStrokesView) {
+    v.addFinishedStrokesListener(this)
+    v.textureBitmapStore = Brushes.textureStore
+    v.rendererFactory = { Brushes.renderer() }
+  }
+
+  // ---- When Ink stops handing strokes over ----
+  //
+  // Ink hands finished strokes over (onStrokesFinished) only once nothing is being written. One
+  // tester's tablet (an S Pen whose side button he uses a lot) got into a state where it never did
+  // again: every new stroke stayed on Ink's live layer only, showed and hid as that layer was
+  // redrawn and cleared (an old black loop flashing back at each pen-down), and was never kept
+  // (his video, 3 Nov 2026). So if strokes finished well over a second ago are still waiting while
+  // nothing is being written, Ink is asked to hand them over now; if it still hasn't a moment
+  // later, they're kept from their recorded inputs and Ink's layer is cleared (as undo and the
+  // eraser already do), and what the pen did lately is noted in the crash log, to find what set it
+  // off. (Swapping in a fresh Ink layer crashed Ink's render thread, so that's not done.)
+
+  private val stallCheck = Runnable { checkInkStall() }
+
+  /** The last few pen and finger downs and ups (not moves), for the crash log. */
+  private val touchTrail = ArrayDeque<String>()
+
+  private fun noteTouch(e: MotionEvent) {
+    val a = e.actionMasked
+    if (a == MotionEvent.ACTION_MOVE) return
+    val who = (0 until e.pointerCount).joinToString(",") { i -> "${e.getPointerId(i)}:${e.getToolType(i)}" }
+    touchTrail.addLast("${e.eventTime % 100000} a=$a i=${e.actionIndex} p=[$who] b=${e.buttonState} f=${e.flags} m=$mode dp=$drawPointer")
+    while (touchTrail.size > 16) touchTrail.removeFirst()
+  }
+
+  private fun scheduleStallCheck() {
+    removeCallbacks(stallCheck)
+    postDelayed(stallCheck, INK_STALL_MS)
+  }
+
+  /** Ink was asked to hand strokes over (the first sign of a stall); next time they're kept here. */
+  private var stallNudged = false
+
+  private fun checkInkStall() {
+    if (doc == null) return
+    // Still writing: look again once she's done.
+    if (mode == Mode.INK || strokeId != null) {
+      scheduleStallCheck()
+      return
+    }
+    val now = SystemClock.uptimeMillis()
+    val stuck = shadows.values.count { it.finished && it.finishedAt != 0L && now - it.finishedAt >= INK_STALL_MS }
+    if (stuck == 0) {
+      stallNudged = false
+      if (shadows.values.any { it.finished }) scheduleStallCheck()
+      return
+    }
+    if (!stallNudged) {
+      stallNudged = true
+      runCatching { inProgress.requestHandoff() }
+      removeCallbacks(stallCheck)
+      postDelayed(stallCheck, INK_NUDGE_MS)
+      return
+    }
+    stallNudged = false
+    com.tali.notes.CrashLog.recovered(
+      context,
+      IllegalStateException("Ink stopped handing strokes over: $stuck waiting, ${strokePens.size} pens, ${splitParts.size} parts, mode $mode\n" + touchTrail.joinToString("\n")),
+    )
+    commitWaitingInk()
+  }
+
+  /**
+   * The last pointer lifted, but not as the one that was drawing (on some tablets the S Pen comes
+   * back under another pointer id, say after its button is pressed mid-stroke): the stroke is ended
+   * where it was last shown. Before, it was never ended, and Ink held it as still being written.
+   */
+  private fun endLostDraw(e: MotionEvent) {
+    if (mode == Mode.INK) {
+      val g = gesture
+      if (g != null) {
+        endPart(g, e)
+        g.ended = true
+        if (g.split && g.parts.isEmpty()) keepWhole(g)
+        host.onInkWaiting()
+        scheduleStallCheck()
+      } else dropStroke(null)
+      gesture = null
+      strokeId = null
+      stopHolds()
+      removeCallbacks(pasteHold)
+      endSnap()
+      mode = Mode.NONE
+      drawPointer = -1
+      invalidate()
+    } else abortDrawing()
   }
 
   override fun onStrokesFinished(finished: Map<InProgressStrokeId, Stroke>) {
@@ -797,6 +890,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     shadows[sid]?.finished = true
     up.recycle()
     strokeId = null
+    scheduleStallCheck()
   }
 
   /** Every part handed over: the stroke kept whole from all its samples, in the frame its parts go. */
@@ -895,6 +989,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private class InkShadow(val pen: PenType, val brush: androidx.ink.brush.Brush, val start: Long, val unitCm: Float, val toWorld: android.graphics.Matrix) {
     val inputs = androidx.ink.strokes.MutableStrokeInputBatch()
     var finished = false
+      set(value) {
+        field = value
+        if (value && finishedAt == 0L) finishedAt = SystemClock.uptimeMillis()
+      }
+
+    /** When it was finished (for noticing Ink not handing it over). */
+    var finishedAt = 0L
 
     /** Drawn on the page by us instead of by Ink's layer (the page moved before the hand-off). */
     var item: InkItem? = null
@@ -1860,6 +1961,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun handleTouch(e: MotionEvent) {
+    noteTouch(e)
     if ((0 until e.pointerCount).any { isStylus(e.getToolType(it)) }) {
       lastPenAt = SystemClock.uptimeMillis()
       cancelHold()
@@ -1912,6 +2014,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (isDrawingMode()) {
           if (pid == drawPointer) {
             if (e.flags and MotionEvent.FLAG_CANCELED != 0) abortDrawing() else endDraw(e)
+          } else if (e.actionMasked == MotionEvent.ACTION_UP && e.findPointerIndex(drawPointer) < 0) {
+            // The last pointer is up, and it isn't the one drawing: the gesture is over all the same.
+            endLostDraw(e)
           }
         } else {
           fingerUp(e)
@@ -2506,6 +2611,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
             strokeId?.let { sid ->
               inProgress.finishStroke(e, drawPointer, sid)
               shadows[sid]?.finished = true
+              scheduleStallCheck()
             }
             strokeId = null
             g?.let {
@@ -5505,6 +5611,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private val DRAW_MODES =
       setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE, Mode.STRAIGHT, Mode.LASER, Mode.JOINT_SELECTION)
     private const val HOLD_TOLERANCE_DP = 7f
+
+    /** Strokes finished this long ago and still not handed over by Ink, while nothing is being written, mean Ink is stuck. */
+    private const val INK_STALL_MS = 1500L
+
+    /** After asking Ink to hand strokes over, how long to give it before keeping them here. */
+    private const val INK_NUDGE_MS = 400L
 
     /** Circle to select: how long after the pen presses on the loop it starts lighting up. */
     private const val CIRCLE_CHARGE_FROM_MS = 60L
