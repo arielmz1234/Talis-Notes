@@ -1139,6 +1139,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       canvas.restore()
     }
     liveEdit?.let { drawShapePreview(canvas, it) }
+    // Lines being lengthened together by their joint.
+    jointPreview?.forEach { item -> if (item is ShapeItem) drawShapePreview(canvas, item) }
     shapePreview?.let { drawShapePreview(canvas, it) }
     if (isDraggingSelection() && selection.isNotEmpty()) {
       canvas.save()
@@ -1224,7 +1226,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     canvas.drawPath(lassoPath, lassoPaint)
   }
 
-  private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION || mode == Mode.JOINT_SELECTION
+  private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
 
   /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
   // ---- Fill ----
@@ -2001,8 +2003,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         if (d < HANDLE_HIT_DP * density && d <= resizeChip(r).dist(screen) && d <= moveChip(r).dist(screen)) {
           jointDrag = j
           jointGrab = j.at - p
-          jointAngle = 0f
           jointScale = 1f
+          jointPreview = null
           dragTransform = Affine.IDENTITY
           tiles.hidden = selection.map { it.id }.toSet()
           mode = Mode.JOINT_SELECTION
@@ -2225,22 +2227,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       Mode.JOINT_SELECTION -> {
         val j = jointDrag ?: return
-        var to = world(e, idx) + jointGrab
-        // Lines meeting at the pivot: the joint's line keeps to the same tidy angles as a single line.
-        if (j.shared) to = ShapeRecognizer.snappedLine(j.pivot, to).b
-        val from = j.at - j.pivot
-        val now = to - j.pivot
-        if (now.length() * camera.scale < 8f * density || from.length() < 0.01f) return
-        var angle = now.angle() - from.angle()
-        if (!j.shared) {
-          val step = (PI / 4).toFloat()
-          val snapped = Math.round(angle / step) * step
-          if (abs(angle - snapped) < SNAP_ROTATE_RAD) angle = snapped
-        }
-        val k = (now.length() / from.length()).coerceIn(0.05f, 20f)
-        jointAngle = angle
+        // How far along the joint's own line the pen is: every line grows or shrinks by that much
+        // of its length, along its own direction, from its fixed end (like one line's end dot).
+        val len = j.at.dist(j.pivot)
+        if (len < 0.01f) return
+        val dir = (j.at - j.pivot) * (1f / len)
+        var k = ((world(e, idx) + jointGrab - j.pivot).dot(dir) / len).coerceIn(0.05f, 20f)
+        if (abs(k - 1f) < 0.02f) k = 1f
         jointScale = k
-        dragTransform = Affine.scaleAround(j.pivot, k).then(Affine.rotateAround(j.pivot, angle))
+        jointPreview = selection.mapIndexed { i, item -> (item as? ShapeItem)?.let { lengthened(it, j.fixedA[i], k) } ?: item }
         invalidate()
       }
       Mode.ROTATE_SELECTION -> {
@@ -2539,11 +2534,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.LASSO -> finishLasso(if (idx >= 0) world(e, idx) else null)
       Mode.MOVE_SELECTION,
       Mode.SCALE_SELECTION,
-      Mode.ROTATE_SELECTION,
-      Mode.JOINT_SELECTION -> {
+      Mode.ROTATE_SELECTION -> {
         if (mode == Mode.MOVE_SELECTION) chipBackAt = SystemClock.uptimeMillis()
-        jointDrag = null
         finishSelectionDrag()
+      }
+      Mode.JOINT_SELECTION -> {
+        val moved = jointPreview
+        jointDrag = null
+        jointPreview = null
+        tiles.hidden = emptySet()
+        if (d != null && moved != null && jointScale != 1f) {
+          d.commit(Change(selection, moved))
+          setSelection(moved, menu = false)
+        } else {
+          menuClosed = false
+          publishSelection()
+        }
       }
       Mode.HANDLE_DRAG -> {
         chipBackAt = SystemClock.uptimeMillis()
@@ -4387,19 +4393,25 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
-  /** The joint of several lines: dragging [at] turns and stretches them all round [pivot]. */
-  private class LineJoint(val pivot: Pt, val at: Pt, val shared: Boolean)
+  /**
+   * The joint of several lines: dragging [at] along the line from [pivot] makes every line longer
+   * or shorter by the same share of its length, each along its own direction; [fixedA] says, for
+   * each line in the selection, whether its first end stays put (otherwise its second does).
+   */
+  private class LineJoint(val pivot: Pt, val at: Pt, val fixedA: List<Boolean>)
 
   private var jointDrag: LineJoint? = null
   private var jointGrab = Pt.ZERO
-  private var jointAngle = 0f
   private var jointScale = 1f
 
+  /** The lines as they'd be while the joint is dragged (drawn as previews; kept on lift). */
+  private var jointPreview: List<CanvasItem>? = null
+
   /**
-   * Two or more lines picked up together get one joint, so their size and angle change together,
-   * like one line's end dot. Where the lines meet at a point (arrows from one joint of a truss),
-   * that point is the pivot and the joint sits on the end farthest from it; otherwise they turn
-   * round their middle, the joint on the end farthest from the middle.
+   * Two or more lines picked up together get one joint that lengthens or shortens them all
+   * together, like one line's end dot does for one. Where lines meet at a point (arrows from one
+   * joint of a truss) that end of each stays put; the others keep their back end (the one behind,
+   * along the longest line). The joint sits on the longest line's free end.
    */
   private fun lineJoint(): LineJoint? {
     if (selection.size < 2 || cropping != null) return null
@@ -4415,11 +4427,54 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         meet = p
       }
     }
-    val pivot = meet?.let { m -> pts.filter { it.dist(m) < tol }.let { near -> Pt(near.sumOf { it.x.toDouble() }.toFloat() / near.size, near.sumOf { it.y.toDouble() }.toFloat() / near.size) } }
-      ?: selectionBounds?.center ?: return null
-    val at = pts.maxByOrNull { it.dist(pivot) } ?: return null
-    if (at.dist(pivot) * camera.scale < 16f * density) return null
-    return LineJoint(pivot, at, meet != null)
+    val longest = ends.indices.maxByOrNull { ends[it].first.dist(ends[it].second) } ?: return null
+    val (la, lb) = ends[longest]
+    if (la.dist(lb) * camera.scale < 16f * density) return null
+    // The longest line's fixed end: the meeting point if it's there, else the end nearer the middle.
+    val centre = selectionBounds?.center ?: return null
+    val longFixedA = when {
+      meet != null && la.dist(meet) < tol -> true
+      meet != null && lb.dist(meet) < tol -> false
+      else -> la.dist(centre) <= lb.dist(centre)
+    }
+    val pivot = if (longFixedA) la else lb
+    val at = if (longFixedA) lb else la
+    val dir = (at - pivot) * (1f / at.dist(pivot))
+    val fixedA = ends.mapIndexed { i, (a, b) ->
+      when {
+        i == longest -> longFixedA
+        meet != null && a.dist(meet) < tol -> true
+        meet != null && b.dist(meet) < tol -> false
+        else -> a.dot(dir) <= b.dot(dir)
+      }
+    }
+    return LineJoint(pivot, at, fixedA)
+  }
+
+  /** [item] made [k] times as long, from its first end ([fixedA]) or its second, along its own direction. */
+  private fun lengthened(item: ShapeItem, fixedA: Boolean, k: Float): ShapeItem {
+    val (a, b) = lineEnds(item) ?: return item
+    val anchor = if (fixedA) a else b
+    val moving = if (fixedA) b else a
+    val to = anchor + (moving - anchor) * k
+    val g = item.geometry
+    val moved: ShapeGeometry = when (g) {
+      is LineShape -> if (fixedA) g.copy(b = to) else g.copy(a = to)
+      is com.tali.notes.model.LoadShape, is com.tali.notes.model.ParamShape -> g.withHandle(if (fixedA) 1 else 0, to)
+      else -> {
+        // A curve stretches along its own line, keeping its bow.
+        val len = moving.dist(anchor)
+        if (len < 0.01f) return item
+        val dx = (moving.x - anchor.x) / len
+        val dy = (moving.y - anchor.y) / len
+        val m = k - 1f
+        val ma = 1f + m * dx * dx
+        val mb = m * dx * dy
+        val md = 1f + m * dy * dy
+        g.transformed(Affine(ma, mb, mb, md, anchor.x - (ma * anchor.x + mb * anchor.y), anchor.y - (mb * anchor.x + md * anchor.y)))
+      }
+    }
+    return item.withGeometry(moved)
   }
 
   private val jointGuide = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -4429,11 +4484,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val jointRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
   private val jointDot = Paint(Paint.ANTI_ALIAS_FLAG)
 
-  /** The joint of several lines: a dashed line from the pivot (a small ring) to the joint (a dot in a halo), and while dragged how far it turned and how much it grew. */
+  /** The joint of several lines: a dashed line from the fixed end (a small ring) to the joint (a dot in a halo), and while dragged how long they now are. */
   private fun drawLineJoint(canvas: Canvas) {
     val j = (if (mode == Mode.JOINT_SELECTION) jointDrag else lineJoint()) ?: return
     val pivot = camera.toScreen(j.pivot)
-    val at = camera.toScreen(if (mode == Mode.JOINT_SELECTION) dragTransform.apply(j.at) else j.at)
+    val at = camera.toScreen(if (mode == Mode.JOINT_SELECTION) j.pivot + (j.at - j.pivot) * jointScale else j.at)
     jointGuide.color = handleColor
     jointGuide.alpha = 150
     jointGuide.strokeWidth = 1.5f * density
@@ -4450,8 +4505,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     jointDot.color = handleColor
     canvas.drawCircle(at.x, at.y, 2.6f * density, jointDot)
     if (mode == Mode.JOINT_SELECTION) {
-      val degrees = Math.round(-Math.toDegrees(jointAngle.toDouble())).toInt().let { ((it + 540) % 360) - 180 }
-      val label = "$degrees° · ${Math.round(jointScale * 100)}%"
+      val label = "${Math.round(jointScale * 100)}%"
       angleText.textSize = 13f * density
       angleText.color = 0xFFFFFFFF.toInt()
       angleBubble.color = handleColor
