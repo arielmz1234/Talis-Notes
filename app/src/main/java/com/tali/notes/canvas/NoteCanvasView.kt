@@ -368,9 +368,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private var holdAnchor = Pt.ZERO
   private val holdRunnable = Runnable { onHold() }
 
-  /** Circle to select: a little after the pen stops on a closed loop round something, the loop starts to light up. */
-  private val chargeRunnable = Runnable { chargeCircle() }
-
   /** A pen or finger held still on the page with something copied offers Paste there ([offerPaste]). */
   private val pasteHold = Runnable { offerPaste() }
   private var pasteHoldAt = Pt(0f, 0f)
@@ -2087,7 +2084,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     if (effective != Tool.ERASER && effective != Tool.LASER) armPasteHold(screen, p)
     when (effective) {
-      Tool.PEN -> if (settings.activeSlot.straight) startStraight(p) else startInk(e, idx, p, d)
+      Tool.PEN -> if (settings.activeSlot.straight) startStraight(p) else {
+        startInk(e, idx, p, d)
+        armLoopPress(screen, p)
+      }
       Tool.LASER -> startLaser(p)
       Tool.ERASER -> {
         requestUnbufferedDispatch(e)
@@ -2165,19 +2165,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun scheduleHold() {
     stopHolds()
-    val circles = settings.activeSlot.circleSelect
-    if (settings.holdToShape || circles) postDelayed(holdRunnable, settings.holdDelayMs)
-    if (circles) postDelayed(chargeRunnable, CIRCLE_CHARGE_FROM_MS)
+    if (settings.holdToShape) postDelayed(holdRunnable, settings.holdDelayMs)
   }
 
-  /** The hold waits no more (the pen moved or lifted); a loop that had started lighting up goes out. */
+  /** The hold waits no more (the pen moved or lifted), and so does a press on a loop (circle to select). */
   private fun stopHolds() {
     removeCallbacks(holdRunnable)
-    removeCallbacks(chargeRunnable)
-    if (circle?.caughtAt == 0L) {
-      circle = null
-      invalidate()
-    }
+    stopLoopPress()
   }
 
   private fun drawMove(e: MotionEvent) {
@@ -2353,14 +2347,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
-  /**
-   * The pen stopped moving mid-stroke: a loop round something picks it up (circle to select, when
-   * the pen has it on); otherwise the stroke may turn into a clean shape.
-   */
+  /** The pen stopped moving mid-stroke: try to turn the stroke into a clean shape. */
   private fun onHold() {
     try {
-      if (settings.activeSlot.circleSelect && (catchWithCircle() || emptyCircle())) return
-      if (settings.holdToShape) snapToShape()
+      snapToShape()
     } catch (t: Throwable) {
       com.tali.notes.CrashLog.recovered(context, t)
     }
@@ -2509,6 +2499,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           dropStroke(e)
           selectShape(tapped)
         } else {
+          noteLoop()
           val g = gesture
           // Undo lights up now, not when Ink hands the stroke over (a quick tap on it was lost).
           if (g != null) host.onInkWaiting()
@@ -3868,11 +3859,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   // ---- Circle to select ----
 
   /**
-   * A loop drawn round things with a pen that has circle to select on. While the pen holds still
-   * a glow comes up round it and a brighter band runs round from where the loop began ([since]),
-   * reaching its end just as it's caught ([caughtAt], the hold). Then the stroke leaves the page:
-   * its line turns into the lasso's marching dashes and pulls tight round what it caught, ending
-   * as the selection's frame (a lasso rope drawn in).
+   * Circle to select, two steps, apart from hold-to-shape (which is holding at the end of the same
+   * stroke): she draws a loop round things and lifts the pen, then presses on the loop again and
+   * holds. While she holds, a glow comes up round the loop and a brighter band runs round it from
+   * where it began ([since]), reaching its end as it's caught ([caughtAt], [CIRCLE_HOLD_MS]). Then
+   * the loop leaves the page: its line turns into the lasso's marching dashes and pulls tight round
+   * what it caught, ending as the selection's frame (a lasso rope drawn in).
    */
   private class CircleCatch(val loop: List<Pt>, val since: Long) {
     var caughtAt = 0L
@@ -3882,9 +3874,32 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private var circle: CircleCatch? = null
 
-  /** The closed part of the stroke being written: from where its end came back to its own path (the start, or a little past it) to the end. */
-  private fun circleLoop(): List<Pt>? {
-    val pts = strokePoints
+  /** The last stroke written, when it's a loop round something: [stroke] all of it, [loop] its closed part. */
+  private class LoopStroke(val stroke: List<Pt>, val loop: List<Pt>, val bounds: Rect, val color: Int, val size: Float)
+
+  private var lastLoop: LoopStroke? = null
+
+  /** Where the press on the loop came down (on screen); moving off it lets go. */
+  private var loopPressAt = Pt.ZERO
+
+  private val loopCharge = Runnable {
+    val c = lastLoop
+    if (c != null && mode == Mode.INK) {
+      circle = CircleCatch(c.loop, SystemClock.uptimeMillis())
+      postInvalidateOnAnimation()
+    }
+  }
+
+  private val loopCatch = Runnable {
+    try {
+      catchLoop()
+    } catch (t: Throwable) {
+      com.tali.notes.CrashLog.recovered(context, t)
+    }
+  }
+
+  /** The closed part of [pts]: from where its end came back to its own path (the start, or a little past it) to the end. */
+  private fun circleLoop(pts: List<Pt>): List<Pt>? {
     val n = pts.size
     if (n < 10) return null
     val close = CIRCLE_CLOSE_DP * density / camera.scale
@@ -3924,7 +3939,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun loopPicks(item: CanvasItem, loop: List<Pt>, area: Rect) =
     (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, loop)
 
-  /** Whether [loop] would pick anything up, counting writing still waiting for Ink's hand-off. */
+  /** Whether [loop] would pick anything up, counting writing still waiting for Ink's hand-off (not the stroke being finished). */
   private fun circleCatches(loop: List<Pt>): Boolean {
     val d = doc ?: return false
     val area = Rect.around(loop) ?: return false
@@ -3936,33 +3951,67 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
-  /** The pen has rested a moment on a loop round something: it starts lighting up. */
-  private fun chargeCircle() {
-    if (mode != Mode.INK || viewOnly || !settings.activeSlot.circleSelect) return
-    val loop = circleLoop() ?: return
-    if (!circleCatches(loop)) return
-    circle = CircleCatch(loop, SystemClock.uptimeMillis())
-    postInvalidateOnAnimation()
+  /** A stroke is being finished: remember it if it's a loop round something (with a pen that circles to select). */
+  private fun noteLoop() {
+    val slot = settings.activeSlot
+    val pts = strokePoints.toList()
+    val loop = if (slot.circleSelect && !viewOnly) circleLoop(pts)?.takeIf { circleCatches(it) } else null
+    lastLoop = loop?.let { LoopStroke(pts, it, Rect.around(pts) ?: return@let null, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size) }
   }
 
-  /** The hold on a loop round something: what it goes round is picked up as with the lasso, and the loop leaves the page. */
-  private fun catchWithCircle(): Boolean {
-    if (mode != Mode.INK || viewOnly) return false
-    val loop = circleLoop() ?: return false
-    if (!circleCatches(loop)) return false
-    val slot = settings.activeSlot
+  /** The pen came down at [screen] ([p] in the world): on the last loop, holding still there will pick up what it goes round. */
+  private fun armLoopPress(screen: Pt, p: Pt) {
+    val c = lastLoop ?: return
+    if (!settings.activeSlot.circleSelect || viewOnly) return
+    val reach = max(LOOP_REACH_DP * density / camera.scale, c.size)
+    var on = false
+    for (i in 1 until c.stroke.size) if (Geo.distToSegment(p, c.stroke[i - 1], c.stroke[i]) < reach) { on = true; break }
+    if (!on) return
+    loopPressAt = screen
+    postDelayed(loopCharge, CIRCLE_CHARGE_FROM_MS)
+    postDelayed(loopCatch, CIRCLE_HOLD_MS)
+  }
+
+  /** The press on the loop moved or lifted before it was caught. */
+  private fun stopLoopPress() {
+    removeCallbacks(loopCharge)
+    removeCallbacks(loopCatch)
+    if (circle?.caughtAt == 0L) {
+      circle = null
+      invalidate()
+    }
+  }
+
+  /** Held long enough on the loop: what it goes round is picked up as with the lasso, and the loop leaves the page. */
+  private fun catchLoop() {
+    val c = lastLoop ?: return
+    if (mode != Mode.INK || viewOnly) return
     val since = circle?.since ?: SystemClock.uptimeMillis()
+    // The press itself leaves nothing; the rest of this touch does nothing.
     dropStroke(null)
-    // The rest of this touch does nothing; strokes still waiting for Ink go in so they can be picked up.
+    removeCallbacks(pasteHold)
     mode = Mode.IGNORE
+    // Strokes still waiting for Ink go in now (the loop among them), so they can be picked up.
     commitWaitingInk()
-    val d = doc ?: return true
-    val area = Rect.around(loop) ?: return true
-    val picked = withFills(d.intersecting(area).filter { loopPicks(it, loop, area) })
-    circle = CircleCatch(loop, since).apply {
+    val d = doc ?: return
+    // The loop itself: the newest stroke where it was drawn.
+    val tol = max(4f, 0.05f * max(c.bounds.width, c.bounds.height))
+    val loopItem = d.intersecting(c.bounds).filterIsInstance<InkItem>()
+      .filter { it.bounds.center.dist(c.bounds.center) < tol && abs(it.bounds.width - c.bounds.width) < tol * 2 + c.size * 2 }
+      .maxByOrNull { it.z }
+    val area = Rect.around(c.loop)
+    val picked = if (loopItem == null || area == null) emptyList() else withFills(d.intersecting(area).filter { it.id != loopItem.id && loopPicks(it, c.loop, area) })
+    lastLoop = null
+    if (loopItem == null || picked.isEmpty()) {
+      circle = null
+      invalidate()
+      return
+    }
+    d.commit(Change(listOf(loopItem), emptyList()))
+    circle = CircleCatch(c.loop, since).apply {
       caughtAt = SystemClock.uptimeMillis()
-      color = if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color
-      width = slot.size
+      color = c.color
+      width = c.size
     }
     // The menu comes once the loop has settled and the pen has lifted.
     setSelection(picked, menu = false)
@@ -3970,29 +4019,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     host.onTip("circle-select", tr(R.string.circled_and_picked_up))
     postInvalidateOnAnimation()
-    return true
-  }
-
-  /**
-   * A round loop round nothing, held: like a lasso that caught nothing, it just goes (its line turns
-   * to dashes and fades). Other closed shapes held (a box, a triangle) still become clean shapes.
-   */
-  private fun emptyCircle(): Boolean {
-    if (mode != Mode.INK || viewOnly) return false
-    val loop = circleLoop() ?: return false
-    val packs = com.tali.notes.model.ShapePacks.all.filter { it.id in settings.starredPacks }.flatMap { it.shapes }
-    if (ShapeRecognizer.recognize(strokePoints, settings.customShapes, packs) !is com.tali.notes.model.EllipseShape) return false
-    val slot = settings.activeSlot
-    dropStroke(null)
-    mode = Mode.IGNORE
-    clearSelection()
-    circle = CircleCatch(loop, SystemClock.uptimeMillis()).apply {
-      caughtAt = SystemClock.uptimeMillis()
-      color = if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color
-      width = slot.size
-    }
-    postInvalidateOnAnimation()
-    return true
   }
 
   private val circleGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -4029,7 +4055,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         return
       }
       // Lighting up (under the ink still being written): the glow comes up, the band runs round.
-      val span = (settings.holdDelayMs - CIRCLE_CHARGE_FROM_MS).coerceAtLeast(1L)
+      val span = CIRCLE_HOLD_MS - CIRCLE_CHARGE_FROM_MS
       val t = ((now - c.since).toFloat() / span).coerceIn(0f, 1f)
       val path = pathThrough(screen, close = false)
       circleGlow.color = accentColor
@@ -5080,6 +5106,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   fun undo() {
+    lastLoop = null
     finishCrop(false)
     commitWaitingInk()
 
@@ -5088,7 +5115,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   fun redo() {
+    lastLoop = null
     finishCrop(false)
+
     commitWaitingInk()
 
     clearSelection()
@@ -5422,8 +5451,15 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE, Mode.STRAIGHT, Mode.LASER, Mode.JOINT_SELECTION)
     private const val HOLD_TOLERANCE_DP = 7f
 
-    /** Circle to select: how long after the pen stops the loop starts lighting up (it's caught at the hold, [AppSettings.holdDelayMs]). */
-    private const val CIRCLE_CHARGE_FROM_MS = 110L
+    /** Circle to select: how long after the pen presses on the loop it starts lighting up. */
+    private const val CIRCLE_CHARGE_FROM_MS = 60L
+
+    /** ...and how long it's held there to pick up what the loop goes round (before hold-to-paste's 600 ms). */
+    private const val CIRCLE_HOLD_MS = 350L
+
+    /** How near the loop's line (on screen) a press counts as on it. */
+    private const val LOOP_REACH_DP = 14f
+
 
     /** How close (on screen) the pen must come back to its path for the loop to count as closed. */
     private const val CIRCLE_CLOSE_DP = 30f

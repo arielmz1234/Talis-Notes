@@ -791,7 +791,7 @@
     <string name="starred_notebooks">Com estrela</string>
     <string name="crop">Cortar</string>
     <string name="circle_to_select">Circular para selecionar</string>
-    <string name="circle_to_select_detail">Desenhe um laço ao redor e segure por um instante para selecionar</string>
+    <string name="circle_to_select_detail">Desenhe um laço ao redor e depois segure a caneta sobre ele para selecionar</string>
     <string name="circled_and_picked_up">Selecionado. Dá para desligar nas opções da caneta</string>
     <string name="drag_the_corners_or_sides_to_crop">Arraste os cantos ou os lados para cortar</string>
 </resources>

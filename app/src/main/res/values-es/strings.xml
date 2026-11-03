@@ -791,7 +791,7 @@
     <string name="starred_notebooks">Destacados</string>
     <string name="crop">Recortar</string>
     <string name="circle_to_select">Rodear para seleccionar</string>
-    <string name="circle_to_select_detail">Dibuja un lazo alrededor y mantén el lápiz un momento para seleccionarlo</string>
+    <string name="circle_to_select_detail">Dibuja un lazo alrededor y luego mantén el lápiz sobre él para seleccionarlo</string>
     <string name="circled_and_picked_up">Seleccionado. Puedes desactivarlo en los ajustes del lápiz</string>
     <string name="drag_the_corners_or_sides_to_crop">Arrastra las esquinas o los lados para recortar</string>
 </resources>

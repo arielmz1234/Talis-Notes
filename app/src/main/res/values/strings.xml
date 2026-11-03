@@ -791,7 +791,7 @@
     <string name="starred_notebooks">Starred</string>
     <string name="crop">Crop</string>
     <string name="circle_to_select">Circle to select</string>
-    <string name="circle_to_select_detail">Draw a loop round things and hold for a moment to pick them up</string>
+    <string name="circle_to_select_detail">Draw a loop round things, then press on it and hold to pick them up</string>
     <string name="circled_and_picked_up">Circled and picked up. You can turn this off in the pen’s settings</string>
     <string name="drag_the_corners_or_sides_to_crop">Drag the corners or sides to crop</string>
 </resources>

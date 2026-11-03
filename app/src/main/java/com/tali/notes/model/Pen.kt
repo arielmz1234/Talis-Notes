@@ -104,7 +104,8 @@ data class PenSlot(
   /** Starred pens are the ones a double (next) or triple (back) press of the S Pen button cycles through. */
   val starred: Boolean = false,
   /** Circle to select: a loop drawn round things, then held for a moment, picks them up like the lasso. */
-  val circleSelect: Boolean = true,
+  val circleSelect: Boolean = false,
+
 ) {
 
   /** The three thicknesses; until she sets them, a thinner and a thicker one around [size]. */

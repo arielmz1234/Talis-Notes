@@ -791,7 +791,7 @@
     <string name="starred_notebooks">المميزة بنجمة</string>
     <string name="crop">قص</string>
     <string name="circle_to_select">أحِط للتحديد</string>
-    <string name="circle_to_select_detail">ارسم حلقة حول العناصر واضغط لحظة لتحديدها</string>
+    <string name="circle_to_select_detail">ارسم حلقة حول العناصر، ثم اضغط عليها مطولًا لتحديدها</string>
     <string name="circled_and_picked_up">تم التحديد. يمكنك إيقاف ذلك من إعدادات القلم</string>
     <string name="drag_the_corners_or_sides_to_crop">اسحب الزوايا أو الجوانب للقص</string>
 </resources>
