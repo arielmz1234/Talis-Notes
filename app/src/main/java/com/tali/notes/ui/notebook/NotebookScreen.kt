@@ -177,6 +177,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.outlined.LibraryAdd
+import androidx.compose.material.icons.outlined.Crop
+
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.material.icons.outlined.GridView
@@ -285,6 +287,8 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   var pasteOffer by remember { mutableStateOf<com.tali.notes.canvas.PasteOffer?>(null) }
   // A picture just taken with the screenshot lasso, waiting to be saved or shared.
   var screenshot by remember { mutableStateOf<java.io.File?>(null) }
+  // A picture's crop is being changed: its Done bar shows at the bottom.
+  var cropping by remember { mutableStateOf(false) }
   var pendingPdf by remember { mutableStateOf<File?>(null) }
 
   val imagePicker =
@@ -438,6 +442,10 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
                 }
 
                 override fun onInkWaiting() = vm.inkWaiting()
+
+                override fun onCropping(on: Boolean) {
+                  cropping = on
+                }
 
                 override fun onDropped(drop: NoteCanvasView.Dropped) {
                   val text = drop.text
@@ -846,11 +854,31 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           onArrange = { front -> holder.view?.runSafely { arrangeSelection(front) } },
           onMirror = { horizontal -> holder.view?.runSafely { mirrorSelection(horizontal) } },
           onLock = { holder.view?.runSafely { lockSelection() } },
+          onCrop = { holder.view?.runSafely { startCrop() } },
         )
       }
     }
 
+    // Cropping a picture: Reset, Cancel and Done, floating at the bottom like the toolbars at the top.
+    AnimatedVisibility(
+      cropping,
+      Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 24.dp),
+      enter = fadeIn(tween(200)) + slideInVertically(tween(260, easing = com.tali.notes.ui.components.EaseOutStrong)) { it / 2 },
+      exit = fadeOut(tween(150)) + slideOutVertically(tween(180)) { it / 3 },
+    ) {
+      Row(
+        Modifier.cloudSurface(22.dp, CloudCrown.SOFT_EDGE).padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        QuietButton(stringResource(R.string.reset)) { holder.view?.runSafely { resetCrop() } }
+        QuietButton(stringResource(R.string.cancel)) { holder.view?.runSafely { finishCrop(false) } }
+        PrimaryButton(stringResource(R.string.done), Icons.Outlined.Check, Modifier.height(44.dp)) { holder.view?.runSafely { finishCrop(true) } }
+      }
+    }
+
     // Typing: the editor sits over the text block, above everything else.
+
     vm.textEdit?.let { edit ->
       holder.view?.let { canvas ->
         TextEditorOverlay(
@@ -1546,7 +1574,7 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
 }
 
 @Composable
-internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit, onThicknessLive: (Float) -> Unit = {}) {
+internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit, onThicknessLive: (Float) -> Unit = {}, onCrop: () -> Unit = {}) {
   val c = Tali.colors
   val density = LocalDensity.current
   // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
@@ -1589,6 +1617,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
       // One row: ⋯ adds the rest straight after itself (scrolls sideways only if the screen is too narrow).
       Row(Modifier.height(44.dp).onSizeChanged { rowWidth = it.width }.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.onSizeChanged { foldedWidth = it.width }, verticalAlignment = Alignment.CenterVertically) {
+          // A picture: cropping first, as it's what's most often wanted right after adding one.
+          if (sel.croppable) ToolButton(Icons.Outlined.Crop, stringResource(R.string.crop), onClick = onCrop)
           ToolButton(Icons.Outlined.ContentCopy, stringResource(R.string.copy_hold_anywhere_to_paste_it), onClick = onCopy)
           ToolButton(Icons.Outlined.ContentCut, stringResource(R.string.cut_hold_anywhere_to_paste_it), onClick = onCut)
           ToolButton(Icons.Outlined.LibraryAdd, stringResource(R.string.duplicate), onClick = onDuplicate)

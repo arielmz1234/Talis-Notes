@@ -40,7 +40,7 @@ object ItemCodec {
     classDiscriminator = "type"
   }
 
-  @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false, val front: Boolean = false, val locked: Boolean = false, val walls: List<String> = emptyList(), val flipX: Boolean = false, val flipY: Boolean = false)
+  @Serializable private class ImagePayload(val file: String, val rect: Rect, val pdfPage: Boolean = false, val front: Boolean = false, val locked: Boolean = false, val walls: List<String> = emptyList(), val flipX: Boolean = false, val flipY: Boolean = false, val crop: Rect? = null)
 
   @Serializable private class TextPayload(val text: String, val x: Float, val y: Float, val width: Float, val locked: Boolean = false, val height: Float = 0f)
 
@@ -67,7 +67,7 @@ object ItemCodec {
         ItemRow(item.id, item.z, KIND_SHAPE, item.pen.name, item.color, item.size, bytes, b.left, b.top, b.right, b.bottom)
       }
       is ImageItem -> {
-        val bytes = json.encodeToString(ImagePayload.serializer(), ImagePayload(item.file, item.rect, item.pdfPage, item.front, item.locked, item.walls.toList(), item.flipX, item.flipY)).encodeToByteArray()
+        val bytes = json.encodeToString(ImagePayload.serializer(), ImagePayload(item.file, item.rect, item.pdfPage, item.front, item.locked, item.walls.toList(), item.flipX, item.flipY, item.crop)).encodeToByteArray()
         ItemRow(item.id, item.z, KIND_IMAGE, null, 0, 0f, bytes, b.left, b.top, b.right, b.bottom)
       }
       is TextItem -> {
@@ -110,7 +110,8 @@ object ItemCodec {
           }
           KIND_IMAGE -> {
             val p = json.decodeFromString(ImagePayload.serializer(), row.payload.decodeToString())
-            ImageItem(row.id, row.z, p.file, p.rect, p.pdfPage, p.front, p.locked, p.walls.toSet(), p.flipX, p.flipY)
+            ImageItem(row.id, row.z, p.file, p.rect, p.pdfPage, p.front, p.locked, p.walls.toSet(), p.flipX, p.flipY, p.crop)
+
           }
           KIND_TEXT -> {
             val p = json.decodeFromString(TextPayload.serializer(), row.payload.decodeToString())

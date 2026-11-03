@@ -179,28 +179,48 @@ class ImageItem(
   /** Drawn mirrored left to right / upside down (an area fill mirrored with its outline). */
   val flipX: Boolean = false,
   val flipY: Boolean = false,
+  /**
+   * The part of the picture shown, as fractions of its width and height (0..1); null shows it all.
+   * Cropping keeps the whole picture, so a crop can be undone or opened up again later.
+   */
+  val crop: Rect? = null,
 ) : CanvasItem() {
   override val bounds: Rect = rect
 
   /** The same picture outlining [ids] instead (a copy's outline is the copied strokes). */
-  fun withWalls(ids: Set<String>) = ImageItem(id, z, file, rect, pdfPage, front, locked, ids, flipX, flipY)
+  fun withWalls(ids: Set<String>) = ImageItem(id, z, file, rect, pdfPage, front, locked, ids, flipX, flipY, crop)
 
   /** Mirrored in place (an area fill flipping with its outline). */
-  fun flipped(horizontal: Boolean) = ImageItem(id, z, file, rect, pdfPage, front, locked, walls, if (horizontal) !flipX else flipX, if (horizontal) flipY else !flipY)
+  fun flipped(horizontal: Boolean) = ImageItem(id, z, file, rect, pdfPage, front, locked, walls, if (horizontal) !flipX else flipX, if (horizontal) flipY else !flipY, crop)
+
+  /** Cropped to [part] of the whole picture (fractions, see [crop]), shown in [shown] on the page. */
+  fun cropped(part: Rect?, shown: Rect) = ImageItem(id, z, file, shown, pdfPage, front, locked, walls, flipX, flipY, part)
+
+  /** Where the whole picture would sit on the page, uncropped. */
+  val whole: Rect
+    get() {
+      val c = crop ?: return rect
+      val w = rect.width / c.width.coerceAtLeast(0.001f)
+      val h = rect.height / c.height.coerceAtLeast(0.001f)
+      val left = rect.left - c.left * w
+      val top = rect.top - c.top * h
+      return Rect(left, top, left + w, top + h)
+    }
   override val pen: PenType? = null
 
-  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front, locked, walls, flipX, flipY)
+  override fun withZ(newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, front, locked, walls, flipX, flipY, crop)
 
-  override fun withLocked(on: Boolean) = ImageItem(id, z, file, rect, pdfPage, front, on, walls, flipX, flipY)
+  override fun withLocked(on: Boolean) = ImageItem(id, z, file, rect, pdfPage, front, on, walls, flipX, flipY, crop)
 
-  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on, locked, walls, flipX, flipY)
+  fun inFront(on: Boolean, newZ: Long) = ImageItem(id, newZ, file, rect, pdfPage, on, locked, walls, flipX, flipY, crop)
 
   override fun transformed(m: Affine, newId: String, newZ: Long): ImageItem {
     val a = m.apply(Pt(rect.left, rect.top))
     val b = m.apply(Pt(rect.right, rect.bottom))
     // Moved (same id) it keeps its lock; a copy starts unlocked (its outline is remapped by whoever copies it).
     val same = newId == id
-    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage, front, if (same) locked else false, walls, flipX, flipY)
+    return ImageItem(newId, newZ, file, Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y)), pdfPage, front, if (same) locked else false, walls, flipX, flipY, crop)
+
   }
 }
 

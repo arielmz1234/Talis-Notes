@@ -790,4 +790,9 @@
     <string name="no_starred_notebooks_yet">עדיין אין מחברות מסומנות בכוכב</string>
     <string name="hold_a_notebook_and_choose_star">יש ללחוץ לחיצה ארוכה על מחברת ולבחור \"סימון בכוכב\" כדי שתופיע כאן.</string>
     <string name="starred_notebooks">מסומנים בכוכב</string>
+    <string name="crop">חיתוך</string>
+    <string name="circle_to_select">הקפה לבחירה</string>
+    <string name="circle_to_select_detail">מקיפים דברים בלולאה ומחזיקים רגע כדי לבחור אותם</string>
+    <string name="circled_and_picked_up">נבחר. אפשר לכבות את זה בהגדרות העט</string>
+    <string name="drag_the_corners_or_sides_to_crop">גוררים את הפינות או הצדדים כדי לחתוך</string>
 </resources>

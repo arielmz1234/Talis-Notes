@@ -789,4 +789,9 @@
     <string name="no_starred_notebooks_yet">Nenhum caderno com estrela ainda</string>
     <string name="hold_a_notebook_and_choose_star">Segure um caderno e escolha Marcar com estrela para mantê-lo aqui.</string>
     <string name="starred_notebooks">Com estrela</string>
+    <string name="crop">Cortar</string>
+    <string name="circle_to_select">Circular para selecionar</string>
+    <string name="circle_to_select_detail">Desenhe um laço ao redor e segure por um instante para selecionar</string>
+    <string name="circled_and_picked_up">Selecionado. Dá para desligar nas opções da caneta</string>
+    <string name="drag_the_corners_or_sides_to_crop">Arraste os cantos ou os lados para cortar</string>
 </resources>

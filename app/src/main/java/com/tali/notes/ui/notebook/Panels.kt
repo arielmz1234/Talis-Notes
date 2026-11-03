@@ -248,11 +248,10 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
         },
       )
     }
-    Spacer(Modifier.height(14.dp))
-    SectionLabel(stringResource(R.string.this_pen_and_other_tools))
-    Spacer(Modifier.height(4.dp))
-    ToggleRow(stringResource(R.string.eraser_can_erase_it), settings.eraserHits(slot.type), { vm.setEraserAffects(slot.type, it) })
-    ToggleRow(stringResource(R.string.lasso_can_pick_it_up), settings.lassoHits(slot.type), { vm.setLassoAffects(slot.type, it) })
+    Spacer(Modifier.height(10.dp))
+    // What the eraser and lasso take is set in their own panels; this pen's own trick is circling to select.
+    ToggleRow(stringResource(R.string.circle_to_select), slot.circleSelect, { on -> vm.updateActivePen { it.copy(circleSelect = on) } }, detail = stringResource(R.string.circle_to_select_detail))
+
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       QuietButton(stringResource(R.string.add_a_pen), onClick = vm::addPen)

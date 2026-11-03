@@ -29,6 +29,8 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
     strokeWidth = 1.5f
   }
   private val rectF = RectF()
+  private val srcRect = android.graphics.Rect()
+
 
   /** On A4 pages: the area each stroke or shape is shown in (see `Pages.clipFor`), or null to draw it whole. */
   var clipFor: ((CanvasItem) -> com.tali.notes.geometry.Rect?)? = null
@@ -135,7 +137,11 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
             canvas.save()
             canvas.scale(if (item.flipX) -1f else 1f, if (item.flipY) -1f else 1f, rectF.centerX(), rectF.centerY())
           }
-          canvas.drawBitmap(if (edited != null) edited else reduce(item.file, bmp, item.rect), null, rectF, imagePaint)
+          val shown = if (edited != null) edited else reduce(item.file, bmp, item.whole)
+          // A cropped picture shows just its part of the whole.
+          val src = item.crop?.let { c -> srcRect.apply { set((c.left * shown.width).toInt(), (c.top * shown.height).toInt(), (c.right * shown.width).toInt().coerceAtLeast((c.left * shown.width).toInt() + 1), (c.bottom * shown.height).toInt().coerceAtLeast((c.top * shown.height).toInt() + 1)) } }
+          canvas.drawBitmap(shown, src, rectF, imagePaint)
+
           if (flip) canvas.restore()
           sharp()[item.id]?.takeIf { it.itemRect == item.rect && !it.bitmap.isRecycled }?.let { p ->
             patchRect.set(p.rect.left, p.rect.top, p.rect.right, p.rect.bottom)

@@ -789,4 +789,9 @@
     <string name="no_starred_notebooks_yet">Aucun carnet favori pour l’instant</string>
     <string name="hold_a_notebook_and_choose_star">Maintenez un carnet et choisissez Ajouter une étoile pour le retrouver ici.</string>
     <string name="starred_notebooks">Favoris</string>
+    <string name="crop">Rogner</string>
+    <string name="circle_to_select">Entourer pour sélectionner</string>
+    <string name="circle_to_select_detail">Entourez des éléments et maintenez un instant pour les sélectionner</string>
+    <string name="circled_and_picked_up">Sélectionné. Désactivable dans les réglages du stylo</string>
+    <string name="drag_the_corners_or_sides_to_crop">Faites glisser les coins ou les côtés pour rogner</string>
 </resources>

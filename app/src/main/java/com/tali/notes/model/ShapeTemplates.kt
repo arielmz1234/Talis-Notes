@@ -33,6 +33,11 @@ data class ParamShape(val template: String, val place: Affine, val w: Float, val
   private val frame: Frame
     get() = Frame(w, h, v)
 
+  /** Where a design drawn like a line ([ShapeTemplate.Mode.LINE]) starts and ends on the page; null for any other. */
+  val lineEnds: Pair<Pt, Pt>?
+    get() = if (spec?.mode == ShapeTemplate.Mode.LINE) place.apply(Pt(0f, 0f)) to place.apply(Pt(w, 0f)) else null
+
+
   private val drawing: ShapeGeometry by lazy { (spec?.render(frame) ?: GroupShape(emptyList())).transformed(place) }
 
   /** The drawing on the page (for snapping, which treats it like any group of lines). */

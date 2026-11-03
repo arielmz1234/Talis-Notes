@@ -118,6 +118,9 @@ interface CanvasHost {
 
   /** A stroke was finished and is waiting for Ink's hand-off: undo can already take it. */
   fun onInkWaiting() = Unit
+
+  /** A picture's crop is being changed (true) or that ended (false): the screen shows its Done bar meanwhile. */
+  fun onCropping(on: Boolean) = Unit
 }
 
 /** Paste offered at [screenX], [screenY] (pixels in the canvas), which is [at] in the world. */
@@ -142,6 +145,8 @@ data class SelectionInfo(
   val line: LineStyle? = null,
   /** Everything picked up is locked (only possible when the lasso is set to pick up locked items). */
   val locked: Boolean = false,
+  /** One picture that can be cropped (not a PDF page or a fill). */
+  val croppable: Boolean = false,
 )
 
 /**
@@ -324,6 +329,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     MOVE_SELECTION,
     SCALE_SELECTION,
     ROTATE_SELECTION,
+
+    /** Two or more lines turning and growing together by their joint ([LineJoint]). */
+    JOINT_SELECTION,
+
+    /** A handle or the frame of a picture being cropped. */
+    CROP_DRAG,
     HANDLE_DRAG,
     SHAPE_CREATE,
 
@@ -356,6 +367,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val strokePoints = ArrayList<Pt>()
   private var holdAnchor = Pt.ZERO
   private val holdRunnable = Runnable { onHold() }
+
+  /** Circle to select: a little after the pen stops on a closed loop round something, the loop starts to light up. */
+  private val chargeRunnable = Runnable { chargeCircle() }
 
   /** A pen or finger held still on the page with something copied offers Paste there ([offerPaste]). */
   private val pasteHold = Runnable { offerPaste() }
@@ -546,7 +560,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     super.onDetachedFromWindow()
     cameraAnimator?.cancel()
     stopFling()
-    removeCallbacks(holdRunnable)
+    stopHolds()
     detach()
   }
 
@@ -1142,8 +1156,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     canvas.restore()
 
     drawLasso(canvas)
+    drawCircleCatch(canvas)
     drawShotFlash(canvas)
     drawSelection(canvas)
+    drawCrop(canvas)
     drawShapeHandles(canvas)
     drawSnapGuides(canvas)
     drawMeasure(canvas)
@@ -1211,7 +1227,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     canvas.drawPath(lassoPath, lassoPaint)
   }
 
-  private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
+  private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION || mode == Mode.JOINT_SELECTION
 
   /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
   // ---- Fill ----
@@ -1399,6 +1415,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Whether a touch at [screen] lands on the active shape's dots or on the selection (to move, resize or turn it). */
   private fun grabsEdit(screen: Pt): Boolean {
     val hit = HANDLE_HIT_DP * density
+    lineJoint()?.let { j -> if (camera.toScreen(j.at).dist(screen) < hit) return true }
     currentActiveShape()?.let { shape -> if (handleAt(shape, screen) >= 0) return true }
     val sb = selectionBounds ?: return false
     val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
@@ -1437,7 +1454,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun drawSelection(canvas: Canvas) {
     val b = selectionBounds ?: return
+    // A loop just caught is still tightening into the selection's frame (drawCircleCatch).
+    if (circle?.let { it.caughtAt != 0L } == true) return
     val pad = 8f * density
+    if (mode == Mode.JOINT_SELECTION) {
+      drawLineJoint(canvas)
+      return
+    }
     if (activeShapeId != null && selection.size == 1 && mode != Mode.ROTATE_SELECTION && mode != Mode.SCALE_SELECTION) {
       // The shape's own dots move its corners; add the rotate handle and the resize chip.
       val r = screenRect(b, Affine.IDENTITY).apply { inset(-pad, -pad) }
@@ -1460,6 +1483,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (mode != Mode.MOVE_SELECTION) drawResizeChip(canvas, resizeChip(r))
     if (mode != Mode.MOVE_SELECTION && mode != Mode.SCALE_SELECTION) drawMoveChip(canvas, moveChip(r))
     drawRotateHandle(canvas, r)
+    if (mode != Mode.MOVE_SELECTION && mode != Mode.SCALE_SELECTION && mode != Mode.ROTATE_SELECTION) drawLineJoint(canvas)
   }
 
   /** The turning selection: its outline follows the rotation, with the angle shown above it. */
@@ -1849,6 +1873,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
     // Any new touch catches a gliding page, like putting a finger on a moving list.
     if (e.actionMasked == MotionEvent.ACTION_DOWN) stopFling()
+    if (cropTouch(e)) return
     when (e.actionMasked) {
       MotionEvent.ACTION_DOWN,
       MotionEvent.ACTION_POINTER_DOWN -> {
@@ -1969,10 +1994,26 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val screen = Pt(e.getX(idx), e.getY(idx))
     eraserOverride = e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER || e.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
 
-    // 0. The resize and move chips win over everything (they sit clear of the shape's own dots).
+    // 0. The resize and move chips win over everything (they sit clear of the shape's own dots),
+    // except the joint of several lines when it's the nearer.
     selectionBounds?.let { sb ->
       if (eraserOverride) return@let
       val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
+      lineJoint()?.let { j ->
+        val d = camera.toScreen(j.at).dist(screen)
+        if (d < HANDLE_HIT_DP * density && d <= resizeChip(r).dist(screen) && d <= moveChip(r).dist(screen)) {
+          jointDrag = j
+          jointGrab = j.at - p
+          jointAngle = 0f
+          jointScale = 1f
+          dragTransform = Affine.IDENTITY
+          tiles.hidden = selection.map { it.id }.toSet()
+          mode = Mode.JOINT_SELECTION
+          host.onSelectionChanged(null)
+          invalidate()
+          return
+        }
+      }
       val resizing = resizeChip(r).dist(screen) < HANDLE_HIT_DP * density
       if (resizing || moveChip(r).dist(screen) < HANDLE_HIT_DP * density) {
         dragStart = p
@@ -2123,8 +2164,20 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private fun scheduleHold() {
+    stopHolds()
+    val circles = settings.activeSlot.circleSelect
+    if (settings.holdToShape || circles) postDelayed(holdRunnable, settings.holdDelayMs)
+    if (circles) postDelayed(chargeRunnable, CIRCLE_CHARGE_FROM_MS)
+  }
+
+  /** The hold waits no more (the pen moved or lifted); a loop that had started lighting up goes out. */
+  private fun stopHolds() {
     removeCallbacks(holdRunnable)
-    if (settings.holdToShape) postDelayed(holdRunnable, settings.holdDelayMs)
+    removeCallbacks(chargeRunnable)
+    if (circle?.caughtAt == 0L) {
+      circle = null
+      invalidate()
+    }
   }
 
   private fun drawMove(e: MotionEvent) {
@@ -2174,6 +2227,26 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           edgeFrameAt = 0L
           postOnAnimation(edgeStep)
         }
+        invalidate()
+      }
+      Mode.JOINT_SELECTION -> {
+        val j = jointDrag ?: return
+        var to = world(e, idx) + jointGrab
+        // Lines meeting at the pivot: the joint's line keeps to the same tidy angles as a single line.
+        if (j.shared) to = ShapeRecognizer.snappedLine(j.pivot, to).b
+        val from = j.at - j.pivot
+        val now = to - j.pivot
+        if (now.length() * camera.scale < 8f * density || from.length() < 0.01f) return
+        var angle = now.angle() - from.angle()
+        if (!j.shared) {
+          val step = (PI / 4).toFloat()
+          val snapped = Math.round(angle / step) * step
+          if (abs(angle - snapped) < SNAP_ROTATE_RAD) angle = snapped
+        }
+        val k = (now.length() / from.length()).coerceIn(0.05f, 20f)
+        jointAngle = angle
+        jointScale = k
+        dragTransform = Affine.scaleAround(j.pivot, k).then(Affine.rotateAround(j.pivot, angle))
         invalidate()
       }
       Mode.ROTATE_SELECTION -> {
@@ -2280,10 +2353,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
-  /** The pen stopped moving mid-stroke: try to turn the stroke into a clean shape. */
+  /**
+   * The pen stopped moving mid-stroke: a loop round something picks it up (circle to select, when
+   * the pen has it on); otherwise the stroke may turn into a clean shape.
+   */
   private fun onHold() {
     try {
-      snapToShape()
+      if (settings.activeSlot.circleSelect && (catchWithCircle() || emptyCircle())) return
+      if (settings.holdToShape) snapToShape()
     } catch (t: Throwable) {
       com.tali.notes.CrashLog.recovered(context, t)
     }
@@ -2416,7 +2493,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun endDraw(e: MotionEvent) {
     val d = doc
     val idx = e.findPointerIndex(drawPointer)
-    removeCallbacks(holdRunnable)
+    stopHolds()
     removeCallbacks(pasteHold)
     when (mode) {
       Mode.INK -> {
@@ -2471,8 +2548,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.LASSO -> finishLasso(if (idx >= 0) world(e, idx) else null)
       Mode.MOVE_SELECTION,
       Mode.SCALE_SELECTION,
-      Mode.ROTATE_SELECTION -> {
+      Mode.ROTATE_SELECTION,
+      Mode.JOINT_SELECTION -> {
         if (mode == Mode.MOVE_SELECTION) chipBackAt = SystemClock.uptimeMillis()
+        jointDrag = null
         finishSelectionDrag()
       }
       Mode.HANDLE_DRAG -> {
@@ -2526,7 +2605,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun abortDrawing() {
     endSnap()
-    removeCallbacks(holdRunnable)
+    stopHolds()
     removeCallbacks(pasteHold)
     dropStroke(null)
     liveShape = null
@@ -3141,7 +3220,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
       val f = edit.item
       out[f] = if (px.none { (it ushr 24) > 0 }) null
-      else ImageItem(f.id, f.z, images.saveSoon(bmp, f.file.take(FILL_PREFIX.length + 9)), f.rect, f.pdfPage, f.front, f.locked, f.walls, f.flipX, f.flipY)
+      else ImageItem(f.id, f.z, images.saveSoon(bmp, f.file.take(FILL_PREFIX.length + 9)), f.rect, f.pdfPage, f.front, f.locked, f.walls, f.flipX, f.flipY, f.crop)
+
     }
     fillEdits.clear()
     itemRenderer.swapped = emptyMap()
@@ -3490,6 +3570,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         lineSize = selection.firstNotNullOfOrNull { (it as? InkItem)?.size ?: (it as? ShapeItem)?.size },
         line = selection.firstNotNullOfOrNull { (it as? InkItem)?.line ?: (it as? ShapeItem)?.line },
         locked = selection.all { it.locked },
+        croppable = (selection.singleOrNull() as? ImageItem)?.let { croppable(it) } == true,
       )
     )
   }
@@ -3581,7 +3662,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       }
       else -> return
     }
-    removeCallbacks(holdRunnable)
+    stopHolds()
     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     host.onPasteOffer(PasteOffer(pasteHoldAt.x, pasteHoldAt.y, camera.toWorld(pasteHoldAt.x, pasteHoldAt.y), if (tabletClipNewer()) 1 else Clipboard.items.size))
     invalidate()
@@ -3784,8 +3865,583 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     selectSingle(item)
   }
 
+  // ---- Circle to select ----
+
+  /**
+   * A loop drawn round things with a pen that has circle to select on. While the pen holds still
+   * a glow comes up round it and a brighter band runs round from where the loop began ([since]),
+   * reaching its end just as it's caught ([caughtAt], the hold). Then the stroke leaves the page:
+   * its line turns into the lasso's marching dashes and pulls tight round what it caught, ending
+   * as the selection's frame (a lasso rope drawn in).
+   */
+  private class CircleCatch(val loop: List<Pt>, val since: Long) {
+    var caughtAt = 0L
+    var color = 0
+    var width = 1f
+  }
+
+  private var circle: CircleCatch? = null
+
+  /** The closed part of the stroke being written: from where its end came back to its own path (the start, or a little past it) to the end. */
+  private fun circleLoop(): List<Pt>? {
+    val pts = strokePoints
+    val n = pts.size
+    if (n < 10) return null
+    val close = CIRCLE_CLOSE_DP * density / camera.scale
+    val end = pts[n - 1]
+    var walked = 0f
+    var best = -1
+    var bestD = Float.MAX_VALUE
+    for (i in n - 2 downTo 0) {
+      walked += pts[i + 1].dist(pts[i])
+      if (walked < close * 4) continue
+      val d = pts[i].dist(end)
+      if (d < bestD) {
+        bestD = d
+        best = i
+      }
+    }
+    if (best < 0 || bestD > close) return null
+    val loop = pts.subList(best, n).toList()
+    val box = Rect.around(loop) ?: return null
+    if (min(box.width, box.height) * camera.scale < 20f * density) return null
+    // A real loop, not a line gone over and back.
+    if (abs(signedArea(loop)) < 0.25f * box.width * box.height) return null
+    return loop
+  }
+
+  private fun signedArea(pts: List<Pt>): Float {
+    var s = 0f
+    for (i in pts.indices) {
+      val a = pts[i]
+      val b = pts[(i + 1) % pts.size]
+      s += a.x * b.y - b.x * a.y
+    }
+    return s / 2f
+  }
+
+  /** Whether the lasso would pick [item] up with [loop] (its bounds [area]). */
+  private fun loopPicks(item: CanvasItem, loop: List<Pt>, area: Rect) =
+    (!item.locked || settings.lassoLocked) && settings.lassoHits(item.pen) && item.bounds.intersects(area) && lassoTouches(item, loop)
+
+  /** Whether [loop] would pick anything up, counting writing still waiting for Ink's hand-off. */
+  private fun circleCatches(loop: List<Pt>): Boolean {
+    val d = doc ?: return false
+    val area = Rect.around(loop) ?: return false
+    if (d.intersecting(area).any { loopPicks(it, loop, area) }) return true
+    val input = androidx.ink.strokes.StrokeInput()
+    return shadows.any { (id, sh) ->
+      sh.finished && strokePens.containsKey(id) && settings.lassoHits(sh.pen) &&
+        Lasso.touchesPath(List(sh.inputs.size) { i -> sh.inputs.populate(i, input); Pt(input.x, input.y) }, loop)
+    }
+  }
+
+  /** The pen has rested a moment on a loop round something: it starts lighting up. */
+  private fun chargeCircle() {
+    if (mode != Mode.INK || viewOnly || !settings.activeSlot.circleSelect) return
+    val loop = circleLoop() ?: return
+    if (!circleCatches(loop)) return
+    circle = CircleCatch(loop, SystemClock.uptimeMillis())
+    postInvalidateOnAnimation()
+  }
+
+  /** The hold on a loop round something: what it goes round is picked up as with the lasso, and the loop leaves the page. */
+  private fun catchWithCircle(): Boolean {
+    if (mode != Mode.INK || viewOnly) return false
+    val loop = circleLoop() ?: return false
+    if (!circleCatches(loop)) return false
+    val slot = settings.activeSlot
+    val since = circle?.since ?: SystemClock.uptimeMillis()
+    dropStroke(null)
+    // The rest of this touch does nothing; strokes still waiting for Ink go in so they can be picked up.
+    mode = Mode.IGNORE
+    commitWaitingInk()
+    val d = doc ?: return true
+    val area = Rect.around(loop) ?: return true
+    val picked = withFills(d.intersecting(area).filter { loopPicks(it, loop, area) })
+    circle = CircleCatch(loop, since).apply {
+      caughtAt = SystemClock.uptimeMillis()
+      color = if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color
+      width = slot.size
+    }
+    // The menu comes once the loop has settled and the pen has lifted.
+    setSelection(picked, menu = false)
+    if (picked.size == 1 && picked[0] is ShapeItem) activeShapeId = picked[0].id
+    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    host.onTip("circle-select", tr(R.string.circled_and_picked_up))
+    postInvalidateOnAnimation()
+    return true
+  }
+
+  /**
+   * A round loop round nothing, held: like a lasso that caught nothing, it just goes (its line turns
+   * to dashes and fades). Other closed shapes held (a box, a triangle) still become clean shapes.
+   */
+  private fun emptyCircle(): Boolean {
+    if (mode != Mode.INK || viewOnly) return false
+    val loop = circleLoop() ?: return false
+    val packs = com.tali.notes.model.ShapePacks.all.filter { it.id in settings.starredPacks }.flatMap { it.shapes }
+    if (ShapeRecognizer.recognize(strokePoints, settings.customShapes, packs) !is com.tali.notes.model.EllipseShape) return false
+    val slot = settings.activeSlot
+    dropStroke(null)
+    mode = Mode.IGNORE
+    clearSelection()
+    circle = CircleCatch(loop, SystemClock.uptimeMillis()).apply {
+      caughtAt = SystemClock.uptimeMillis()
+      color = if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color
+      width = slot.size
+    }
+    postInvalidateOnAnimation()
+    return true
+  }
+
+  private val circleGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+  }
+  private val circleLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+  }
+  private val circleFill = Paint(Paint.ANTI_ALIAS_FLAG)
+  private val circlePath = Path()
+  private val circleTrace = Path()
+  private val circleMeasure = android.graphics.PathMeasure()
+
+  private fun pathThrough(pts: List<Pt>, close: Boolean): Path {
+    circlePath.rewind()
+    pts.forEachIndexed { i, p -> if (i == 0) circlePath.moveTo(p.x, p.y) else circlePath.lineTo(p.x, p.y) }
+    if (close) circlePath.close()
+    return circlePath
+  }
+
+  private fun drawCircleCatch(canvas: Canvas) {
+    val c = circle ?: return
+    val now = SystemClock.uptimeMillis()
+    val pen = c.width * camera.scale
+    val screen = c.loop.map(camera::toScreen)
+    if (c.caughtAt == 0L) {
+      if (mode != Mode.INK) {
+        circle = null
+        return
+      }
+      // Lighting up (under the ink still being written): the glow comes up, the band runs round.
+      val span = (settings.holdDelayMs - CIRCLE_CHARGE_FROM_MS).coerceAtLeast(1L)
+      val t = ((now - c.since).toFloat() / span).coerceIn(0f, 1f)
+      val path = pathThrough(screen, close = false)
+      circleGlow.color = accentColor
+      circleGlow.alpha = (70 * easeOut(min(1f, t * 2.5f))).toInt()
+      circleGlow.strokeWidth = pen + 16f * density
+      canvas.drawPath(path, circleGlow)
+      circleMeasure.setPath(path, false)
+      circleTrace.rewind()
+      val run = t * t * (3f - 2f * t)
+      circleMeasure.getSegment(0f, circleMeasure.length * run, circleTrace, true)
+      circleGlow.alpha = 140
+      circleGlow.strokeWidth = pen + 7f * density
+      canvas.drawPath(circleTrace, circleGlow)
+      postInvalidateOnAnimation()
+      return
+    }
+    val e = (now - c.caughtAt).toFloat()
+    if (e >= CIRCLE_CATCH_MS) {
+      circle = null
+      invalidate()
+      return
+    }
+    // The loop, evenly spaced and closed, and the selection's frame it pulls in to, point for point.
+    val n = 120
+    val from = Geo.resample(screen + screen.first(), n)
+    val frame = selectionBounds?.let { b ->
+      screenRect(b, Affine.IDENTITY).apply {
+        inset(-8f * density, -8f * density)
+        set(Math.round(left) + 0.5f, Math.round(top) + 0.5f, Math.round(right) + 0.5f, Math.round(bottom) + 0.5f)
+      }
+    }
+    val pull = easeOut(((e - 70f) / (CIRCLE_CATCH_MS - 70f)).coerceIn(0f, 1f))
+    val pts = if (frame != null && from.size == n) {
+      val to = framePoints(frame, from)
+      List(n) { i -> from[i] + (to[i] - from[i]) * pull }
+    } else from
+    val gone = if (frame == null) pull else 0f
+    val path = pathThrough(pts, close = true)
+    // Ink turns into the lasso's dashes over the first 220 ms, with a flash of the glow as it's caught.
+    val turn = easeOut(e / 220f)
+    circleFill.color = lassoFill.color
+    circleFill.alpha = (lassoFill.alpha * turn * (1f - pull)).toInt()
+    canvas.drawPath(path, circleFill)
+    circleGlow.color = accentColor
+    circleGlow.alpha = (110 * (1f - turn) * (1f - gone)).toInt()
+    circleGlow.strokeWidth = pen + 12f * density
+    circleGlow.pathEffect = null
+    canvas.drawPath(path, circleGlow)
+    val thin = selectionPaint.strokeWidth
+    circleLine.pathEffect = null
+    circleLine.color = c.color
+    circleLine.alpha = (255 * (1f - turn)).toInt()
+    circleLine.strokeWidth = pen + (thin - pen) * turn
+    canvas.drawPath(path, circleLine)
+    circleLine.color = accentColor
+    circleLine.alpha = (255 * turn * (1f - gone)).toInt()
+    // The dashes march round as it tightens, settling on the frame's own pattern.
+    circleLine.pathEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), -(1f - pull) * 30f * density)
+    canvas.drawPath(path, circleLine)
+    circleLine.pathEffect = null
+    postInvalidateOnAnimation()
+  }
+
+  /** Points round [r] matching [loop] point for point: from the place nearest its first point, going round the same way, closing where it began. */
+  private fun framePoints(r: RectF, loop: List<Pt>): List<Pt> {
+    val w = r.width()
+    val h = r.height()
+    val per = 2f * (w + h)
+    fun at(s0: Float): Pt {
+      var s = ((s0 % per) + per) % per
+      if (s < w) return Pt(r.left + s, r.top)
+      s -= w
+      if (s < h) return Pt(r.right, r.top + s)
+      s -= h
+      if (s < w) return Pt(r.right - s, r.bottom)
+      s -= w
+      return Pt(r.left, r.bottom - s)
+    }
+    val first = loop.first()
+    var s0 = 0f
+    var best = Float.MAX_VALUE
+    for (k in 0 until 240) {
+      val s = per * k / 240f
+      val d = at(s).dist(first)
+      if (d < best) {
+        best = d
+        s0 = s
+      }
+    }
+    val corners = listOf(Pt(r.left, r.top), Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom))
+    val dir = if ((signedArea(loop) > 0f) == (signedArea(corners) > 0f)) 1f else -1f
+    val n = loop.size
+    return List(n) { i -> at(s0 + dir * per * i / (n - 1)) }
+  }
+
+  // ---- Cropping a picture ----
+
+  /** A picture being cropped: where the whole of it sits ([whole]) and the part kept ([frame]), in the world. */
+  private class CropEdit(val item: ImageItem, val whole: Rect, var frame: Rect)
+
+  private var cropping: CropEdit? = null
+
+  /** Which handle is held: 0 top-left, then clockwise round the corners and sides to 7 (left); 8 the frame itself. */
+  private var cropGrab = -1
+  private var cropFrom = Rect(0f, 0f, 0f, 0f)
+  private var cropDown = Pt.ZERO
+  private var cropPointer = -1
+
+  /** The rest of a touch that ended cropping (or landed beside the frame) goes nowhere. */
+  private var cropSwallow = false
+
+  private fun croppable(item: ImageItem) = !item.pdfPage && !isAreaFill(item) && !item.flipX && !item.flipY && !item.locked
+
+  /**
+   * Crop the picture picked up. Its whole shows round a frame with marks at the corners and sides;
+   * the part outside the frame is shaded. Done (or a touch off the picture) keeps it. The whole
+   * picture is kept, so a crop can be opened up again later.
+   */
+  fun startCrop() {
+    val d = doc ?: return
+    val item = (selection.singleOrNull() as? ImageItem)?.let { d[it.id] as? ImageItem }?.takeIf { croppable(it) } ?: return
+    clearSelection()
+    cropping = CropEdit(item, item.whole, item.rect)
+    tiles.hidden = setOf(item.id)
+    images.request(item.file)
+    host.onCropping(true)
+    host.onTip("crop", tr(R.string.drag_the_corners_or_sides_to_crop))
+    invalidate()
+  }
+
+  /** The whole picture again (Done then keeps it uncropped). */
+  fun resetCrop() {
+    val c = cropping ?: return
+    c.frame = c.whole
+    invalidate()
+  }
+
+  /** Ends cropping: [keep] puts the new crop on the page (one undo step); otherwise it stays as it was. */
+  fun finishCrop(keep: Boolean) {
+    val c = cropping ?: return
+    cropping = null
+    if (mode == Mode.CROP_DRAG) mode = Mode.NONE
+    tiles.hidden = emptySet()
+    host.onCropping(false)
+    val d = doc
+    val now = d?.get(c.item.id) as? ImageItem
+    if (d != null && now != null) {
+      val w = c.whole
+      val f = c.frame
+      val part = Rect((f.left - w.left) / w.width, (f.top - w.top) / w.height, (f.right - w.left) / w.width, (f.bottom - w.top) / w.height)
+      val all = part.left < 0.002f && part.top < 0.002f && part.right > 0.998f && part.bottom > 0.998f
+      val cropped = now.cropped(if (all) null else part, if (all) w else f)
+      if (keep && (cropped.rect != now.rect || cropped.crop != now.crop)) {
+        d.commit(Change(listOf(now), listOf(cropped)))
+        selectSingle(cropped)
+      } else selectSingle(now)
+    }
+    invalidate()
+  }
+
+  /** Where each crop handle sits on screen, in [cropGrab]'s order. */
+  private fun cropHandles(f: RectF) = listOf(
+    Pt(f.left, f.top), Pt(f.centerX(), f.top), Pt(f.right, f.top), Pt(f.right, f.centerY()),
+    Pt(f.right, f.bottom), Pt(f.centerX(), f.bottom), Pt(f.left, f.bottom), Pt(f.left, f.centerY()),
+  )
+
+  /**
+   * Touches while cropping: a handle or the frame is dragged; a touch off the picture keeps the
+   * crop and ends it; a finger on the shaded part still scrolls and zooms. Returns whether it took the touch.
+   */
+  private fun cropTouch(e: MotionEvent): Boolean {
+    if (cropSwallow) {
+      if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) cropSwallow = false
+      return true
+    }
+    val c = cropping ?: return false
+    when (e.actionMasked) {
+      MotionEvent.ACTION_DOWN -> {
+        val idx = e.actionIndex
+        val s = Pt(e.getX(idx), e.getY(idx))
+        val f = screenRect(c.frame, Affine.IDENTITY)
+        val near = cropHandles(f).withIndex().minByOrNull { it.value.dist(s) }
+        val grab = when {
+          near != null && near.value.dist(s) < HANDLE_HIT_DP * density -> near.index
+          f.contains(s.x, s.y) -> 8
+          else -> -1
+        }
+        if (grab >= 0) {
+          cropGrab = grab
+          cropPointer = e.getPointerId(idx)
+          cropDown = world(e, idx)
+          cropFrom = c.frame
+          mode = Mode.CROP_DRAG
+          invalidate()
+          return true
+        }
+        if (!screenRect(c.whole, Affine.IDENTITY).contains(s.x, s.y)) {
+          finishCrop(true)
+          cropSwallow = true
+          return true
+        }
+        if (e.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER) return false
+        cropSwallow = true
+        return true
+      }
+      MotionEvent.ACTION_POINTER_DOWN,
+      MotionEvent.ACTION_POINTER_UP -> return mode == Mode.CROP_DRAG
+      MotionEvent.ACTION_MOVE -> {
+        if (mode != Mode.CROP_DRAG) return false
+        val idx = e.findPointerIndex(cropPointer)
+        if (idx >= 0) dragCrop(c, world(e, idx))
+        return true
+      }
+      MotionEvent.ACTION_UP,
+      MotionEvent.ACTION_CANCEL -> {
+        if (mode != Mode.CROP_DRAG) return false
+        mode = Mode.NONE
+        cropGrab = -1
+        invalidate()
+        return true
+      }
+    }
+    return false
+  }
+
+  private fun dragCrop(c: CropEdit, p: Pt) {
+    val w = c.whole
+    val f = cropFrom
+    val dx = p.x - cropDown.x
+    val dy = p.y - cropDown.y
+    val least = CROP_MIN_DP * density / camera.scale
+    // A side brought near the picture's own edge goes right onto it.
+    val stick = 8f * density / camera.scale
+    fun near(v: Float, edge: Float) = if (abs(v - edge) < stick) edge else v
+    c.frame =
+      if (cropGrab == 8) {
+        val mx = dx.coerceIn(w.left - f.left, w.right - f.right)
+        val my = dy.coerceIn(w.top - f.top, w.bottom - f.bottom)
+        Rect(f.left + mx, f.top + my, f.right + mx, f.bottom + my)
+      } else {
+        var l = f.left
+        var t = f.top
+        var r = f.right
+        var b = f.bottom
+        if (cropGrab == 0 || cropGrab == 6 || cropGrab == 7) l = near(f.left + dx, w.left).coerceIn(w.left, r - least)
+        if (cropGrab == 0 || cropGrab == 1 || cropGrab == 2) t = near(f.top + dy, w.top).coerceIn(w.top, b - least)
+        if (cropGrab == 2 || cropGrab == 3 || cropGrab == 4) r = near(f.right + dx, w.right).coerceIn(l + least, w.right)
+        if (cropGrab == 4 || cropGrab == 5 || cropGrab == 6) b = near(f.bottom + dy, w.bottom).coerceIn(t + least, w.bottom)
+        Rect(l, t, r, b)
+      }
+    invalidate()
+  }
+
+  private val cropImagePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+  private val cropShade = Paint().apply { color = 0x8A14101F.toInt() }
+
+  private val cropLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    color = 0xFFFFFFFF.toInt()
+  }
+  private val cropMark = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+  }
+
+  /** The picture being cropped: its whole, shaded outside the frame, the frame with marks at its corners and sides, thirds while dragging. */
+  private fun drawCrop(canvas: Canvas) {
+    val c = cropping ?: return
+    val whole = screenRect(c.whole, Affine.IDENTITY)
+    val f = screenRect(c.frame, Affine.IDENTITY)
+    val bmp = images.peek(c.item.file)
+    if (bmp != null) canvas.drawBitmap(bmp, null, whole, cropImagePaint) else images.request(c.item.file)
+    canvas.save()
+    canvas.clipOutRect(f)
+    canvas.drawRect(whole, cropShade)
+    canvas.restore()
+    cropLine.strokeWidth = 1.2f * density
+    cropLine.alpha = 230
+    canvas.drawRect(f, cropLine)
+    if (mode == Mode.CROP_DRAG) {
+      cropLine.alpha = 130
+      cropLine.strokeWidth = 1f * density
+      for (i in 1..2) {
+        val x = f.left + f.width() * i / 3f
+        val y = f.top + f.height() * i / 3f
+        canvas.drawLine(x, f.top, x, f.bottom, cropLine)
+        canvas.drawLine(f.left, y, f.right, y, cropLine)
+      }
+    }
+    // Thick marks at the corners and the middle of each side, just inside the frame: the accent on a white edge, so they show on any picture and on white paper.
+    val len = min(18f * density, min(f.width(), f.height()) / 3f)
+    val inset = 1.5f * density
+    val l = f.left + inset
+    val t = f.top + inset
+    val r = f.right - inset
+    val b = f.bottom - inset
+    val cx = f.centerX()
+    val cy = f.centerY()
+    for (pass in 0..1) {
+      cropMark.strokeWidth = if (pass == 0) 7.5f * density else 4f * density
+      cropMark.color = if (pass == 0) 0xFFFFFFFF.toInt() else accentColor
+      canvas.drawLine(l, t, l + len, t, cropMark)
+      canvas.drawLine(l, t, l, t + len, cropMark)
+      canvas.drawLine(r, t, r - len, t, cropMark)
+      canvas.drawLine(r, t, r, t + len, cropMark)
+      canvas.drawLine(r, b, r - len, b, cropMark)
+      canvas.drawLine(r, b, r, b - len, cropMark)
+      canvas.drawLine(l, b, l + len, b, cropMark)
+      canvas.drawLine(l, b, l, b - len, cropMark)
+      canvas.drawLine(cx - len / 2, t, cx + len / 2, t, cropMark)
+      canvas.drawLine(cx - len / 2, b, cx + len / 2, b, cropMark)
+      canvas.drawLine(l, cy - len / 2, l, cy + len / 2, cropMark)
+      canvas.drawLine(r, cy - len / 2, r, cy + len / 2, cropMark)
+    }
+  }
+
+  // ---- Several lines picked up together ----
+
+  /** The ends of a shape drawn like a line (lines, arrows, dimensions, curves, loads, line-like subject shapes); null for any other. */
+  private fun lineEnds(item: CanvasItem): Pair<Pt, Pt>? {
+    val g = (item as? ShapeItem)?.geometry ?: return null
+    return when (g) {
+      is LineShape -> g.a to g.b
+      is com.tali.notes.model.CurveShape -> g.points.first() to g.points.last()
+      is com.tali.notes.model.LoadShape -> g.a to g.b
+      is com.tali.notes.model.ParamShape -> g.lineEnds
+      else -> null
+    }
+  }
+
+  /** The joint of several lines: dragging [at] turns and stretches them all round [pivot]. */
+  private class LineJoint(val pivot: Pt, val at: Pt, val shared: Boolean)
+
+  private var jointDrag: LineJoint? = null
+  private var jointGrab = Pt.ZERO
+  private var jointAngle = 0f
+  private var jointScale = 1f
+
+  /**
+   * Two or more lines picked up together get one joint, so their size and angle change together,
+   * like one line's end dot. Where the lines meet at a point (arrows from one joint of a truss),
+   * that point is the pivot and the joint sits on the end farthest from it; otherwise they turn
+   * round their middle, the joint on the end farthest from the middle.
+   */
+  private fun lineJoint(): LineJoint? {
+    if (selection.size < 2 || cropping != null) return null
+    val ends = selection.map { lineEnds(it) ?: return null }
+    val pts = ends.flatMap { listOf(it.first, it.second) }
+    val tol = JOINT_MEET_DP * density / camera.scale
+    var meet: Pt? = null
+    var most = 1
+    for (p in pts) {
+      val n = ends.count { (a, b) -> a.dist(p) < tol || b.dist(p) < tol }
+      if (n > most) {
+        most = n
+        meet = p
+      }
+    }
+    val pivot = meet?.let { m -> pts.filter { it.dist(m) < tol }.let { near -> Pt(near.sumOf { it.x.toDouble() }.toFloat() / near.size, near.sumOf { it.y.toDouble() }.toFloat() / near.size) } }
+      ?: selectionBounds?.center ?: return null
+    val at = pts.maxByOrNull { it.dist(pivot) } ?: return null
+    if (at.dist(pivot) * camera.scale < 16f * density) return null
+    return LineJoint(pivot, at, meet != null)
+  }
+
+  private val jointGuide = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    pathEffect = DashPathEffect(floatArrayOf(4f * density, 4f * density), 0f)
+  }
+  private val jointRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+  private val jointDot = Paint(Paint.ANTI_ALIAS_FLAG)
+
+  /** The joint of several lines: a dashed line from the pivot (a small ring) to the joint (a dot in a halo), and while dragged how far it turned and how much it grew. */
+  private fun drawLineJoint(canvas: Canvas) {
+    val j = (if (mode == Mode.JOINT_SELECTION) jointDrag else lineJoint()) ?: return
+    val pivot = camera.toScreen(j.pivot)
+    val at = camera.toScreen(if (mode == Mode.JOINT_SELECTION) dragTransform.apply(j.at) else j.at)
+    jointGuide.color = handleColor
+    jointGuide.alpha = 150
+    jointGuide.strokeWidth = 1.5f * density
+    canvas.drawLine(pivot.x, pivot.y, at.x, at.y, jointGuide)
+    canvas.drawCircle(pivot.x, pivot.y, 4f * density, handleFill)
+    jointRing.color = handleColor
+    jointRing.strokeWidth = 2f * density
+    jointRing.alpha = 255
+    canvas.drawCircle(pivot.x, pivot.y, 4f * density, jointRing)
+    jointRing.alpha = 70
+    jointRing.strokeWidth = 5f * density
+    canvas.drawCircle(at.x, at.y, 11.5f * density, jointRing)
+    drawHandle(canvas, at.x, at.y, 7f)
+    jointDot.color = handleColor
+    canvas.drawCircle(at.x, at.y, 2.6f * density, jointDot)
+    if (mode == Mode.JOINT_SELECTION) {
+      val degrees = Math.round(-Math.toDegrees(jointAngle.toDouble())).toInt().let { ((it + 540) % 360) - 180 }
+      val label = "$degrees° · ${Math.round(jointScale * 100)}%"
+      angleText.textSize = 13f * density
+      angleText.color = 0xFFFFFFFF.toInt()
+      angleBubble.color = handleColor
+      val w = angleText.measureText(label) + 16f * density
+      val h = 24f * density
+      // Beside the pivot, on the side away from the joint, where the hand isn't.
+      val away = (pivot - at).let { v -> if (v.length() < 1f) Pt(0f, 1f) else v * (1f / v.length()) }
+      val cx = pivot.x + away.x * (w / 2 + 14f * density)
+      val cy = pivot.y + away.y * (h / 2 + 14f * density)
+      canvas.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, angleBubble)
+      canvas.drawText(label, cx, cy + 4.5f * density, angleText)
+    }
+  }
+
   /**
    * Adds imported PDF pages as one tall stack below everything already in the notebook, at their
+
    * real size (an A4 page exports back onto an A4 page), and scrolls to the first one.
    */
   fun insertPages(pages: List<NotesRepository.ImportedPage>) {
@@ -4424,13 +5080,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   fun undo() {
+    finishCrop(false)
     commitWaitingInk()
+
     clearSelection()
     doc?.undo()
   }
 
   fun redo() {
+    finishCrop(false)
     commitWaitingInk()
+
     clearSelection()
     doc?.redo()
   }
@@ -4759,8 +5419,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   companion object {
     private val DRAW_MODES =
-      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE, Mode.STRAIGHT, Mode.LASER)
+      setOf(Mode.INK, Mode.LIVE_SHAPE, Mode.ERASE, Mode.LASSO, Mode.MOVE_SELECTION, Mode.SCALE_SELECTION, Mode.ROTATE_SELECTION, Mode.HANDLE_DRAG, Mode.SHAPE_CREATE, Mode.FILL_TAP, Mode.IGNORE, Mode.STRAIGHT, Mode.LASER, Mode.JOINT_SELECTION)
     private const val HOLD_TOLERANCE_DP = 7f
+
+    /** Circle to select: how long after the pen stops the loop starts lighting up (it's caught at the hold, [AppSettings.holdDelayMs]). */
+    private const val CIRCLE_CHARGE_FROM_MS = 110L
+
+    /** How close (on screen) the pen must come back to its path for the loop to count as closed. */
+    private const val CIRCLE_CLOSE_DP = 30f
+
+    /** The caught loop turning into the lasso and tightening round what it caught. */
+    private const val CIRCLE_CATCH_MS = 560L
+
+    /** Line ends this close (on screen) count as meeting, for the joint of several lines. */
+    private const val JOINT_MEET_DP = 10f
+
+    /** The smallest a crop can be, on screen. */
+    private const val CROP_MIN_DP = 28f
 
     /** PDF points per world unit (dp), matching the PDF export so pages keep their real size. */
     private const val PT_PER_DP = 72f / 160f
