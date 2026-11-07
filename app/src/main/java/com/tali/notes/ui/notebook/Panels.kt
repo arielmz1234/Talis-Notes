@@ -1,6 +1,7 @@
 package com.tali.notes.ui.notebook
 
 import com.tali.notes.ui.components.title
+import com.tali.notes.ui.components.ButtonRow
 import com.tali.notes.ui.components.nameRes
 import com.tali.notes.tr
 import androidx.compose.ui.res.stringResource
@@ -253,7 +254,7 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     ToggleRow(stringResource(R.string.circle_to_select), slot.circleSelect, { on -> vm.updateActivePen { it.copy(circleSelect = on) } }, detail = stringResource(R.string.circle_to_select_detail))
 
     Spacer(Modifier.height(12.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    ButtonRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       QuietButton(stringResource(R.string.add_a_pen), onClick = vm::addPen)
       if (settings.pens.size > 1) QuietButton(stringResource(R.string.remove_this_pen), color = c.danger, onClick = vm::removeActivePen)
     }

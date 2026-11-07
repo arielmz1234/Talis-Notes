@@ -52,6 +52,7 @@ import com.tali.notes.data.NotesRepository
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.library.CardBody
 import com.tali.notes.ui.components.PrimaryButton
+import com.tali.notes.ui.components.ButtonRow
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.ToggleRow
 import com.tali.notes.ui.components.WorkingText
@@ -241,7 +242,7 @@ private fun AutoCard(onRun: (String, suspend () -> String) -> Unit, compact: Boo
         color = if (note != null) c.blue else if (status.error != null) c.danger else c.inkFaint,
       )
       Spacer(Modifier.height(10.dp))
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      ButtonRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         QuietButton(stringResource(R.string.back_up_now), color = c.blue) { onRun(later(R.string.backing_up)) { if (AutoBackup.backupNow(context)) later(R.string.backed_up) else AutoBackup.status(context).value.error ?: later(R.string.couldn_t_save_the_backup) } }
         QuietButton(stringResource(R.string.change_place)) { pick.launch(AutoBackup.FILE_NAME) }
         QuietButton(stringResource(R.string.turn_off)) { AutoBackup.turnOff(context) }
@@ -322,7 +323,7 @@ private fun DriveCard(onRun: (String, suspend () -> String) -> Unit, describe: (
       color = if (note != null) c.blue else if (status.error != null) c.danger else c.inkFaint,
     )
     Spacer(Modifier.height(10.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    ButtonRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
       if (status.enabled) {
         QuietButton(stringResource(R.string.back_up_now), color = c.blue) {
           withToken(later(R.string.backing_up_to_drive)) { token ->

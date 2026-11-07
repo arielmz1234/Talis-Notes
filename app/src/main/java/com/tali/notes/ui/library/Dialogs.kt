@@ -71,7 +71,8 @@ import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.SectionLabel
 import com.tali.notes.ui.components.rememberSlidingSelection
 import com.tali.notes.ui.components.slidingHighlight
-import com.tali.notes.ui.components.slidingOption
+import com.tali.notes.ui.components.slidingOption
+import com.tali.notes.ui.components.ButtonRow
 
 @Composable
 fun DialogCard(onDismiss: () -> Unit, width: Int = 520, dim: Boolean = true, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
@@ -274,7 +275,7 @@ fun NewNotebookDialog(
       }
     }
     Spacer(Modifier.height(16.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       PrimaryButton(stringResource(R.string.create)) { create() }
     }
@@ -302,7 +303,7 @@ fun NameDialog(title: String, initial: String, placeholder: String, confirm: Str
     Spacer(Modifier.height(18.dp))
     TitleField(value, { value = it }, placeholder) { onConfirm(value.text) }
     Spacer(Modifier.height(24.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       PrimaryButton(confirm) { onConfirm(value.text) }
     }
@@ -318,7 +319,7 @@ fun ConfirmDialog(title: String, body: String, confirm: String, destructive: Boo
     Spacer(Modifier.height(10.dp))
     Text(body, style = MaterialTheme.typography.bodyMedium, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       if (destructive) QuietButton(confirm, color = c.danger, onClick = onConfirm) else PrimaryButton(confirm, onClick = onConfirm)
     }

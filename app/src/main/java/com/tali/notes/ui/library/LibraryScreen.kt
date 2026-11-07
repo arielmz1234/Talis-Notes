@@ -1,6 +1,7 @@
 package com.tali.notes.ui.library
 
 import com.tali.notes.ui.components.nameRes
+import com.tali.notes.ui.components.ButtonRow
 import com.tali.notes.tr
 import androidx.compose.ui.res.stringResource
 import com.tali.notes.R
@@ -592,7 +593,7 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
         color = c.inkMuted,
       )
       Spacer(Modifier.height(24.dp))
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+      ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
         QuietButton(stringResource(R.string.delete_forever), color = c.danger) {
           vm.deleteForever(nb.id)
           trashAction = null
@@ -920,7 +921,7 @@ private fun NewFolderDialog(title: String, placeholder: String, initialColor: In
     Spacer(Modifier.height(6.dp))
     Box(Modifier.offset(x = (-12).dp)) { CoverSwatches(current = color) { color = it } }
     Spacer(Modifier.height(22.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       PrimaryButton(stringResource(R.string.create)) { onCreate(name.text.ifBlank { placeholder }, color) }
     }
@@ -1020,13 +1021,15 @@ private fun SortButton(sort: LibrarySort, reversed: Boolean, onSort: (LibrarySor
 private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
   val c = Tali.colors
   Row(
-    modifier.height(48.dp).clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
+    modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Icon(Icons.Outlined.Search, null, tint = c.inkFaint, modifier = Modifier.size(20.dp))
     Spacer(Modifier.width(10.dp))
     Box(Modifier.weight(1f)) {
-      if (value.isEmpty()) Text(stringResource(R.string.search_notebooks), style = MaterialTheme.typography.bodyMedium, color = c.inkFaint)
+      // One line however narrow the field gets (a small phone, large text): it shortens with "â€¦".
+      if (value.isEmpty()) Text(stringResource(R.string.search_notebooks), style = MaterialTheme.typography.bodyMedium, color = c.inkFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
       BasicTextField(
         value,
         onChange,
@@ -1251,7 +1254,7 @@ private fun EmptyFolder(onCreate: () -> Unit, onNewFolder: () -> Unit) {
     Spacer(Modifier.height(8.dp))
     Text(stringResource(R.string.create_a_notebook_here_or_move), style = MaterialTheme.typography.bodyLarge, color = c.inkMuted)
     Spacer(Modifier.height(24.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    ButtonRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
       QuietButton(stringResource(R.string.folder_inside), onClick = onNewFolder)
       PrimaryButton(stringResource(R.string.new_notebook), Icons.Outlined.Add, onClick = onCreate)
     }

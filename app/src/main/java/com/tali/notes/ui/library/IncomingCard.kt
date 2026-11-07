@@ -59,6 +59,7 @@ import com.tali.notes.data.NotebookMeta
 import com.tali.notes.talisApp
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.PrimaryButton
+import com.tali.notes.ui.components.ButtonRow
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.relativeTime
 import kotlinx.coroutines.delay
@@ -163,7 +164,7 @@ fun WelcomeRestoreCard(onDismiss: () -> Unit) {
       else Row(dim.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) { tiles(Modifier.weight(1f).fillMaxHeight()) }
     }
     Spacer(Modifier.height(20.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
       if (restored) PrimaryButton(stringResource(R.string.done), onClick = onDismiss) else QuietButton(stringResource(R.string.start_fresh)) { if (busy == null) onDismiss() }
     }
   }
@@ -224,7 +225,7 @@ private fun RestoreCard(files: Incoming.Files, onDismiss: () -> Unit) {
       color = if (result != null || busy) c.blue else c.inkMuted,
     )
     Spacer(Modifier.height(20.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
       if (result != null) {
         PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
       } else {

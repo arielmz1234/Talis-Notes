@@ -496,7 +496,7 @@ fun NewPaperDialog(onDismiss: () -> Unit, importImage: suspend (Uri) -> String?,
     }
     }
     Spacer(Modifier.height(16.dp))
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       Text(if (editing != null) stringResource(R.string.changes_show_in_every_notebook_that) else stringResource(R.string.saved_with_your_papers_for_every), style = MaterialTheme.typography.bodySmall, color = c.inkFaint, modifier = Modifier.weight(1f))
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       if (canSave) PrimaryButton(if (editing != null) stringResource(R.string.save_changes) else stringResource(R.string.save_paper)) { save() }
@@ -555,7 +555,7 @@ fun BuiltInPaperDialog(
       }
     }
     Spacer(Modifier.height(20.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       if (look != null) QuietButton(stringResource(R.string.reset)) { onLook(com.tali.notes.model.PaperLook()) }
       PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
     }

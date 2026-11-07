@@ -1,6 +1,7 @@
 package com.tali.notes.ui.notebook
 
 import com.tali.notes.ui.components.detailRes
+import com.tali.notes.ui.components.ButtonRow
 import com.tali.notes.ui.components.nameRes
 import com.tali.notes.tr
 import androidx.compose.ui.res.stringResource
@@ -747,11 +748,28 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
       if (narrow) {
         // Held upright: title and undo share the first line, the tools get a line of their own.
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-          titlePill()
-          Spacer(Modifier.width(12.dp))
-          Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { undoBar() }
+        // Neither side is ever squeezed: on a small phone (or with large text) where both don't
+        // fit, the corner (eye, â‹¯) takes a line of its own, still on the right. Squeezed, it lost â‹¯.
+        androidx.compose.ui.layout.Layout(content = { titlePill(); undoBar() }, modifier = Modifier.fillMaxWidth()) { parts, cons ->
+          val gap = 12.dp.roundToPx()
+          val loose = cons.copy(minWidth = 0, minHeight = 0)
+          val title = parts[0].measure(loose)
+          val corner = parts[1].measure(loose)
+          if (title.width + gap + corner.width <= cons.maxWidth) {
+            val h = maxOf(title.height, corner.height)
+            layout(cons.maxWidth, h) {
+              title.place(0, (h - title.height) / 2)
+              corner.place(cons.maxWidth - corner.width, (h - corner.height) / 2)
+            }
+          } else {
+            val below = 8.dp.roundToPx()
+            layout(cons.maxWidth, title.height + below + corner.height) {
+              title.place(0, 0)
+              corner.place(cons.maxWidth - corner.width, title.height + below)
+            }
+          }
         }
+
         // A little more room between the two lines when the tablet is held upright.
         Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) { tools() }
@@ -1160,7 +1178,7 @@ private fun SavePdfDialog(title: String, folders: List<com.tali.notes.data.Folde
       FolderChoice(folders, folderId) { folderId = it }
     }
     Spacer(Modifier.height(20.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       PrimaryButton(stringResource(R.string.save)) { onSave(name.text, folderId) }
     }
@@ -1218,7 +1236,7 @@ private fun LeavePdfDialog(title: String, onStay: () -> Unit, onSave: () -> Unit
       color = c.inkMuted,
     )
     Spacer(Modifier.height(22.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
       QuietButton(stringResource(R.string.keep_looking), onClick = onStay)
       Spacer(Modifier.weight(1f))
       QuietButton(stringResource(R.string.leave_without_saving_2), color = c.danger, onClick = onLeave)
@@ -1438,7 +1456,7 @@ private fun MenuTile(icon: ImageVector, label: String, modifier: Modifier = Modi
   ) {
     Icon(icon, null, tint = c.accent, modifier = Modifier.size(20.dp))
     Spacer(Modifier.height(3.dp))
-    Text(label, style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1)
+    Text(label, style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
   }
 }
 
@@ -1448,12 +1466,13 @@ private fun MenuChip(icon: ImageVector, label: String, on: Boolean, modifier: Mo
   val c = Tali.colors
   val wash by animateColorAsState(if (on) c.accentSoft else Color.Transparent, tween(200), label = "chip")
   Row(
-    modifier.height(38.dp).clip(RoundedCornerShape(12.dp)).background(wash).border(1.dp, if (on) Color.Transparent else c.line, RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp),
+    modifier.heightIn(min = 38.dp).clip(RoundedCornerShape(12.dp)).background(wash).border(1.dp, if (on) Color.Transparent else c.line, RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Icon(if (on) Icons.Outlined.Check else icon, null, tint = if (on) c.accent else c.inkMuted, modifier = Modifier.size(18.dp))
     Spacer(Modifier.width(8.dp))
-    Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else c.ink, maxLines = 1)
+    // Two lines rather than cut off on a small phone or with large text.
+    Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else c.ink, maxLines = 2, modifier = Modifier.padding(vertical = 4.dp))
   }
 }
 
@@ -1462,12 +1481,13 @@ private fun MenuChip(icon: ImageVector, label: String, on: Boolean, modifier: Mo
 private fun MenuSwitchRow(icon: ImageVector, label: String, checked: Boolean?, value: String? = null, onClick: () -> Unit) {
   val c = Tali.colors
   Row(
-    Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp),
+    Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Icon(icon, null, tint = c.inkMuted, modifier = Modifier.size(20.dp))
     Spacer(Modifier.width(12.dp))
-    Text(label, style = MaterialTheme.typography.bodyMedium, color = c.ink, maxLines = 1, modifier = Modifier.weight(1f))
+    Text(label, style = MaterialTheme.typography.bodyMedium, color = c.ink, maxLines = 2, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
+
     Spacer(Modifier.width(10.dp))
     when {
       value != null -> Text(value, style = MaterialTheme.typography.labelLarge, color = c.accent)
@@ -1730,7 +1750,7 @@ private fun SaveShapeDialog(geometry: ShapeGeometry, onDismiss: () -> Unit, onSa
     Spacer(Modifier.height(18.dp))
     TitleField(value, { value = it }, stringResource(R.string.name_e_g_i_beam)) { onSave(value.text) }
     Spacer(Modifier.height(24.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       PrimaryButton(stringResource(R.string.save_shape)) { onSave(value.text) }
     }
@@ -1799,7 +1819,7 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
     )
     }
     Spacer(Modifier.height(24.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
       QuietButton(stringResource(R.string.save_to_files)) { onExport(layout, choice.quality, false) }
       PrimaryButton(stringResource(R.string.share)) { onExport(layout, choice.quality, true) }

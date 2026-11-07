@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.DpOffset
 import com.tali.notes.AppLanguage
 import com.tali.notes.appLocale
 import com.tali.notes.ui.components.EaseOutStrong
+import com.tali.notes.ui.components.ButtonRow
 import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import com.tali.notes.R
@@ -88,9 +89,10 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onColors
     Spacer(Modifier.height(8.dp))
     ColorThemePicker(settings.colorTheme) { com.tali.notes.ui.components.ThemeFade.beforeChange(); onColors(it) }
     Spacer(Modifier.height(18.dp))
-    // Light or dark beside cloudy or minimal, so the card still fits a landscape tablet.
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-      Column(Modifier.weight(1.6f)) {
+    // Light or dark beside cloudy or minimal, so the card still fits a landscape tablet; one under
+    // the other on a narrow phone, where side by side cut "System default" short.
+    val themeChoice: @Composable (Modifier) -> Unit = { m ->
+      Column(m) {
         SectionLabel(stringResource(R.string.theme))
         Spacer(Modifier.height(8.dp))
         Segmented(
@@ -101,10 +103,26 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onColors
           Modifier.fillMaxWidth(),
         )
       }
-      Column(Modifier.weight(1f)) {
+    }
+    val styleChoice: @Composable (Modifier) -> Unit = { m ->
+      Column(m) {
         SectionLabel(stringResource(R.string.style))
         Spacer(Modifier.height(8.dp))
         Segmented(listOf(false, true), settings.minimal, { if (it) tr(R.string.minimal) else tr(R.string.cloudy) }, { com.tali.notes.ui.components.ThemeFade.beforeChange(); onMinimal(it) }, Modifier.fillMaxWidth())
+      }
+    }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+      if (maxWidth < 440.dp) {
+        Column {
+          themeChoice(Modifier.fillMaxWidth())
+          Spacer(Modifier.height(14.dp))
+          styleChoice(Modifier.fillMaxWidth())
+        }
+      } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+          themeChoice(Modifier.weight(1.6f))
+          styleChoice(Modifier.weight(1f))
+        }
       }
     }
     Spacer(Modifier.height(6.dp))
@@ -126,7 +144,7 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onColors
     )
     }
     Spacer(Modifier.height(22.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
       // The walk through the app, again.
       com.tali.notes.ui.components.QuietButton(stringResource(R.string.take_the_tour), onClick = onTour)
       Spacer(Modifier.weight(1f))
@@ -266,7 +284,9 @@ private fun ColorThemePicker(selected: ColorTheme, onPick: (ColorTheme) -> Unit)
       ) {
         ThemePreview(p, Modifier.fillMaxWidth().height(78.dp))
         Spacer(Modifier.height(6.dp))
-        Text(stringResource(themeName(theme)), style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else c.inkMuted, maxLines = 1)
+        // Shrinks rather than cut off ("Peac") on a narrow phone or with large text.
+        com.tali.notes.ui.components.FitText(stringResource(themeName(theme)), style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else c.inkMuted)
+
         Spacer(Modifier.height(2.dp))
       }
     }

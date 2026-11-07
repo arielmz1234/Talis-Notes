@@ -161,7 +161,8 @@ fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modi
 /**
  * Segmented control for two to four options; the white pill glides to the chosen one. Each option
  * gets the room its label needs and the rest is shared out evenly, so a longer label ("System
- * default") stays on one line beside short ones.
+ * default") stays on one line beside short ones. When they can't all fit on one line (a phone),
+ * they go on as few rows as let every label show whole.
  */
 @Composable
 fun <T : Any> Segmented(options: List<T>, selected: T?, label: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
@@ -172,19 +173,31 @@ fun <T : Any> Segmented(options: List<T>, selected: T?, label: (T) -> String, on
     modifier = modifier.clip(RoundedCornerShape(12.dp)).background(c.sunken).slidingHighlight(glide, selected, SolidColor(c.surface), 10.dp, lift = true).padding(3.dp),
   ) { parts, constraints ->
     val gap = 3.dp.roundToPx()
-    val gaps = gap * (parts.size - 1).coerceAtLeast(0)
     val needs = parts.map { it.maxIntrinsicWidth(constraints.maxHeight) }
-    val total = needs.sum()
-    val room = if (constraints.hasBoundedWidth) constraints.maxWidth - gaps else total
-    val widths =
-      if (total <= room) needs.map { it + (room - total) / parts.size }
-      else needs.map { (it.toLong() * room / total.coerceAtLeast(1)).toInt() }
-    val h = parts.indices.maxOfOrNull { parts[it].minIntrinsicHeight(widths[it]) } ?: 0
-    val placed = parts.mapIndexed { i, m -> m.measure(androidx.compose.ui.unit.Constraints.fixed(widths[i].coerceAtLeast(0), h)) }
-    val w = (widths.sum() + gaps).coerceIn(constraints.minWidth, constraints.maxWidth)
+    val bounded = constraints.hasBoundedWidth
+    // As few rows as let every label show whole (a narrow phone: two rows of two, not "B…").
+    fun rowsOf(perRow: Int) = parts.indices.chunked(perRow.coerceAtLeast(1))
+    fun fits(rows: List<List<Int>>) = rows.all { r -> r.sumOf { needs[it] } + gap * (r.size - 1) <= constraints.maxWidth }
+    val rows = if (!bounded) rowsOf(parts.size) else (parts.size downTo 1).map { rowsOf(it) }.firstOrNull { fits(it) } ?: rowsOf(1)
+    val full = if (bounded) constraints.maxWidth else rows.maxOf { r -> r.sumOf { needs[it] } + gap * (r.size - 1) }
+    val widths = IntArray(parts.size)
+    rows.forEach { r ->
+      val room = full - gap * (r.size - 1)
+      val total = r.sumOf { needs[it] }
+      // Each option gets what its label needs and the rest is shared out evenly; squeezed only when even one per row doesn't fit.
+      r.forEach { i -> widths[i] = if (total <= room) needs[i] + (room - total) / r.size else (needs[i].toLong() * room / total.coerceAtLeast(1)).toInt() }
+    }
+    val rowH = rows.map { r -> r.maxOf { parts[it].minIntrinsicHeight(widths[it]) } }
+    val placed = parts.mapIndexed { i, m -> m.measure(androidx.compose.ui.unit.Constraints.fixed(widths[i].coerceAtLeast(0), rowH[rows.indexOfFirst { i in it }])) }
+    val h = rowH.sum() + gap * (rows.size - 1)
+    val w = (rows.maxOf { r -> r.sumOf { widths[it] } + gap * (r.size - 1) }).coerceIn(constraints.minWidth, constraints.maxWidth)
     layout(w, h.coerceIn(constraints.minHeight, constraints.maxHeight)) {
-      var x = 0
-      placed.forEach { it.placeRelative(x, 0); x += it.width + gap }
+      var y = 0
+      rows.forEachIndexed { k, r ->
+        var x = 0
+        r.forEach { i -> placed[i].placeRelative(x, y); x += placed[i].width + gap }
+        y += rowH[k] + gap
+      }
     }
   }
 }
@@ -206,6 +219,28 @@ private fun <T : Any> SegmentOptions(options: List<T>, selected: T?, label: (T) 
       Text(label(o), style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
   }
+}
+
+/**
+ * A row of buttons, as at the bottom of a card. Every button keeps its full size: when they don't
+ * all fit side by side (a phone, a large text size, a long translation), the rest go on a second
+ * line, still lined up the same way. A plain Row squeezed the last button down to an empty pill.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun ButtonRow(
+  modifier: Modifier = Modifier,
+  horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(10.dp, Alignment.End),
+  verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
+  content: @Composable androidx.compose.foundation.layout.FlowRowScope.() -> Unit,
+) {
+  androidx.compose.foundation.layout.FlowRow(
+    modifier,
+    horizontalArrangement = horizontalArrangement,
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+    itemVerticalAlignment = verticalAlignment,
+    content = content,
+  )
 }
 
 @Composable

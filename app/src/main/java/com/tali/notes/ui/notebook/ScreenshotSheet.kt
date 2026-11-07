@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.PrimaryButton
+import com.tali.notes.ui.components.ButtonRow
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.library.DialogCard
 import java.io.File
@@ -85,7 +86,7 @@ fun ScreenshotSheet(file: File, onDone: () -> Unit, onHint: (String) -> Unit, on
       image?.let { Image(it, stringResource(R.string.the_screenshot), contentScale = ContentScale.Fit, modifier = Modifier.padding(6.dp)) }
     }
     Spacer(Modifier.height(18.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+    ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
       QuietButton(stringResource(R.string.copy)) {
         // Onto the page (hold anywhere to paste it) and into other apps alike.
         onCopy()
