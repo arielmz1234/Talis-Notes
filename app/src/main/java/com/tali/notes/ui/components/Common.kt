@@ -106,8 +106,11 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
  * Round icon button with a pressed scale and optional selected tint. Inside a group of choices, pass
  * the group's [selection] and the highlight glides to it rather than appearing under it.
  */
+/** The usual size of a [ToolButton]; a narrow phone's notebook top line makes them a little smaller to stay on one line. */
+val LocalToolButtonSize = androidx.compose.runtime.compositionLocalOf { 44.dp }
+
 @Composable
-fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enabled: Boolean = true, size: Dp = 44.dp, blue: Boolean = false, selection: SlidingSelection? = null, onClick: () -> Unit) {
+fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enabled: Boolean = true, size: Dp = LocalToolButtonSize.current, blue: Boolean = false, selection: SlidingSelection? = null, onClick: () -> Unit) {
   val c = Tali.colors
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()

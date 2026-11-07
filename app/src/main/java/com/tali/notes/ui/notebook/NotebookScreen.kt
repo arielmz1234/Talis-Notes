@@ -271,6 +271,9 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
   val scope = rememberCoroutineScope()
   // Held upright (or on a small tablet) the top bar splits into two lines.
   val narrow = LocalConfiguration.current.screenWidthDp < 900
+  // A narrow phone (under 380 dp across): the top line's buttons a little smaller and closer, so they stay on one line.
+  val tightTop = LocalConfiguration.current.screenWidthDp < 380
+  val pillGap = if (tightTop) 6.dp else 10.dp
   // A phone: the main toolbar splits into two rows, and the notebook's name steps aside.
   // The desk round the pages follows the colour family.
   val deskTheme = com.tali.notes.theme.LocalColorTheme.current
@@ -588,6 +591,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       val titlePill: @Composable () -> Unit = {
         Box(Modifier.bar("title", 0).inkCover(inkCovers, "title")) {
           TitlePill(
+            gap = pillGap,
             onBack = { leave(onBack) },
             canUndo = vm.canUndo,
             canRedo = vm.canRedo,
@@ -692,7 +696,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         // in the top-right corner.
         Row(Modifier.bar("undo", 2).inkCover(inkCovers, "undo"), verticalAlignment = Alignment.CenterVertically) {
           if (!phone) NamePill(meta?.title ?: "", Modifier.weight(1f, fill = false)) { renaming = true }
-          Spacer(Modifier.width(10.dp))
+          Spacer(Modifier.width(pillGap))
           FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
             ToolButton(Icons.Outlined.VisibilityOff, stringResource(R.string.hide_toolbars)) {
               vm.panel = null
@@ -748,14 +752,17 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       }
       if (narrow) {
         // Held upright: title and undo share the first line, the tools get a line of their own.
-        // Neither side is ever squeezed: on a small phone (or with large text) where both don't
-        // fit, the corner (eye, â‹¯) takes a line of its own, still on the right. Squeezed, it lost â‹¯.
+        // On a narrow phone (360 dp, say) the buttons are a little smaller and closer together so
+        // it all still fits on one line. Only if even that doesn't fit does the corner (eye, ⋯) go
+        // on a line of its own, still on the right; squeezed, it lost ⋯.
+        androidx.compose.runtime.CompositionLocalProvider(com.tali.notes.ui.components.LocalToolButtonSize provides if (tightTop) 40.dp else 44.dp) {
         androidx.compose.ui.layout.Layout(content = { titlePill(); undoBar() }, modifier = Modifier.fillMaxWidth()) { parts, cons ->
-          val gap = 12.dp.roundToPx()
           val loose = cons.copy(minWidth = 0, minHeight = 0)
           val title = parts[0].measure(loose)
           val corner = parts[1].measure(loose)
-          if (title.width + gap + corner.width <= cons.maxWidth) {
+          // The corner starts with its own gap of empty room, which may sit under the title's
+          // edge, as it did in the plain row before: a phone where the two just fit keeps one line.
+          if (title.width + corner.width - pillGap.roundToPx() <= cons.maxWidth) {
             val h = maxOf(title.height, corner.height)
             layout(cons.maxWidth, h) {
               title.place(0, (h - title.height) / 2)
@@ -768,6 +775,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
               corner.place(cons.maxWidth - corner.width, title.height + below)
             }
           }
+        }
         }
 
         // A little more room between the two lines when the tablet is held upright.
@@ -1027,15 +1035,15 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
 }
 
 @Composable
-private fun TitlePill(onBack: () -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, quickOpen: @Composable () -> Unit) {
+private fun TitlePill(gap: Dp, onBack: () -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, quickOpen: @Composable () -> Unit) {
   // Back on a little cloud of its own, quick open on another, then undo and redo.
   Row(verticalAlignment = Alignment.CenterVertically) {
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.LITTLE) {
       ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back_to_notebooks), onClick = onBack)
     }
-    Spacer(Modifier.width(10.dp))
+    Spacer(Modifier.width(gap))
     quickOpen()
-    Spacer(Modifier.width(10.dp))
+    Spacer(Modifier.width(gap))
     FloatingBar(Modifier.height(52.dp), crown = CloudCrown.SOFT_EDGE) {
       ToolButton(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.undo), enabled = canUndo, onClick = onUndo)
       ToolButton(Icons.AutoMirrored.Outlined.Redo, stringResource(R.string.redo), enabled = canRedo, onClick = onRedo)
@@ -1821,7 +1829,7 @@ private fun ExportDialog(paged: Boolean, hasPdfPages: Boolean, onDismiss: () -> 
     Spacer(Modifier.height(24.dp))
     ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
       QuietButton(stringResource(R.string.cancel), onClick = onDismiss)
-      QuietButton(stringResource(R.string.save_to_files)) { onExport(layout, choice.quality, false) }
+      QuietButton(stringResource(R.string.save)) { onExport(layout, choice.quality, false) }
       PrimaryButton(stringResource(R.string.share)) { onExport(layout, choice.quality, true) }
     }
   }
