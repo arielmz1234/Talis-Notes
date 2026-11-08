@@ -272,12 +272,24 @@ data class EllipseShape(
     return copy(center = m.apply(center), rx = rx * s, ry = ry * s, rotation = m.mapAngle(rotation))
   }
 
-  // A circle's dots could only resize it (the resize chip does that); an ellipse's change its shape.
-  override fun handles() = if (round && !stretchable) emptyList() else listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
+  /** A circle from the Circle tool: one dot, on its edge, that sets the radius. */
+  val isCircle: Boolean
+    get() = round && !stretchable
+
+  // A circle has one radius dot (where [rotation] points); an ellipse's four dots change its shape.
+  override fun handles() = if (isCircle) listOf(point(0f)) else listOf(point(0f), point(PI.toFloat() / 2f), point(PI.toFloat()), point(1.5f * PI.toFloat()))
 
   override fun withHandle(index: Int, p: Pt): ShapeGeometry {
-    // A circle (from the Circle tool) stays a circle: any dot sets the radius.
-    if (round && !stretchable) return copy(rx = max(2f, p.dist(center)), ry = max(2f, p.dist(center)))
+    // A circle's dot sets the radius around its centre (which stays put) and goes round with the
+    // pen, settling level, upright or diagonal when close, so its radius line reads tidily.
+    if (isCircle) {
+      val r = max(2f, p.dist(center))
+      var a = (p - center).angle()
+      val step = (PI / 4).toFloat()
+      val tidy = Math.round(a / step) * step
+      if (abs(a - tidy) < 0.1f) a = tidy
+      return copy(rx = r, ry = r, rotation = a)
+    }
     // An ellipse's dot stretches it one way, snapping round into a circle when close.
     val local = (p - center).rotated(-rotation)
     return if (index % 2 == 0) {

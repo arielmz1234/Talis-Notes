@@ -1272,6 +1272,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     drawSnapGuides(canvas)
     drawMeasure(canvas)
     drawSquareHint(canvas)
+    drawRadiusHint(canvas)
     drawEraserCursor(canvas)
     drawLaser(canvas)
     drawLockCues(canvas)
@@ -1298,7 +1299,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     } ?: return
     val (a, b) = when {
       g is com.tali.notes.model.PolyShape && g.isSquare() -> g.points[0] to g.points[2]
-      g is com.tali.notes.model.EllipseShape && g.round && g.rx > 4f -> g.point((0.75f * PI).toFloat()) to g.point((1.75f * PI).toFloat())
+      // A circle's own dot shows its radius instead (drawRadiusHint).
+      g is com.tali.notes.model.EllipseShape && g.round && g.rx > 4f && !(mode == Mode.HANDLE_DRAG && g.isCircle) -> g.point((0.75f * PI).toFloat()) to g.point((1.75f * PI).toFloat())
       else -> return
     }
     val sa = camera.toScreen(a)
@@ -1309,6 +1311,35 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Round dots: tiny dashes with round caps.
     squareHintPaint.strokeWidth = 2.4f * density
     canvas.drawLine(sa.x, sa.y, sb.x, sb.y, squareHintPaint)
+  }
+
+  /**
+   * The radius as a dotted line from the centre, with the centre marked: on a picked-up circle (its
+   * dot is the radius's end), and while the middle dot of a part circle or arc changes its radius.
+   */
+  private fun drawRadiusHint(canvas: Canvas) {
+    if (isDraggingSelection()) return
+    val g = (if (mode == Mode.HANDLE_DRAG) liveEdit else if (mode == Mode.NONE) currentActiveShape() else null)?.geometry ?: return
+    val (c, end) =
+      when {
+        g is EllipseShape && g.isCircle -> g.center to g.point(0f)
+        mode == Mode.HANDLE_DRAG && handleIndex == 2 && g is SectorShape -> g.center to g.handles()[2]
+        mode == Mode.HANDLE_DRAG && handleIndex == 2 && g is ArcShape && !g.arrowEnd -> g.center to g.handles().getOrNull(2)
+        else -> return
+      }
+    end ?: return
+    val sc = camera.toScreen(c)
+    val se = camera.toScreen(end)
+    if (sc.dist(se) < TINY_SHAPE_DP * density / 2) return
+    squareHintPaint.color = accentColor
+    squareHintPaint.alpha = 200
+    squareHintPaint.pathEffect = DashPathEffect(floatArrayOf(0.1f, 6f * density), 0f)
+    squareHintPaint.strokeWidth = 2.4f * density
+    canvas.drawLine(sc.x, sc.y, se.x, se.y, squareHintPaint)
+    squareHintPaint.pathEffect = null
+    squareHintPaint.style = Paint.Style.FILL
+    canvas.drawCircle(sc.x, sc.y, 3f * density, squareHintPaint)
+    squareHintPaint.style = Paint.Style.STROKE
   }
 
   private fun drawLasso(canvas: Canvas) {
@@ -1635,7 +1666,21 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       is LineShape -> measureLine(canvas, g.a, g.b)
       // A distributed load reads like its line: how steep it is and how long.
       is LoadShape -> measureLine(canvas, g.a, g.b)
-      is ArcShape -> if (!g.arrowEnd) drawBubble(canvas, "${g.degrees}°", camera.toScreen(g.center))
+      is ArcShape -> if (!g.arrowEnd) drawBubble(canvas, "${g.degrees}°  ·  r ${cm(g.radius)} cm", camera.toScreen(g.center))
+      is EllipseShape -> if (g.isCircle) {
+        // The diameter is twice the radius as shown, so the two always agree (3.0 and 6.0, not 6.1).
+        val r = cm(g.rx)
+        val label = "r $r cm  ·  ⌀ ${String.format(java.util.Locale.US, "%.1f", r.toFloat() * 2f)} cm"
+        // Beside the middle of its radius line, on the upper side (inside the circle, clear of the
+        // pen at the edge and of the menu and chips outside it).
+        val c = camera.toScreen(g.center)
+        val e = camera.toScreen(g.point(0f))
+        val dir = (e - c).normalized()
+        var n = Pt(-dir.y, dir.x)
+        if (n.y > 0f || (n.y == 0f && n.x > 0f)) n = n * -1f
+        val off = abs(n.x) * bubbleWidth(label) / 2 + abs(n.y) * BUBBLE_H * density / 2 + 8f * density
+        drawBubble(canvas, label, (c.x + e.x) / 2 + n.x * off, (c.y + e.y) / 2 + n.y * off)
+      }
       is TriangleShape -> {
         // Each corner's angle, just inside the corner, while it's being drawn or reshaped.
         if (mode != Mode.HANDLE_DRAG && mode != Mode.SHAPE_CREATE && mode != Mode.LIVE_SHAPE) return
@@ -1649,7 +1694,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
       }
       is SectorShape -> {
-        val label = "${Math.round(g.fraction * 100)}%  ·  ${Math.round(g.fraction * 360)}°"
+        val label = "${Math.round(g.fraction * 100)}%  ·  ${Math.round(g.fraction * 360)}°  ·  r ${cm(g.radius)} cm"
         val c = camera.toScreen(g.center)
         if (g.fraction > 0.6f) drawBubble(canvas, label, c)
         else {
@@ -1698,6 +1743,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       drawBubble(canvas, label, mid.x + n.x * off, mid.y + n.y * off)
     }
   }
+
+  /** [world] units as centimetres at print size (exported PDFs print a unit at 72/160 pt). */
+  private fun cm(world: Float) = String.format(java.util.Locale.US, "%.1f", world * 2.54f / 160f)
 
   private fun bubbleWidth(label: String): Float {
     angleText.textSize = 12.5f * density

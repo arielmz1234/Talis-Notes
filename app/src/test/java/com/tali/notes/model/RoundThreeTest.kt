@@ -44,8 +44,16 @@ class RoundThreeTest {
   }
 
   @Test
-  fun circlesAndHandDrawnLinesHaveNoDots() {
-    assertTrue(EllipseShape(Pt(0f, 0f), 40f, 40f).handles().isEmpty())
+  fun aCircleHasOneRadiusDotAndHandDrawnLinesNone() {
+    val circle = EllipseShape(Pt(0f, 0f), 40f, 40f)
+    assertEquals(1, circle.handles().size)
+    // Its dot sets the radius around the same centre and goes round with the pen.
+    val bigger = circle.withHandle(0, Pt(0f, 70f)) as EllipseShape
+    assertEquals(Pt(0f, 0f), bigger.center)
+    assertEquals(70f, bigger.rx, 0.01f)
+    assertEquals(70f, bigger.ry, 0.01f)
+    assertEquals(Pt(0f, 70f).x, bigger.handles()[0].x, 0.01f)
+    assertEquals(Pt(0f, 70f).y, bigger.handles()[0].y, 0.01f)
     assertEquals(4, EllipseShape(Pt(0f, 0f), 60f, 40f).handles().size)
     assertTrue(PolyShape(listOf(Pt(0f, 0f), Pt(10f, 5f), Pt(20f, 0f)), closed = false, smooth = true).handles().isEmpty())
   }
