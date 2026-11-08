@@ -449,7 +449,7 @@ data class SectorShape(val center: Pt, val radius: Float, val start: Float, val 
  */
 @Serializable
 @SerialName("triangle")
-data class TriangleShape(val a: Pt, val b: Pt, val c: Pt) : ShapeGeometry {
+data class TriangleShape(val a: Pt, val b: Pt, val c: Pt, val turn: Float = 0f) : ShapeGeometry {
   val points: List<Pt>
     get() = listOf(a, b, c)
 
@@ -459,7 +459,8 @@ data class TriangleShape(val a: Pt, val b: Pt, val c: Pt) : ShapeGeometry {
 
   override fun paths(penSize: Float) = listOf(listOf(a, b, c, a))
 
-  override fun transformed(m: Affine) = TriangleShape(m.apply(a), m.apply(b), m.apply(c))
+  // [turn] is how far it's been turned on the page (for the angle shown while turning it).
+  override fun transformed(m: Affine) = TriangleShape(m.apply(a), m.apply(b), m.apply(c), m.mapAngle(turn))
 
   override fun handles() = points
 
@@ -582,10 +583,11 @@ data class LoadShape(val a: Pt, val b: Pt, val depth: Float, val count: Int) : S
 /** Several parts that move and scale together, used for engineering symbols. */
 @Serializable
 @SerialName("group")
-data class GroupShape(val parts: List<ShapeGeometry>) : ShapeGeometry {
+data class GroupShape(val parts: List<ShapeGeometry>, val turn: Float = 0f) : ShapeGeometry {
   override fun paths(penSize: Float) = parts.flatMap { it.paths(penSize) }
 
-  override fun transformed(m: Affine) = copy(parts = parts.map { it.transformed(m) })
+  // [turn] is how far it's been turned on the page (for the angle shown while turning it).
+  override fun transformed(m: Affine) = copy(parts = parts.map { it.transformed(m) }, turn = m.mapAngle(turn))
 
   private fun box() = Rect.around(parts.flatMap { it.paths(1f).flatten() })!!
 

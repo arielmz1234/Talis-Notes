@@ -47,6 +47,26 @@ class TileCache(private val renderer: ItemRenderer) {
     return any
   }
 
+  /**
+   * Once the view settles, tiles in view recorded at a noticeably different zoom are recorded
+   * again. Ink sizes a stroke's soft edge by the zoom it was recorded at, so zoomed in it looked
+   * blurry until she zoomed or scrolled further, and zoomed out a thin line could drop out.
+   * Returns whether any were.
+   */
+  fun refreshForScale(visible: Rect, scale: Float): Boolean {
+    var any = false
+    forEachKey(visible) { key ->
+      val t = tiles[key] ?: return@forEachKey
+      if (t.recordedScale == 0f || t.dirty) return@forEachKey
+      val ratio = scale / t.recordedScale
+      if (ratio > 1.1f || ratio < 0.9f) {
+        t.dirty = true
+        any = true
+      }
+    }
+    return any
+  }
+
   /** Draws visible tiles. The canvas must already be transformed to world coordinates. */
   fun draw(canvas: Canvas, visible: Rect, scale: Float, doc: Document) {
     frame++

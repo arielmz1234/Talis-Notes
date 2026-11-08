@@ -61,6 +61,11 @@ import com.tali.notes.model.SectorShape
 import com.tali.notes.model.Tool
 import com.tali.notes.model.TextItem
 import com.tali.notes.model.TriangleShape
+import com.tali.notes.model.LoadShape
+import com.tali.notes.model.PolyShape
+import com.tali.notes.model.EllipseShape
+import com.tali.notes.model.GroupShape
+import com.tali.notes.model.CurveShape
 import kotlin.math.hypot
 import kotlin.math.floor
 import kotlin.math.max
@@ -177,7 +182,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     tiles.invalidate(r)
     invalidate()
   }
-  private val sharpen = Runnable { refreshSharp() }
+  private val sharpen = Runnable {
+    refreshSharp()
+    if (doc != null && width > 0 && tiles.refreshForScale(visibleWorld(), camera.scale)) invalidate()
+  }
 
   init {
     itemRenderer.sharp = { sharpPdf.patches }
@@ -1595,7 +1603,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     lassoPath.close()
     canvas.drawPath(lassoPath, selectionPaint)
     // Screen y points down, so flip the sign: counter-clockwise reads as positive, as in maths class.
-    val degrees = Math.round(-Math.toDegrees(rotateAngle.toDouble())).toInt().let { ((it + 540) % 360) - 180 }
+    // Measured from the page, not from where this turn began: turning it again carries on from its angle.
+    val line = selection.size == 1 && ((selection[0] as? ShapeItem)?.geometry is LineShape)
+    val degrees = Math.round(-Math.toDegrees((rotateBase + rotateAngle).toDouble())).toInt().let { if (line) Math.floorMod(it, 180) else Math.floorMod(it + 180, 360) - 180 }
     val label = "$degrees\u00B0"
     val center = camera.toScreen(rotatePivot)
     angleText.textSize = 13f * density
@@ -1622,40 +1632,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         else -> currentActiveShape()?.geometry
       } ?: return
     when (g) {
-      is LineShape -> {
-        val v = g.b - g.a
-        if (v.length() < 1f) return
-        var degrees = Math.round(-Math.toDegrees(kotlin.math.atan2(v.y, v.x).toDouble())).toInt()
-        if (degrees < 0) degrees += 180
-        if (degrees == 180) degrees = 0
-        // World units are dp; exported PDFs print them at 72/160 pt each.
-        val cm = g.length * (72f / 160f) / 72f * 2.54f
-        val label = "$degrees°  ·  ${String.format(java.util.Locale.US, "%.1f", cm)} cm"
-        val startMoving = mode == Mode.HANDLE_DRAG && handleIndex == 0
-        val moving = if (startMoving) g.a else g.b
-        val fixed = if (startMoving) g.b else g.a
-        val a = camera.toScreen(fixed)
-        val m = camera.toScreen(moving)
-        val dir = (m - a).normalized()
-        val w = bubbleWidth(label)
-        val idle = if (mode == Mode.NONE) selectionBounds?.let { screenRect(it, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) } } else null
-        if (idle != null) {
-          // Just showing its dots: the menu is above and the chips and rotate handle below, so it
-          // sits under all of them, in the middle.
-          drawBubble(canvas, label, idle.centerX(), idle.bottom + 64f * density)
-        } else if (a.dist(m) < w + 90f * density) {
-          // Short: just past the end that isn't moving, on the far side from the pen.
-          val reach = abs(dir.x) * w / 2 + abs(dir.y) * BUBBLE_H * density / 2 + 14f * density
-          drawBubble(canvas, label, a.x - dir.x * reach, a.y - dir.y * reach)
-        } else {
-          // Beside the middle of the line, on its upper side.
-          var n = Pt(-dir.y, dir.x)
-          if (n.y > 0f || (n.y == 0f && n.x > 0f)) n = n * -1f
-          val mid = Pt((a.x + m.x) / 2, (a.y + m.y) / 2)
-          val off = abs(n.x) * w / 2 + abs(n.y) * BUBBLE_H * density / 2 + 10f * density
-          drawBubble(canvas, label, mid.x + n.x * off, mid.y + n.y * off)
-        }
-      }
+      is LineShape -> measureLine(canvas, g.a, g.b)
+      // A distributed load reads like its line: how steep it is and how long.
+      is LoadShape -> measureLine(canvas, g.a, g.b)
       is ArcShape -> if (!g.arrowEnd) drawBubble(canvas, "${g.degrees}°", camera.toScreen(g.center))
       is TriangleShape -> {
         // Each corner's angle, just inside the corner, while it's being drawn or reshaped.
@@ -1681,6 +1660,42 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         }
       }
       else -> Unit
+    }
+  }
+
+  /** A line's (or a load's) badge: its angle from level and its length at print size. */
+  private fun measureLine(canvas: Canvas, ga: Pt, gb: Pt) {
+    val v = gb - ga
+    if (v.length() < 1f) return
+    var degrees = Math.round(-Math.toDegrees(kotlin.math.atan2(v.y, v.x).toDouble())).toInt()
+    if (degrees < 0) degrees += 180
+    if (degrees == 180) degrees = 0
+    // World units are dp; exported PDFs print them at 72/160 pt each.
+    val cm = ga.dist(gb) * (72f / 160f) / 72f * 2.54f
+    val label = "$degrees°  ·  ${String.format(java.util.Locale.US, "%.1f", cm)} cm"
+    val startMoving = mode == Mode.HANDLE_DRAG && handleIndex == 0
+    val moving = if (startMoving) ga else gb
+    val fixed = if (startMoving) gb else ga
+    val a = camera.toScreen(fixed)
+    val m = camera.toScreen(moving)
+    val dir = (m - a).normalized()
+    val w = bubbleWidth(label)
+    val idle = if (mode == Mode.NONE) selectionBounds?.let { screenRect(it, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) } } else null
+    if (idle != null) {
+      // Just showing its dots: the menu is above and the chips and rotate handle below, so it
+      // sits under all of them, in the middle.
+      drawBubble(canvas, label, idle.centerX(), idle.bottom + 64f * density)
+    } else if (a.dist(m) < w + 90f * density) {
+      // Short: just past the end that isn't moving, on the far side from the pen.
+      val reach = abs(dir.x) * w / 2 + abs(dir.y) * BUBBLE_H * density / 2 + 14f * density
+      drawBubble(canvas, label, a.x - dir.x * reach, a.y - dir.y * reach)
+    } else {
+      // Beside the middle of the line, on its upper side.
+      var n = Pt(-dir.y, dir.x)
+      if (n.y > 0f || (n.y == 0f && n.x > 0f)) n = n * -1f
+      val mid = Pt((a.x + m.x) / 2, (a.y + m.y) / 2)
+      val off = abs(n.x) * w / 2 + abs(n.y) * BUBBLE_H * density / 2 + 10f * density
+      drawBubble(canvas, label, mid.x + n.x * off, mid.y + n.y * off)
     }
   }
 
@@ -2157,6 +2172,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         dragStart = p
         rotatePivot = sb.center
         rotateAngle = 0f
+        rotateBase = selectionFacing()
         dragTransform = Affine.IDENTITY
         tiles.hidden = selection.map { it.id }.toSet()
         mode = Mode.ROTATE_SELECTION
@@ -2346,11 +2362,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       Mode.ROTATE_SELECTION -> {
         val start = (dragStart - rotatePivot).angle()
         var angle = (world(e, idx) - rotatePivot).angle() - start
-        // Snap to 45° steps when close (she asked for 45° rather than finer steps). A single line
-        // snaps by its own direction, so it lands level, upright or diagonal however it started.
+        // Snap to 45° steps when close (she asked for 45° rather than finer steps), by the way it
+        // faces on the page, so it lands level, upright or diagonal however it started.
         val step = (PI / 4).toFloat()
-        val line = ((selection.singleOrNull() as? ShapeItem)?.geometry as? LineShape)
-        val base = line?.let { (it.b - it.a).angle() } ?: 0f
+        val base = rotateBase
         val snapped = Math.round((base + angle) / step) * step - base
         if (abs(angle - snapped) < SNAP_ROTATE_RAD) angle = snapped
         rotateAngle = angle
@@ -3702,12 +3717,40 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       publishSelection()
       return
     }
+    if (mode == Mode.ROTATE_SELECTION) selection.forEach { if (facing(it) == null) turnedBy[it.id] = (turnedBy[it.id] ?: 0f) + rotateAngle }
     var moved = selection.map { it.transformed(t) }
     // Pictures land back on a page (in the same undo step).
     pageNudge(moved)?.let { nudge -> moved = moved.map { it.transformed(nudge) } }
     d.commit(Change(selection, moved))
     setSelection(moved, menu = false)
     if (moved.size == 1 && moved[0] is ShapeItem) activeShapeId = moved[0].id
+  }
+
+  /** How far the selection faced from level when this turn began (radians, screen y down). */
+  private var rotateBase = 0f
+
+  /** How far things with no direction of their own (handwriting, arcs) were turned this session. */
+  private val turnedBy = HashMap<String, Float>()
+
+  /** Which way an item faces on the page (radians, screen y down), or null when it has no way of its own. */
+  private fun facing(item: CanvasItem): Float? =
+    when (val g = (item as? ShapeItem)?.geometry) {
+      is LineShape -> (g.b - g.a).angle()
+      // Level with its arrows hanging down is 0°.
+      is LoadShape -> (g.b - g.a).angle() + if (g.depth < 0f) PI.toFloat() else 0f
+      is PolyShape -> g.rotation
+      is EllipseShape -> g.rotation
+      is TriangleShape -> g.turn
+      is GroupShape -> g.turn
+      is com.tali.notes.model.ParamShape -> g.place.mapAngle(0f)
+      is CurveShape -> (g.points.last() - g.points.first()).angle()
+      else -> null
+    }
+
+  /** The angle the turning badge starts from: the biggest shape's own, else what this session turned it by. */
+  private fun selectionFacing(): Float {
+    val own = selection.filter { facing(it) != null }.maxByOrNull { it.bounds.width * it.bounds.height }
+    return own?.let { facing(it) } ?: selection.firstOrNull()?.let { turnedBy[it.id] } ?: 0f
   }
 
   /** The selection as one clean shape, for saving it to My shapes. */
