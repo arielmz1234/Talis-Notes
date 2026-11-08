@@ -3941,6 +3941,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (mirrored.size == 1 && mirrored[0] is ShapeItem) activeShapeId = mirrored[0].id
   }
 
+  /**
+   * Draws a rectangle round the selection with the pen in use (its colour, thickness and line
+   * style), a little clear of it, in one undo step. The rectangle joins the selection, so the two
+   * move on together.
+   */
+  fun frameSelection() {
+    val d = doc ?: return
+    val b = selectionBounds ?: return
+    val slot = settings.activeSlot
+    val gap = FRAME_GAP + slot.size / 2f
+    val box = PolyShape(listOf(Pt(b.left - gap, b.top - gap), Pt(b.right + gap, b.top - gap), Pt(b.right + gap, b.bottom + gap), Pt(b.left - gap, b.bottom + gap)), true)
+    val frame = ShapeItem(d.newId(), d.nextZ(), slot.type, slot.color, slot.size, box, line = slot.lineStyle)
+    val kept = selection.mapNotNull { d[it.id] }
+    d.commit(Change(emptyList(), listOf(frame)))
+    setSelection(kept + frame)
+  }
+
   fun duplicateSelection() {
     val d = doc ?: return
     val offset = Affine.translate(24f, 24f)
@@ -5845,6 +5862,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val MULTI_TAP_MS = 300L
     /** How long the view rests before PDF pages are drawn sharp for it. */
     private const val SHARP_WAIT_MS = 140L
+
+    /** How far a rectangle drawn round a selection stands clear of it (world units, ~2 mm). */
+    private const val FRAME_GAP = 12f
   }
 }
 

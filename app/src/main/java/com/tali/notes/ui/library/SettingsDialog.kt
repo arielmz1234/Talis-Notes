@@ -75,7 +75,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 
 /** The app's settings, from the library's sidebar: light or dark, and the cloudy or minimal look. */
 @Composable
-fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onColors: (com.tali.notes.theme.ColorTheme) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onTour: () -> Unit, onDismiss: () -> Unit) {
+fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onColors: (com.tali.notes.theme.ColorTheme) -> Unit, onMinimal: (Boolean) -> Unit, onPdfsToLibrary: (Boolean) -> Unit, onTour: () -> Unit, onFeatures: () -> Unit, onDismiss: () -> Unit) {
   val c = Tali.colors
   DialogCard(onDismiss, width = 600) {
     Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, color = c.ink)
@@ -147,6 +147,9 @@ fun SettingsDialog(settings: AppSettings, onTheme: (ThemeMode) -> Unit, onColors
     ButtonRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
       // The walk through the app, again.
       com.tali.notes.ui.components.QuietButton(stringResource(R.string.take_the_tour), onClick = onTour)
+      Spacer(Modifier.width(8.dp))
+      // The smaller things the app can do, and how to use or turn them on.
+      com.tali.notes.ui.components.QuietButton(stringResource(R.string.tips_and_tricks), onClick = onFeatures)
       Spacer(Modifier.weight(1f))
       PrimaryButton(stringResource(R.string.done), onClick = onDismiss)
     }

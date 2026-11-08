@@ -66,7 +66,7 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /** The tour's steps: a title, a few lines, and the little moving picture that shows it. */
-private class TourStep(val title: Int, val body: Int, val picture: @Composable (Modifier) -> Unit)
+internal class TourStep(val title: Int, val body: Int, val picture: @Composable (Modifier) -> Unit)
 
 private val steps =
   listOf(
@@ -86,7 +86,15 @@ private val steps =
  * backups). Skip is there at every step; Back and Next move along, and the dots show how far.
  */
 @Composable
-fun TourCard(onDone: () -> Unit) {
+fun TourCard(onDone: () -> Unit) = StepsCard(steps, onDone, finish = R.string.tour_start_writing)
+
+/**
+ * A card that walks through [steps] one at a time, like the tour: a counter (after [heading], if
+ * any) and Skip along the top, the step's picture beside its words, then dots, Back and Next;
+ * the last step's button says [finish].
+ */
+@Composable
+internal fun StepsCard(steps: List<TourStep>, onDone: () -> Unit, finish: Int, heading: String? = null) {
   val c = Tali.colors
   var at by rememberSaveable { mutableIntStateOf(0) }
   val last = at == steps.lastIndex
@@ -94,7 +102,8 @@ fun TourCard(onDone: () -> Unit) {
   DialogCard(onDismiss = onDone, width = 760) {
     // The step counter and Skip, along the top.
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      Text(stringResource(R.string.tour_step_n_of_n, at + 1, steps.size), style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.weight(1f))
+      val counter = stringResource(R.string.tour_step_n_of_n, at + 1, steps.size)
+      Text(if (heading != null) "$heading  ·  $counter" else counter, style = MaterialTheme.typography.labelMedium, color = c.inkFaint, modifier = Modifier.weight(1f))
       if (!last) Text(stringResource(R.string.tour_skip), style = MaterialTheme.typography.labelLarge, color = c.accent, modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onDone).padding(horizontal = 10.dp, vertical = 6.dp))
     }
     Spacer(Modifier.height(6.dp))
@@ -128,12 +137,12 @@ fun TourCard(onDone: () -> Unit) {
     }
     Spacer(Modifier.height(18.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      Dots(at, Modifier.weight(1f)) { at = it }
+      Dots(at, steps.size, Modifier.weight(1f)) { at = it }
       if (at > 0) {
         QuietButton(stringResource(R.string.back)) { at-- }
         Spacer(Modifier.width(8.dp))
       }
-      PrimaryButton(stringResource(if (last) R.string.tour_start_writing else R.string.tour_next)) { if (last) onDone() else at++ }
+      PrimaryButton(stringResource(if (last) finish else R.string.tour_next)) { if (last) onDone() else at++ }
     }
   }
 }
@@ -160,10 +169,10 @@ private fun PictureFrame(content: @Composable (Modifier) -> Unit) {
 
 /** One dot per step; the current one is a wider pill. Tapping a dot goes there. */
 @Composable
-private fun Dots(at: Int, modifier: Modifier, onPick: (Int) -> Unit) {
+private fun Dots(at: Int, count: Int, modifier: Modifier, onPick: (Int) -> Unit) {
   val c = Tali.colors
   Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-    steps.indices.forEach { i ->
+    (0 until count).forEach { i ->
       val w by animateDpAsState(if (i == at) 22.dp else 8.dp, tween(240, easing = EaseOutStrong), label = "dot")
       val tint by animateColorAsState(if (i == at) c.accent else c.line, tween(200), label = "dotTint")
       Box(Modifier.size(w, 8.dp).clip(CircleShape).background(tint).clickable { onPick(i) })
@@ -175,21 +184,21 @@ private fun Dots(at: Int, modifier: Modifier, onPick: (Int) -> Unit) {
 
 /** 0..1 over [ms], round and round. */
 @Composable
-private fun loop(ms: Int): Float {
+internal fun loop(ms: Int): Float {
   val t = rememberInfiniteTransition(label = "tourLoop")
   val v by t.animateFloat(0f, 1f, infiniteRepeatable(tween(ms, easing = LinearEasing), RepeatMode.Restart), label = "t")
   return v
 }
 
-private fun phase(t: Float, from: Float, to: Float) = ((t - from) / (to - from)).coerceIn(0f, 1f)
+internal fun phase(t: Float, from: Float, to: Float) = ((t - from) / (to - from)).coerceIn(0f, 1f)
 
-private fun ease(x: Float) = 1f - (1f - x) * (1f - x) * (1f - x)
+internal fun ease(x: Float) = 1f - (1f - x) * (1f - x) * (1f - x)
 
 /**
  * Joined-up "handwriting" from [x0] to [x1] on [baseline]: loops like cursive letters (a prolate
  * trochoid), smaller and taller by turns, with gaps between words.
  */
-private fun cursive(x0: Float, x1: Float, baseline: Float, height: Float, seed: Int = 0): List<Offset> {
+internal fun cursive(x0: Float, x1: Float, baseline: Float, height: Float, seed: Int = 0): List<Offset> {
   val step = height * 0.42f
   val loops = ((x1 - x0) / (step * 2f * PI.toFloat())).toInt().coerceAtLeast(2)
   val n = loops * 24
@@ -211,7 +220,7 @@ private fun cursive(x0: Float, x1: Float, baseline: Float, height: Float, seed: 
 }
 
 /** The first [part] of a polyline, as a path. */
-private fun partial(points: List<Offset>, part: Float): Path {
+internal fun partial(points: List<Offset>, part: Float): Path {
   val path = Path()
   if (points.isEmpty() || part <= 0f) return path
   var total = 0f
@@ -232,10 +241,10 @@ private fun partial(points: List<Offset>, part: Float): Path {
   return path
 }
 
-private fun DrawScope.ink(path: Path, color: Color, width: Float = 3.dp.toPx()) =
+internal fun DrawScope.ink(path: Path, color: Color, width: Float = 3.dp.toPx()) =
   drawPath(path, color, style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
 
-private fun DrawScope.ruledPage(c: com.tali.notes.theme.TaliColors) {
+internal fun DrawScope.ruledPage(c: com.tali.notes.theme.TaliColors) {
   val gap = 26.dp.toPx()
   var y = gap
   while (y < size.height) {

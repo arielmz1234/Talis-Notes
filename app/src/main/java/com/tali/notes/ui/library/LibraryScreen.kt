@@ -576,9 +576,14 @@ fun LibraryScreen(onOpen: (String) -> Unit) {
     }
   })
   if (tour) TourCard(onDone = { tour = false })
+  var features by remember { mutableStateOf(false) }
+  if (features) FeaturesCard(onDone = { features = false })
   if (showSettings) SettingsDialog(settings, onTheme = vm::setThemeMode, onColors = vm::setColorTheme, onMinimal = vm::setMinimal, onPdfsToLibrary = { on -> app.settings.update { it.copy(pdfsToLibrary = on) } }, onTour = {
     showSettings = false
     tour = true
+  }, onFeatures = {
+    showSettings = false
+    features = true
   }, onDismiss = { showSettings = false })
   trashAction?.let { nb ->
     DialogCard(onDismiss = { trashAction = null }, width = 480, dim = false) {

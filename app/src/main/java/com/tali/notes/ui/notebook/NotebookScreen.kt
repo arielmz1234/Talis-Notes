@@ -179,6 +179,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Crop
+import androidx.compose.material.icons.outlined.CropSquare
 
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.animation.animateColorAsState
@@ -870,6 +871,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
           colors = settings.savedColors,
           onDelete = { holder.view?.runSafely { deleteSelection() } },
           onDuplicate = { holder.view?.runSafely { duplicateSelection() } },
+          onFrame = { holder.view?.runSafely { frameSelection() } },
           onCopy = { holder.view?.runSafely { copySelection() } },
           onCut = { holder.view?.runSafely { cutSelection() } },
           onColor = { col -> holder.view?.runSafely { recolorSelection(col) } },
@@ -1602,7 +1604,7 @@ private fun PasteBubble(offer: com.tali.notes.canvas.PasteOffer, onDismiss: () -
 }
 
 @Composable
-internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit, onThicknessLive: (Float) -> Unit = {}, onCrop: () -> Unit = {}) {
+internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int>, onDelete: () -> Unit, onDuplicate: () -> Unit, onFrame: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onColor: (Int) -> Unit, onRestyle: (Float?, LineStyle?) -> Unit, onSaveShape: () -> Unit, onEditText: (String) -> Unit, onArrange: (toFront: Boolean) -> Unit, onLock: () -> Unit, onMirror: (horizontal: Boolean) -> Unit, onThicknessLive: (Float) -> Unit = {}, onCrop: () -> Unit = {}) {
   val c = Tali.colors
   val density = LocalDensity.current
   // Folded: just the everyday actions. ⋯ opens the bigger card with style and everything else.
@@ -1650,6 +1652,8 @@ internal fun SelectionMenu(sel: SelectionInfo, narrow: Boolean, colors: List<Int
           ToolButton(Icons.Outlined.ContentCopy, stringResource(R.string.copy_hold_anywhere_to_paste_it), onClick = onCopy)
           ToolButton(Icons.Outlined.ContentCut, stringResource(R.string.cut_hold_anywhere_to_paste_it), onClick = onCut)
           ToolButton(Icons.Outlined.LibraryAdd, stringResource(R.string.duplicate), onClick = onDuplicate)
+          // A rectangle round it, drawn with the pen in use.
+          ToolButton(Icons.Outlined.CropSquare, stringResource(R.string.draw_a_box_around_it), onClick = onFrame)
           ToolButton(Icons.Outlined.DeleteOutline, stringResource(R.string.delete), onClick = onDelete)
           Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(24.dp).background(c.line))
           // Like the toolbar's chevron: > opens the rest to its right, and turns round into < to fold them away.

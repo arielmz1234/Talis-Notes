@@ -39,7 +39,7 @@ class SelectionMenuShotTest {
     rule.setContent {
       TaliTheme(darkTheme = dark) {
         Box(Modifier.testTag("stage").size(w.dp, h.dp).background(Tali.colors.paper)) {
-          SelectionMenu(sel, narrow = w < 900, colors = AppSettings().savedColors, onDelete = {}, onDuplicate = {}, onCopy = {}, onCut = {}, onColor = {}, onRestyle = { _, _ -> }, onSaveShape = {}, onEditText = {}, onArrange = {}, onLock = {}, onMirror = {})
+          SelectionMenu(sel, narrow = w < 900, colors = AppSettings().savedColors, onDelete = {}, onDuplicate = {}, onFrame = {}, onCopy = {}, onCut = {}, onColor = {}, onRestyle = { _, _ -> }, onSaveShape = {}, onEditText = {}, onArrange = {}, onLock = {}, onMirror = {})
         }
       }
     }
