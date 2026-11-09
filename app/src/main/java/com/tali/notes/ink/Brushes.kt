@@ -63,7 +63,15 @@ object Brushes {
   val textureStore: TextureBitmapStore
     get() = textures
 
-  fun renderer(): CanvasStrokeRenderer = CanvasStrokeRenderer.create(textures)
+  /**
+   * Android 14 was the first with the Mesh drawing Ink uses by default, and on it (a Galaxy Tab
+   * S6 Lite 2022) the app died in native drawing code again and again (writing, erasing and
+   * writing quickly; duplicating and moving) and thin lines went missing when zoomed out. Later
+   * Android versions draw meshes fine, so only Android 14 draws strokes as plain paths.
+   */
+  fun renderer(): CanvasStrokeRenderer = CanvasStrokeRenderer.create(forcePathRendering = MESH_UNSAFE, textureStore = textures)
+
+  private val MESH_UNSAFE = android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE
 
   @OptIn(ExperimentalInkCustomBrushApi::class)
   private val calligraphy: BrushFamily by lazy {

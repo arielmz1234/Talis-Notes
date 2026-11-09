@@ -79,6 +79,7 @@ object CrashLog {
       val main = text.indexOf("\"main\"").takeIf { it >= 0 } ?: 0
       text.substring(main).take(6000)
     } else {
+      runCatching { Tombstone.describe(bytes) }.getOrNull()?.let { return it }
       // A tombstone is a protobuf: its words (the abort message, libraries, function names) are
       // plain text inside it.
       val words = ArrayList<String>()
