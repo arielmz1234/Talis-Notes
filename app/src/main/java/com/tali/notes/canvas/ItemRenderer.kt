@@ -100,11 +100,27 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
     }
   }
 
+  /**
+   * Strokes thinner than [THIN_PX] on screen are drawn as plain paths. Ink's mesh drawing can
+   * leave out a line under a pixel wide altogether on some tablets' graphics chips (Tali's Tab S9
+   * FE at about 40% zoom: the sides of rectangles and parts of drawings vanished, while the same
+   * zoom showed them on the emulator); a path is anti-aliased by Android itself, so a thin line
+   * always shows, just fainter.
+   */
+  private val thinStrokes by lazy { CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = com.tali.notes.ink.Brushes.textureStore) }
+  private val scaleOf = FloatArray(9)
+
+  private fun drawStroke(canvas: Canvas, stroke: androidx.ink.strokes.Stroke, worldToScreen: Matrix) {
+    worldToScreen.getValues(scaleOf)
+    val scale = kotlin.math.hypot(scaleOf[Matrix.MSCALE_X], scaleOf[Matrix.MSKEW_Y])
+    (if (stroke.brush.size * scale < THIN_PX) thinStrokes else strokes).draw(canvas, stroke, worldToScreen)
+  }
+
   private fun drawItem(canvas: Canvas, item: CanvasItem, worldToScreen: Matrix) {
     when (item) {
       // Shown by the notebook as a button beside the page, never drawn on it (or in a PDF).
       is AudioItem -> Unit
-      is InkItem -> strokes.draw(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
+      is InkItem -> drawStroke(canvas, if (dark) item.darkStroke else item.stroke, worldToScreen)
       is ShapeItem -> {
         // Its fill first, under the outline, in exactly the colour she chose (on dark paper too).
         item.fill?.let { f ->
@@ -118,7 +134,7 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
             canvas.drawPath(fillPath, fillPaint)
           }
         }
-        (if (dark) item.darkStrokes else item.strokes).forEach { strokes.draw(canvas, it, worldToScreen) }
+        (if (dark) item.darkStrokes else item.strokes).forEach { drawStroke(canvas, it, worldToScreen) }
       }
       is TextItem -> {
         canvas.save()
@@ -156,3 +172,6 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
     }
   }
 }
+
+/** Below this width on screen (pixels) a stroke is drawn as a path, not a mesh (see ItemRenderer.drawStroke). */
+private const val THIN_PX = 2f
