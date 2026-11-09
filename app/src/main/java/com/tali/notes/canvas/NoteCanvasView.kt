@@ -998,10 +998,30 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       any = true
     }
     if (any) {
-      hideInkLayer()
       invalidate()
+      hideInkLayerAfterDraw()
     }
   }
+
+  /**
+   * Ink's layer is front-buffered: clearing it shows at once, while the page drawn here reaches
+   * the screen a frame or two later. Cleared straight away, strokes just put into the page
+   * vanished for those frames (her video: write quickly, press the eraser, the last strokes
+   * blink out and back). So it's cleared once the frame holding them has gone to the screen,
+   * plus one more frame; meanwhile both show the same strokes in the same place.
+   */
+  private fun hideInkLayerAfterDraw() {
+    val gen = ++hideGen
+    viewTreeObserver.registerFrameCommitCallback {
+      postOnAnimation {
+        // A new stroke started meanwhile sets its own mask; leave Ink's layer to it.
+        if (gen == hideGen && mode != Mode.INK && strokeId == null) hideInkLayer()
+      }
+    }
+    invalidate()
+  }
+
+  private var hideGen = 0
 
   /** On dark paper the live stroke used the light version of the colour: the stroke in its real one. */
   private fun realColoured(id: InProgressStrokeId, pen: PenType, s: Stroke): Stroke {
