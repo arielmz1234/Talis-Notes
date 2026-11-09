@@ -17,8 +17,23 @@ class MainActivity : ComponentActivity() {
   // Before Android 13, the language chosen in Settings is applied here (see AppLanguage).
   override fun attachBaseContext(newBase: android.content.Context) = super.attachBaseContext(AppLanguage.wrap(newBase))
 
+  override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+    super.onConfigurationChanged(newConfig)
+    CrashLog.desktop = inDesktopMode(newConfig)
+  }
+
+  /** Samsung DeX (its own Configuration fields), or a desktop-style window elsewhere. */
+  private fun inDesktopMode(c: android.content.res.Configuration): Boolean {
+    val dex = runCatching {
+      val cls = c.javaClass
+      cls.getField("semDesktopModeEnabled").getInt(c) == cls.getField("SEM_DESKTOP_MODE_ENABLED").getInt(null)
+    }.getOrDefault(false)
+    return dex || runCatching { resources.configuration.toString().contains("mWindowingMode=freeform") }.getOrDefault(false)
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    CrashLog.desktop = inDesktopMode(resources.configuration)
     enableEdgeToEdge()
     // Opened with a PDF, picture or backup (not again when the screen turns).
     if (savedInstanceState == null) Incoming.receive(this, intent)

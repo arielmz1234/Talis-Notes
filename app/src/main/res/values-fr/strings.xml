@@ -821,10 +821,6 @@
     <string name="feat_pages_body">Touchez le numéro de page en bas pour voir toutes les pages. Maintenez une page et faites-la glisser pour la déplacer, ou touchez Sélectionner pour en dupliquer ou supprimer plusieurs à la fois.</string>
     <string name="feat_quick_title">Passer d’un cahier à l’autre</string>
     <string name="feat_quick_body">Le bouton à la petite horloge, à côté de Retour, liste vos cahiers récents. Un toucher pour changer, et Retour mène toujours à la bibliothèque.</string>
-    <string name="feat_crop_title">Rogner les images</string>
-    <string name="feat_crop_body">Prenez une image et touchez Rogner, puis faites glisser ses coins et ses côtés. Rien n’est perdu, vous pouvez l’élargir à nouveau plus tard.</string>
-    <string name="feat_paper_title">Un papier à votre goût</string>
-    <string name="feat_paper_body">Choisissez lignes, quadrillage, points, Cornell et plus dans le menu ⋯. Touchez le papier utilisé pour changer l’épaisseur et les couleurs de ses lignes, ou créez votre propre papier, même à partir d’une image.</string>
     <string name="feat_room_title">Plus de place pour écrire</string>
     <string name="feat_room_body">L’œil masque les barres d’outils. Dans le menu ⋯, Plein écran masque aussi les barres de la tablette, et Écrire entre les pages laisse un trait passer d’une page à la suivante.</string>
     <string name="feat_star_title">Mettre vos cahiers en favoris</string>

@@ -11,6 +11,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.RectF
+import android.os.Build
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.InputDevice
@@ -646,6 +647,25 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val who = (0 until e.pointerCount).joinToString(",") { i -> "${e.getPointerId(i)}:${e.getToolType(i)}" }
     touchTrail.addLast("${e.eventTime % 100000} a=$a i=${e.actionIndex} p=[$who] b=${e.buttonState} f=${e.flags} m=$mode dp=$drawPointer")
     while (touchTrail.size > 16) touchTrail.removeFirst()
+    noteForExit(e)
+  }
+
+  /** The last few downs and ups, short, for what Android records if the app dies in native code. */
+  private val exitTrail = ArrayDeque<String>()
+
+  /**
+   * Android keeps up to 128 bytes an app hands it ([android.app.ActivityManager.setProcessStateSummary])
+   * with its record of how the app ended, which [com.tali.notes.CrashLog] reads on the next start.
+   * A crash inside Ink's native code leaves no Java trace, so this says what the pen was doing:
+   * action, tool types, button state, mode, and how many finished strokes were waiting for Ink.
+   */
+  private fun noteForExit(e: MotionEvent) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+    val tools = (0 until e.pointerCount).joinToString("") { e.getToolType(it).toString() }
+    exitTrail.addLast("${e.actionMasked}/$tools/${e.buttonState}/${mode.ordinal}/${shadows.size}")
+    while (exitTrail.size > 8) exitTrail.removeFirst()
+    val text = exitTrail.joinToString(" ").takeLast(120)
+    runCatching { context.getSystemService(android.app.ActivityManager::class.java)?.setProcessStateSummary(text.toByteArray()) }
   }
 
   private fun scheduleStallCheck() {
@@ -2441,13 +2461,19 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         val raw = world(e, idx) + handleGrab
         val bg = base.geometry
         // A dot dragged onto another shape's corner or edge locks on there (a line meeting a line).
-        val stuck = if (bg is LineShape) lineEndAt(if (handleIndex == 0) bg.b else bg.a, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snap)
+        // A line's or a distributed load's end: the other end, which it turns about.
+        val lineFixed = when {
+          bg is LineShape -> if (handleIndex == 0) bg.b else bg.a
+          bg is LoadShape && handleIndex < 2 -> if (handleIndex == 0) bg.b else bg.a
+          else -> null
+        }
+        val stuck = if (lineFixed != null) lineEndAt(lineFixed, raw).let { (p, on) -> p.takeIf { on } } else Snap.point(raw, snapTargets, snap)
         // Not touching anything: the dot lines up with other shapes' sides, middles and corners
         // (and with its own shape's other corners). A line's end on a tidy angle keeps the angle
         // and slides along the line to line up (above a box's side or middle, level with a corner).
         var aligned: Pair<Pt, List<SnapGuide>>? = null
         if (stuck == null) {
-          val fixed = if (handleIndex == 0) (bg as? LineShape)?.b else (bg as? LineShape)?.a
+          val fixed = lineFixed
           val tidy = fixed?.let { ShapeRecognizer.snappedLine(it, raw).b }?.takeIf { it.dist(raw) > 0.01f }
           aligned =
             if (fixed != null && tidy != null) Snap.alongAngle(fixed, tidy, snapTargets, snap).takeIf { it.second.isNotEmpty() }
@@ -2462,6 +2488,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           }
           at != null && bg is LineShape -> if (handleIndex == 0) bg.copy(a = at) else bg.copy(b = at)
           at != null -> bg.withHandle(handleIndex, at)
+          // A load's end not touching anything keeps to the same tidy angles as a line's.
+          lineFixed != null && bg is LoadShape -> bg.withHandle(handleIndex, ShapeRecognizer.snappedLine(lineFixed, raw).b)
           else -> bg.withHandle(handleIndex, raw)
         }
         // A line end being dragged snaps to the same tidy angles as a freshly drawn line.

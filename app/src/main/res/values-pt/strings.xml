@@ -821,10 +821,6 @@
     <string name="feat_pages_body">Toque no número da página embaixo para ver todas. Segure uma página e arraste para movê-la, ou toque em Selecionar para duplicar ou excluir várias de uma vez.</string>
     <string name="feat_quick_title">Pule entre cadernos</string>
     <string name="feat_quick_body">O botão com o reloginho, ao lado de Voltar, lista seus cadernos recentes. Um toque troca, e Voltar continua levando à biblioteca.</string>
-    <string name="feat_crop_title">Corte imagens</string>
-    <string name="feat_crop_body">Pegue uma imagem e toque em Cortar, depois arraste os cantos e lados. Nada se perde, então dá para ampliar de novo depois.</string>
-    <string name="feat_paper_title">Deixe o papel do seu jeito</string>
-    <string name="feat_paper_body">Escolha pautado, quadriculado, pontilhado, Cornell e mais no menu ⋯. Toque no papel em uso para mudar a espessura e as cores das linhas, ou crie seu próprio papel, até a partir de uma imagem.</string>
     <string name="feat_room_title">Mais espaço para escrever</string>
     <string name="feat_room_body">O olho esconde as barras de ferramentas. No menu ⋯, Tela cheia esconde também as barras do tablet, e Escrever entre as páginas deixa um traço seguir de uma página para a próxima.</string>
     <string name="feat_star_title">Marque seus cadernos</string>

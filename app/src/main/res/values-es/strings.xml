@@ -821,10 +821,6 @@
     <string name="feat_pages_body">Toca el número de página abajo para ver todas las páginas. Mantén una página y arrástrala para moverla, o toca Seleccionar para duplicar o eliminar varias a la vez.</string>
     <string name="feat_quick_title">Salta entre cuadernos</string>
     <string name="feat_quick_body">El botón con el relojito, junto a Atrás, muestra tus cuadernos recientes. Un toque cambia de cuaderno, y Atrás sigue llevándote a la biblioteca.</string>
-    <string name="feat_crop_title">Recorta imágenes</string>
-    <string name="feat_crop_body">Toma una imagen y toca Recortar, luego arrastra sus esquinas y lados. No se pierde nada, así que puedes volver a ampliarla después.</string>
-    <string name="feat_paper_title">Haz tuyo el papel</string>
-    <string name="feat_paper_body">Elige rayas, cuadrícula, puntos, Cornell y más en el menú ⋯. Toca el papel que usas para cambiar el grosor y los colores de sus líneas, o crea tu propio papel, incluso a partir de una imagen.</string>
     <string name="feat_room_title">Más espacio para escribir</string>
     <string name="feat_room_body">El ojo oculta las barras de herramientas. En el menú ⋯, Pantalla completa oculta también las barras de la tableta, y Escribir entre páginas deja que un trazo siga de una página a la siguiente.</string>
     <string name="feat_star_title">Destaca tus cuadernos</string>

@@ -43,8 +43,6 @@ private val features =
     TourStep(R.string.feat_laser_title, R.string.feat_laser_body) { LaserPicture(it) },
     TourStep(R.string.feat_pages_title, R.string.feat_pages_body) { PagesPicture(it) },
     TourStep(R.string.feat_quick_title, R.string.feat_quick_body) { QuickOpenPicture(it) },
-    TourStep(R.string.feat_crop_title, R.string.feat_crop_body) { CropPicture(it) },
-    TourStep(R.string.feat_paper_title, R.string.feat_paper_body) { PaperPicture(it) },
     TourStep(R.string.feat_room_title, R.string.feat_room_body) { RoomPicture(it) },
     TourStep(R.string.feat_star_title, R.string.feat_star_body) { StarNotebookPicture(it) },
     TourStep(R.string.feat_colours_title, R.string.feat_colours_body) { ColoursPicture(it) },
@@ -440,68 +438,6 @@ private fun QuickOpenPicture(modifier: Modifier) {
       drawLine(c.inkMuted.copy(alpha = k), Offset(w * 0.3f, y + h * 0.07f), Offset(w * (0.6f + 0.06f * (i % 2)), y + h * 0.07f), 3.dp.toPx(), cap = StrokeCap.Round)
     }
     if (t in 0.5f..0.62f) finger(Offset(w * 0.5f, h * 0.47f + h * 0.07f), c)
-  }
-}
-
-@Composable
-private fun CropPicture(modifier: Modifier) {
-  val c = Tali.colors
-  val t = loop(3800)
-  Canvas(modifier) {
-    val w = size.width; val h = size.height
-    val l = w * 0.1f; val r = w * 0.9f; val top = h * 0.12f; val b = h * 0.88f
-    // A photo: sky, sun and hills.
-    drawRect(Color(0xFFBFE0FA), Offset(l, top), Size(r - l, b - top))
-    drawCircle(Gold, h * 0.08f, Offset(w * 0.7f, h * 0.32f))
-    val hills = Path().apply { moveTo(l, b); lineTo(l, h * 0.62f); cubicTo(w * 0.35f, h * 0.45f, w * 0.5f, h * 0.75f, r, h * 0.55f); lineTo(r, b); close() }
-    drawPath(hills, Color(0xFF6FBF7F))
-    // The frame's corners come in; outside it shades.
-    val k = if (t < 0.55f) ease(phase(t, 0.1f, 0.5f)) else 1f - ease(phase(t, 0.7f, 0.95f))
-    val fl = l + (w * 0.18f) * k; val fr = r - (w * 0.1f) * k; val ft = top + (h * 0.12f) * k; val fb = b - (h * 0.14f) * k
-    val shade = Color.Black.copy(alpha = 0.38f)
-    drawRect(shade, Offset(l, top), Size(r - l, ft - top))
-    drawRect(shade, Offset(l, fb), Size(r - l, b - fb))
-    drawRect(shade, Offset(l, ft), Size(fl - l, fb - ft))
-    drawRect(shade, Offset(fr, ft), Size(r - fr, fb - ft))
-    drawRect(Color.White, Offset(fl, ft), Size(fr - fl, fb - ft), style = Stroke(1.5.dp.toPx()))
-    val m = 12.dp.toPx()
-    listOf(Offset(fl, ft) to Offset(1f, 1f), Offset(fr, ft) to Offset(-1f, 1f), Offset(fr, fb) to Offset(-1f, -1f), Offset(fl, fb) to Offset(1f, -1f)).forEach { (p, d) ->
-      drawLine(c.accent, p, Offset(p.x + d.x * m, p.y), 4.dp.toPx(), cap = StrokeCap.Round)
-      drawLine(c.accent, p, Offset(p.x, p.y + d.y * m), 4.dp.toPx(), cap = StrokeCap.Round)
-    }
-  }
-}
-
-@Composable
-private fun PaperPicture(modifier: Modifier) {
-  val c = Tali.colors
-  val t = loop(4500)
-  Canvas(modifier) {
-    val w = size.width; val h = size.height
-    // One page trying on papers: lines, grid, dots, Cornell.
-    val which = (t * 4).toInt().coerceIn(0, 3)
-    val l = w * 0.18f; val r = w * 0.82f; val top = h * 0.06f; val b = h * 0.94f
-    drawRoundRect(Color.White, Offset(l, top), Size(r - l, b - top), CornerRadius(6.dp.toPx()))
-    drawRoundRect(c.line, Offset(l, top), Size(r - l, b - top), CornerRadius(6.dp.toPx()), style = Stroke(1.dp.toPx()))
-    val gap = 14.dp.toPx()
-    val line = Color(0xFFB7C3D6)
-    when (which) {
-      0 -> { var y = top + gap * 1.5f; while (y < b) { drawLine(line, Offset(l + 6.dp.toPx(), y), Offset(r - 6.dp.toPx(), y), 1.dp.toPx()); y += gap } }
-      1 -> {
-        var y = top + gap; while (y < b) { drawLine(line, Offset(l, y), Offset(r, y), 1.dp.toPx()); y += gap }
-        var x = l + gap; while (x < r) { drawLine(line, Offset(x, top), Offset(x, b), 1.dp.toPx()); x += gap }
-      }
-      2 -> { var y = top + gap; while (y < b) { var x = l + gap; while (x < r) { drawCircle(line, 1.6.dp.toPx(), Offset(x, y)); x += gap }; y += gap } }
-      else -> {
-        var y = top + gap * 2.5f; while (y < b - h * 0.2f) { drawLine(line, Offset(l + w * 0.18f, y), Offset(r - 6.dp.toPx(), y), 1.dp.toPx()); y += gap }
-        drawLine(Red.copy(alpha = 0.6f), Offset(l + w * 0.16f, top + gap * 1.5f), Offset(l + w * 0.16f, b - h * 0.2f), 1.5.dp.toPx())
-        drawLine(Red.copy(alpha = 0.6f), Offset(l, b - h * 0.2f), Offset(r, b - h * 0.2f), 1.5.dp.toPx())
-      }
-    }
-    // The pencil badge: tap the paper in use to change it.
-    val badge = Offset(r - 4.dp.toPx(), top + 4.dp.toPx())
-    drawCircle(c.accent, 11.dp.toPx(), badge)
-    drawLine(Color.White, Offset(badge.x - 4.dp.toPx(), badge.y + 4.dp.toPx()), Offset(badge.x + 4.dp.toPx(), badge.y - 4.dp.toPx()), 2.5.dp.toPx(), cap = StrokeCap.Round)
   }
 }
 

@@ -821,10 +821,6 @@
     <string name="feat_pages_body">Tap the page number at the bottom to see every page. Hold a page and drag it to move it, or tap Select to duplicate or delete several at once.</string>
     <string name="feat_quick_title">Jump between notebooks</string>
     <string name="feat_quick_body">The button with the little clock, beside Back, lists your recent notebooks. One tap switches, and Back still takes you to the library.</string>
-    <string name="feat_crop_title">Crop pictures</string>
-    <string name="feat_crop_body">Pick up a picture and tap Crop, then drag its corners and sides. Nothing is cut away for good, so you can widen it again later.</string>
-    <string name="feat_paper_title">Make the paper yours</string>
-    <string name="feat_paper_body">Choose lines, grid, dots, Cornell and more in the ⋯ menu. Tap the paper you\'re using to change its line thickness and colours, or make your own paper, even from a picture.</string>
     <string name="feat_room_title">More room to write</string>
     <string name="feat_room_body">The eye hides the toolbars. In the ⋯ menu, Full screen hides the tablet\'s bars too, and Write between pages lets a stroke carry on from one page to the next.</string>
     <string name="feat_star_title">Star your notebooks</string>
