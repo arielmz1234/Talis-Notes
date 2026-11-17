@@ -84,7 +84,10 @@ struct SelectIcon: View {
         let step = 2 * CGFloat.pi / CGFloat(dashes)
         for i in 0..<dashes {
           let t0 = start + CGFloat(i) * step
-          let pts = (0...2).map { t0 + step * 0.42 * CGFloat($0) / 2 }.map { pt(cx + rx * cos($0), cy + ry * sin($0)) }
+          let pts: [CGPoint] = (0...2).map { (j: Int) -> CGPoint in
+            let a: CGFloat = t0 + step * 0.42 * CGFloat(j) / 2
+            return pt(cx + rx * cos(a), cy + ry * sin(a))
+          }
           p.move(to: pts[0])
           p.addLine(to: pts[1])
           p.addLine(to: pts[2])

@@ -527,9 +527,11 @@ private struct Wave: View {
         let head = CGFloat(played) * CGFloat(n)
         let mid = size.height / 2
         for (i, v) in values.enumerated() {
-          let near = min(max(1 - abs(CGFloat(i) - head) / 4, 0), 1)
-          let sway = alive ? 1 + 0.35 * near * CGFloat(sin(time * 2 * .pi * 1.8 + Double(i) * 0.9)) : 1
-          let h = min(max(bw + (size.height - bw) * CGFloat(v) * sway, bw), size.height)
+          let near: CGFloat = min(max(1 - abs(CGFloat(i) - head) / 4, 0), 1)
+          let phase: Double = time * 2 * .pi * 1.8 + Double(i) * 0.9
+          let sway: CGFloat = alive ? 1 + 0.35 * near * CGFloat(sin(phase)) : 1
+          let tall: CGFloat = bw + (size.height - bw) * CGFloat(v) * sway
+          let h: CGFloat = min(max(tall, bw), size.height)
           let x = CGFloat(i) * step + bw / 2
           var p = Path()
           p.move(to: CGPoint(x: x, y: mid - h / 2 + bw / 2))

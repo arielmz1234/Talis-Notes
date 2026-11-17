@@ -422,7 +422,8 @@ private struct VoicePicture: View {
         ctx.fill(circle(b, 14), with: .color(memoRed))
         for k in 0..<9 {
           let x = w * 0.62 + CGFloat(k) * 9
-          let amp = (0.3 + 0.7 * (sin(Double(k) * 1.3 + t * 2 * .pi * 2) * 0.5 + 0.5)) * 22
+          let wave: Double = sin(Double(k) * 1.3 + t * 2 * .pi * 2) * 0.5 + 0.5
+          let amp = CGFloat(0.3 + 0.7 * wave) * 22
           line(ctx, CGPoint(x: x, y: h * 0.66 - amp / 2), CGPoint(x: x, y: h * 0.66 + amp / 2), c.accent, 4, round: true)
         }
       }
