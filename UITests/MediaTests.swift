@@ -189,7 +189,8 @@ extension MediaTests {
     // XCTest calls the tiles not hittable, though touches reach them.
     let first = app.buttons["Look at page 1"].firstMatch, second = app.buttons["Look at page 2"].firstMatch
     XCTAssertTrue(first.waitForExistence(timeout: 3) && second.exists, "two pages in the overview")
-    first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0, thenDragTo: second.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+    first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
+      forDuration: 1.0, thenDragTo: second.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)), withVelocity: .slow, thenHoldForDuration: 0.6)
     settle()
     closeOverview()
     shot("v8-memo-moved-with-its-page")

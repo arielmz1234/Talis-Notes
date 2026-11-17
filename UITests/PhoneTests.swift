@@ -56,12 +56,26 @@ final class PhoneTests: ShotCase {
     settle()
     stop(app, "ph-a2-tools-open")
     let screen = app.windows.firstMatch.frame
-    let frames = Self.tools.map { app.buttons["tool-\($0)"].firstMatch.frame }
-    for (name, f) in zip(Self.tools, frames) {
+    // On a phone too narrow for them all (an iPhone 16) they come in pages: every tool is on one.
+    let page = app.buttons["tools-page"].firstMatch
+    let paged = page.exists
+    var frames: [String: CGRect] = [:]
+    for _ in 0..<(paged ? 2 : 1) {
+      for name in Self.tools where app.buttons["tool-\(name)"].exists { frames[name] = app.buttons["tool-\(name)"].firstMatch.frame }
+      if paged {
+        page.tap()
+        settle()
+      }
+    }
+    for name in Self.tools {
+      let f = frames[name] ?? .zero
       XCTAssertTrue(f.width > 0 && screen.contains(f), "\(name) is on the screen, at \(f)")
     }
-    XCTAssertEqual(frames.first!.minX + frames.last!.maxX, screen.width, accuracy: 3, "the tools are centred under the pens")
-    XCTAssertGreaterThan(frames.first!.minY, app.buttons["pen-p1"].firstMatch.frame.maxY, "in a bar of their own below the pens")
+    let shown = Self.tools.compactMap { frames[$0] }
+    if !paged, let first = shown.first, let last = shown.last {
+      XCTAssertEqual(first.minX + last.maxX, screen.width, accuracy: 3, "the tools are centred under the pens")
+    }
+    XCTAssertGreaterThan(shown.first?.minY ?? 0, app.buttons["pen-p1"].firstMatch.frame.maxY, "in a bar of their own below the pens")
     // Choosing a tool folds them away; its button shows the tool in use.
     app.buttons["tool-eraser"].firstMatch.tap()
     settle()

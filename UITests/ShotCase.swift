@@ -41,13 +41,19 @@ class ShotCase: XCTestCase {
 
   /// Taps a tool's button. On a phone the tools are folded behind one button, which opens them and
   /// closes whatever panel is open: so there, tapping the tool in use to close its panel is that
-  /// button alone, and the tools are folded away again.
+  /// button alone, and the tools are folded away again. A phone too narrow for them all (an iPhone 16)
+  /// shows them in pages, with an arrow to the next.
   func tapTool(_ app: XCUIApplication, _ id: String, file: StaticString = #filePath, line: UInt = #line) {
     let fold = app.buttons["tools-button"].firstMatch
     let folded = fold.exists && !app.buttons[id].exists
     let panelOpen = app.descendants(matching: .any)["tool-panel"].firstMatch.exists
     if folded {
       fold.tap()
+      settle()
+    }
+    let page = app.buttons["tools-page"].firstMatch
+    if !app.buttons[id].exists, page.exists {
+      page.tap()
       settle()
     }
     let tool = app.buttons[id].firstMatch
