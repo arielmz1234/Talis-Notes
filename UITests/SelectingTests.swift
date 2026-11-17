@@ -226,8 +226,11 @@ final class SelectingTests: ShotCase {
     settle()
     tapRightSide(app.buttons["Solid"].firstMatch)
     XCTAssertTrue(app.buttons["Solid"].firstMatch.isSelected, "the right side of Solid chooses Solid")
-    if !app.buttons["colour-D83A3A"].firstMatch.isHittable { at(app, 0.5, 0.7).press(forDuration: 0.05, thenDragTo: at(app, 0.5, 0.5)) }
-    tapRightSide(app.buttons["colour-D83A3A"].firstMatch)
+    // On a short phone (an iPhone 16) the colours sit half under the foot of the pen's panel, which
+    // XCTest still calls hittable: the panel is scrolled up to them.
+    let red = app.buttons["colour-D83A3A"].firstMatch
+    if !red.isHittable || red.frame.maxY > app.windows.firstMatch.frame.height * 0.85 { at(app, 0.5, 0.7).press(forDuration: 0.05, thenDragTo: at(app, 0.5, 0.5)) }
+    tapRightSide(red)
     XCTAssertTrue(app.buttons["colour-D83A3A"].firstMatch.isSelected, "the right side of a colour picks that colour")
     let pens = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "pen-"))
     let before = pens.count
