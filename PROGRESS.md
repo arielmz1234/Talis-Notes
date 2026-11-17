@@ -66,6 +66,9 @@ Testing:
   "Duplicate opens Delete" was not the simulator: a button with a rounded-rectangle `contentShape`
   answered taps up to 22 pt to its left (the right half of Undo fired Redo). Every button uses a
   plain `Rectangle` content shape now.
+- CI splits the UI suite over five jobs (`scripts/ci-shots.sh`, one matrix entry each): all of it
+  once on the iPad in the light; the dark, Hebrew and iPhone runs take ScreenshotTests and the phone
+  classes. One job for all of it ran past GitHub's hour. Failing tests are listed, not fatal.
 - After a page drag in the overview, the drag's window stays in XCTest's tree and the tiles read as
   not hittable, though touches reach them: tap them by coordinates.
 - A new notebook takes the last paper used, so a test choosing a paper must pick one that isn't

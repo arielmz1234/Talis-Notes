@@ -1,0 +1,28 @@
+#!/bin/sh
+# One CI shard's UI test runs, after build-for-testing. Each argument is one run:
+#   "<ipad|iphone> <tag> <dark 0/1> <language or -> <Class,Class… or all>"
+# Shots land in shots/<tag>-*.png, each run's log in build/<tag>.log. Failing tests are listed but
+# don't fail the job: the shots are what it's for.
+cd "$(dirname "$0")/.."
+mkdir -p shots
+ipad=$(sh scripts/sim.sh "iPad Pro 13" iPad)
+iphone=$(sh scripts/sim.sh "iPhone 16" iPhone)
+for run in "$@"; do
+  set -- $run
+  dev=$ipad; [ "$1" = iphone ] && dev=$iphone
+  # Boot fully first: a cold boot inside the first test timed out the app's launch.
+  xcrun simctl boot "$dev" 2>/dev/null || true
+  xcrun simctl bootstatus "$dev" -b > /dev/null
+  only=""
+  [ "$5" = all ] || for c in $(echo "$5" | tr ',' ' '); do only="$only -only-testing:TalisNotesUITests/$c"; done
+  lang=$4; [ "$lang" = - ] && lang=""
+  echo "== $2 ($1, $5)"
+  TEST_RUNNER_SHOT_DIR="$PWD/shots" TEST_RUNNER_SHOT_TAG="$2" TEST_RUNNER_SHOT_DARK="$3" TEST_RUNNER_SHOT_LANG="$lang" \
+    xcodebuild test-without-building -project TalisNotes.xcodeproj -scheme TalisNotes \
+    -destination "id=$dev" -derivedDataPath build/dd -resultBundlePath "build/$2.xcresult" $only > "build/$2.log" 2>&1 || true
+  # Why a test failed (the element it couldn't find, the line), then the summary.
+  grep -E "error:|failed:|Assertion|No matches|not hittable" "build/$2.log" | grep -v "Test Suite" | head -20 || true
+  grep -E "Executed .* tests?, with" "build/$2.log" | tail -1
+done
+ls shots
+test "$(ls shots | wc -l)" -gt 0

@@ -11,19 +11,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # The UI suite takes about an hour on one simulator, so it's split across jobs, each building
+  # for itself. Every iPad class runs in the light; the dark, Hebrew and iPhone runs take the
+  # screenshot set and the classes about the phone.
+  test:
+    name: ${{ matrix.name }}
     runs-on: macos-26
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ipad-selecting
+            core: true
+            runs: '["ipad ipad-light 0 - SelectingTests"]'
+          - name: ipad-pens-media
+            runs: '["ipad ipad-light 0 - PenTests,MediaTests,ShapeTipsTests"]'
+          - name: ipad-library-pages-shapes
+            runs: '["ipad ipad-light 0 - LibraryTests,PagesTests,ShapesMoreTests,PhoneTests,ScreenshotTests"]'
+          - name: looks
+            runs: '["ipad ipad-dark 1 - ScreenshotTests", "ipad ipad-he 0 he ScreenshotTests", "iphone iphone-light 0 - ScreenshotTests,PhoneTests", "iphone iphone-dark 1 - ScreenshotTests"]'
+          - name: iphone-selecting
+            runs: '["iphone iphone-light 0 - SelectingTests"]'
     steps:
       - uses: actions/checkout@v4
 
       - name: Xcode
         run: |
-          ls /Applications | grep Xcode || true
           xcodebuild -version
           xcrun simctl list runtimes
 
       - name: Core unit tests (TaliCore)
+        if: matrix.core
         run: set -o pipefail; swift test --package-path Packages/TaliCore 2>&1 | tail -60
 
       - name: Generate project
@@ -39,36 +58,33 @@ jobs:
             CODE_SIGNING_ALLOWED=NO > build-log.txt 2>&1 || { grep -E "error:|warning: .*(Sources|UITests)/" build-log.txt | sort -u | head -150; tail -30 build-log.txt; exit 1; }
           tail -5 build-log.txt
 
-      - name: Screenshots
+      - name: UI tests and screenshots
+        env:
+          RUNS: ${{ matrix.runs }}
         run: |
-          mkdir -p shots
-          ipad=$(sh scripts/sim.sh "iPad Pro 13" iPad)
-          iphone=$(sh scripts/sim.sh "iPhone 16" iPhone)
-          echo "iPad $ipad, iPhone $iphone"
-          # Boot both simulators fully first: a cold boot inside the first test timed out the app's launch.
-          for d in "$ipad" "$iphone"; do xcrun simctl boot "$d" 2>/dev/null || true; xcrun simctl bootstatus "$d" -b > /dev/null; done
-          run() { # device tag dark lang
-            TEST_RUNNER_SHOT_DIR="$PWD/shots" TEST_RUNNER_SHOT_TAG="$2" TEST_RUNNER_SHOT_DARK="$3" TEST_RUNNER_SHOT_LANG="$4" \
-            xcodebuild test-without-building -project TalisNotes.xcodeproj -scheme TalisNotes \
-              -destination "id=$1" -derivedDataPath build/dd -resultBundlePath "build/$2.xcresult" > "build/$2.log" 2>&1 || true
-            # Why a test failed (the element it couldn't find, the line), then the summary.
-            grep -E "error:|Failed|failed:|Assertion|No matches|not hittable|ScreenshotTests.swift:" "build/$2.log" | grep -v "Test Suite" | head -20 || true
-            tail -6 "build/$2.log"
-          }
-          run "$ipad" ipad-light 0 ""
-          run "$ipad" ipad-dark 1 ""
-          run "$ipad" ipad-he 0 he
-          run "$iphone" iphone-light 0 ""
-          run "$iphone" iphone-dark 1 ""
-          ls shots
-          test "$(ls shots | wc -l)" -gt 0
+          echo "$RUNS" | jq -r '.[]' > runs.txt
+          set --
+          while IFS= read -r r; do set -- "$@" "$r"; done < runs.txt
+          sh scripts/ci-shots.sh "$@"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: screenshots
+          name: screenshots-${{ matrix.name }}
           path: shots/
           if-no-files-found: warn
+
+  ipa:
+    name: Unsigned .ipa
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate project
+        run: |
+          brew install xcodegen >/dev/null
+          xcodegen generate
 
       - name: Unsigned .ipa (for sideloading)
         run: |
