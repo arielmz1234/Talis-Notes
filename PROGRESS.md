@@ -56,6 +56,13 @@ How things fit together now (read before changing the notebook):
   trash is `selection-delete`.
 - Pictures and memos are typed rows (`PictureRow`, `MemoRow`); one `contentBounds` (TaliCore `Rect`).
 - Colours live in `Palettes.shared` (observable); pen helpers (`presetSizes`, `withSize`) in TaliCore.
+- `CrashLog` (Android's): uncaught exceptions, fatal signals (async-signal-safe, turned into a
+  report on the next start), MetricKit crash and hang reports, and an on-screen marker for a close
+  nothing saw. The library's `CrashBanner` offers the report by Mail (the share sheet without an
+  account). UI test runs (`-uitest`) start clean; `-crashReport` makes a test report.
+- The canvas ignores PencilKit's "drawing changed" for a drawing it set itself (`ownDrawing`), not
+  only while `loading`: on CI's iOS the call came late, and a lasso move's live drawing was stored
+  part way (the outline stayed behind while its fill went on).
 - `NoteCanvasView.onResize` refits and redraws chrome; `PagesLayer.paint(in:scale:print:)` is the one
   drawing path for screen, page pictures and PDF (`drawsPaper` off when export paints one sheet).
 

@@ -273,12 +273,12 @@ extension NoteCanvas.Coordinator {
     if let before = lasso.before, stored.contains(where: { lasso.picked.contains($0.stroke.id) }) {
       let by = CGAffineTransform(a: CGFloat(t.a), b: CGFloat(t.b), c: CGFloat(t.c), d: CGFloat(t.d), tx: CGFloat(t.tx), ty: CGFloat(t.ty))
       loading = true
-      canvas.drawing = PKDrawing(strokes: before.strokes.enumerated().map { i, s in
+      setDrawing(PKDrawing(strokes: before.strokes.enumerated().map { i, s in
         guard i < stored.count, lasso.picked.contains(stored[i].stroke.id) else { return s }
         var m = s
         m.transform = s.transform.concatenating(by)
         return m
-      })
+      }))
       loading = false
     }
     carryShapes(t)
@@ -296,7 +296,7 @@ extension NoteCanvas.Coordinator {
     if let before = lasso.before {
       lasso.before = nil
       loading = true
-      canvas.drawing = before
+      setDrawing(before)
       loading = false
     }
     restoreLifted()

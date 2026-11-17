@@ -310,7 +310,7 @@ extension NoteCanvas.Coordinator {
     for (k, st) in stored { archive[k] = st }
     stored = next
     loading = true
-    canvas.drawing = drawing
+    setDrawing(drawing)
     loading = false
     touch()
   }

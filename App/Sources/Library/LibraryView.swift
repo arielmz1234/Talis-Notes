@@ -35,6 +35,8 @@ struct LibraryView: View {
   var onOpen: (NotebookMeta) -> Void
   @State private var dialog: LibraryDialog?
   @State private var addCardOpen = false
+  /// The last run's crash report, offered once under the heading.
+  @State private var crashReport = CrashLog.shared.pendingReport()
   /// The + menu's File: the system file picker, then what was picked becomes an item of its own.
   @State private var importing = false
   /// The + menu's Photo: the system photo picker (up to 30, as on Android).
@@ -328,6 +330,19 @@ struct LibraryView: View {
             heading.frame(maxWidth: .infinity, alignment: .leading)
             actions(searchWidth: 240)
           }
+        }
+        if let report = crashReport {
+          Spacer().frame(height: 16)
+          CrashBanner(
+            onSend: {
+              CrashReportSender.send(report)
+              CrashLog.shared.dismiss()
+              withAnimation(.easeOut(duration: 0.2)) { crashReport = nil }
+            },
+            onDismiss: {
+              CrashLog.shared.dismiss()
+              withAnimation(.easeOut(duration: 0.2)) { crashReport = nil }
+            })
         }
         Spacer().frame(height: 18)
         RulerDivider()

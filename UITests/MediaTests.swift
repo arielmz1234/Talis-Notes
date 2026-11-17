@@ -185,12 +185,20 @@ extension MediaTests {
     XCTAssertEqual(memos.count, 1, "undo takes the copy away again")
     // Moved with its page: page 1 dragged after page 2.
     overview()
-    // By coordinates: after a page drag the drag's window stays in the tree over the overview, and
-    // XCTest calls the tiles not hittable, though touches reach them.
-    let first = app.buttons["Look at page 1"].firstMatch, second = app.buttons["Look at page 2"].firstMatch
+    // Picked, then dragged past page 2, as PagesTests moves pages (the way that works on CI's
+    // simulators too). By coordinates when XCTest calls the tile not hittable, which it can after
+    // the undo though touches reach it.
+    app.buttons["pages-select"].firstMatch.tap()
+    let first = app.buttons["Pick page 1"].firstMatch, second = app.buttons["Pick page 2"].firstMatch
     XCTAssertTrue(first.waitForExistence(timeout: 3) && second.exists, "two pages in the overview")
-    first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
-      forDuration: 1.0, thenDragTo: second.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)), withVelocity: .slow, thenHoldForDuration: 0.6)
+    first.tap()
+    settle()
+    if first.isHittable, second.isHittable {
+      first.press(forDuration: 1.0, thenDragTo: second)
+    } else {
+      first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0, thenDragTo: second.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
+    }
+    XCTAssertTrue(app.buttons["pages-select"].waitForExistence(timeout: 4), "the move ends the picking")
     settle()
     closeOverview()
     shot("v8-memo-moved-with-its-page")

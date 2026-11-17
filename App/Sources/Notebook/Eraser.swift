@@ -157,7 +157,7 @@ extension NoteCanvas.Coordinator {
     if inkChanged {
       sweep.ink = ink
       loading = true
-      canvas.drawing = PKDrawing(strokes: ink.map(\.pk))
+      setDrawing(PKDrawing(strokes: ink.map(\.pk)))
       loading = false
     }
     sweep.changed = sweep.changed || inkChanged || shapesChanged || fillsChanged

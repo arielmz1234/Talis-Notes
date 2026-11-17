@@ -194,7 +194,7 @@ extension NoteCanvas.Coordinator {
     if kept.count == canvas.drawing.strokes.count { return }
     loading = true
     canvas.undoManager?.disableUndoRegistration()
-    canvas.drawing = PKDrawing(strokes: kept)
+    setDrawing(PKDrawing(strokes: kept))
     canvas.undoManager?.enableUndoRegistration()
     loading = false
     sync(canvas.drawing)

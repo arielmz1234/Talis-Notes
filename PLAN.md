@@ -55,6 +55,7 @@ The Android app (`C:\dev\Talis-Notes`, its `CLAUDE.md` and `README.md`) is the s
 - [x] Typed text: keyboard button, Android placement, tap to edit, A−/A+, lasso and eraser
 - [x] PDF export of imported PDFs at full quality; "Adding…" pill; drafts from other apps
 ### 6. Shapes, hold-to-shape, snapping, fill, the rest of CLAUDE.md
+- [x] Crash log and the library's "closed unexpectedly" banner (Android's `CrashLog`, `CrashBanner`)
 - [x] Hold-to-shape (recogniser ported with its tests; shapes stored the Android way)
 - [x] Shapes in the eraser and lasso; Shapes tool and panel (standard + civil symbols)
 - [x] Shapes Style tab, shape dots and resize/rotate chips, snapping, fill, subject packs

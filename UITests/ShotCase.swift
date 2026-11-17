@@ -49,6 +49,8 @@ class ShotCase: XCTestCase {
     let panelOpen = app.descendants(matching: .any)["tool-panel"].firstMatch.exists
     if folded {
       fold.tap()
+      // On a slow machine the tools bar takes a moment to come down.
+      _ = app.buttons[id].waitForExistence(timeout: 2) || app.buttons["tools-page"].waitForExistence(timeout: 1)
       settle()
     }
     let page = app.buttons["tools-page"].firstMatch

@@ -531,12 +531,12 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
     }
     guard let before = lasso.before else { return }
     loading = true
-    canvas.drawing = PKDrawing(strokes: before.strokes.enumerated().map { i, pk in
+    setDrawing(PKDrawing(strokes: before.strokes.enumerated().map { i, pk in
       guard i < stored.count, lasso.picked.contains(stored[i].stroke.id) else { return pk }
       var s = stored[i].stroke
       s.size = size
       return s.pkStroke(mask: mask(for: s))
-    })
+    }))
     loading = false
     showThickness(size)
   }
@@ -545,7 +545,7 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
     guard lasso.drag == nil, let before = lasso.before, let canvas else { return }
     lasso.before = nil
     loading = true
-    canvas.drawing = before
+    setDrawing(before)
     loading = false
     restoreLifted()
     dropShapes()

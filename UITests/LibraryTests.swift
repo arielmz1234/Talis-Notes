@@ -258,6 +258,19 @@ final class LibraryTests: ShotCase {
     shot("lib-43-portrait-settings")
   }
 
+  /// After an unexpected close, a banner under the heading offers the report (Android's `CrashBanner`).
+  func testCrashBanner() {
+    let app = launch(["-crashReport"])
+    settle()
+    let banner = app.descendants(matching: .any)["crash-banner"].firstMatch
+    XCTAssertTrue(banner.waitForExistence(timeout: 5), "the banner after an unexpected close")
+    XCTAssertTrue(app.buttons["crash-send"].exists && app.buttons["crash-dismiss"].exists, "Send report and Dismiss")
+    shot("lib-44-crash-banner")
+    app.buttons["crash-dismiss"].firstMatch.tap()
+    settle()
+    XCTAssertFalse(banner.exists, "Dismiss puts it away")
+  }
+
   func testEmptyLibrary() {
     let app = XCUIApplication()
     var args = ["-uitest"]

@@ -6,6 +6,10 @@ struct TalisNotesApp: App {
   @State private var library = Library.open()
   @AppStorage("themeMode") private var themeMode = "LIGHT"
 
+  init() {
+    CrashLog.shared.install()
+  }
+
   var body: some Scene {
     WindowGroup {
       RootView()

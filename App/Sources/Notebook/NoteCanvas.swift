@@ -359,7 +359,20 @@ struct NoteCanvas: UIViewRepresentable {
     var pageCount = 1
     /// The highest z among shapes, so new items go on top of them.
     var shapeZ: Int64 = 0
+    /// On while the canvas's drawing is set from here, so its change isn't taken for her writing.
     var loading = false
+    /// The drawing last set from here (`setDrawing`). PencilKit can report a drawing set from code
+    /// after `loading` is off again (seen on CI's iOS): taken for writing, a selection's live move
+    /// was stored part way and its outline stayed behind while the fill went on.
+    private var ownDrawing: PKDrawing?
+
+    /// Sets the canvas's drawing from here (inside `loading`), remembering it so PencilKit's report
+    /// of it, however late, isn't taken for her writing.
+    func setDrawing(_ d: PKDrawing) {
+      guard let canvas else { return }
+      canvas.drawing = d
+      ownDrawing = canvas.drawing
+    }
     /// The window's undo manager outlives this screen, so its steps are dropped on leaving: kept,
     /// Undo stayed lit after reopening with nothing real behind it (Android starts each visit fresh).
     weak var history: UndoManager?
@@ -457,7 +470,7 @@ struct NoteCanvas: UIViewRepresentable {
       pages?.pages.under = under
       let drawn = Self.highlighterFirst(inks) { $0 }.map { ($0.pkStroke(mask: mask(for: $0)), $0) }
       stored = drawn.map { (StrokeKey($0.0), $0.1) }
-      canvas.drawing = PKDrawing(strokes: drawn.map(\.0))
+      setDrawing(PKDrawing(strokes: drawn.map(\.0)))
       loading = false
       updateContent()
       applyTool()
@@ -725,7 +738,7 @@ struct NoteCanvas: UIViewRepresentable {
     // MARK: Keeping the store in step
 
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-      guard !loading else { return }
+      guard !loading, canvasView.drawing != ownDrawing else { return }
       sync(canvasView.drawing)
       reportUndo()
     }
@@ -824,7 +837,7 @@ struct NoteCanvas: UIViewRepresentable {
         // Swap in the stored form (page mask, untransformed) without making an undo step of it.
         loading = true
         canvas.undoManager?.disableUndoRegistration()
-        canvas.drawing = PKDrawing(strokes: rebuilt)
+        setDrawing(PKDrawing(strokes: rebuilt))
         canvas.undoManager?.enableUndoRegistration()
         loading = false
       }
