@@ -91,3 +91,10 @@ private struct StepButton: View {
     }
   }
 }
+
+/// Pen, shape and selection thickness change in quarters; the + and − step by one (Android's `THICKNESS_STEP`).
+let thicknessStep: Float = 0.25
+
+/// A thickness as she sees it: four times the stored width, so every step is a whole number
+/// (0.5 shows as 2, 1 as 4). Android's `thicknessLabel`; the stored sizes are unchanged.
+func thicknessLabel(_ size: Float) -> String { String(Int((size * 4).rounded())) }

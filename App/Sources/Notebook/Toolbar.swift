@@ -463,8 +463,8 @@ struct QuickSizes: View {
             VStack(alignment: .leading, spacing: 6) {
               Text(L("thickness_n", i + 1)).font(TaliType.titleSmall).foregroundStyle(c.ink)
               HStack {
-                StepSlider(value: Binding(get: { pen.size }, set: { pen = pen.withSize($0) }), range: pen.type.minSize...pen.type.maxSize, step: 0.5)
-                Text(String(format: "%.1f", pen.size)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40)
+                StepSlider(value: Binding(get: { pen.size }, set: { pen = pen.withSize($0) }), range: pen.type.minSize...pen.type.maxSize, step: thicknessStep)
+                Text(thicknessLabel(pen.size)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40)
               }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -563,13 +563,13 @@ struct PenPanel: View {
       StrokePreview(pen: pen)
       Spacer().frame(height: 12)
       Segmented(options: [0, 1, 2], selected: Binding(get: { min(max(pen.sizeSlot, 0), 2) }, set: { pen = pen.pickSize($0) })) {
-        String(format: "%.1f", pen.presetSizes[$0])
+        thicknessLabel(pen.presetSizes[$0])
       }
       Spacer().frame(height: 8)
       HStack(spacing: 0) {
         Text(L("size")).font(TaliType.bodyMedium).foregroundStyle(c.inkMuted).frame(width: 44, alignment: .leading)
-        StepSlider(value: Binding(get: { pen.size }, set: { pen = pen.withSize($0) }), range: pen.type.minSize...pen.type.maxSize, step: 0.5)
-        Text(String(format: "%.1f", pen.size)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40).padding(.leading, 8)
+        StepSlider(value: Binding(get: { pen.size }, set: { pen = pen.withSize($0) }), range: pen.type.minSize...pen.type.maxSize, step: thicknessStep)
+        Text(thicknessLabel(pen.size)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40).padding(.leading, 8)
       }
       if pen.type.takesLineStyle {
         Spacer().frame(height: 10)

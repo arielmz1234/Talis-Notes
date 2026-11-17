@@ -10,6 +10,17 @@
    screenshots, macOS runners sometimes queue). Batch changes, and read compile errors with
    `gh run view <id> --log-failed | grep error:`.
 
+## Thickness in whole numbers (17 Nov 2026, Windows, from Android 1.0.24)
+
+Android's df39537 (its CLAUDE.md item 91a): pen, shape-style and selection thickness step by 0.25
+(`thicknessStep` in `Theme/StepSlider.swift`) and show four times the stored width
+(`thicknessLabel`: 0.5 shows as 2, 1 as 4); stored sizes are unchanged and the eraser and text
+size keep their own steps. Changed: the pen panel (presets and slider), the toolbar's quick sizes,
+the Shapes Style tab and the selection menu's thickness. `PenTests` taps "16" (was "4.0") and
+holds + for 8 s to reach "160". Not built here (no Swift on Windows): CI checks it. Items 91b
+(Back from a file opened from another app) and 91c (the stroke flicker, an Android Ink issue) not
+ported.
+
 ## Windows sessions 4–5 (11–12 Nov 2026), merged without their code
 
 While the Mac ran the parity work, the scheduled task on the owner's Windows PC kept going and

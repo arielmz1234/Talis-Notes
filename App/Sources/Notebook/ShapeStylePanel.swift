@@ -81,8 +81,8 @@ struct ShapeStylePicker: View {
       Spacer().frame(height: 6)
       HStack(spacing: 0) {
         Text(L("size")).font(TaliType.bodyMedium).foregroundStyle(c.inkMuted).frame(width: 84, alignment: .leading)
-        StepSlider(value: Binding(get: { look.size }, set: { v in if !followsPen { update { $0.size = v } } }), range: ShapeLook.minSize...ShapeLook.maxSize, step: 0.5)
-        Text(String(format: "%.1f", look.size)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40, alignment: .trailing).padding(.leading, 8)
+        StepSlider(value: Binding(get: { look.size }, set: { v in if !followsPen { update { $0.size = v } } }), range: ShapeLook.minSize...ShapeLook.maxSize, step: thicknessStep)
+        Text(thicknessLabel(look.size)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40, alignment: .trailing).padding(.leading, 8)
       }
       .opacity(resting)
       OpacitySlider(label: L("opacity"), value: look.opacity, least: ShapeLook.minOpacity, enabled: true) { v in update { $0.opacity = v } }

@@ -162,10 +162,10 @@ struct SelectionMenu: View {
       StepSlider(value: Binding(get: { thickness }, set: { v in
         thickness = v
         onCommand(.previewThickness(v))
-      }), range: 0.5...40, step: 0.5) {
+      }), range: 0.5...40, step: thicknessStep) {
         onCommand(.thickenSelection(thickness))
       }
-      Text(String(format: "%.1f", thickness)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40).padding(.leading, 8)
+      Text(thicknessLabel(thickness)).font(TaliType.titleSmall).foregroundStyle(c.ink).frame(width: 40).padding(.leading, 8)
     }
     let styles = CompactLineStylePicker(selected: info.line ?? "SOLID") { onCommand(.lineSelection($0)) }
     return Group {
