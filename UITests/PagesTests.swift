@@ -166,10 +166,10 @@ final class PagesTests: ShotCase {
     shot("o5-delete-asks")
     let confirm = app.buttons.matching(NSPredicate(format: "label == 'Delete page'"))
     confirm.element(boundBy: confirm.count - 1).tap()
-    // The page lifts away on a puff before it goes.
-    Thread.sleep(forTimeInterval: 0.25)
-    shot("o6a-puff")
+    // The page lifts away on a puff (0.6 s) before it goes: checked before the shot, which can take
+    // most of that on a slow machine.
     XCTAssertTrue(app.buttons["Look at page 5"].exists, "still there while its puff plays")
+    shot("o6a-puff")
     settle()
     shot("o6-deleted")
     XCTAssertFalse(app.buttons["Look at page 5"].exists, "one page fewer")
