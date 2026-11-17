@@ -142,8 +142,13 @@ struct NotebookView: View {
         .overlay { CropLayer(crop: crop) }
         // Under the bars and their panels, as on Android, where it belongs to the page.
         if let sel = selection, !hidden, !viewing {
-          SelectionMenuLayer(info: sel, narrow: narrow, onSaveShape: saveShape, onCrop: { if let p = bridge.coordinator?.pickedItems.first?.picture { crop.start(p) } }) { command = $0 }
+          GeometryReader { safe in
+            SelectionMenuLayer(
+              info: sel, narrow: narrow, bottomInset: safe.safeAreaInsets.bottom, onSaveShape: saveShape,
+              onCrop: { if let p = bridge.coordinator?.pickedItems.first?.picture { crop.start(p) } }
+            ) { command = $0 }
             .ignoresSafeArea()
+          }
         }
         VStack(spacing: narrow ? 18 : 0) {
           if viewing && draft {

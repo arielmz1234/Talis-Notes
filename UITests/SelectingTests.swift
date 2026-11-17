@@ -261,8 +261,13 @@ final class SelectingTests: ShotCase {
     XCTAssertTrue(app.buttons["Dark paper"].firstMatch.isSelected, "the right side of Dark paper turns the paper dark")
     XCTAssertFalse(app.buttons["Endless canvas"].firstMatch.isSelected, "and leaves the pages as they are")
     app.buttons["Dark paper"].firstMatch.tap()
-    tapRightSide(app.descendants(matching: .any)["paper-BLANK"].firstMatch)
-    XCTAssertTrue(app.descendants(matching: .any)["paper-BLANK"].firstMatch.isSelected, "the right side of Blank chooses blank paper")
+    settle()
+    // Not the current paper (a new notebook takes the last one used): tapping that one opens its card.
+    let papers = ["paper-BLANK", "paper-LINES"].map { app.descendants(matching: .any)[$0].firstMatch }
+    XCTAssertTrue(papers[0].waitForExistence(timeout: 3), "the papers")
+    let other = papers.first { !$0.isSelected } ?? papers[1]
+    tapRightSide(other)
+    XCTAssertTrue(other.isSelected, "the right side of a paper chooses it")
     tapRightSide(app.buttons["Pages"].firstMatch)
     XCTAssertTrue(app.buttons["Look at page 1"].waitForExistence(timeout: 3), "the right side of Pages opens the pages")
     app.buttons["Done"].firstMatch.tap()
@@ -703,6 +708,12 @@ final class SelectingTests: ShotCase {
     XCTAssertFalse(onPage(1), "rested at the bottom edge, the page scrolled along")
     XCTAssertGreaterThan(selectionFrame(app).midY, window.height * 0.7, "and what's carried stayed under the finger")
     calmShot("g2-carried-to-a-later-page")
+    // Put down at the bottom of the screen, its menu keeps clear of the page and zoom chips.
+    let menu = app.buttons["selection-more"].firstMatch
+    XCTAssertTrue(menu.waitForExistence(timeout: 3), "the menu comes back")
+    for chip in [app.buttons["zoom-chip"].firstMatch, app.buttons.matching(NSPredicate(format: "label MATCHES %@", "[0-9]+ / [0-9]+")).firstMatch] {
+      XCTAssertFalse(chip.frame.intersects(menu.frame), "\(chip.label) isn't over the menu")
+    }
   }
 
   func testSnapping() {

@@ -23,7 +23,9 @@ two machines don't build the same things again.
 
 Goal: parity with Android except backups, iCloud and Drive. Six areas were built by agents in
 their own worktrees and merged into `main` one by one, each checked by the full UI suite on the
-iPad Pro 13 simulator (see PLAN.md's "Parity with Android" for what each left). Still to come: a phone pass and the leftovers listed in PLAN.md.
+iPad Pro 13 simulator (see PLAN.md's "Parity with Android" for what each left). The phone pass and
+the leftovers in PLAN.md went in on 12 Nov; on 17 Nov every UI suite passed on the iPad Pro 13, and
+the selection and phone suites on an iPhone, with 396 core tests.
 
 How things fit together now (read before changing the notebook):
 - `TopBarLayout` places the wide top row by role (title, tools, corner) as Android's
@@ -48,12 +50,14 @@ How things fit together now (read before changing the notebook):
 Testing:
 - One UI test class per area (`UITests/*Tests.swift` on `ShotCase`). `ONLY=<Class>` or
   `ONLY=<Class>/<test>` with `scripts/local-shots.sh`; `scripts/one-test.sh` also stops a single test.
-- Full suite on the iPad Pro 13: about 30 minutes for 43 tests. One known failure:
-  `PenTests.testColours` (iPad Pro 13 only: after Remove this pen, the first tap on another pen
-  only closes the panel). The overview's "Duplicate opens Delete" was not the simulator: a button
-  with a rounded-rectangle `contentShape` answered taps up to 22 pt to its left (the right half of
-  Undo fired Redo). Buttons use a plain `Rectangle` content shape; 14 rounded ones remain in Library,
-  PaperPicker, CloudSurface, ShapesPanel, ShapePacksCard, MoreMenu and Tour.
+- Full suite on the iPad Pro 13: about 50 minutes for 59 tests, no known failures. The overview's
+  "Duplicate opens Delete" was not the simulator: a button with a rounded-rectangle `contentShape`
+  answered taps up to 22 pt to its left (the right half of Undo fired Redo). Every button uses a
+  plain `Rectangle` content shape now.
+- After a page drag in the overview, the drag's window stays in XCTest's tree and the tiles read as
+  not hittable, though touches reach them: tap them by coordinates.
+- A new notebook takes the last paper used, so a test choosing a paper must pick one that isn't
+  current (tapping the current one opens its card).
 - A shape just made stays picked up (Android's soft selection): tests that count pixels or tap
   "Delete" must put it down first or tell the menu's trash apart.
 - Test-only launch arguments: `-uitest -seed`, `-cameraPicture`, `-fakePickers`, `-fakeDrop`,
@@ -67,8 +71,7 @@ Device: the owner's iPad Air 11 (M2) installs with the free personal team, bundl
 `xcodebuild … -destination generic/platform=iOS DEVELOPMENT_TEAM=R38D6WY53B PRODUCT_BUNDLE_IDENTIFIER=com.tali.notes.idan`
 then `xcrun devicectl device install app --device <udid> <app>`.
 
-Pushing: `idanlo` has no write access to `arielmz1234/Talis-Notes-iOS`; everything since `ea994c6`
-is local on `main` until that's sorted.
+Pushing: `idanlo` has write access to `arielmz1234/Talis-Notes-iOS` since 12 Nov; `main` is pushed.
 
 ## On the Mac (session 3, 11 Nov 2026)
 

@@ -215,6 +215,8 @@ struct SelectionMenu: View {
 struct SelectionMenuLayer: View {
   var info: SelectionInfo
   var narrow: Bool
+  /// The safe area under the screen's content, which this layer reaches past.
+  var bottomInset: CGFloat = 0
   var onSaveShape: () -> Void = {}
   var onCrop: () -> Void = {}
   var onCommand: (CanvasCommand) -> Void
@@ -228,11 +230,14 @@ struct SelectionMenuLayer: View {
       let gap: CGFloat = 14
       let width = SelectionMenu.shownWidth(info, more: more, maxWidth: geo.size.width - 2 * gap) + 2 * SelectionMenu.padding
       let topLimit: CGFloat = narrow ? 196 : 128
-      let bottomLimit = geo.size.height - height - gap
+      // On a narrow screen the menu reaches the page and zoom chips in the bottom corner, which lie
+      // over it: it keeps above them. They sit inside the safe area; this layer reaches the screen's edge.
+      let bottomLimit = geo.size.height - height - gap - (narrow ? 44 + bottomInset : 0)
       let above = rect.minY - height - gap
       // The rotate handle hangs under the selection: the menu, when it goes below, leaves room for it.
       let below = rect.maxY + gap + (info.rotatable ? 48 : 0)
-      let y = above >= topLimit ? above : (below <= bottomLimit ? below : min(max(rect.minY + gap, topLimit), max(bottomLimit, topLimit)))
+      let placed = above >= topLimit ? above : (below <= bottomLimit ? below : max(rect.minY + gap, topLimit))
+      let y = min(placed, max(bottomLimit, topLimit))
       let x = min(max(rect.midX - (SelectionMenu.foldedWidth(info) + 2 * SelectionMenu.padding) / 2, gap), max(geo.size.width - width - gap, gap))
       // Where what's picked up is, for VoiceOver (the frame itself is drawn on the canvas).
       Color.clear.frame(width: max(rect.width, 1), height: max(rect.height, 1)).offset(x: rect.minX, y: rect.minY)

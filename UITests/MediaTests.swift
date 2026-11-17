@@ -185,7 +185,11 @@ extension MediaTests {
     XCTAssertEqual(memos.count, 1, "undo takes the copy away again")
     // Moved with its page: page 1 dragged after page 2.
     overview()
-    app.buttons["Look at page 1"].firstMatch.press(forDuration: 1.0, thenDragTo: app.buttons["Look at page 2"].firstMatch)
+    // By coordinates: after a page drag the drag's window stays in the tree over the overview, and
+    // XCTest calls the tiles not hittable, though touches reach them.
+    let first = app.buttons["Look at page 1"].firstMatch, second = app.buttons["Look at page 2"].firstMatch
+    XCTAssertTrue(first.waitForExistence(timeout: 3) && second.exists, "two pages in the overview")
+    first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0, thenDragTo: second.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
     settle()
     closeOverview()
     shot("v8-memo-moved-with-its-page")
@@ -195,7 +199,7 @@ extension MediaTests {
     XCTAssertEqual(memos.firstMatch.frame.minY, home.minY, accuracy: 4, "undo brings the page and its memo back")
     // Deleted with its page.
     overview()
-    app.buttons["Look at page 1"].firstMatch.tap()
+    app.buttons["Look at page 1"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     settle()
     app.buttons["Delete page"].firstMatch.tap()
     settle()
