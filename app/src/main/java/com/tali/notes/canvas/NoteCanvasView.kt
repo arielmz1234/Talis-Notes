@@ -1017,6 +1017,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    */
   private fun hideInkLayerAfterDraw(frames: Int = HIDE_AFTER_FRAMES) {
     val gen = ++hideGen
+    hidePending = true
     viewTreeObserver.registerFrameCommitCallback { hideAfterFrames(gen, frames) }
     invalidate()
   }
@@ -1029,6 +1030,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         hideAfterFrames(gen, frames - 1)
         return@postOnAnimation
       }
+      hidePending = false
       // A new stroke started meanwhile sets its own mask; leave Ink's layer to it.
       if (mode != Mode.INK && strokeId == null) {
         hideInkLayer()
@@ -1038,6 +1040,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   private var hideGen = 0
+  private var hidePending = false
 
   /**
    * Strokes put into the page by [commitWaitingInk] whose copy Ink's layer still shows while it
@@ -1128,19 +1131,58 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * layer is masked out (its waiting strokes are cleared from it) and those strokes are drawn on
    * the page here from the same inputs, until Ink hands them over.
    */
-  private fun shadowWaitingInk() {
+  private fun shadowWaitingInk(frames: Int = HIDE_AFTER_FRAMES) {
     if (mode == Mode.INK) return
     val waiting = shadows.entries.filter { (_, s) -> s.finished && s.item == null }
-    if (waiting.isEmpty()) return
+    if (waiting.isEmpty()) {
+      // Copies made earlier, but Ink's layer wasn't cleared (a stroke began meanwhile): clear it now.
+      if (inkLayerOwed && !hidePending) hideInkLayerAfterDraw(frames)
+      return
+    }
     // All or nothing: a stroke that can't be drawn here is left to Ink's layer.
     val items = waiting.map { (id, s) ->
       val stroke = runCatching { androidx.ink.strokes.Stroke(s.brush, s.inputs) }.getOrNull() ?: return
       InkItem("waiting-ink-$id", 0L, s.pen, realColoured(id, s.pen, stroke))
     }
     waiting.forEachIndexed { i, (_, s) -> s.item = items[i] }
-    hideInkLayer()
-    invalidate()
+    // Ink's layer shows at once, our copies a frame or two later: cleared straight away, the
+    // strokes vanished for those frames as the page began to move (Tali's video, 17 Nov 2026).
+    // So it's cleared once our copies have reached the screen ([hideInkLayerAfterDraw]), and
+    // until then it moves with the page ([followInkLayer]), so the two never part (kept in its
+    // place, the stroke showed twice for those frames).
+    if (inkFollowFrom == null) inkFollowFrom = android.graphics.Matrix(waiting.last().value.toWorld)
+    followInkLayer()
+    inkLayerOwed = true
+    hideInkLayerAfterDraw(frames)
   }
+
+  /** Where Ink's layer was drawn (screen to page), while it follows the page until it's cleared. */
+  private var inkFollowFrom: android.graphics.Matrix? = null
+
+  private fun followInkLayer() {
+    val from = inkFollowFrom ?: return
+    val m = android.graphics.Matrix(from).apply { postConcat(camera.worldToScreen) }
+    val v = FloatArray(9).also(m::getValues)
+    inProgress.pivotX = 0f
+    inProgress.pivotY = 0f
+    inProgress.scaleX = v[android.graphics.Matrix.MSCALE_X]
+    inProgress.scaleY = v[android.graphics.Matrix.MSCALE_Y]
+    inProgress.translationX = v[android.graphics.Matrix.MTRANS_X]
+    inProgress.translationY = v[android.graphics.Matrix.MTRANS_Y]
+  }
+
+  /** Ink's layer back in place (after it's been cleared): strokes go to it in screen coordinates. */
+  private fun stopFollowingInk() {
+    if (inkFollowFrom == null) return
+    inkFollowFrom = null
+    inProgress.translationX = 0f
+    inProgress.translationY = 0f
+    inProgress.scaleX = 1f
+    inProgress.scaleY = 1f
+  }
+
+  /** Our copies of waiting strokes are drawn, but Ink's layer hasn't been cleared of them yet. */
+  private var inkLayerOwed = false
 
   /**
    * Clears Ink's layer: a mask over all of it, which Ink applies the next time it draws (it
@@ -1148,11 +1190,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * and invisible, makes it draw now. The next stroke sets its usual mask again ([startInk]).
    */
   private fun hideInkLayer() {
+    inkLayerOwed = false
     inProgress.maskPath = android.graphics.Path().apply { addRect(-1e5f, -1e5f, 1e5f, 1e5f, android.graphics.Path.Direction.CW) }
     runCatching {
       val id = inProgress.startStroke(androidx.ink.strokes.StrokeInput.create(-2000f, -2000f, 0L, androidx.ink.brush.InputToolType.STYLUS), clearBrush)
       inProgress.cancelStroke(id, null)
     }
+    stopFollowingInk()
   }
 
   private val clearBrush by lazy { Brushes.brush(PenType.FINELINER, 0x00000000, 1f, com.tali.notes.model.LineStyle.SOLID, false) }
@@ -2369,6 +2413,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // pointed tail, often at an angle (the owner's video, 2 Nov 2026). For the marker it reaches at
     // most half the tip's width on screen.
     predictionGuard.reset(if (slot.type.isHighlighter) slot.size * camera.scale * 0.5f else null)
+    // Ink's layer still following the page with strokes waiting to be cleared: cleared and put back
+    // first (our copies of them have shown by now), since this stroke goes to it in screen terms.
+    if (inkFollowFrom != null) {
+      hideGen++
+      hidePending = false
+      hideInkLayer()
+    }
     val se = smoother.smooth(e, idx, MotionEvent.ACTION_DOWN)
     predictor.record(se)
     predictionGuard.record(se)
@@ -5148,6 +5199,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun fingerDown(e: MotionEvent) {
     // Fingers usually move the page next: ask Ink to hand the last strokes over soon (see [shadowWaitingInk]).
     if (strokePens.isNotEmpty()) runCatching { inProgress.requestHandoff() }
+    // And draw them on the page here before anything moves, so Ink's layer is already cleared of
+    // them (once our copies show) by the time the page slides.
+    if (e.actionMasked == MotionEvent.ACTION_DOWN) shadowWaitingInk(HIDE_AFTER_FRAMES)
     if (e.actionMasked == MotionEvent.ACTION_DOWN) {
       velocity?.recycle()
       velocity = VelocityTracker.obtain().also { it.addMovement(e) }
@@ -5476,6 +5530,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     shadowWaitingInk()
     refreshSnapTargets()
     clampCamera()
+    followInkLayer()
     host.onCameraMoved()
     if (selection.isNotEmpty()) publishSelection()
     updatePage()
