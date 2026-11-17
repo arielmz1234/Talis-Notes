@@ -221,7 +221,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
   private var doc: Document? = null
-  private val docListener: (Change) -> Unit = { onDocChanged(it); scheduleSharp() }
+  private val docListener: (Change) -> Unit = { ghostsTouched(it.removed.map { r -> r.id }); onDocChanged(it); scheduleSharp() }
 
   var settings = AppSettings()
     set(value) {
@@ -486,6 +486,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     addView(inProgress, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     setUpInkLayer(inProgress)
     tiles.boundsOf = { id -> doc?.get(id)?.bounds }
+    tiles.onHidden = ::ghostsTouched
     isFocusable = true
     // Ink sets up its front-buffered drawing surface on the first stroke unless asked earlier,
     // which made the first stroke on a page lag or only appear once the pen lifted.
@@ -929,7 +930,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       try {
         val built = androidx.ink.strokes.Stroke(g.brush, g.full.inputs)
         val stroke = if (darkPaper) built.copy(built.brush.copyWithColorIntArgb(Brushes.inkColor(g.pen, g.color))) else built
-        d.commit(Change(emptyList(), listOf(InkItem(d.newId(), d.nextZ(), g.pen, stroke))))
+        val item = InkItem(d.newId(), d.nextZ(), g.pen, stroke)
+        d.commit(Change(emptyList(), listOf(item)))
+        inkGhosts += item.id
       } catch (t: Throwable) {
         com.tali.notes.CrashLog.recovered(context, t)
       }
@@ -987,7 +990,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       val pen = strokePens[id] ?: continue
       val stroke = runCatching { androidx.ink.strokes.Stroke(sh.brush, sh.inputs) }.getOrNull() ?: continue
       try {
-        d.commit(Change(emptyList(), listOf(InkItem(d.newId(), d.nextZ(), pen, realColoured(id, pen, stroke)))))
+        val item = InkItem(d.newId(), d.nextZ(), pen, realColoured(id, pen, stroke))
+        d.commit(Change(emptyList(), listOf(item)))
+        inkGhosts += item.id
       } catch (t: Throwable) {
         com.tali.notes.CrashLog.recovered(context, t)
         continue
@@ -1010,18 +1015,44 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * blink out and back). So it's cleared once the frame holding them has gone to the screen,
    * plus one more frame; meanwhile both show the same strokes in the same place.
    */
-  private fun hideInkLayerAfterDraw() {
+  private fun hideInkLayerAfterDraw(frames: Int = HIDE_AFTER_FRAMES) {
     val gen = ++hideGen
-    viewTreeObserver.registerFrameCommitCallback {
-      postOnAnimation {
-        // A new stroke started meanwhile sets its own mask; leave Ink's layer to it.
-        if (gen == hideGen && mode != Mode.INK && strokeId == null) hideInkLayer()
-      }
-    }
+    viewTreeObserver.registerFrameCommitCallback { hideAfterFrames(gen, frames) }
     invalidate()
   }
 
+  /** Counts [frames] screen frames, then clears Ink's layer, unless a newer wait or a new stroke took over. */
+  private fun hideAfterFrames(gen: Int, frames: Int) {
+    postOnAnimation {
+      if (gen != hideGen) return@postOnAnimation
+      if (frames > 1) {
+        hideAfterFrames(gen, frames - 1)
+        return@postOnAnimation
+      }
+      // A new stroke started meanwhile sets its own mask; leave Ink's layer to it.
+      if (mode != Mode.INK && strokeId == null) {
+        hideInkLayer()
+        inkGhosts.clear()
+      }
+    }
+  }
+
   private var hideGen = 0
+
+  /**
+   * Strokes put into the page by [commitWaitingInk] whose copy Ink's layer still shows while it
+   * waits to be cleared. If one is erased, deleted or picked up and moved in that time, the copy
+   * would linger where it was (Tali: write, then quickly erase or move, and a ghost of the stroke
+   * flickers), so the wait starts again from the frame that shows the change, one frame long.
+   */
+  private val inkGhosts = HashSet<String>()
+
+  private fun ghostsTouched(ids: Collection<String>) {
+    if (inkGhosts.isEmpty() || ids.none { it in inkGhosts }) return
+    // Strokes still waiting for Ink's hand-off live only on its layer: clearing it would hide them.
+    if (strokePens.isNotEmpty()) return
+    hideInkLayerAfterDraw(frames = 1)
+  }
 
   /** On dark paper the live stroke used the light version of the colour: the stroke in its real one. */
   private fun realColoured(id: InProgressStrokeId, pen: PenType, s: Stroke): Stroke {
@@ -5909,6 +5940,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L
     /** How long the view rests before PDF pages are drawn sharp for it. */
+    /**
+     * Frames to wait, after the frame that put waiting strokes into the page went to the screen,
+     * before Ink's layer (shown at once) is cleared: one wasn't always enough on her 120 Hz tablet,
+     * where the page can reach the screen a frame or two after it's sent.
+     */
+    private const val HIDE_AFTER_FRAMES = 3
     private const val SHARP_WAIT_MS = 140L
 
     /** How far a rectangle drawn round a selection stands clear of it (world units, ~2 mm). */

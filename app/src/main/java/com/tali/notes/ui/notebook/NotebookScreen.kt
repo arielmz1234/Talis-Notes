@@ -1723,8 +1723,8 @@ private fun SelectionThickness(size: Float, line: LineStyle?, width: Dp, onResty
   val slider = @Composable { modifier: Modifier ->
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
       // The drawing follows the slider as it moves; the change is saved (one undo step) when it's let go.
-      StepSlider(value, 0.5f..40f, 0.5f, { value = it; onLive(it) }, Modifier.weight(1f), onChangeFinished = { onRestyle(if (value != size) value else null, null) })
-      Text(String.format(java.util.Locale.US, "%.1f", value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+      StepSlider(value, 0.5f..40f, com.tali.notes.ui.components.THICKNESS_STEP, { value = it; onLive(it) }, Modifier.weight(1f), onChangeFinished = { onRestyle(if (value != size) value else null, null) })
+      Text(com.tali.notes.ui.components.thicknessLabel(value), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
   }
   val styles = @Composable { modifier: Modifier -> CompactLineStylePicker(line ?: LineStyle.SOLID, { onRestyle(null, it) }, modifier) }

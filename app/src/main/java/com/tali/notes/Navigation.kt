@@ -54,7 +54,7 @@ fun MainNavigation() {
   // A PDF or pictures from another app open as themselves (a PDF item or a Picture item, built like
   // + › File: its own pages on plain paper), never into a notebook: from a notebook she can add
   // them herself. Until she saves it, it's just for looking (unless *Add them to my notebooks* is
-  // on). It opens on top of whatever was open, so leaving goes back there. A backup asks to restore.
+  // on). It takes the place of whatever was open, so Back always goes to the library. A backup asks to restore.
   val offer = Incoming.offer.collectAsState().value
   val app = androidx.compose.ui.platform.LocalContext.current.talisApp
   var opening by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
@@ -76,7 +76,12 @@ fun MainNavigation() {
       }.onFailure { com.tali.notes.CrashLog.recovered(app, it) }.getOrNull()
       opening = null
       Incoming.offer.value = null
-      if (id != null) backStack.add(Notebook(id))
+      if (id != null) {
+        // Only the library stays under it: Back from it always goes home, never to a notebook
+        // that happened to be open when the file arrived.
+        while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+        backStack.add(Notebook(id))
+      }
     }
   } else if (offer != null) {
     IncomingCard(offer, onDismiss = { Incoming.offer.value = null })

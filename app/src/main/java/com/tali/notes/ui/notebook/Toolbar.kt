@@ -357,8 +357,8 @@ private fun QuickSizes(slot: PenSlot, onPick: (Int) -> Unit, onSet: (Int, Float)
           Column(Modifier.width(280.dp).padding(horizontal = 14.dp, vertical = 4.dp)) {
             Text(stringResource(R.string.thickness_n, i + 1), style = MaterialTheme.typography.titleSmall, color = c.ink)
             Row(verticalAlignment = Alignment.CenterVertically) {
-              com.tali.notes.ui.components.StepSlider(sizes[i], slot.type.minSize..slot.type.maxSize, 0.5f, { onSet(i, it) }, Modifier.weight(1f))
-              Text(String.format(java.util.Locale.US, "%.1f", sizes[i]), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+              com.tali.notes.ui.components.StepSlider(sizes[i], slot.type.minSize..slot.type.maxSize, com.tali.notes.ui.components.THICKNESS_STEP, { onSet(i, it) }, Modifier.weight(1f))
+              Text(com.tali.notes.ui.components.thicknessLabel(sizes[i]), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
             }
           }
         }

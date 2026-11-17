@@ -125,3 +125,9 @@ private fun StepButton(icon: ImageVector, label: String, enabled: Boolean, onSte
     Icon(icon, null, tint = if (enabled) c.ink else c.inkFaint, modifier = Modifier.size(18.dp))
   }
 }
+
+/** Pen, shape and selection thickness change in quarters; the + and − step by one. */
+const val THICKNESS_STEP = 0.25f
+
+/** A thickness as she sees it: four times the stored width, so every step is a whole number (0.5 shows as 2, 1 as 4). */
+fun thicknessLabel(size: Float): String = kotlin.math.round(size * 4f).toInt().toString()

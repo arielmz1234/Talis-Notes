@@ -25,9 +25,13 @@ class TileCache(private val renderer: ItemRenderer) {
       val changed = (field - value) + (value - field)
       field = value
       changed.forEach { id -> boundsOf(id)?.let(::invalidate) }
+      onHidden(value)
     }
 
   var boundsOf: (String) -> Rect? = { null }
+
+  /** Told which items were just hidden (picked up to be moved or edited). */
+  var onHidden: (Set<String>) -> Unit = {}
 
   fun invalidate(worldRect: Rect) {
     forEachKey(worldRect.outset(2f)) { key -> tiles[key]?.dirty = true }

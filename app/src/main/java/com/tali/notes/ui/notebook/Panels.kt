@@ -191,12 +191,12 @@ fun PenPanel(settings: AppSettings, vm: NotebookViewModel) {
     StrokePreview(slot.type, slot.color, slot.size, slot.lineStyle, slot.square, slot.straight)
     Spacer(Modifier.height(12.dp))
     // Her three thicknesses (also beside the colours in the toolbar): pick one, then the slider sets it.
-    Segmented(listOf(0, 1, 2), slot.sizeSlot.coerceIn(0, 2), { i -> String.format(java.util.Locale.US, "%.1f", slot.presetSizes[i]) }, vm::pickPenSize, Modifier.fillMaxWidth())
+    Segmented(listOf(0, 1, 2), slot.sizeSlot.coerceIn(0, 2), { i -> com.tali.notes.ui.components.thicknessLabel(slot.presetSizes[i]) }, vm::pickPenSize, Modifier.fillMaxWidth())
     Spacer(Modifier.height(8.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(stringResource(R.string.size), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(44.dp))
-      StepSlider(slot.size, slot.type.minSize..slot.type.maxSize, 0.5f, { v -> vm.updateActivePen { it.withSize(v) } }, Modifier.weight(1f))
-      Text(String.format(java.util.Locale.US, "%.1f", slot.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
+      StepSlider(slot.size, slot.type.minSize..slot.type.maxSize, com.tali.notes.ui.components.THICKNESS_STEP, { v -> vm.updateActivePen { it.withSize(v) } }, Modifier.weight(1f))
+      Text(com.tali.notes.ui.components.thicknessLabel(slot.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(40.dp).padding(start = 8.dp))
     }
     if (slot.type.takesLineStyle) {
       Spacer(Modifier.height(10.dp))
@@ -630,8 +630,8 @@ private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
       Spacer(Modifier.height(6.dp))
       Row(resting, verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.size), style = MaterialTheme.typography.bodyMedium, color = c.inkMuted, modifier = Modifier.width(84.dp))
-        StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, 0.5f, { v -> if (own) vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
-        Text(String.format(java.util.Locale.US, "%.1f", look.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
+        StepSlider(look.size, com.tali.notes.model.ShapeStyle.MIN_SIZE..com.tali.notes.model.ShapeStyle.MAX_SIZE, com.tali.notes.ui.components.THICKNESS_STEP, { v -> if (own) vm.updateShapeStyle { it.copy(size = v) } }, Modifier.weight(1f))
+        Text(com.tali.notes.ui.components.thicknessLabel(look.size), style = MaterialTheme.typography.titleSmall, color = c.ink, modifier = Modifier.width(48.dp).padding(start = 8.dp))
       }
       OpacitySlider(stringResource(R.string.opacity), look.opacity, enabled = true) { v -> vm.updateShapeStyle { it.copy(opacity = v) } }
       OpacitySlider(stringResource(R.string.fill_opacity), look.fillOpacity, enabled = fill != null) { v -> vm.updateShapeStyle { it.copy(fillOpacity = v) } }
