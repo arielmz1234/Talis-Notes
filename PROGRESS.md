@@ -17,9 +17,10 @@ Android's df39537 (its CLAUDE.md item 91a): pen, shape-style and selection thick
 (`thicknessLabel`: 0.5 shows as 2, 1 as 4); stored sizes are unchanged and the eraser and text
 size keep their own steps. Changed: the pen panel (presets and slider), the toolbar's quick sizes,
 the Shapes Style tab and the selection menu's thickness. `PenTests` taps "16" (was "4.0") and
-holds + for 8 s to reach "160". Not built here (no Swift on Windows): CI checks it. Items 91b
-(Back from a file opened from another app) and 91c (the stroke flicker, an Android Ink issue) not
-ported.
+holds + for 8 s to reach "160". Not built here (no Swift on Windows): CI checks it. Item 91b
+(Back from a file opened from another app goes to the library) needs nothing here: `RootView`
+has no stack, only one notebook over the library, and a file from another app replaces it
+(`open = n`), so Back always lands in the library. 91c (the stroke flicker) is Android Ink's own.
 
 ## Windows sessions 4–5 (11–12 Nov 2026), merged without their code
 
