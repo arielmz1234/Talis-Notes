@@ -111,11 +111,7 @@ extension MediaTests {
     }
     settle()
     open(app, "Fluid mechanics")
-    tapTool(app, "tool-voice")
-    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-    let allow = springboard.buttons["Allow"]
-    if allow.waitForExistence(timeout: 2) { allow.tap() }
-    app.tap()
+    startRecording(app)
     Thread.sleep(forTimeInterval: 2.5)
     shot("v1-recording")
     app.buttons["memo-done"].firstMatch.tap()
@@ -150,9 +146,7 @@ extension MediaTests {
     let app = launch()
     settle()
     open(app, "Fluid mechanics")
-    tapTool(app, "tool-voice")
-    let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
-    if allow.waitForExistence(timeout: 2) { allow.tap() }
+    startRecording(app)
     Thread.sleep(forTimeInterval: 2.5)
     app.buttons["memo-done"].firstMatch.tap()
     settle()
@@ -453,4 +447,22 @@ extension MediaTests {
 /// English labels the tests tap.
 enum L10n {
   static let exportPDF = "Export PDF"
+}
+
+extension MediaTests {
+  /// The voice tool, then the microphone's permission whenever it's asked for (on a slow machine
+  /// the alert comes late), until the recorder shows; the tool again if it never opened.
+  func startRecording(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+    let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
+    let done = app.buttons["memo-done"].firstMatch
+    for _ in 0..<2 where !done.exists {
+      tapTool(app, "tool-voice")
+      let until = Date().addingTimeInterval(8)
+      while !done.exists, Date() < until {
+        if allow.exists { allow.tap() }
+        _ = done.waitForExistence(timeout: 0.5)
+      }
+    }
+    XCTAssertTrue(done.exists, "the recorder", file: file, line: line)
+  }
 }

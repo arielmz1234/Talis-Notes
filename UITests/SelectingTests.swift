@@ -564,6 +564,16 @@ final class SelectingTests: ShotCase {
     calmShot("c2-carried-with-its-cut-side")
     XCTAssertEqual(topSide(shiftedBy: 0), 0, "nothing of the cut side stays behind")
     XCTAssertGreaterThan(topSide(shiftedBy: 0.4), 20, "its pieces went with the fill")
+    if topSide(shiftedBy: 0.4) <= 20 {
+      // Only seen on CI's iPad: whether what's stored is wrong, or only what's on the screen.
+      app.buttons["back"].firstMatch.tap()
+      settle()
+      app.descendants(matching: .any)["notebook-New notebook"].firstMatch.tap()
+      settle()
+      calmShot("c2-reopened")
+      XCTAssertGreaterThan(topSide(shiftedBy: 0.4), 20, "reopened, the outline is with the fill: only the screen was behind")
+      return
+    }
     // Picked up again by the fill and carried back: the outline still goes with it.
     at(app, 0.68, 0.51).tap()
     settle()

@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 mkdir -p shots
 ipad=$(sh scripts/sim.sh "iPad Pro 13" iPad)
 iphone=$(sh scripts/sim.sh "iPhone 16" iPhone)
+xcrun simctl list devices | grep -E "$ipad|$iphone"
 for run in "$@"; do
   set -- $run
   dev=$ipad; [ "$1" = iphone ] && dev=$iphone
