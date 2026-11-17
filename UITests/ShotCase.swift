@@ -152,7 +152,9 @@ struct Pixels {
 
   func darkest(x: CGFloat, rows: ClosedRange<CGFloat>) -> Colour {
     let cx = Int(x * CGFloat(width))
-    return (Int(rows.lowerBound * CGFloat(height))...Int(rows.upperBound * CGFloat(height))).map { colour(cx, $0) }.min { $0.r + $0.g + $0.b < $1.r + $1.g + $1.b }!
+    let top = Int(rows.lowerBound * CGFloat(height)), bottom = Int(rows.upperBound * CGFloat(height))
+    func light(_ c: Colour) -> Int { c.r + c.g + c.b }
+    return (top...bottom).map { colour(cx, $0) }.min { light($0) < light($1) }!
   }
 
   /// How many pixels match from [x0] to [x1] between [rows] (fractions of the screen).
