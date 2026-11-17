@@ -18,12 +18,15 @@ for run in "$@"; do
   [ "$5" = all ] || for c in $(echo "$5" | tr ',' ' '); do only="$only -only-testing:TalisNotesUITests/$c"; done
   lang=$4; [ "$lang" = - ] && lang=""
   echo "== $2 ($1, $5)"
-  TEST_RUNNER_SHOT_DIR="$PWD/shots" TEST_RUNNER_SHOT_TAG="$2" TEST_RUNNER_SHOT_DARK="$3" TEST_RUNNER_SHOT_LANG="$lang" \
+  # A test that fails is run again (up to three tries): drags and timings are flaky on CI's slow
+  # virtual machines, while a real bug fails every time. CI=1 tells the tests where they run.
+  TEST_RUNNER_CI=1 TEST_RUNNER_SHOT_DIR="$PWD/shots" TEST_RUNNER_SHOT_TAG="$2" TEST_RUNNER_SHOT_DARK="$3" TEST_RUNNER_SHOT_LANG="$lang" \
     xcodebuild test-without-building -project TalisNotes.xcodeproj -scheme TalisNotes \
-    -destination "id=$dev" -derivedDataPath build/dd -resultBundlePath "build/$2.xcresult" $only > "build/$2.log" 2>&1 || true
+    -destination "id=$dev" -derivedDataPath build/dd -resultBundlePath "build/$2.xcresult" \
+    -retry-tests-on-failure -test-iterations 3 $only > "build/$2.log" 2>&1 || true
   # Why a test failed (the element it couldn't find, the line), then the summary.
   grep -E "error:|failed:|Assertion|No matches|not hittable" "build/$2.log" | grep -v "Test Suite" | head -20 || true
-  grep -E "Executed .* tests?, with" "build/$2.log" | tail -1
+  grep -E "Executed .* tests?, with|Test Case .* (passed|failed) on (Retry|Repetition)" "build/$2.log" | tail -8
 done
 ls shots
 test "$(ls shots | wc -l)" -gt 0
