@@ -173,9 +173,15 @@ struct MainToolbar: View {
           .rotationEffect(.degrees(panel == .pen ? 180 : 0))
           .frame(width: 28, height: 44)
           .background(RoundedRectangle(cornerRadius: 10).fill(panel == .pen ? c.accentSoft : .clear))
+          // A bigger target than the arrow: the touch area reaches past it on every side, the arrow and the bar's layout unchanged.
+          .padding(.horizontal, 9).padding(.vertical, 8)
+          .contentShape(Rectangle())
       }
-      .buttonStyle(.plain).contentShape(Rectangle())
+      .buttonStyle(.plain)
+      .padding(.horizontal, -9).padding(.vertical, -8)
+      .zIndex(1)
       .accessibilityLabel(L("pen_settings"))
+      .accessibilityIdentifier("toolbar-pen-settings")
       if showColors, let i = activeIndex {
         let pen = pens[i]
         let quick = Array(Palettes.shared.colors(for: pen).prefix(Palettes.shared.toolbarCount(for: pen)))
