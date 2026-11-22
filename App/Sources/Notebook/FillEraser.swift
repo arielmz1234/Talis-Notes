@@ -64,8 +64,9 @@ extension NoteCanvas.Coordinator {
   /// Shows [now] on the page without saving it (the stroke isn't over, or was called off).
   func showFills(_ now: [FillPicture]) {
     guard let pages else { return }
+    let before = pages.pages.under.fills
     pages.pages.under.fills = now
-    pages.layer.setNeedsDisplay()
+    redrawFills(before, now)
   }
 
   /// The eraser lifted: fills rubbed out are saved as new pictures (or go when nothing's left of

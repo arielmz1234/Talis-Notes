@@ -228,7 +228,8 @@ final class PagesView: UIView {
 
   override init(frame: CGRect) {
     super.init(frame: frame)
-    pages.levelsOfDetail = 6
+    // Sharp from 16× down to ⅛×, so zooming all the way out uses tiles already drawn at a level near it.
+    pages.levelsOfDetail = 8
     pages.levelsOfDetailBias = 4
     pages.tileSize = CGSize(width: 512, height: 512)
     isOpaque = false
@@ -468,6 +469,7 @@ struct NoteCanvas: UIViewRepresentable {
       }
       under.setLockedInk(lockedStrokes) { self.mask(for: $0) }
       pages?.pages.under = under
+      pages?.layer.setNeedsDisplay()
       let drawn = Self.highlighterFirst(inks) { $0 }.map { ($0.pkStroke(mask: mask(for: $0)), $0) }
       stored = drawn.map { (StrokeKey($0.0), $0.1) }
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
@@ -648,10 +650,13 @@ struct NoteCanvas: UIViewRepresentable {
       let world = pages.worldSize
       let z = canvas.zoomScale
       pages.layer.anchorPoint = .zero
+      // Only a new size redraws the tiles: a zoom is the tiled layer's own (its levels of detail),
+      // and redrawing every tile for each step of a pinch made the page visibly load again and again.
+      let resized = pages.bounds.size != world
       pages.bounds = CGRect(origin: .zero, size: world)
       pages.transform = CGAffineTransform(scaleX: z, y: z)
       pages.layer.position = .zero
-      pages.setNeedsDisplay()
+      if resized { pages.setNeedsDisplay() }
       canvas.contentSize = CGSize(width: world.width * z, height: world.height * z)
       updateChrome()
       // Until she zooms by hand, the page keeps fitting the canvas as its size settles (the screen

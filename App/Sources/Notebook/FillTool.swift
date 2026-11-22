@@ -255,8 +255,18 @@ extension NoteCanvas.Coordinator {
       CrashNote.log("saving fills: \(error)")
     }
     pages.pages.under.fills = newFills
-    pages.layer.setNeedsDisplay()
+    redrawFills(before, newFills)
     touch()
+  }
+
+  /// Redraws only where fills came, went or changed: redrawing every tile blanked the whole page
+  /// for a moment, so a fill seemed to load slowly.
+  func redrawFills(_ before: [FillPicture], _ after: [FillPicture]) {
+    let was = Dictionary(before.map { ($0.row.id, $0) }, uniquingKeysWith: { a, _ in a })
+    let now = Dictionary(after.map { ($0.row.id, $0) }, uniquingKeysWith: { a, _ in a })
+    func same(_ a: FillPicture?, _ b: FillPicture) -> Bool { a.map { $0 == b && $0.image === b.image } ?? false }
+    let changed = before.filter { !same(now[$0.row.id], $0) } + after.filter { !same(was[$0.row.id], $0) }
+    redrawPage(changed.map { CGRect($0.row.rect) }.reduce(nil) { joined($0, $1) })
   }
 
   /// One change by the fill tool (shapes' own fills and fill pictures together), as one undo step.
