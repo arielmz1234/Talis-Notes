@@ -487,6 +487,13 @@ struct NoteCanvas: UIViewRepresentable {
     var lasso = LassoState()
     /// Hold-to-shape (see HoldToShape.swift).
     var hold = HoldState()
+    /// New strokes swapped for the stored form (smoothed, kept to their page), by PencilKit's key:
+    /// after an undo or redo PencilKit puts its own form back, and it's swapped again.
+    var swappedForm: [StrokeKey: PKStroke] = [:]
+    /// PencilKit checks the drawing it made before it undoes: each drawing it handed in that was
+    /// swapped, by the drawing it became.
+    var pkSwaps: [(ours: PKDrawing, theirs: PKDrawing)] = []
+    var swappedNew = false
     /// Page numbers and the pull past the last page (see PageChrome.swift).
     var pageChrome = PageChromeState()
     /// The eraser (see Eraser.swift).
@@ -528,14 +535,14 @@ struct NoteCanvas: UIViewRepresentable {
     @objc func twoFingerTap() {
       guard parent.settings.smartUndo, !parent.viewOnly else { return }
       clearSelection()
-      canvas?.undoManager?.undo()
+      undoKeepingSwaps(redo: false)
       reportUndo()
     }
 
     @objc func threeFingerTap() {
       guard parent.settings.smartUndo, !parent.viewOnly else { return }
       clearSelection()
-      canvas?.undoManager?.redo()
+      undoKeepingSwaps(redo: true)
       reportUndo()
     }
 
@@ -585,10 +592,10 @@ struct NoteCanvas: UIViewRepresentable {
       switch cmd {
       case .undo:
         clearSelection()
-        canvas.undoManager?.undo()
+        undoKeepingSwaps(redo: false)
       case .redo:
         clearSelection()
-        canvas.undoManager?.redo()
+        undoKeepingSwaps(redo: true)
       case .addPage:
         pageCount += 1
         updateContent()
@@ -750,14 +757,38 @@ struct NoteCanvas: UIViewRepresentable {
 
     /// Matches the drawing's strokes to what's stored: new ones are stored, moved ones rewritten,
     /// missing ones removed. Only ink rows are touched; shapes, pictures and text stay as they are.
-    func sync(_ drawing: PKDrawing) {
+    /// Undo or redo with PencilKit's own strokes in place for the moment it looks for them; `sync`
+    /// swaps them back straight after.
+    func undoKeepingSwaps(redo: Bool) {
+      guard let canvas, let undo = canvas.undoManager else { return }
+      if let swap = pkSwaps.last(where: { $0.ours == canvas.drawing }) {
+        loading = true
+        undo.disableUndoRegistration()
+        setDrawing(swap.theirs)
+        undo.enableUndoRegistration()
+        loading = false
+      }
+      if redo { undo.redo() } else { undo.undo() }
+      // Nothing changed (the step wasn't PencilKit's): the swapped forms go straight back.
+      if canvas.drawing.strokes.contains(where: { pk in swappedForm[StrokeKey(pk)].map { !Self.sameForm($0, pk) } ?? false }) { sync(canvas.drawing) }
+    }
+
+    func sync(_ given: PKDrawing) {
+      // PencilKit's own form of a swapped stroke (back for an undo) is the swapped one.
+      var swappedBack = false
+      let drawing = PKDrawing(strokes: given.strokes.map { pk in
+        guard let swapped = swappedForm[StrokeKey(pk)], !Self.sameForm(swapped, pk) else { return pk }
+        swappedBack = true
+        return swapped
+      })
       var byKey: [StrokeKey: [Int]] = [:]
       for (i, s) in stored.enumerated() { byKey[s.key, default: []].append(i) }
       var next: [(key: StrokeKey, stroke: InkStroke)] = []
       var used = Set<Int>()
       var changed: [InkStroke] = []
       var rebuilt: [PKStroke] = []
-      var needsRebuild = false
+      var needsRebuild = swappedBack
+      swappedNew = false
       let pen = currentPen
       var z = max(stored.map(\.stroke.z).max() ?? 0, shapeZ) + 1
       for pk in drawing.strokes {
@@ -794,8 +825,10 @@ struct NoteCanvas: UIViewRepresentable {
           // on (in clear ink): neither is kept.
           needsRebuild = true
         } else {
-          // A new stroke from the pen.
-          let s = InkStroke.from(pk, pen: pen, id: newId(), z: z)
+          // A new stroke from the pen, its jitter smoothed as Android smooths it (PenSmoother).
+          var s = InkStroke.from(pk, pen: pen, id: newId(), z: z)
+          let smoothed = !pen.straight && s.inputs.points.count > 2
+          if smoothed { s.inputs.points = PenSmoother.smooth(s.inputs.points, zoom: Float(canvas?.zoomScale ?? 1)) }
           if !pen.type.pressureSensitive, pk.path.count > 2 {
             // Keep the live width matching the stored one (see InkWidth).
             let mid = pk.path[pk.path.count / 2]
@@ -805,11 +838,27 @@ struct NoteCanvas: UIViewRepresentable {
           changed.append(s)
           if let box = s.inputs.bounds { growPages(toHold: box) }
           let m = mask(for: s)
-          if let m, !m.bounds.contains(CGRect(s.bounds)) {
+          if smoothed {
+            // Drawn from the smoothed points from now on (and hidden past its page's edge): the same
+            // PencilKit stroke with its points moved, so its own undo still finds it.
+            var fresh = pk
+            fresh.path = PKStrokePath(
+              controlPoints: zip(pk.path, s.inputs.points).map { old, p in
+                PKStrokePoint(
+                  location: CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)), timeOffset: old.timeOffset, size: old.size, opacity: old.opacity,
+                  force: old.force, azimuth: old.azimuth, altitude: old.altitude, secondaryScale: old.secondaryScale)
+              }, creationDate: pk.path.creationDate)
+            if let m, !m.bounds.contains(CGRect(s.bounds)) { fresh.mask = m }
+            rebuilt.append(fresh)
+            remember(pk, swappedFor: fresh)
+            next.append((StrokeKey(fresh), s))
+            needsRebuild = true
+          } else if let m, !m.bounds.contains(CGRect(s.bounds)) {
             // It runs off its page: draw it hidden past the edge, as it will be from now on.
             var masked = pk
             masked.mask = m
             rebuilt.append(masked)
+            remember(pk, swappedFor: masked)
             next.append((StrokeKey(masked), s))
             needsRebuild = true
           } else {
@@ -845,7 +894,24 @@ struct NoteCanvas: UIViewRepresentable {
         setDrawing(PKDrawing(strokes: rebuilt))
         canvas.undoManager?.enableUndoRegistration()
         loading = false
+        if swappedNew {
+          pkSwaps.append((ours: canvas.drawing, theirs: given))
+          if pkSwaps.count > 200 { pkSwaps.removeFirst(pkSwaps.count - 200) }
+        }
       }
+    }
+
+    /// Whether two forms of one stroke (same key) are drawn the same: both kept to a page or not,
+    /// and the same points where smoothing moves them.
+    static func sameForm(_ a: PKStroke, _ b: PKStroke) -> Bool {
+      guard (a.mask == nil) == (b.mask == nil), a.path.count == b.path.count, a.path.count > 0 else { return false }
+      let mid = a.path.count / 2, end = a.path.count - 1
+      return a.path[mid].location == b.path[mid].location && a.path[end].location == b.path[end].location
+    }
+
+    private func remember(_ drawn: PKStroke, swappedFor swapped: PKStroke) {
+      swappedForm[StrokeKey(drawn)] = swapped
+      swappedNew = true
     }
 
     var currentPen: PenSlot {
