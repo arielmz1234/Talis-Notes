@@ -60,6 +60,8 @@ struct StepsCard: View {
         page(steps[at]).id(at).transition(slide)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
+      // The sliding steps stay inside the card: a short slide, cut at the content's edges.
+      .padding(2).clipped().padding(-2)
       .background(GeometryReader { g in Color.clear.onAppear { width = g.size.width }.onChange(of: g.size.width) { _, w in width = w } })
       Spacer().frame(height: 18)
       HStack(spacing: 0) {
@@ -79,8 +81,8 @@ struct StepsCard: View {
   private var slide: AnyTransition {
     let sign: CGFloat = (forward ? 1 : -1) * (direction == .rightToLeft ? -1 : 1)
     return .asymmetric(
-      insertion: .offset(x: width / 6 * sign).combined(with: .opacity).animation(Ease.outStrong(duration: 0.26)),
-      removal: .offset(x: -width / 8 * sign).combined(with: .opacity).animation(.easeOut(duration: 0.16)))
+      insertion: .offset(x: 28 * sign).combined(with: .opacity).animation(Ease.outStrong(duration: 0.28).delay(0.06)),
+      removal: .offset(x: -20 * sign).combined(with: .opacity).animation(.easeOut(duration: 0.14)))
   }
 
   private func go(_ i: Int) {
