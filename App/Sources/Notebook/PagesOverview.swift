@@ -91,6 +91,10 @@ struct PagesOverview: View {
   @State private var order: [Int]?
   @State private var held: Int?
   @State private var carried: [Int] = []
+  /// Where each page's tile is in the grid, where the finger is while holding one, and where on the tile it took hold.
+  @State private var frames: [Int: CGRect] = [:]
+  @State private var dragAt: CGPoint?
+  @State private var grab: CGSize = .zero
   /// Pages lifting away on a puff before they're deleted.
   @State private var leaving: Set<Int> = []
   /// Each page's latest picture, so after a move the tiles show the right page while new pictures are made.
@@ -127,19 +131,28 @@ struct PagesOverview: View {
                 }
               }
               .puffBox(leaving: leaving.contains(i))
-              // While picking, only a picked page can be held, and it brings its unbroken run along.
-              .modifier(HoldToMove(enabled: picked?.contains(i) ?? true) {
-                held = i
-                carried = Pages.carried(with: i, picked: picked)
-                order = Array(0..<count)
-                return NSItemProvider(object: "\(i)" as NSString)
-              })
-              .onDrop(of: [.text], delegate: PageDrop(target: i, held: $held, carried: carried, order: $order, onDrop: finishMove))
+              .background(GeometryReader { g in Color.clear.preference(key: PageFrames.self, value: [i: g.frame(in: .named("pages-grid"))]) })
+              .offset(heldOffset(i))
+              .zIndex(held == i ? 2 : (carried.contains(i) ? 1 : 0))
+              // Holding a page picks it (or, while picking, takes the unbroken run it's in); dragging then moves them.
+              .gesture(
+                LongPressGesture(minimumDuration: 0.4)
+                  .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("pages-grid")))
+                  .onChanged { value in
+                    guard case .second(true, let drag) = value else { return }
+                    if held == nil { take(i, at: drag?.location) }
+                    if let drag { follow(drag.location) }
+                  }
+                  .onEnded { _ in letGo() }
+              )
             }
             if picked == nil { addTile }
           }
           .padding(4)
+          .coordinateSpace(name: "pages-grid")
+          .onPreferenceChange(PageFrames.self) { frames = $0 }
         }
+        .scrollDisabled(held != nil)
       }
       .padding(24)
       .frame(maxWidth: 900, maxHeight: .infinity)
@@ -298,6 +311,54 @@ struct PagesOverview: View {
     version += 1
   }
 
+  /// Held long enough: the page is picked (Android's hold), and lifts with the pages it carries.
+  private func take(_ i: Int, at p: CGPoint?) {
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    if picked == nil || !(picked?.contains(i) ?? false) {
+      withAnimation(Ease.outStrong(duration: 0.2)) { picked = (picked ?? []).union([i]) }
+    }
+    let run = Pages.carried(with: i, picked: picked)
+    withAnimation(.easeOut(duration: 0.16)) {
+      held = i
+      carried = run.contains(i) ? run : [i]
+    }
+    order = Array(0..<count)
+    let f = frames[i] ?? .zero
+    let at = p ?? CGPoint(x: f.midX, y: f.midY)
+    grab = CGSize(width: at.x - f.midX, height: at.y - f.midY)
+    dragAt = at
+  }
+
+  /// The held page follows the finger; passing over another page, the carried ones take its place.
+  private func follow(_ p: CGPoint) {
+    dragAt = p
+    guard let o = order else { return }
+    guard let target = frames.first(where: { !carried.contains($0.key) && $0.value.contains(p) })?.key else { return }
+    let moved = Pages.moving(carried, in: o, onto: target)
+    if moved != o { withAnimation(Ease.outStrong(duration: 0.22)) { order = moved } }
+  }
+
+  /// Let go: moved pages go to their new places; held without moving, the page just stays picked.
+  private func letGo() {
+    guard held != nil else { return }
+    dragAt = nil
+    if let o = order, o != Array(0..<count) {
+      finishMove()
+    } else {
+      withAnimation(Ease.outStrong(duration: 0.2)) {
+        order = nil
+        held = nil
+        carried = []
+      }
+    }
+  }
+
+  /// The held page sits under the finger, wherever its slot is now.
+  private func heldOffset(_ i: Int) -> CGSize {
+    guard held == i, let at = dragAt, let f = frames[i] else { return .zero }
+    return CGSize(width: at.x - grab.width - f.midX, height: at.y - grab.height - f.midY)
+  }
+
   /// Let go: the held pages and everything on them move to where they were dropped.
   private func finishMove() {
     defer {
@@ -311,36 +372,10 @@ struct PagesOverview: View {
   }
 }
 
-/// A page that can be held and dragged to a new place.
-private struct HoldToMove: ViewModifier {
-  var enabled: Bool
-  var start: () -> NSItemProvider
-
-  func body(content: Content) -> some View {
-    if enabled { content.onDrag(start) } else { content }
-  }
-}
-
-/// The held pages passing over another take its place as one block; the others make way.
-private struct PageDrop: DropDelegate {
-  var target: Int
-  @Binding var held: Int?
-  var carried: [Int]
-  @Binding var order: [Int]?
-  var onDrop: () -> Void
-
-  func dropEntered(info: DropInfo) {
-    guard held != nil, let o = order else { return }
-    let moved = Pages.moving(carried, in: o, onto: target)
-    if moved != o { withAnimation(Ease.outStrong(duration: 0.22)) { order = moved } }
-  }
-
-  func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
-
-  func performDrop(info: DropInfo) -> Bool {
-    onDrop()
-    return true
-  }
+/// Where each page's tile is, in the grid.
+private struct PageFrames: PreferenceKey {
+  static let defaultValue: [Int: CGRect] = [:]
+  static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) { value.merge(nextValue()) { $1 } }
 }
 
 private struct PageTile: View {
@@ -360,8 +395,7 @@ private struct PageTile: View {
   @Environment(\.tali) private var c
 
   var body: some View {
-    Button(action: action) {
-      VStack(spacing: 8) {
+    VStack(spacing: 8) {
         Color.white
           .aspectRatio(aspect, contentMode: .fit)
           .overlay { if let picture { Image(uiImage: picture).resizable().scaledToFill() } }
@@ -388,8 +422,12 @@ private struct PageTile: View {
       .animation(.easeOut(duration: 0.15), value: picked)
       .animation(Ease.outStrong(duration: 0.2), value: picking)
       .animation(.easeOut(duration: 0.16), value: lifted)
-    }
-    .buttonStyle(PressStyle())
+    .contentShape(Rectangle())
+    // A tap, not a Button: a Button's touch also fired after a hold that picked or moved the page.
+    .onTapGesture(perform: action)
+    .accessibilityElement(children: .ignore)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityAction { action() }
     .accessibilityLabel(picking ? L("pick_page_n", number) : L("look_at_page_n", number))
     .accessibilityAddTraits(picked ? .isSelected : [])
     .task(id: version) { if let made = bridge.pageImage(index, width: 240) { onPicture(made) } }
