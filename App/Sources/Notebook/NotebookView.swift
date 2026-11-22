@@ -512,7 +512,7 @@ struct NotebookView: View {
       pens: $pens, tool: $tool, panel: $panel, shape: shapeSource, lasso: lassoShot ? .screenshot : lassoFree ? .freeForm : .lasso,
       onKeyboard: { panel = nil; command = .newText }, onInsert: { panel = nil; inserting = $0 }, memos: memos,
       onVoice: { panel = nil; memos.mic(hint: show) }, showColors: showColors, compactTools: PhoneWriting.onPhone,
-      toolsRoom: PhoneWriting.narrowerForTests ?? toolsRoom)
+      toolsRoom: PhoneWriting.narrowerForTests ?? toolsRoom, darkPaper: dark)
   }
 
   private func saveShape() {

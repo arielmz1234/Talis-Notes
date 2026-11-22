@@ -122,11 +122,15 @@ struct MainToolbar: View {
   var compactTools = false
   /// How wide the folded tools may be when they drop down.
   var toolsRoom: CGFloat = .infinity
+  /// On dark paper the pens and their colours show as they write there (Android's `onDarkPaper`).
+  var darkPaper = false
   @State private var toolsOpen = false
   @Environment(\.tali) private var c
   @Namespace private var toolGlide
 
   private var activeId: String? { if case .pen(let id) = tool { id } else { nil } }
+
+  private func shown(_ argb: Int32) -> Int32 { darkPaper ? DarkInk.onDarkPaper(argb) : argb }
   private var activeIndex: Int? { pens.firstIndex { $0.id == activeId } }
 
   var body: some View {
@@ -150,7 +154,7 @@ struct MainToolbar: View {
       HStack(alignment: .bottom, spacing: 0) {
         ForEach(pens) { pen in
           let on = pen.id == activeId
-          PenGlyph(type: pen.type, color: Color(uiColor: UIColor(argb: pen.color)), line: pen.lineStyle)
+          PenGlyph(type: pen.type, color: Color(uiColor: UIColor(argb: shown(pen.color))), line: pen.lineStyle)
             .offset(y: on ? 2 : 16)
             .frame(width: 34, height: 56, alignment: .top)
             .contentShape(Rectangle())
@@ -188,7 +192,7 @@ struct MainToolbar: View {
         if !quick.isEmpty {
           HStack(spacing: 0) {
             ForEach(quick, id: \.self) { col in
-              ColorDot(color: Color(argb: col), selected: UInt32(bitPattern: pen.color) | 0xFF00_0000 == col | 0xFF00_0000, size: 22) {
+              ColorDot(color: Color(argb: UInt32(bitPattern: shown(Int32(bitPattern: col)))), selected: UInt32(bitPattern: pen.color) | 0xFF00_0000 == col | 0xFF00_0000, size: 22) {
                 pens[i].color = Int32(bitPattern: col)
               }
               .accessibilityLabel(L("colour"))
