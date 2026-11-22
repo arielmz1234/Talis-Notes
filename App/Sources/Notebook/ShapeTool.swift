@@ -12,6 +12,8 @@ struct ShapeToolState {
   var startScreen: CGPoint = .zero
   var drawing = false
   var preview: ShapeRow?
+  /// Bumped for each shape: a finished one's preview stays until the page has drawn it.
+  var ticket = 0
   let layer = CAShapeLayer()
   /// The dotted line across a rectangle that's exactly square, or an ellipse that's exactly round.
   let squareHint = CAShapeLayer()
@@ -94,8 +96,20 @@ extension NoteCanvas.Coordinator {
     shapeTool.start = nil
     shapeTool.drawing = false
     shapeTool.preview = nil
-    drawShapePreview()
     endSnap()
+    shapeTool.ticket += 1
+    if let shape {
+      // The live shape stays over the page until the page's tiles have drawn it (taken away at
+      // once, the shape blinked out and back as they redrew).
+      shapeTool.squareHint.path = nil
+      let ticket = shapeTool.ticket
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        guard let self, self.shapeTool.ticket == ticket, self.shapeTool.preview == nil else { return }
+        self.drawShapePreview()
+      }
+    } else {
+      drawShapePreview()
+    }
     if let shape {
       pickUpShape(addShape(shape), soft: true)
     } else if let tapped {

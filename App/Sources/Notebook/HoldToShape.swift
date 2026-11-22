@@ -182,8 +182,16 @@ extension NoteCanvas.Coordinator {
     if let shape = hold.live {
       hold.live = nil
       hold.base = nil
-      hold.layer.path = nil
-      if !cancelled { pickUpShape(addShape(shape), soft: true) }
+      if cancelled {
+        hold.layer.path = nil
+      } else {
+        pickUpShape(addShape(shape), soft: true)
+        // The live shape stays until the page's tiles have drawn the kept one, so it doesn't blink.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+          guard let self, self.hold.live == nil else { return }
+          self.hold.layer.path = nil
+        }
+      }
     } else if !cancelled, let tapped = shapeTappedByPen() {
       dropInk(since: hold.began.addingTimeInterval(-0.2))
       pickUpShape(tapped)
@@ -345,7 +353,8 @@ extension NoteCanvas.Coordinator {
       }
     }
     touch()
-    pages.layer.setNeedsDisplay()
+    // Only where it is: redrawing every tile blanked the page around it for a moment.
+    redrawPage(s.geometry.bounds(s.size).map { CGRect($0) })
     reportUndo()
   }
 

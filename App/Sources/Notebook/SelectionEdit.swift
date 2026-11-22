@@ -227,6 +227,9 @@ extension NoteCanvas.Coordinator {
     parent.onSelection(nil)
     lasso.transform = .identity
     lasso.before = canvas.drawing
+    // A shape just made may still show its live copy over the page: it's carried now.
+    shapeTool.layer.path = nil
+    if hold.live == nil { hold.layer.path = nil }
     // What the last drag left in the overlay goes now: this one fills it afresh.
     lasso.overlayTicket += 1
     CATransaction.begin()
