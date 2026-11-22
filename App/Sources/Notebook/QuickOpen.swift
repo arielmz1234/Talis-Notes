@@ -64,8 +64,15 @@ private struct QuickOpenRow: View {
     Button(action: action) {
       HStack(spacing: 12) {
         ZStack(alignment: .leading) {
-          PaperPreview(style: notebook.paper, landscape: notebook.landscape, dark: notebook.dark, zoom: 1.6)
-          Rectangle().fill(Color(argb: notebook.cover)).frame(width: 4)
+          if let thumb = ThumbnailCache.shared.image(id: notebook.id, version: notebook.thumbVersion) {
+            // Its first page with what's on it, from the top, as the library's card.
+            Color.clear.overlay(alignment: .top) { Image(uiImage: thumb).resizable().scaledToFill() }.clipped()
+          } else {
+            PaperPreview(
+              style: notebook.paper, landscape: notebook.landscape, dark: notebook.dark, zoom: 1.6,
+              custom: PaperSettings.shared.custom(notebook.customPaper))
+          }
+          if notebook.kind == .notebook { Rectangle().fill(Color(argb: notebook.cover)).frame(width: 4) }
         }
         .frame(width: 52, height: 38)
         .clipShape(RoundedRectangle(cornerRadius: 7))
