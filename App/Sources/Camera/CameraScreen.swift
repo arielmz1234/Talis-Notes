@@ -241,6 +241,7 @@ final class LiveCamera {
   @ObservationIgnored private var device: AVCaptureDevice?
   @ObservationIgnored weak var preview: AVCaptureVideoPreviewLayer?
   @ObservationIgnored private var rotation: AVCaptureDevice.RotationCoordinator?
+  @ObservationIgnored private var turning: NSKeyValueObservation?
   @ObservationIgnored private var delegate: PhotoDelegate?
 
   func start() {
@@ -263,11 +264,31 @@ final class LiveCamera {
       session.commitConfiguration()
       device = d
       hasFlash = d.hasFlash
-      if let preview { rotation = AVCaptureDevice.RotationCoordinator(device: d, previewLayer: preview) }
+      if let preview { follow(d, preview) }
       nonisolated(unsafe) let s = session
       Self.queue.async { s.startRunning() }
       state = .running
     }
+  }
+
+  /// The preview turns with the device, so it stays level in landscape too, not only in portrait.
+  func follow(_ d: AVCaptureDevice, _ preview: AVCaptureVideoPreviewLayer) {
+    let r = AVCaptureDevice.RotationCoordinator(device: d, previewLayer: preview)
+    rotation = r
+    let level: @MainActor (CGFloat) -> Void = { [weak preview] angle in
+      guard let conn = preview?.connection, conn.isVideoRotationAngleSupported(angle) else { return }
+      conn.videoRotationAngle = angle
+    }
+    level(r.videoRotationAngleForHorizonLevelPreview)
+    turning = r.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.new]) { r, _ in
+      nonisolated(unsafe) let r = r
+      Task { @MainActor in level(r.videoRotationAngleForHorizonLevelPreview) }
+    }
+  }
+
+  /// The preview came after the camera started: it turns from now on.
+  func attached() {
+    if rotation == nil, let device, let preview { follow(device, preview) }
   }
 
   func stop() {
@@ -355,6 +376,7 @@ private struct CameraPreview: UIViewRepresentable {
     v.preview.session = camera.session
     v.preview.videoGravity = .resizeAspect
     camera.preview = v.preview
+    camera.attached()
     return v
   }
 
