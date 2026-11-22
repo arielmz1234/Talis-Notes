@@ -51,6 +51,9 @@ struct ReorderableColors: View {
 
   @Environment(\.tali) private var c
   @State private var width: CGFloat = 0
+  /// Set just after the first layout with the real width: until then the dots take their places
+  /// without moving (sprung from a zero-width layout, they flew in from outside the card).
+  @State private var settled = false
   /// While dragging, the order shown follows the finger; it's saved when she lets go.
   @State private var order: [UInt32] = []
   @State private var dragging: UInt32?
@@ -73,7 +76,7 @@ struct ReorderableColors: View {
           .scaleEffect(lifted ? 1.18 : 1)
           .offset(x: lifted ? dragAt.x - Self.dot / 2 : home.x, y: lifted ? dragAt.y - Self.dot / 2 : home.y)
           .zIndex(lifted ? 1 : 0)
-          .animation(lifted ? nil : .spring(response: 0.28, dampingFraction: 0.82), value: home)
+          .animation(lifted || !settled ? nil : .spring(response: 0.28, dampingFraction: 0.82), value: home)
           .animation(.easeOut(duration: 0.16), value: lifted)
           .onTapGesture { onPick(color) }
           .gesture(holdAndDrag(color, home: home, layout: layout))
@@ -109,8 +112,18 @@ struct ReorderableColors: View {
       .offset(x: CGFloat(layout.add.x), y: CGFloat(layout.add.y))
     }
     .frame(maxWidth: .infinity, minHeight: CGFloat(layout.height), maxHeight: CGFloat(layout.height), alignment: .topLeading)
-    .background(GeometryReader { g in Color.clear.onAppear { width = g.size.width }.onChange(of: g.size.width) { _, w in width = w } })
+    // They fade in where they belong, once there's a width to lay them out in.
+    .opacity(width > 0 ? 1 : 0)
+    .animation(.easeOut(duration: 0.18), value: width > 0)
+    .background(GeometryReader { g in Color.clear.onAppear { measured(g.size.width) }.onChange(of: g.size.width) { _, w in measured(w) } })
     .coordinateSpace(name: "colours")
+  }
+
+  private func measured(_ w: CGFloat) {
+    var t = Transaction()
+    t.disablesAnimations = true
+    withTransaction(t) { width = w }
+    if w > 0, !settled { DispatchQueue.main.async { settled = true } }
   }
 
   private func holdAndDrag(_ color: UInt32, home: CGPoint, layout: SavedColours.Layout) -> some Gesture {
