@@ -214,6 +214,8 @@ struct MainToolbar: View {
                 FillIcon(color: c.blue)
               } else if tool == .lasso {
                 lassoIcon(c.blue)
+              } else if tool == .laser {
+                LaserIcon(color: c.blue)
               } else {
                 Image(systemName: currentToolIcon).font(.system(size: 19)).foregroundStyle(isPen ? c.ink : c.blue)
               }
@@ -335,6 +337,8 @@ struct MainToolbar: View {
           FillIcon(color: on ? c.blue : c.ink)
         } else if t == .lasso {
           lassoIcon(on ? c.blue : c.ink)
+        } else if t == .laser {
+          LaserIcon(color: on ? c.blue : c.ink)
         } else {
           Image(systemName: icon).font(.system(size: 19)).foregroundStyle(on ? c.blue : c.ink)
         }

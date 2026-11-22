@@ -124,3 +124,27 @@ struct SelectIcon: View {
     .frame(width: size, height: size)
   }
 }
+
+/// The laser pointer drawn as Android's `TaliIcons.Laser`: a pointer held at a slant, its beam, and
+/// the dot it makes with two sparks beside it.
+struct LaserIcon: View {
+  var color: Color
+  var size: CGFloat = 24
+
+  var body: some View {
+    Canvas { ctx, canvasSize in
+      let k = canvasSize.width / 24
+      func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+      let line = StrokeStyle(lineWidth: 1.8 * k, lineCap: .round, lineJoin: .round)
+      var p = Path()
+      p.move(to: pt(20.2, 3.8)); p.addLine(to: pt(13.4, 10.6))
+      p.move(to: pt(21.4, 5)); p.addLine(to: pt(14.6, 11.8)); p.addLine(to: pt(12.2, 9.4)); p.addLine(to: pt(19, 2.6)); p.closeSubpath()
+      p.move(to: pt(10.6, 13.4)); p.addLine(to: pt(7.4, 16.6))
+      p.addEllipse(in: CGRect(x: 3.7 * k, y: 16.6 * k, width: 3.8 * k, height: 3.8 * k))
+      p.move(to: pt(3, 15.2)); p.addLine(to: pt(2.2, 14.4))
+      p.move(to: pt(8.6, 21)); p.addLine(to: pt(9.4, 21.8))
+      ctx.stroke(p, with: .color(color), style: line)
+    }
+    .frame(width: size, height: size)
+  }
+}
