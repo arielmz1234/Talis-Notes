@@ -185,7 +185,8 @@ struct NotebookView: View {
             TopBarLayout {
               if !hidden { leftBars.bar("title", 0, bars).topBarRole(.title) }
               if !hidden { mainToolbar(showColors: true).bar("tools", 1, bars).topBarRole(.tools).zIndex(1) }
-              if !hidden { rightBars(showName: true).bar("undo", 2, bars).topBarRole(.corner) }
+              if !hidden { nameBar.bar("undo", 2, bars).topBarRole(.name) }
+              if !hidden { rightBars(showName: false).bar("undo", 2, bars).topBarRole(.corner) }
             }
             .frame(minHeight: 60, alignment: .top)
           }
@@ -567,7 +568,13 @@ struct NotebookView: View {
   /// The notebook's name with a pencil (no crown), then the eye, in the top-right corner.
   private func rightBars(showName: Bool) -> some View {
     HStack(spacing: 10) {
-      if showName {
+      if showName { nameBar }
+      cornerBar
+    }
+  }
+
+  /// The notebook's name with a pencil to rename it.
+  private var nameBar: some View {
         FloatingBar(crown: .none, height: 44) {
           HStack(spacing: 8) {
             Text(title).font(TaliType.titleSmall).foregroundStyle(barColors.ink).lineLimit(1).frame(maxWidth: 200, alignment: .leading)
@@ -581,7 +588,10 @@ struct NotebookView: View {
           .accessibilityHint(L("rename"))
           .accessibilityIdentifier("notebook-title")
         }
-      }
+  }
+
+  /// The eye and ⋯, always in the top-right corner.
+  private var cornerBar: some View {
       FloatingBar(crown: .softEdge) {
         ToolIcon(system: "eye.slash", label: L("hide_toolbars")) { setHidden(true) }
           .accessibilityIdentifier("hide-toolbars")
@@ -641,7 +651,6 @@ struct NotebookView: View {
             .presentationBackground(barColors.surface)
           }
       }
-    }
   }
 }
 
