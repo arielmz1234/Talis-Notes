@@ -145,6 +145,7 @@ extension NoteCanvas.Coordinator {
     let p = worldPoint(t)
     hold.began = Date()
     circlePressBegan(t, at: Pt(Float(p.x), Float(p.y)))
+    edgeCoverBegan(at: p)
     hold.points = [Pt(Float(p.x), Float(p.y))]
     hold.anchor = t.location(in: canvas)
     hold.last = hold.anchor
@@ -165,6 +166,7 @@ extension NoteCanvas.Coordinator {
       hold.last = sp
       let p = CGPoint(x: sp.x / canvas.zoomScale, y: sp.y / canvas.zoomScale)
       hold.points.append(Pt(Float(p.x), Float(p.y)))
+      edgeCoverMoved(to: p)
       if hypot(sp.x - hold.anchor.x, sp.y - hold.anchor.y) > Self.holdTolerance {
         hold.anchor = sp
         scheduleHold()
@@ -174,6 +176,7 @@ extension NoteCanvas.Coordinator {
 
   private func holdEnded(_ cancelled: Bool) {
     stopHoldTimer()
+    edgeCoverEnded()
     if circlePressEnded() {
       hold.points = []
       return

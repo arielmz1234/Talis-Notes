@@ -487,6 +487,7 @@ struct NoteCanvas: UIViewRepresentable {
     var lasso = LassoState()
     /// Hold-to-shape (see HoldToShape.swift).
     var hold = HoldState()
+    var edgeCover = PageEdgeCoverState()
     /// New strokes swapped for the stored form (smoothed, kept to their page), by PencilKit's key:
     /// after an undo or redo PencilKit puts its own form back, and it's swapped again.
     var swappedForm: [StrokeKey: PKStroke] = [:]
