@@ -13,6 +13,7 @@ struct TalisNotesApp: App {
   var body: some Scene {
     WindowGroup {
       RootView()
+        .background(KeyboardDismiss().frame(width: 0, height: 0))
         .environment(library)
         .taliTheme()
         .preferredColorScheme(scheme)
