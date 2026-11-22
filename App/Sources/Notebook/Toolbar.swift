@@ -620,6 +620,10 @@ struct PenPanel: View {
         )
         .modifier(ShownWhenAdded(id: "colour-picker"))
       }
+      Spacer().frame(height: 10)
+      // What the eraser and lasso take is set in their own panels; this pen's own trick is circling to select.
+      ToggleRow(label: L("circle_to_select"), on: $pen.circleSelect, detail: L("circle_to_select_detail"))
+        .accessibilityIdentifier("pen-circle-select")
       Spacer().frame(height: 12)
       HStack(spacing: 10) {
         Button(L("add_a_pen"), action: onAddPen).buttonStyle(QuietButtonStyle())

@@ -87,6 +87,11 @@ struct HoldState {
   var dropSince: Date?
   var began = Date()
   let layer = CAShapeLayer()
+  /// Circle to select: the last stroke when it was a loop round something, and the press on it.
+  var circle: CircleLoop?
+  var circleTimer: Timer?
+  var circlePress: CGPoint?
+  let ring = CAShapeLayer()
 }
 
 extension NoteCanvas.Coordinator {
@@ -110,16 +115,17 @@ extension NoteCanvas.Coordinator {
     hold.layer.lineJoin = .round
     hold.layer.zPosition = 9
     v.layer.addSublayer(hold.layer)
+    installCircleSelect(on: v)
   }
 
   /// Whether this touch writes with the pen (not the eraser or lasso, not a finger that only
   /// scrolls, not a touch that took hold of the selection).
-  private func writes(_ t: UITouch) -> Bool {
+  func writes(_ t: UITouch) -> Bool {
     guard let canvas, case .pen = parent.tool, canvas.drawingGestureRecognizer.isEnabled || tracesOwnInk else { return false }
     return draws(t) && claim(t) == nil
   }
 
-  private func worldPoint(_ t: UITouch) -> CGPoint {
+  func worldPoint(_ t: UITouch) -> CGPoint {
     guard let canvas else { return .zero }
     let p = t.location(in: canvas)
     return CGPoint(x: p.x / canvas.zoomScale, y: p.y / canvas.zoomScale)
@@ -132,9 +138,13 @@ extension NoteCanvas.Coordinator {
     hold.base = nil
     hold.dropSince = nil
     hold.screenLength = 0
-    guard writes(t) else { return }
+    guard writes(t) else {
+      forgetCircle()
+      return
+    }
     let p = worldPoint(t)
     hold.began = Date()
+    circlePressBegan(t, at: Pt(Float(p.x), Float(p.y)))
     hold.points = [Pt(Float(p.x), Float(p.y))]
     hold.anchor = t.location(in: canvas)
     hold.last = hold.anchor
@@ -148,6 +158,7 @@ extension NoteCanvas.Coordinator {
       followLive(worldPoint(samples.last ?? t))
       return
     }
+    circlePressMoved(t.location(in: canvas))
     for s in samples {
       let sp = s.location(in: canvas)
       hold.screenLength += hypot(sp.x - hold.last.x, sp.y - hold.last.y)
@@ -163,6 +174,10 @@ extension NoteCanvas.Coordinator {
 
   private func holdEnded(_ cancelled: Bool) {
     stopHoldTimer()
+    if circlePressEnded() {
+      hold.points = []
+      return
+    }
     if hold.live != nil { endSnap() }
     if let shape = hold.live {
       hold.live = nil
@@ -172,6 +187,8 @@ extension NoteCanvas.Coordinator {
     } else if !cancelled, let tapped = shapeTappedByPen() {
       dropInk(since: hold.began.addingTimeInterval(-0.2))
       pickUpShape(tapped)
+    } else if !cancelled {
+      noteCircle()
     }
     hold.points = []
   }
@@ -185,7 +202,7 @@ extension NoteCanvas.Coordinator {
 
   /// Takes back the ink PencilKit drew since [since] (the dot of a tap): it lets go of a stroke still
   /// in hand, and one already handed in is taken out again, without an undo step of its own.
-  private func dropInk(since: Date) {
+  func dropInk(since: Date) {
     guard let canvas else { return }
     hold.dropSince = since
     canvas.drawingGestureRecognizer.isEnabled = false

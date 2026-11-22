@@ -117,10 +117,12 @@ public struct PenSlot: Codable, Hashable, Identifiable, Sendable {
   public var sizeSlot: Int
   /// How many of its palette's colours sit in the toolbar; nil until set (the app-wide number).
   public var toolbarColors: Int?
+  /// Circle to select: a loop drawn round things, then held for a moment, picks them up like the lasso.
+  public var circleSelect: Bool
 
   public init(
     id: String, type: PenType, color: Int32, size: Float, line: LineStyle = .SOLID, squareTip: Bool = false, freehand: Bool = false,
-    sizes: [Float] = [], sizeSlot: Int = 1, toolbarColors: Int? = nil
+    sizes: [Float] = [], sizeSlot: Int = 1, toolbarColors: Int? = nil, circleSelect: Bool = false
   ) {
     self.id = id
     self.type = type
@@ -132,6 +134,7 @@ public struct PenSlot: Codable, Hashable, Identifiable, Sendable {
     self.sizes = sizes
     self.sizeSlot = sizeSlot
     self.toolbarColors = toolbarColors
+    self.circleSelect = circleSelect
   }
 
   // Missing keys take their defaults, as kotlinx.serialization does (pens saved before a field existed, or by Android).
@@ -147,6 +150,7 @@ public struct PenSlot: Codable, Hashable, Identifiable, Sendable {
     sizes = try c.decodeIfPresent([Float].self, forKey: .sizes) ?? []
     sizeSlot = try c.decodeIfPresent(Int.self, forKey: .sizeSlot) ?? 1
     toolbarColors = try c.decodeIfPresent(Int.self, forKey: .toolbarColors)
+    circleSelect = try c.decodeIfPresent(Bool.self, forKey: .circleSelect) ?? false
   }
 
   public static let maxPens = 8

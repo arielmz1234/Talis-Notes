@@ -220,7 +220,7 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
 
   /// Whether the lasso loop [poly] picks up [item]: anything it touches. A whole PDF page is never
   /// picked up, however much of it the loop holds: it's the page itself.
-  private static func lassoTouches(_ item: PageItem, _ poly: [Pt]) -> Bool {
+  static func lassoTouches(_ item: PageItem, _ poly: [Pt]) -> Bool {
     switch item {
     case .ink(let s): Lasso.touchesPath(s.inputs.points.map { Pt($0.x, $0.y) }, poly)
     case .shape(let s): s.geometry.paths(s.size).contains { Lasso.touchesPath($0, poly) }
