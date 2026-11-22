@@ -659,7 +659,15 @@ struct StrokePreview: View {
       }
       inputs = InkInputs(points: points, tool: .stylus)
     }
-    return InkStroke(id: "", z: 0, pen: pen.type, tags: InkStroke.tags(for: pen), color: pen.inkColor, size: pen.size, inputs: inputs)
+    return InkStroke(id: "", z: 0, pen: pen.type, tags: InkStroke.tags(for: pen), color: pen.inkColor, size: shownSize(pen), inputs: inputs)
+  }
+
+  /// The sample's width: the pen's range laid over what the card can show, so the thinnest pen is
+  /// still a clear line and the thickest is a broad stroke, not a card filled with ink.
+  static func shownSize(_ pen: PenSlot) -> Float {
+    let lo = pen.type.minSize, hi = pen.type.maxSize
+    let f = hi > lo ? (min(max(pen.size, lo), hi) - lo) / (hi - lo) : 0
+    return 1.6 + f * (10 - 1.6)
   }
 
   private static func picture(_ pen: PenSlot, scale: CGFloat) -> UIImage {
