@@ -31,7 +31,14 @@ final class MemoModel {
   /// The memo just added from a recording: it pops in.
   var justAdded: String?
   /// How the page sits on screen, updated as it scrolls and zooms.
-  private(set) var placement = MemoPlacement(zoom: 1, origin: .zero, screen: Pt(1, 1), pages: nil, pageCount: 1, topClearance: 104)
+  /// Read by the memo buttons; it only tells them to move while there are memos on the page (the
+  /// page scrolling redrew the memo layer every frame with none there).
+  var placement: MemoPlacement {
+    _ = placementTick
+    return latestPlacement
+  }
+  private var placementTick = 0
+  @ObservationIgnored private var latestPlacement = MemoPlacement(zoom: 1, origin: .zero, screen: Pt(1, 1), pages: nil, pageCount: 1, topClearance: 104)
   /// The mic button's frame (global), so the recording bar hangs below it.
   var micFrame: CGRect = .zero
 
@@ -64,9 +71,10 @@ final class MemoModel {
   func cameraMoved() {
     guard let c = bridge?.coordinator, let canvas = c.canvas else { return }
     let z = Float(canvas.zoomScale)
-    placement = MemoPlacement(
+    latestPlacement = MemoPlacement(
       zoom: z, origin: Pt(Float(-canvas.contentOffset.x), Float(-canvas.contentOffset.y)), screen: Pt(Float(canvas.bounds.width), Float(canvas.bounds.height)),
       pages: c.paged ? c.layout : nil, pageCount: c.pageCount, topClearance: Float(c.parent.topClearance))
+    if !memos.isEmpty || draft != nil { placementTick &+= 1 }
   }
 
   /// Every button's centre this frame, spread so none overlap however far she zooms out.

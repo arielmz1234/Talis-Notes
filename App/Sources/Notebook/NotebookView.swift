@@ -122,8 +122,9 @@ struct NotebookView: View {
           onPencil: pencilGesture,
           onScreenshot: { url in withAnimation(Ease.outStrong(duration: 0.24)) { screenshot = url } },
           onView: { p, z in
-            page = p
-            zoom = z
+            // Only what changed: this comes every frame the page scrolls.
+            if page != p { page = p }
+            if zoom != z { zoom = z }
             memos.cameraMoved()
             crop.cameraMoved()
           },

@@ -19,8 +19,10 @@ final class CropModel {
   @ObservationIgnored private var grab = -1
   @ObservationIgnored private var from = Rect(0, 0, 0, 0)
 
-  func cameraMoved() {
-    guard let canvas = bridge?.coordinator?.canvas else { return }
+  /// The page moved: the crop frame follows it. Only while cropping ([always] as a crop starts):
+  /// otherwise each frame of scrolling redrew the crop layer for nothing.
+  func cameraMoved(always: Bool = false) {
+    guard always || edit != nil, let canvas = bridge?.coordinator?.canvas else { return }
     zoom = canvas.zoomScale
     origin = CGPoint(x: -canvas.contentOffset.x, y: -canvas.contentOffset.y)
   }
@@ -33,7 +35,7 @@ final class CropModel {
   func start(_ p: PictureRow) {
     guard CropEdit.croppable(p) else { return }
     bridge?.coordinator?.clearSelection()
-    cameraMoved()
+    cameraMoved(always: true)
     var whole = p
     whole.crop = nil
     image = pictureImage(whole, pixelsPerUnit: 2, cap: 2400).map { UIImage(cgImage: $0) }
