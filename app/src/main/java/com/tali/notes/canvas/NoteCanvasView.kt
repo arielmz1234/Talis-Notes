@@ -1081,6 +1081,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** Drawn on the page by us instead of by Ink's layer (the page moved before the hand-off). */
     var item: InkItem? = null
+
+    /** Where its samples went on the page (world units), for keeping it in view on Ink's layer. */
+    val bounds = android.graphics.RectF()
     private val pt = FloatArray(2)
 
     /** Sample [h] of [e] ([MotionEvent.getHistorySize] for the latest one). */
@@ -1091,6 +1094,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       pt[0] = axis(MotionEvent.AXIS_X)
       pt[1] = axis(MotionEvent.AXIS_Y)
       toWorld.mapPoints(pt)
+      if (inputs.size == 0) bounds.set(pt[0], pt[1], pt[0], pt[1]) else bounds.union(pt[0], pt[1])
       val time = (if (latest) e.eventTime else e.getHistoricalEventTime(h)) - start
       val type = e.getToolType(idx)
       val stylus = type == MotionEvent.TOOL_TYPE_STYLUS
@@ -2428,7 +2432,17 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // sits above every view and isn't clipped to this one, so the stroke used to show over the
     // toolbars and status bar, then vanish on lift (a tester's video).
     val areas = inkAreas(pageAt(p))
-    inProgress.maskPath = inkMask(areas)
+    // Strokes just finished but not handed over yet are still on Ink's layer, and its mask clears
+    // them too: one written on the next page vanished while she wrote on this one, until she lifted
+    // (Tali's video, 22 Nov 2026). Their own spots are left unmasked. Ink is never given ink off a
+    // stroke's page (see Gesture), so nothing of this stroke can show there that won't be kept.
+    val waiting = shadows.values.filter { it.finished && it.item == null }.map { sh ->
+      android.graphics.RectF(sh.bounds).apply {
+        val pad = sh.brush.size
+        inset(-pad, -pad)
+      }
+    }
+    inProgress.maskPath = inkMask(areas, waiting)
     // Ink's stroke unit: how far the pen moves (cm) for one world unit, as Ink works it out.
     val unitCm = camera.scale * 2.54f / resources.displayMetrics.xdpi
     // Half the pen in, so a stretch shown never reaches past the edge (nothing for the mask to clear).
@@ -3259,7 +3273,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * floating over the page ([CanvasHost.inkCovers]), so the stroke looks the same as it's written
    * as once it's kept (drawn under the bars, clipped to its page). Null when nothing is covered.
    */
-  private fun inkMask(areas: List<Rect>?): android.graphics.Path? {
+  private fun inkMask(areas: List<Rect>?, keep: List<android.graphics.RectF> = emptyList()): android.graphics.Path? {
     val loc = IntArray(2).also { getLocationInWindow(it) }
     val covers = host.inkCovers()
     if (areas == null && covers.isEmpty()) return null
@@ -3267,6 +3281,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (areas != null) {
       mask.addRect(-1e5f, -1e5f, 1e5f, 1e5f, android.graphics.Path.Direction.CW)
       mask.op(areaPath(areas, camera.worldToScreen), android.graphics.Path.Op.DIFFERENCE)
+      if (keep.isNotEmpty()) {
+        val kept = android.graphics.Path()
+        keep.forEach { kept.addRect(it, android.graphics.Path.Direction.CW) }
+        kept.transform(camera.worldToScreen)
+        mask.op(kept, android.graphics.Path.Op.DIFFERENCE)
+      }
     }
     if (covers.isNotEmpty()) {
       val bars = android.graphics.Path()

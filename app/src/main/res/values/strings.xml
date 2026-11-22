@@ -634,7 +634,7 @@
     <string name="tap_a_filled_shape_or_area">Tap a filled shape or area to take its fill away.</string>
     <string name="tap_a_filled_shape_or_area_2">Tap a filled shape or area to take its fill away</string>
     <string name="tap_a_notebook_to_bring_it">Tap a notebook to bring it back</string>
-    <string name="tap_a_page_to_look_closer">" · tap a page to look closer, hold and drag to move it"</string>
+    <string name="tap_a_page_to_look_closer">" · tap a page to look closer, hold to select it, hold and drag to move it"</string>
     <string name="tap_for_backups">Tap for backups</string>
     <string name="tap_inside_a_shape_or_inside">Tap inside a shape, or inside an area you\'ve drawn around, to fill it with colour. Your writing stays on top.</string>
     <string name="tap_pages_to_pick_them">Tap pages to pick them</string>

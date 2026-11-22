@@ -634,7 +634,7 @@
     <string name="tap_a_filled_shape_or_area">اضغط على شكل أو منطقة معبأة لإزالة تعبئتها.</string>
     <string name="tap_a_filled_shape_or_area_2">اضغط على شكل أو منطقة معبأة لإزالة تعبئتها</string>
     <string name="tap_a_notebook_to_bring_it">اضغط على دفتر لاستعادته</string>
-    <string name="tap_a_page_to_look_closer">" · اضغط على صفحة لتراها عن قرب، واضغط عليها مطولًا واسحبها لنقلها"</string>
+    <string name="tap_a_page_to_look_closer">" · اضغط على صفحة لتراها عن قرب، واضغط عليها مطولًا لتحديدها، واضغط مطولًا واسحبها لنقلها"</string>
     <string name="tap_for_backups">اضغط للنسخ الاحتياطية</string>
     <string name="tap_inside_a_shape_or_inside">اضغط داخل شكل، أو داخل منطقة أحطت بها، لتعبئتها بلون. تبقى كتابتك فوقها.</string>
     <string name="tap_pages_to_pick_them">اضغط على الصفحات لاختيارها</string>

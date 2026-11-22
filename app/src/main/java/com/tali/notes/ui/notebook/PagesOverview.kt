@@ -8,6 +8,8 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
@@ -143,6 +145,8 @@ fun PagesOverview(
   // The page held (its real index), and the pages carried with it: just it, or a picked unbroken
   // run of pages, which move together.
   var dragging by remember { mutableStateOf<Int?>(null) }
+  // The page last held (not just tapped), so letting go of it doesn't count as a tap.
+  var heldTile by remember { mutableStateOf<Int?>(null) }
   var carried by remember { mutableStateOf(emptyList<Int>()) }
   // Where the held tile should be drawn (its top-left in the grid's view): it follows the finger,
   // whatever slot the tile has moved to in the meantime, and through scrolling.
@@ -167,7 +171,13 @@ fun PagesOverview(
     val sorted = chosen.sorted()
     return if (sorted.last() - sorted.first() == sorted.size - 1) sorted else listOf(page)
   }
+  /** Holding a page picks it (and starts picking if she wasn't): Notewise and Samsung Notes do the same. */
+  fun pickByHold(page: Int) {
+    val chosen = picked.orEmpty()
+    if (page !in chosen) picked = chosen + page
+  }
   fun startDrag(page: Int) {
+    pickByHold(page)
     val me = itemInfo(page) ?: return
     dragging = page
     carried = runWith(page)
@@ -214,6 +224,9 @@ fun PagesOverview(
       val pages = order.toList()
       picked = null
       onRearrange(pages, if (block.size > 1) tr(R.string.n_pages_moved, block.size) else tr(R.string.page_n_moved_to_n, held + 1, pages.indexOf(held) + 1))
+      // Laid out afresh: blank pages moved change nothing in the notebook (so no new version), and
+      // the old order then counted as a move again on the next hold.
+      order = (0 until count).toList()
     }
   }
   Dialog(onDismissRequest = { if (peek != null) peek = null else if (picked != null) picked = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -295,17 +308,29 @@ fun PagesOverview(
               onPicture = { thumbs[i] = it },
               modifier = (if (i in carried) Modifier.zIndex(if (lifted) 3f else 2f).graphicsLayer { val l = lift(); translationX = l.x; translationY = l.y }
                 else Modifier.animateItem(placementSpec = if (settling) null else spring(dampingRatio = 0.85f, stiffness = 500f, visibilityThreshold = androidx.compose.ui.unit.IntOffset.VisibilityThreshold)))
-                .pointerInput(i, count, chosen) {
-                  // While picking, only a picked page can be held, and it brings its unbroken run along.
-                  if (chosen != null && i !in chosen) return@pointerInput
+                // Not keyed on what's picked: the hold itself picks the page, and the drag goes on.
+                .pointerInput(i) {
+                  // A new press: whatever an earlier hold left behind no longer counts.
+                  awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    if (heldTile == i) heldTile = null
+                  }
+                }
+                .pointerInput(i, count) {
+                  // Held, the page is picked; moved on, it's carried (with its unbroken run of picked pages).
                   detectDragGesturesAfterLongPress(
-                    onDragStart = { startDrag(i) },
+                    onDragStart = { heldTile = i; startDrag(i) },
                     onDrag = { change, delta -> change.consume(); dragBy(delta) },
                     onDragEnd = { drop() },
                     onDragCancel = { drop() },
                   )
                 },
             ) {
+              // Let go after a hold: the hold picked the page, so the release doesn't open it (or untick it).
+              if (heldTile == i) {
+                heldTile = null
+                return@PageTile
+              }
               if (chosen != null) picked = (if (i in chosen) chosen - i else chosen + i)
               else {
                 lastPeek = i

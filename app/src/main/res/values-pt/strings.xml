@@ -634,7 +634,7 @@
     <string name="tap_a_filled_shape_or_area">Toque numa forma ou área preenchida para tirar o preenchimento.</string>
     <string name="tap_a_filled_shape_or_area_2">Toque numa forma ou área preenchida para tirar o preenchimento</string>
     <string name="tap_a_notebook_to_bring_it">Toque num caderno para recuperá-lo</string>
-    <string name="tap_a_page_to_look_closer">" · toque numa página para ver de perto, toque e segure e arraste para movê-la"</string>
+    <string name="tap_a_page_to_look_closer">" · toque numa página para ver de perto, toque e segure para selecioná-la, ou segure e arraste para movê-la"</string>
     <string name="tap_for_backups">Toque para ver os backups</string>
     <string name="tap_inside_a_shape_or_inside">Toque dentro de uma forma, ou dentro de uma área que você contornou, para preenchê-la com cor. Sua escrita fica por cima.</string>
     <string name="tap_pages_to_pick_them">Toque nas páginas para escolhê-las</string>

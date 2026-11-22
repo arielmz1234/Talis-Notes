@@ -635,7 +635,7 @@
     <string name="tap_a_filled_shape_or_area">מקישים על צורה או אזור צבועים כדי להסיר את המילוי.</string>
     <string name="tap_a_filled_shape_or_area_2">מקישים על צורה או אזור צבועים כדי להסיר את המילוי</string>
     <string name="tap_a_notebook_to_bring_it">מקישים על מחברת כדי להחזיר אותה</string>
-    <string name="tap_a_page_to_look_closer">" · הקשה על עמוד מגדילה, לחיצה ארוכה וגרירה מזיזה אותו"</string>
+    <string name="tap_a_page_to_look_closer">" · הקשה על עמוד מגדילה, לחיצה ארוכה בוחרת אותו, לחיצה ארוכה וגרירה מזיזה אותו"</string>
     <string name="tap_for_backups">הקשה לגיבויים</string>
     <string name="tap_inside_a_shape_or_inside">מקישים בתוך צורה, או בתוך אזור שהקפת, כדי לצבוע אותו. הכתיבה נשארת מעל.</string>
     <string name="tap_pages_to_pick_them">מקישים על עמודים כדי לבחור אותם</string>

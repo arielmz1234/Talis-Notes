@@ -1102,6 +1102,9 @@ private fun PdfViewerBar(
           ToolButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), onClick = onBack)
         }
         Spacer(Modifier.width(10.dp))
+        // The name takes only the room the buttons leave: a long one on a phone pushed Write (or
+        // Save) and ⋯ off the screen (Ariel's screenshot, 22 Nov 2026). It shortens with … instead.
+        Box(Modifier.weight(1f)) {
         FloatingBar(Modifier.height(52.dp).widthIn(max = 380.dp).arrive(1), crown = CloudCrown.NONE) {
           Column(Modifier.padding(horizontal = 10.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1114,10 +1117,12 @@ private fun PdfViewerBar(
               style = MaterialTheme.typography.bodySmall,
               color = c.inkFaint,
               maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
             )
           }
         }
-        Spacer(Modifier.weight(1f).widthIn(min = 10.dp))
+        }
+        Spacer(Modifier.width(10.dp))
         // Saved, it's one of hers: the pen brings the toolbars to write on it. Not saved yet: Save.
         if (saved) PrimaryButton(stringResource(R.string.write), icon = Icons.Outlined.Edit, modifier = Modifier.height(52.dp).arrive(2), onClick = onWrite)
         else PrimaryButton(stringResource(R.string.save), icon = Icons.Outlined.Save, modifier = Modifier.height(52.dp).arrive(2), onClick = onSave)

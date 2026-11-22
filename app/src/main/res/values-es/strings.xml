@@ -634,7 +634,7 @@
     <string name="tap_a_filled_shape_or_area">Toca una forma o zona rellena para quitarle el relleno.</string>
     <string name="tap_a_filled_shape_or_area_2">Toca una forma o zona rellena para quitarle el relleno</string>
     <string name="tap_a_notebook_to_bring_it">Toca un cuaderno para recuperarlo</string>
-    <string name="tap_a_page_to_look_closer">" · toca una página para verla de cerca, mantenla pulsada y arrástrala para moverla"</string>
+    <string name="tap_a_page_to_look_closer">" · toca una página para verla de cerca, mantenla pulsada para seleccionarla, o mantenla y arrástrala para moverla"</string>
     <string name="tap_for_backups">Toca para ver las copias</string>
     <string name="tap_inside_a_shape_or_inside">Toca dentro de una forma, o dentro de una zona que hayas rodeado, para rellenarla de color. Tu escritura queda encima.</string>
     <string name="tap_pages_to_pick_them">Toca páginas para elegirlas</string>

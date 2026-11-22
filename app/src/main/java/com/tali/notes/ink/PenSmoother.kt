@@ -10,7 +10,12 @@ import kotlin.math.hypot
  * (Casiez et al.), which smooths a lot when the pen moves slowly (where the hand's and the
  * digitizer's jitter shows as little kinks, most of all zoomed in) and hardly at all when it moves
  * fast (so quick writing keeps up with the pen). Positions are in screen pixels, so it feels the
- * same at any zoom. Pressure, tilt and timing are left as they are.
+ * same at any zoom. Tilt and timing are left as they are.
+ *
+ * Pressure is eased too, over [PRESSURE_TAU_MS]: the S Pen's reading sometimes jumps between two
+ * samples, and the pens that thicken with pressure showed it as a step in the stroke's edge
+ * (Ariel's screenshots, 22 Nov 2026: a "d" and an "r" with a notch partway down the stem). Eased,
+ * a jump becomes a short taper; ordinary changes in pressure still come through.
  *
  * One per stroke: [reset] when a stroke starts, then [smooth] every event of it, in order.
  */
@@ -25,6 +30,7 @@ class PenSmoother(
   private var y = 0f
   private var vx = 0f
   private var vy = 0f
+  private var pressure = 0f
   private var lastNanos = Long.MIN_VALUE
   private val props = arrayOf(MotionEvent.PointerProperties())
   private val coords = arrayOf(MotionEvent.PointerCoords())
@@ -39,12 +45,13 @@ class PenSmoother(
   }
 
   /** One sample at [nanos]: updates the filter and leaves the smoothed position in [x], [y]. */
-  private fun step(px: Float, py: Float, nanos: Long) {
+  private fun step(px: Float, py: Float, pp: Float, nanos: Long) {
     if (lastNanos == Long.MIN_VALUE) {
       x = px
       y = py
       vx = 0f
       vy = 0f
+      pressure = pp
       lastNanos = nanos
       return
     }
@@ -54,6 +61,7 @@ class PenSmoother(
       return
     }
     lastNanos = nanos
+    pressure += (1f - kotlin.math.exp(-dt * 1000f / PRESSURE_TAU_MS)) * (pp - pressure)
     val av = alpha(speedCutoff, dt)
     vx += av * ((px - x) / dt - vx)
     vy += av * ((py - y) / dt - vy)
@@ -79,9 +87,10 @@ class PenSmoother(
     for (h in 0..e.historySize) {
       val latest = h >= e.historySize
       if (latest) e.getPointerCoords(idx, coords[0]) else e.getHistoricalPointerCoords(idx, h, coords[0])
-      step(coords[0].x, coords[0].y, nanos(e, h))
+      step(coords[0].x, coords[0].y, coords[0].pressure, nanos(e, h))
       coords[0].x = x
       coords[0].y = y
+      coords[0].pressure = pressure
       val time = if (latest) e.eventTime else e.getHistoricalEventTime(h)
       val o = out
       if (o == null) {
@@ -96,5 +105,8 @@ class PenSmoother(
   companion object {
     const val MIN_CUTOFF = 2.5f
     const val BETA = 0.04f
+
+    /** How long pressure takes to follow a change (ms, time constant): short enough to keep the pen's feel. */
+    const val PRESSURE_TAU_MS = 18f
   }
 }

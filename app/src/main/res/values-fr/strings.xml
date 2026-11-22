@@ -634,7 +634,7 @@
     <string name="tap_a_filled_shape_or_area">Touchez une forme ou une zone remplie pour retirer son remplissage.</string>
     <string name="tap_a_filled_shape_or_area_2">Touchez une forme ou une zone remplie pour retirer son remplissage</string>
     <string name="tap_a_notebook_to_bring_it">Touchez un carnet pour le récupérer</string>
-    <string name="tap_a_page_to_look_closer">" · touchez une page pour la voir de près, maintenez-la et faites-la glisser pour la déplacer"</string>
+    <string name="tap_a_page_to_look_closer">" · touchez une page pour la voir de près, maintenez-la pour la sélectionner, ou maintenez-la et faites-la glisser pour la déplacer"</string>
     <string name="tap_for_backups">Touchez pour les sauvegardes</string>
     <string name="tap_inside_a_shape_or_inside">Touchez l\'intérieur d\'une forme, ou d\'une zone que vous avez entourée, pour la remplir de couleur. Votre écriture reste au-dessus.</string>
     <string name="tap_pages_to_pick_them">Touchez des pages pour les choisir</string>
