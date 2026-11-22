@@ -49,6 +49,8 @@ struct LibraryView: View {
   @State private var drawer = false
   /// Picking several notebooks (Select): the ones ticked, or nil when not picking.
   @State private var picked: Set<String>?
+  /// The notebook whose hold menu is open.
+  @State private var holding: String?
   /// Notebooks and folders on their way out (puffing away), and a folder that has just been made.
   @State private var vanishing: Set<String> = []
   @State private var fresh: Set<String> = []
@@ -503,13 +505,19 @@ struct LibraryView: View {
                   onOpen(n)
                 }
               }
-              // Only while picking or in Recently deleted: otherwise holding opens its menu.
-              .gesture(
-                LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                  if let chosen = picked { togglePick(n.id, in: chosen) } else { show(.trash(n)) }
-                }, including: picked != nil || lib.shelf == .trash ? .all : .subviews
-              )
-              .contextMenu { if lib.shelf != .trash && picked == nil { menu(for: n) } }
+              // Holding picks it while picking, opens it in Recently deleted, and otherwise opens its menu.
+              .modifier(HoldPress {
+                if let chosen = picked {
+                  togglePick(n.id, in: chosen)
+                } else if lib.shelf == .trash {
+                  show(.trash(n))
+                } else {
+                  holding = n.id
+                }
+              })
+              .popover(isPresented: holdBinding(n.id)) {
+                HoldMenu { menu(for: n) }.environment(\.tali, c)
+              }
               .puffBox(leaving: vanishing.contains(n.id))
             }
           } header: {
@@ -539,22 +547,38 @@ struct LibraryView: View {
   }
 
   /// A notebook's hold menu, in Android's order.
+  private func holdBinding(_ id: String) -> Binding<Bool> {
+    Binding(get: { holding == id }, set: { if !$0, holding == id { holding = nil } })
+  }
+
+  /// Closes the hold menu, then does [action] once it has gone (a card or dialog opened from it comes after).
+  private func fromMenu(_ action: @escaping () -> Void) {
+    holding = nil
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: action)
+  }
+
   @ViewBuilder private func menu(for n: NotebookMeta) -> some View {
-    Button { picked = [n.id] } label: { Label(L("select"), systemImage: "checkmark.circle") }
-    Button { lib.toggleStar(n.id) } label: {
-      Label(L(lib.starred.contains(n.id) ? "remove_star" : "star"), systemImage: lib.starred.contains(n.id) ? "star.fill" : "star")
-    }
-    Button { show(.rename(n)) } label: { Label(L("rename"), systemImage: "pencil") }
-    Button { lib.duplicate(n.id) } label: { Label(L("duplicate"), systemImage: "doc.on.doc") }
+    let starred = lib.starred.contains(n.id)
+    HoldMenuRow(icon: "checkmark.circle", label: L("select")) { fromMenu { withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) { picked = [n.id] } } }
+    HoldMenuRow(icon: starred ? "star.fill" : "star", label: L(starred ? "remove_star" : "star")) { fromMenu { lib.toggleStar(n.id) } }
+    HoldMenuRow(icon: "pencil", label: L("rename")) { fromMenu { show(.rename(n)) } }
+    HoldMenuRow(icon: "doc.on.doc", label: L("duplicate")) { fromMenu { lib.duplicate(n.id) } }
     Menu {
-      MoveTargets(folders: lib.folders, here: n.folderId) { lib.move(n.id, to: $0) }
+      MoveTargets(folders: lib.folders, here: n.folderId) { target in fromMenu { lib.move(n.id, to: target) } }
     } label: {
-      Label(L("move_to_folder"), systemImage: "folder")
+      HStack(spacing: 12) {
+        Image(systemName: "folder").font(.system(size: 16)).foregroundStyle(c.inkMuted).frame(width: 20)
+        Text(L("move_to_folder")).font(TaliType.bodyMedium).foregroundStyle(c.ink).lineLimit(1)
+        Spacer(minLength: 0)
+        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(c.inkFaint)
+      }
+      .padding(.horizontal, 8).frame(minHeight: 42).contentShape(Rectangle())
     }
+    .accessibilityLabel(L("move_to_folder"))
     // Only a notebook has a cover (its spine).
-    if n.kind == .notebook { ColourPalette(current: n.cover) { lib.setCover(n.id, $0) } }
-    Divider()
-    Button(role: .destructive) { show(.delete(n)) } label: { Label(L("delete"), systemImage: "trash") }
+    if n.kind == .notebook { HoldMenuColours(current: n.cover) { lib.setCover(n.id, $0) } }
+    Divider().overlay(c.line).padding(.vertical, 4)
+    HoldMenuRow(icon: "trash", label: L("delete"), warning: true) { fromMenu { show(.delete(n)) } }
   }
 
   @ViewBuilder private var drawerLayer: some View {
