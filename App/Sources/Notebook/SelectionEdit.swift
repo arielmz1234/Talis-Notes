@@ -227,8 +227,43 @@ extension NoteCanvas.Coordinator {
     parent.onSelection(nil)
     lasso.transform = .identity
     lasso.before = canvas.drawing
+    // What the last drag left in the overlay goes now: this one fills it afresh.
+    lasso.overlayTicket += 1
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    lasso.shapeLayer.sublayers = nil
+    lasso.shapeLayer.setAffineTransform(.identity)
+    CATransaction.commit()
     liftShapes()
+    liftInk()
     drawChrome()
+  }
+
+  /// The picked-up writing leaves PencilKit's drawing for the overlay while it's carried: moved in
+  /// PencilKit every step, it was redrawn late, so it jumped to the end and showed in both places.
+  private func liftInk() {
+    guard let canvas, let before = lasso.before else { return }
+    var up: [PKStroke] = [], left: [PKStroke] = []
+    for (i, s) in before.strokes.enumerated() {
+      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(s) } else { left.append(s) }
+    }
+    guard !up.isEmpty else { return }
+    let z = canvas.zoomScale
+    let scale = canvas.traitCollection.displayScale
+    let drawing = PKDrawing(strokes: up)
+    let box = drawing.bounds.insetBy(dx: -2, dy: -2)
+    let l = CALayer()
+    l.frame = CGRect(x: box.minX * z, y: box.minY * z, width: box.width * z, height: box.height * z)
+    l.contentsScale = scale
+    canvas.traitCollection.performAsCurrent { l.contents = drawing.image(from: box, scale: z * scale).cgImage }
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    lasso.shapeLayer.addSublayer(l)
+    CATransaction.commit()
+    lasso.overlayTicket += 1
+    loading = true
+    setDrawing(PKDrawing(strokes: left))
+    loading = false
   }
 
   func continueDrag(to p: Pt) {
@@ -269,19 +304,8 @@ extension NoteCanvas.Coordinator {
       drawChrome()
       return
     }
-    let t = lasso.transform
-    if let before = lasso.before, stored.contains(where: { lasso.picked.contains($0.stroke.id) }) {
-      let by = CGAffineTransform(a: CGFloat(t.a), b: CGFloat(t.b), c: CGFloat(t.c), d: CGFloat(t.d), tx: CGFloat(t.tx), ty: CGFloat(t.ty))
-      loading = true
-      setDrawing(PKDrawing(strokes: before.strokes.enumerated().map { i, s in
-        guard i < stored.count, lasso.picked.contains(stored[i].stroke.id) else { return s }
-        var m = s
-        m.transform = s.transform.concatenating(by)
-        return m
-      }))
-      loading = false
-    }
-    carryShapes(t)
+    // The writing rides in the overlay with the rest (see liftInk).
+    carryShapes(lasso.transform)
     drawChrome()
   }
 
