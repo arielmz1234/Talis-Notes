@@ -17,9 +17,7 @@
     <string name="add_a_pen">הוספת עט</string>
     <string name="add_n_to_the_shapes_panel">הוספת %1$s ללוח הצורות</string>
     <string name="add_page">הוספת עמוד</string>
-    <string name="add_the_picture">הוספת התמונה</string>
     <string name="add_them_to_my_notebooks">להוסיף למחברות שלי</string>
-    <string name="add_these">הוספת %1$s</string>
     <string name="add_to_the_page">הוספה לעמוד</string>
     <string name="added_1_page_write_right_on">נוסף עמוד אחד — אפשר לכתוב עליו</string>
     <string name="added_n_pages_write_right_on">נוספו %1$s עמודים — אפשר לכתוב עליהם</string>
@@ -62,7 +60,6 @@
     <string name="brought_back_1_notebook_from_the">מחברת אחת שוחזרה מהגיבוי.</string>
     <string name="brought_back_n_notebooks_from_the">%1$s מחברות שוחזרו מהגיבוי.</string>
     <string name="brought_to_the_front">הובא לחזית</string>
-    <string name="called_n">בשם \"%1$s\"</string>
     <string name="cancel">ביטול</string>
     <string name="change_place">שינוי מיקום</string>
     <string name="changes_show_in_every_notebook_on">השינויים יופיעו בכל מחברת עם הדף הזה.</string>
@@ -153,7 +150,6 @@
     <string name="endless_canvas_write_anywhere">קנבס אינסופי: כותבים בכל מקום</string>
     <string name="ends_and_edges_lock_on_shapes">קצוות ושוליים ננעלים; צורות מתיישרות.</string>
     <string name="eraser">מחק</string>
-    <string name="eraser_can_erase_it">המחק יכול למחוק אותו</string>
     <string name="erases">מוחק</string>
     <string name="every_backup_in_a_folder_on">כל הגיבויים בתיקייה בטאבלט או בכרטיס זיכרון.</string>
     <string name="every_notebook_the_app_backed_up">כל מחברת שהאפליקציה גיבתה שם. והגיבוי לשם ממשיך.</string>
@@ -211,7 +207,6 @@
     <string name="in_the_toolbar_with_this_pen">בסרגל הכלים עם העט הזה</string>
     <string name="in_your_shapes_panel">בלוח הצורות שלך</string>
     <string name="insert">הוספה</string>
-    <string name="into_which_notebook">לאיזו מחברת?</string>
     <string name="it_disappears_from_the_paper_choices">הוא ייעלם מבחירת הדפים. מחברות שמשתמשות בו יעברו לדף ריק; הכתיבה נשארת.</string>
     <string name="it_goes_into_your_notebooks_ready">הוא נכנס למחברות שלך, מוכן לכתיבה.</string>
     <string name="it_ll_keep_backing_up_into">" הגיבוי לקובץ הזה ימשיך מעצמו."</string>
@@ -226,7 +221,6 @@
     <string name="language">שפה</string>
     <string name="laser">לייזר</string>
     <string name="lasso">לאסו</string>
-    <string name="lasso_can_pick_it_up">הלאסו יכול לבחור אותו</string>
     <string name="last_backed_up_n">גיבוי אחרון: %1$s</string>
     <string name="last_backup_n">גיבוי אחרון %1$s</string>
     <string name="last_n">אחרון: %1$s</string>
@@ -287,7 +281,6 @@
     <string name="n_pages_deleted_undo_brings_them">%1$s עמודים נמחקו — ביטול הפעולה מחזיר אותם</string>
     <string name="n_pages_duplicated">%1$s עמודים שוכפלו</string>
     <string name="n_pages_moved">%1$s עמודים הועברו</string>
-    <string name="n_pdfs">%1$s קובצי PDF</string>
     <string name="n_pictures">%1$s תמונות</string>
     <string name="n_saved_to_your_papers">\"%1$s\" נשמר בדפים שלך</string>
     <string name="n_selected">%1$s נבחרו</string>
@@ -329,7 +322,6 @@
     <string name="one_page_that_goes_on_forever">עמוד אחד שנמשך לכל הכיוונים, לשרטוטים גדולים ולמפות חשיבה.</string>
     <string name="opacity">אטימות</string>
     <string name="open_n">פתיחת %1$s</string>
-    <string name="open_now">פתוחה עכשיו</string>
     <string name="open_voice_memo">פתיחת הקלטה</string>
     <string name="opening">פותח…</string>
     <string name="opening_pdf">פותח PDF…</string>
@@ -676,7 +668,6 @@
     <string name="this_file_isn_t_a_tali">הקובץ הזה הוא לא גיבוי של Tali\'s Notes.</string>
     <string name="this_folder_is_empty">התיקייה ריקה</string>
     <string name="this_pdf_is_password_protected_remove">ה-PDF הזה מוגן בסיסמה. מסירים את הסיסמה ומנסים שוב.</string>
-    <string name="this_pen_and_other_tools">העט הזה וכלים אחרים</string>
     <string name="those_files_couldn_t_be_restored">לא הצלחנו לשחזר את הקבצים האלה.</string>
     <string name="tip">טיפ</string>
     <string name="tip_at_the_end_of_a">טיפ: בסוף קו או צורה, משאירים את העט במקום והיא מתיישרת</string>
@@ -748,7 +739,6 @@
     <string name="open">פתיחה</string>
     <string name="only_pdfs_and_pictures_can_be_added">אפשר להוסיף רק קובצי PDF ותמונות.</string>
     <string name="n_here">%1$s (כאן)</string>
-    <string name="on_its_own">בנפרד</string>
     <string name="write">כתיבה</string>
     <string name="add_camera">מצלמה</string>
     <string name="a_photo_of_the_board_or_a_page">צילום של הלוח או של דף</string>

@@ -169,9 +169,10 @@ object Brushes {
   private fun dampedByDistance(b: BrushBehavior): BrushBehavior =
     BrushBehavior(
       b.terminalNodes.map { t ->
-        val input = (t as? BrushBehavior.TargetNode)?.input as? BrushBehavior.DampingNode
+        val target = t as? BrushBehavior.TargetNode
+        val input = target?.input as? BrushBehavior.DampingNode
         if (input == null || input.dampingSource != BrushBehavior.DampingSource.TIME_IN_SECONDS) t
-        else (t as BrushBehavior.TargetNode).let { BrushBehavior.TargetNode(it.target, it.targetModifierRangeStart, it.targetModifierRangeEnd, BrushBehavior.DampingNode(BrushBehavior.DampingSource.DISTANCE_IN_MULTIPLES_OF_BRUSH_SIZE, FOUNTAIN_SETTLE, input.input)) }
+        else BrushBehavior.TargetNode(target.target, target.targetModifierRangeStart, target.targetModifierRangeEnd, BrushBehavior.DampingNode(BrushBehavior.DampingSource.DISTANCE_IN_MULTIPLES_OF_BRUSH_SIZE, FOUNTAIN_SETTLE, input.input))
       }
     )
 

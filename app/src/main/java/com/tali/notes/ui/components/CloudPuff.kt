@@ -291,7 +291,6 @@ private val LAYER_ROOM: Dp = 28.dp
 /** Room around the area for the mist to spill into as it spreads and rises. */
 private val OVERFLOW: Dp = 56.dp
 
-/** A pale lilac the dark-mode mist leans towards. */
 
 /** How many tints the wisps come in, from the top of the cloud to its lilac underside. */
 private const val TONES = 4

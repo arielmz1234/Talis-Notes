@@ -271,8 +271,6 @@ class TextItem(
 
   fun recolored(c: Int) = TextItem(id, z, text, origin, width, fontSize, c, locked, height)
 
-  fun withText(t: String) = TextItem(id, z, t, origin, width, fontSize, color, locked, height)
-
   companion object {
     /** Line height as a multiple of the font size, matched by the editor. */
     const val LINE = 1.3f

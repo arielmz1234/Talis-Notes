@@ -129,10 +129,10 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   /** She chose to leave without saving: the PDF and what she wrote on it go when the notebook closes. */
   private var discardOnLeave = false
 
-  /** Keeps the PDF she was looking at as one of her notebooks, called [title]. */
   /** Her folders, for choosing where a PDF or picture she saves goes. */
   val folders = repo.folders
 
+  /** Keeps the PDF she was looking at as one of her notebooks, called [title]. */
   fun saveAsNotebook(title: String, folderId: String? = null) {
     // Into the folder she chose first, so its name is kept apart from that folder's others.
     if (folderId != null) repo.moveToFolder(notebookId, folderId)
@@ -476,13 +476,11 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
   fun updateActivePen(transform: (PenSlot) -> PenSlot) =
     store.update { s -> s.copy(pens = s.pens.map { if (it.id == s.activeSlot.id) transform(it) else it }) }
 
-  /** A colour chosen for the active pen (from the palette, the picker or the quick colours). */
-  fun pickPenColor(color: Int) = updateActivePen { it.pick(color) }
+  /** A colour chosen for the active pen (from the palette, the picker or the toolbar). */
+  fun pickPenColor(color: Int) = updateActivePen { it.copy(color = color) }
 
   /** The active pen's line: solid, dotted or dashed. */
   fun setPenLine(line: LineStyle) = updateActivePen { it.copy(line = line) }
-
-  fun setPaperLineWeight(weight: Float) = store.update { it.copy(paperLineWeight = weight.coerceIn(0.5f, 5f)) }
 
   /** A built-in paper's own line thickness (from its edit card). */
   fun setPaperWeight(style: PaperStyle, weight: Float) = store.update { it.copy(paperWeights = it.paperWeights + (style.name to weight.coerceIn(0.5f, 5f))) }

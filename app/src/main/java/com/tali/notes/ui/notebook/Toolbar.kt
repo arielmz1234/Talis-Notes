@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Undo
-import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Screenshot
@@ -319,11 +317,6 @@ private fun ToolStrip(items: List<Pair<String, @Composable () -> Unit>>, selecte
 @Composable
 private fun Divider() {
   Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(28.dp).background(Tali.colors.line))
-}
-
-@Composable
-fun ColorChip(color: Color, onClick: () -> Unit) {
-  Box(Modifier.size(28.dp).clip(CircleShape).background(color).clickable(onClick = onClick))
 }
 
 /**

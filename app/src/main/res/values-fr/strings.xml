@@ -16,9 +16,7 @@
     <string name="add_a_pen">Ajouter un stylo</string>
     <string name="add_n_to_the_shapes_panel">Ajouter %1$s au panneau Formes</string>
     <string name="add_page">Ajouter une page</string>
-    <string name="add_the_picture">Ajouter l\'image</string>
     <string name="add_them_to_my_notebooks">Les ajouter à mes carnets</string>
-    <string name="add_these">Ajouter %1$s</string>
     <string name="add_to_the_page">Ajouter à la page</string>
     <string name="added_1_page_write_right_on">1 page ajoutée : écrivez directement dessus</string>
     <string name="added_n_pages_write_right_on">%1$s pages ajoutées : écrivez directement dessus</string>
@@ -61,7 +59,6 @@
     <string name="brought_back_1_notebook_from_the">1 carnet récupéré depuis la sauvegarde.</string>
     <string name="brought_back_n_notebooks_from_the">%1$s carnets récupérés depuis la sauvegarde.</string>
     <string name="brought_to_the_front">Mis au premier plan</string>
-    <string name="called_n">Nommé « %1$s »</string>
     <string name="cancel">Annuler</string>
     <string name="change_place">Changer d\'endroit</string>
     <string name="changes_show_in_every_notebook_on">Les modifications s\'appliquent à tous les carnets sur ce papier.</string>
@@ -152,7 +149,6 @@
     <string name="endless_canvas_write_anywhere">Canevas infini : écrivez n\'importe où</string>
     <string name="ends_and_edges_lock_on_shapes">Les extrémités et les bords s\'accrochent ; les formes s\'alignent.</string>
     <string name="eraser">Gomme</string>
-    <string name="eraser_can_erase_it">La gomme peut l\'effacer</string>
     <string name="erases">Efface</string>
     <string name="every_backup_in_a_folder_on">Toutes les sauvegardes d\'un dossier de la tablette ou d\'une carte mémoire.</string>
     <string name="every_notebook_the_app_backed_up">Tous les carnets que l\'appli y a sauvegardés. Elle continue aussi d\'y sauvegarder.</string>
@@ -210,7 +206,6 @@
     <string name="in_the_toolbar_with_this_pen">Dans la barre avec ce stylo</string>
     <string name="in_your_shapes_panel">Dans votre panneau Formes</string>
     <string name="insert">Insérer</string>
-    <string name="into_which_notebook">Dans quel carnet ?</string>
     <string name="it_disappears_from_the_paper_choices">Il disparaît des choix de papier. Les carnets qui l\'utilisent passent au papier blanc ; votre écriture reste.</string>
     <string name="it_goes_into_your_notebooks_ready">Il va dans vos carnets, prêt à être annoté.</string>
     <string name="it_ll_keep_backing_up_into">" La sauvegarde continuera toute seule dans ce fichier."</string>
@@ -225,7 +220,6 @@
     <string name="language">Langue</string>
     <string name="laser">Laser</string>
     <string name="lasso">Lasso</string>
-    <string name="lasso_can_pick_it_up">Le lasso peut le prendre</string>
     <string name="last_backed_up_n">Dernière sauvegarde : %1$s</string>
     <string name="last_backup_n">Dernière sauvegarde %1$s</string>
     <string name="last_n">Dernière : %1$s</string>
@@ -286,7 +280,6 @@
     <string name="n_pages_deleted_undo_brings_them">%1$s pages supprimées : Annuler les fait revenir</string>
     <string name="n_pages_duplicated">%1$s pages dupliquées</string>
     <string name="n_pages_moved">%1$s pages déplacées</string>
-    <string name="n_pdfs">%1$s PDF</string>
     <string name="n_pictures">%1$s images</string>
     <string name="n_saved_to_your_papers">« %1$s » enregistré dans vos papiers</string>
     <string name="n_selected">%1$s sélectionnés</string>
@@ -328,7 +321,6 @@
     <string name="one_page_that_goes_on_forever">Une page sans fin dans toutes les directions, pour les grands dessins et les cartes mentales.</string>
     <string name="opacity">Opacité</string>
     <string name="open_n">Ouvrir %1$s</string>
-    <string name="open_now">Ouvert</string>
     <string name="open_voice_memo">Ouvrir le mémo vocal</string>
     <string name="opening">Ouverture…</string>
     <string name="opening_pdf">Ouverture du PDF…</string>
@@ -675,7 +667,6 @@
     <string name="this_file_isn_t_a_tali">Ce fichier n\'est pas une sauvegarde Tali\'s Notes.</string>
     <string name="this_folder_is_empty">Ce dossier est vide</string>
     <string name="this_pdf_is_password_protected_remove">Ce PDF est protégé par un mot de passe. Retirez le mot de passe et réessayez.</string>
-    <string name="this_pen_and_other_tools">Ce stylo et les autres outils</string>
     <string name="those_files_couldn_t_be_restored">Ces fichiers n\'ont pas pu être restaurés.</string>
     <string name="tip">Astuce</string>
     <string name="tip_at_the_end_of_a">Astuce : à la fin d\'un trait ou d\'une forme, gardez le stylet immobile et il devient net</string>
@@ -747,7 +738,6 @@
     <string name="open">Ouvrir</string>
     <string name="only_pdfs_and_pictures_can_be_added">Seuls les PDF et les images peuvent être ajoutés.</string>
     <string name="n_here">%1$s (ici)</string>
-    <string name="on_its_own">À part</string>
     <string name="write">Écrire</string>
     <string name="add_camera">Appareil photo</string>
     <string name="a_photo_of_the_board_or_a_page">Une photo du tableau ou d\'une page</string>

@@ -16,9 +16,7 @@
     <string name="add_a_pen">Add a pen</string>
     <string name="add_n_to_the_shapes_panel">Add %1$s to the Shapes panel</string>
     <string name="add_page">Add page</string>
-    <string name="add_the_picture">Add the picture</string>
     <string name="add_them_to_my_notebooks">Add them to my notebooks</string>
-    <string name="add_these">Add %1$s</string>
     <string name="add_to_the_page">Add to the page</string>
     <string name="added_1_page_write_right_on">Added 1 page — write right on it</string>
     <string name="added_n_pages_write_right_on">Added %1$s pages — write right on them</string>
@@ -61,7 +59,6 @@
     <string name="brought_back_1_notebook_from_the">Brought back 1 notebook from the backup.</string>
     <string name="brought_back_n_notebooks_from_the">Brought back %1$s notebooks from the backup.</string>
     <string name="brought_to_the_front">Brought to the front</string>
-    <string name="called_n">Called “%1$s”</string>
     <string name="cancel">Cancel</string>
     <string name="change_place">Change place</string>
     <string name="changes_show_in_every_notebook_on">Changes show in every notebook on this paper.</string>
@@ -152,7 +149,6 @@
     <string name="endless_canvas_write_anywhere">Endless canvas: write anywhere</string>
     <string name="ends_and_edges_lock_on_shapes">Ends and edges lock on; shapes line up.</string>
     <string name="eraser">Eraser</string>
-    <string name="eraser_can_erase_it">Eraser can erase it</string>
     <string name="erases">Erases</string>
     <string name="every_backup_in_a_folder_on">Every backup in a folder on the tablet or a memory card.</string>
     <string name="every_notebook_the_app_backed_up">Every notebook the app backed up there. It keeps backing up there too.</string>
@@ -210,7 +206,6 @@
     <string name="in_the_toolbar_with_this_pen">In the toolbar with this pen</string>
     <string name="in_your_shapes_panel">In your Shapes panel</string>
     <string name="insert">Insert</string>
-    <string name="into_which_notebook">Into which notebook?</string>
     <string name="it_disappears_from_the_paper_choices">It disappears from the paper choices. Notebooks using it switch to blank paper; your writing stays.</string>
     <string name="it_goes_into_your_notebooks_ready">It goes into your notebooks, ready to write on.</string>
     <string name="it_ll_keep_backing_up_into">" It\'ll keep backing up into that file by itself."</string>
@@ -225,7 +220,6 @@
     <string name="language">Language</string>
     <string name="laser">Laser</string>
     <string name="lasso">Lasso</string>
-    <string name="lasso_can_pick_it_up">Lasso can pick it up</string>
     <string name="last_backed_up_n">Last backed up: %1$s</string>
     <string name="last_backup_n">Last backup %1$s</string>
     <string name="last_n">Last: %1$s</string>
@@ -286,7 +280,6 @@
     <string name="n_pages_deleted_undo_brings_them">%1$s pages deleted — undo brings them back</string>
     <string name="n_pages_duplicated">%1$s pages duplicated</string>
     <string name="n_pages_moved">%1$s pages moved</string>
-    <string name="n_pdfs">%1$s PDFs</string>
     <string name="n_pictures">%1$s pictures</string>
     <string name="n_saved_to_your_papers">“%1$s” saved to your papers</string>
     <string name="n_selected">%1$s selected</string>
@@ -328,7 +321,6 @@
     <string name="one_page_that_goes_on_forever">One page that goes on forever in every direction, for big drawings and mind maps.</string>
     <string name="opacity">Opacity</string>
     <string name="open_n">Open %1$s</string>
-    <string name="open_now">Open now</string>
     <string name="open_voice_memo">Open voice memo</string>
     <string name="opening">Opening…</string>
     <string name="opening_pdf">Opening PDF…</string>
@@ -675,7 +667,6 @@
     <string name="this_file_isn_t_a_tali">This file isn\'t a Tali\'s Notes backup.</string>
     <string name="this_folder_is_empty">This folder is empty</string>
     <string name="this_pdf_is_password_protected_remove">This PDF is password-protected. Remove the password and try again.</string>
-    <string name="this_pen_and_other_tools">This pen and other tools</string>
     <string name="those_files_couldn_t_be_restored">Those files couldn\'t be restored.</string>
     <string name="tip">Tip</string>
     <string name="tip_at_the_end_of_a">Tip: at the end of a line or shape, hold the pen still and it snaps clean</string>
@@ -747,7 +738,6 @@
     <string name="open">Open</string>
     <string name="only_pdfs_and_pictures_can_be_added">Only PDFs and pictures can be added.</string>
     <string name="n_here">%1$s (here)</string>
-    <string name="on_its_own">On its own</string>
     <string name="write">Write</string>
     <string name="add_camera">Camera</string>
     <string name="a_photo_of_the_board_or_a_page">A photo of the board or a page</string>

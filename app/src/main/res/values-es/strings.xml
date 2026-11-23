@@ -16,9 +16,7 @@
     <string name="add_a_pen">Añadir un bolígrafo</string>
     <string name="add_n_to_the_shapes_panel">Añadir %1$s al panel de Formas</string>
     <string name="add_page">Añadir página</string>
-    <string name="add_the_picture">Añadir la imagen</string>
     <string name="add_them_to_my_notebooks">Añadirlos a mis cuadernos</string>
-    <string name="add_these">Añadir %1$s</string>
     <string name="add_to_the_page">Añadir a la página</string>
     <string name="added_1_page_write_right_on">1 página añadida: escribe directamente en ella</string>
     <string name="added_n_pages_write_right_on">%1$s páginas añadidas: escribe directamente en ellas</string>
@@ -61,7 +59,6 @@
     <string name="brought_back_1_notebook_from_the">Se recuperó 1 cuaderno de la copia.</string>
     <string name="brought_back_n_notebooks_from_the">Se recuperaron %1$s cuadernos de la copia.</string>
     <string name="brought_to_the_front">Traído al frente</string>
-    <string name="called_n">Llamado «%1$s»</string>
     <string name="cancel">Cancelar</string>
     <string name="change_place">Cambiar lugar</string>
     <string name="changes_show_in_every_notebook_on">Los cambios se ven en todos los cuadernos con este papel.</string>
@@ -152,7 +149,6 @@
     <string name="endless_canvas_write_anywhere">Lienzo infinito: escribe donde quieras</string>
     <string name="ends_and_edges_lock_on_shapes">Los extremos y bordes se enganchan; las formas se alinean.</string>
     <string name="eraser">Borrador</string>
-    <string name="eraser_can_erase_it">El borrador puede borrarlo</string>
     <string name="erases">Borra</string>
     <string name="every_backup_in_a_folder_on">Todas las copias de una carpeta de la tableta o una tarjeta de memoria.</string>
     <string name="every_notebook_the_app_backed_up">Todos los cuadernos que la app copió allí. También sigue haciendo copias allí.</string>
@@ -210,7 +206,6 @@
     <string name="in_the_toolbar_with_this_pen">En la barra con este bolígrafo</string>
     <string name="in_your_shapes_panel">En tu panel de Formas</string>
     <string name="insert">Insertar</string>
-    <string name="into_which_notebook">¿En qué cuaderno?</string>
     <string name="it_disappears_from_the_paper_choices">Desaparece de los papeles disponibles. Los cuadernos que lo usan pasan a papel en blanco; tu escritura se queda.</string>
     <string name="it_goes_into_your_notebooks_ready">Va a tus cuadernos, listo para escribir en él.</string>
     <string name="it_ll_keep_backing_up_into">" Seguirá haciendo copias en ese archivo por sí sola."</string>
@@ -225,7 +220,6 @@
     <string name="language">Idioma</string>
     <string name="laser">Láser</string>
     <string name="lasso">Lazo</string>
-    <string name="lasso_can_pick_it_up">El lazo puede seleccionarlo</string>
     <string name="last_backed_up_n">Última copia: %1$s</string>
     <string name="last_backup_n">Última copia %1$s</string>
     <string name="last_n">Última: %1$s</string>
@@ -286,7 +280,6 @@
     <string name="n_pages_deleted_undo_brings_them">%1$s páginas eliminadas: deshacer las recupera</string>
     <string name="n_pages_duplicated">%1$s páginas duplicadas</string>
     <string name="n_pages_moved">%1$s páginas movidas</string>
-    <string name="n_pdfs">%1$s PDF</string>
     <string name="n_pictures">%1$s imágenes</string>
     <string name="n_saved_to_your_papers">«%1$s» guardado en tus papeles</string>
     <string name="n_selected">%1$s seleccionados</string>
@@ -328,7 +321,6 @@
     <string name="one_page_that_goes_on_forever">Una página que sigue para siempre en todas direcciones, para dibujos grandes y mapas mentales.</string>
     <string name="opacity">Opacidad</string>
     <string name="open_n">Abrir %1$s</string>
-    <string name="open_now">Abierto ahora</string>
     <string name="open_voice_memo">Abrir nota de voz</string>
     <string name="opening">Abriendo…</string>
     <string name="opening_pdf">Abriendo PDF…</string>
@@ -675,7 +667,6 @@
     <string name="this_file_isn_t_a_tali">Este archivo no es una copia de Tali\'s Notes.</string>
     <string name="this_folder_is_empty">Esta carpeta está vacía</string>
     <string name="this_pdf_is_password_protected_remove">Este PDF está protegido con contraseña. Quita la contraseña y vuelve a intentarlo.</string>
-    <string name="this_pen_and_other_tools">Este bolígrafo y otras herramientas</string>
     <string name="those_files_couldn_t_be_restored">No se pudieron restaurar esos archivos.</string>
     <string name="tip">Consejo</string>
     <string name="tip_at_the_end_of_a">Consejo: al final de una línea o forma, deja el lápiz quieto y se ajusta limpia</string>
@@ -747,7 +738,6 @@
     <string name="open">Abrir</string>
     <string name="only_pdfs_and_pictures_can_be_added">Solo se pueden añadir PDF e imágenes.</string>
     <string name="n_here">%1$s (aquí)</string>
-    <string name="on_its_own">Por separado</string>
     <string name="write">Escribir</string>
     <string name="add_camera">Cámara</string>
     <string name="a_photo_of_the_board_or_a_page">Una foto de la pizarra o de una página</string>

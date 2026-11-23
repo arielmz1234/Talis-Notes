@@ -77,11 +77,7 @@ enum class LineStyle(val label: String, val pattern: List<Float>) {
   MIXED_DASH("Mixed dash", listOf(6f, 2f, 2.2f, 2f)),
 }
 
-/**
- * One pen in the toolbar: a style, colour and size she has set up. [quick] are the three colours
- * shown beside the pens for switching without opening the settings; [recent] is every colour she
- * picked for it, most recent first, which decides which quick colour a new one replaces.
- */
+/** One pen in the toolbar: a style, colour and size she has set up. */
 @Serializable
 data class PenSlot(
   val id: String,
@@ -89,8 +85,6 @@ data class PenSlot(
   val color: Int,
   val size: Float,
   val line: LineStyle = LineStyle.SOLID,
-  val quick: List<Int> = emptyList(),
-  val recent: List<Int> = emptyList(),
   /** A highlighter with a square tip instead of a round one. */
   val squareTip: Boolean = false,
   /** A highlighter that follows the hand instead of drawing straight lines. */
@@ -105,7 +99,6 @@ data class PenSlot(
   val starred: Boolean = false,
   /** Circle to select: a loop drawn round things, then held for a moment, picks them up like the lasso. */
   val circleSelect: Boolean = false,
-
 ) {
 
   /** The three thicknesses; until she sets them, a thinner and a thicker one around [size]. */
@@ -151,36 +144,8 @@ data class PenSlot(
   val lineStyle: LineStyle
     get() = if (type.takesLineStyle) line else LineStyle.SOLID
 
-  /** The three quick colours, starting from sensible ones for the pen until she has picked her own. */
-  val quickColors: List<Int>
-    get() {
-      if (quick.size == QUICK) return quick
-      val start = if (type.isHighlighter) HIGHLIGHTER_QUICK else INK_QUICK
-      val base = (quick + start).distinct().take(QUICK)
-      return if (color in base) base else base.dropLast(1) + color
-    }
-
-  /**
-   * Switches to [c] and keeps it among the quick colours: if it isn't one already, it takes the
-   * place of the quick colour used longest ago, in the same spot, so the others don't move.
-   */
-  fun pick(c: Int): PenSlot {
-    val shown = quickColors
-    val nextRecent = (listOf(c) + recent.filter { it != c }).take(12)
-    val nextQuick =
-      if (c in shown) shown
-      else {
-        val oldest = shown.maxBy { q -> nextRecent.indexOf(q).let { if (it < 0) Int.MAX_VALUE else it } }
-        shown.map { if (it == oldest) c else it }
-      }
-    return copy(color = c, quick = nextQuick, recent = nextRecent)
-  }
-
   companion object {
     const val SIZES = 3
-    const val QUICK = 3
-    private val INK_QUICK = listOf(0xFF1B1F2A, 0xFF1F5FD1, 0xFFD83A3A).map { it.toInt() }
-    private val HIGHLIGHTER_QUICK = listOf(0xFFFFD60A, 0xFFFF6FA8, 0xFF5AA9E6).map { it.toInt() }
   }
 }
 

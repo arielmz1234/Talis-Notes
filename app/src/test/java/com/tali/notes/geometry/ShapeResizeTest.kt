@@ -1,6 +1,5 @@
 package com.tali.notes.geometry
 
-import com.tali.notes.model.EllipseShape
 import com.tali.notes.model.PolyShape
 import com.tali.notes.model.ShapeKind
 import kotlin.math.PI

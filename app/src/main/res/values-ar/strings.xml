@@ -16,9 +16,7 @@
     <string name="add_a_pen">إضافة قلم</string>
     <string name="add_n_to_the_shapes_panel">إضافة %1$s إلى لوحة الأشكال</string>
     <string name="add_page">إضافة صفحة</string>
-    <string name="add_the_picture">إضافة الصورة</string>
     <string name="add_them_to_my_notebooks">إضافتها إلى دفاتري</string>
-    <string name="add_these">إضافة %1$s</string>
     <string name="add_to_the_page">إضافة إلى الصفحة</string>
     <string name="added_1_page_write_right_on">أُضيفت صفحة واحدة — اكتب عليها مباشرة</string>
     <string name="added_n_pages_write_right_on">أُضيفت %1$s صفحات — اكتب عليها مباشرة</string>
@@ -61,7 +59,6 @@
     <string name="brought_back_1_notebook_from_the">استُعيد دفتر واحد من النسخة الاحتياطية.</string>
     <string name="brought_back_n_notebooks_from_the">استُعيدت %1$s دفاتر من النسخة الاحتياطية.</string>
     <string name="brought_to_the_front">أُحضر إلى الأمام</string>
-    <string name="called_n">باسم «%1$s»</string>
     <string name="cancel">إلغاء</string>
     <string name="change_place">تغيير المكان</string>
     <string name="changes_show_in_every_notebook_on">تظهر التغييرات في كل دفتر يستخدم هذا الورق.</string>
@@ -152,7 +149,6 @@
     <string name="endless_canvas_write_anywhere">لوحة لا نهائية: اكتب في أي مكان</string>
     <string name="ends_and_edges_lock_on_shapes">الأطراف والحواف تلتصق؛ والأشكال تصطف.</string>
     <string name="eraser">ممحاة</string>
-    <string name="eraser_can_erase_it">يمكن للممحاة مسحه</string>
     <string name="erases">تمسح</string>
     <string name="every_backup_in_a_folder_on">كل النسخ الاحتياطية في مجلد على الجهاز أو على بطاقة ذاكرة.</string>
     <string name="every_notebook_the_app_backed_up">كل دفتر نسخه التطبيق هناك. ويواصل النسخ إلى هناك أيضًا.</string>
@@ -210,7 +206,6 @@
     <string name="in_the_toolbar_with_this_pen">في الشريط مع هذا القلم</string>
     <string name="in_your_shapes_panel">في لوحة الأشكال</string>
     <string name="insert">إدراج</string>
-    <string name="into_which_notebook">إلى أي دفتر؟</string>
     <string name="it_disappears_from_the_paper_choices">يختفي من خيارات الورق. الدفاتر التي تستخدمه تنتقل إلى ورق فارغ؛ وتبقى كتابتك.</string>
     <string name="it_goes_into_your_notebooks_ready">يذهب إلى دفاترك، جاهزًا للكتابة عليه.</string>
     <string name="it_ll_keep_backing_up_into">" سيواصل النسخ إلى هذا الملف تلقائيًا."</string>
@@ -225,7 +220,6 @@
     <string name="language">اللغة</string>
     <string name="laser">ليزر</string>
     <string name="lasso">اللاسو</string>
-    <string name="lasso_can_pick_it_up">يمكن للاسو تحديده</string>
     <string name="last_backed_up_n">آخر نسخة احتياطية: %1$s</string>
     <string name="last_backup_n">آخر نسخة %1$s</string>
     <string name="last_n">الأخيرة: %1$s</string>
@@ -286,7 +280,6 @@
     <string name="n_pages_deleted_undo_brings_them">حُذفت %1$s صفحات — التراجع يعيدها</string>
     <string name="n_pages_duplicated">كُرّرت %1$s صفحات</string>
     <string name="n_pages_moved">نُقلت %1$s صفحات</string>
-    <string name="n_pdfs">%1$s ملفات PDF</string>
     <string name="n_pictures">%1$s صور</string>
     <string name="n_saved_to_your_papers">حُفظ «%1$s» في أوراقك</string>
     <string name="n_selected">%1$s محددة</string>
@@ -328,7 +321,6 @@
     <string name="one_page_that_goes_on_forever">صفحة تمتد بلا نهاية في كل الاتجاهات، للرسومات الكبيرة والخرائط الذهنية.</string>
     <string name="opacity">الشفافية</string>
     <string name="open_n">فتح %1$s</string>
-    <string name="open_now">مفتوح الآن</string>
     <string name="open_voice_memo">فتح المذكرة الصوتية</string>
     <string name="opening">جارٍ الفتح…</string>
     <string name="opening_pdf">جارٍ فتح PDF…</string>
@@ -675,7 +667,6 @@
     <string name="this_file_isn_t_a_tali">هذا الملف ليس نسخة احتياطية من Tali\'s Notes.</string>
     <string name="this_folder_is_empty">هذا المجلد فارغ</string>
     <string name="this_pdf_is_password_protected_remove">ملف PDF هذا محمي بكلمة مرور. أزل كلمة المرور وحاول مجددًا.</string>
-    <string name="this_pen_and_other_tools">هذا القلم وأدوات أخرى</string>
     <string name="those_files_couldn_t_be_restored">تعذّرت استعادة هذه الملفات.</string>
     <string name="tip">نصيحة</string>
     <string name="tip_at_the_end_of_a">نصيحة: في نهاية خط أو شكل، أبقِ القلم ثابتًا فيستقيم الشكل</string>
@@ -747,7 +738,6 @@
     <string name="open">فتح</string>
     <string name="only_pdfs_and_pictures_can_be_added">يمكن إضافة ملفات PDF والصور فقط.</string>
     <string name="n_here">%1$s (هنا)</string>
-    <string name="on_its_own">وحده</string>
     <string name="write">كتابة</string>
     <string name="add_camera">الكاميرا</string>
     <string name="a_photo_of_the_board_or_a_page">صورة للسبورة أو لصفحة</string>

@@ -1,12 +1,10 @@
 package com.tali.notes.ui.components
 
 import com.tali.notes.tr
-import androidx.compose.ui.res.stringResource
 import com.tali.notes.R
 import androidx.compose.ui.graphics.graphicsLayer
 import android.graphics.BitmapFactory
 import android.text.format.DateUtils
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,7 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -102,13 +99,13 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
   }
 }
 
+/** The usual size of a [ToolButton]; a narrow phone's notebook top line makes them a little smaller to stay on one line. */
+val LocalToolButtonSize = androidx.compose.runtime.compositionLocalOf { 44.dp }
+
 /**
  * Round icon button with a pressed scale and optional selected tint. Inside a group of choices, pass
  * the group's [selection] and the highlight glides to it rather than appearing under it.
  */
-/** The usual size of a [ToolButton]; a narrow phone's notebook top line makes them a little smaller to stay on one line. */
-val LocalToolButtonSize = androidx.compose.runtime.compositionLocalOf { 44.dp }
-
 @Composable
 fun ToolButton(icon: ImageVector, label: String, selected: Boolean = false, enabled: Boolean = true, size: Dp = LocalToolButtonSize.current, blue: Boolean = false, selection: SlidingSelection? = null, onClick: () -> Unit) {
   val c = Tali.colors

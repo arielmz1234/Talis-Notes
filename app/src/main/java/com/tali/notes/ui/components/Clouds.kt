@@ -250,9 +250,9 @@ private const val BURST_MIST_MS = 640
 private const val REFORM_AFTER_MS = 4000L
 
 /**
- * A cloud that drifts slowly sideways on its own GPU layer (no re-layout, no re-draw). The drift is
- * so slow that 12 updates a second look perfectly smooth, which keeps the tablet cool and saves
- * battery while the library sits open; it follows the frame clock, so it stops in the background.
+ * A cloud that drifts sideways [driftDp] each way, out and back once per [periodMs], on its own GPU
+ * layer (no re-layout, no re-draw). About 30 updates a second look smooth at this speed and keep the
+ * tablet cool while the library sits open; it follows the frame clock, so it stops in the background.
  */
 @Composable
 fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, driftDp: Float = 10f, periodMs: Int = 9000, alpha: Float = 1f, burstable: Boolean = false) {
@@ -261,11 +261,12 @@ fun DriftingCloud(modifier: Modifier = Modifier, width: Dp, variant: Int = 0, dr
   var x by remember { mutableFloatStateOf(0f) }
   LaunchedEffect(periodMs) {
     val start = withFrameMillis { it }
+    val ease = androidx.compose.animation.core.CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
     while (true) {
-      val t = withFrameMillis { it } - start
-      // Eased back and forth: -1 → 1 → -1 over two periods.
-      x = -kotlin.math.cos(t.toDouble() / periodMs * Math.PI).toFloat()
-      delay(80)
+      // Out and back once per period, eased in and out each way (the iPad app's drift).
+      val phase = ((withFrameMillis { it } - start) % periodMs) / periodMs.toFloat() * 2f
+      x = if (phase < 1f) -1f + 2f * ease.transform(phase) else 1f - 2f * ease.transform(phase - 1f)
+      delay(32)
     }
   }
   Cloud(modifier.graphicsLayer { translationX = x * driftDp * density }, width = width, variant = variant, alpha = alpha, burstable = burstable)

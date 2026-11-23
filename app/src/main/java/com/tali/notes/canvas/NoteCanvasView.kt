@@ -270,7 +270,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       invalidate()
     }
 
-  /** Number of A4 pages, or null for an endless canvas. */
   /** Portrait or landscape A4 pages, as chosen when the notebook was made. */
   var pageLayout: Pages = Pages.PORTRAIT
     set(value) {
@@ -620,6 +619,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
 
+  // Ink deprecates rendererFactory, but it is the only way to make its live layer draw paths on
+  // Android 14 (see Brushes.renderer).
+  @Suppress("DEPRECATION")
   private fun setUpInkLayer(v: InProgressStrokesView) {
     v.addFinishedStrokesListener(this)
     v.textureBitmapStore = Brushes.textureStore
@@ -733,9 +735,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     } else abortDrawing()
   }
 
-  override fun onStrokesFinished(finished: Map<InProgressStrokeId, Stroke>) {
+  override fun onStrokesFinished(strokes: Map<InProgressStrokeId, Stroke>) {
     // Parts of a stroke that went off its page: drawn here until the whole stroke is kept.
-    val parts = finished.filterKeys { it in splitParts }
+    val parts = strokes.filterKeys { it in splitParts }
     if (parts.isNotEmpty()) {
       parts.forEach { (id, s) ->
         val g = splitParts.remove(id)!!
@@ -750,22 +752,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       invalidate()
     }
     // Only strokes not handed over yet (Ink may report a stroke already taken).
-    val strokes = finished.filterKeys { strokePens.containsKey(it) && it !in parts }
-    if (strokes.isEmpty()) {
-      inProgress.removeFinishedStrokes(finished.keys)
-      finished.keys.forEach { shadows.remove(it) }
+    val kept = strokes.filterKeys { strokePens.containsKey(it) && it !in parts }
+    if (kept.isEmpty()) {
+      inProgress.removeFinishedStrokes(strokes.keys)
+      strokes.keys.forEach { shadows.remove(it) }
       return
     }
     val d = doc
     if (d != null) {
       try {
         val added =
-          strokes.flatMap { (id, s) ->
+          kept.map { (id, s) ->
             val pen = strokePens.remove(id)!!
             val stroke = realColoured(id, pen, rebuilt(s))
             strokeColors.remove(id)
             // Kept whole: on A4 pages the part past its page is only hidden (ItemRenderer.clipFor).
-            listOf(InkItem(d.newId(), d.nextZ(), pen, stroke))
+            InkItem(d.newId(), d.nextZ(), pen, stroke)
           }
         // Each stroke its own undo step, even when Ink hands several over at once.
         added.forEach { d.commit(Change(emptyList(), listOf(it))) }
@@ -773,13 +775,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         com.tali.notes.CrashLog.recovered(context, t)
       }
     }
-    // Hand-off in the same frame the tiles pick the strokes up, so there's no flicker (and our own
+    // Hand-off in the same frame the tiles pick them up, so there's no flicker (and our own
     // copies of them, if the page moved meanwhile, go in that same frame). Every stroke Ink handed
     // over goes, not only the ones kept now: one already taken (undo, the eraser or the lasso right
     // after writing, see commitWaitingInk) and handed over together with a newer one stayed on Ink's
     // layer for good, a stroke that couldn't be erased or picked up until the notebook was reopened.
-    inProgress.removeFinishedStrokes(finished.keys)
-    finished.keys.forEach { shadows.remove(it) }
+    inProgress.removeFinishedStrokes(strokes.keys)
+    strokes.keys.forEach { shadows.remove(it) }
     invalidate()
   }
 
@@ -1063,7 +1065,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     hideInkLayerAfterDraw(frames = 1)
   }
 
-  /** On dark paper the live stroke used the light version of the colour: the stroke in its real one. */
   /**
    * [s] built again from its own inputs. The stroke Ink hands over was built bit by bit while it was
    * written and its outline can come out a little different from the same inputs built at once
@@ -1074,6 +1075,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    */
   private fun rebuilt(s: Stroke): Stroke = runCatching { Stroke(s.brush, s.inputs) }.getOrDefault(s)
 
+  /** On dark paper the live stroke used the light version of the colour: the stroke in its real one. */
   private fun realColoured(id: InProgressStrokeId, pen: PenType, s: Stroke): Stroke {
     val real = strokeColors[id]?.let { Brushes.inkColor(pen, it) }
     return if (real != null && real != s.brush.colorIntArgb) s.copy(s.brush.copyWithColorIntArgb(real)) else s
@@ -1503,7 +1505,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   private fun isDraggingSelection() = mode == Mode.MOVE_SELECTION || mode == Mode.SCALE_SELECTION || mode == Mode.ROTATE_SELECTION
 
-  /** Pictures can't be turned (they stay upright), so the rotate handle only shows for drawings. */
   // ---- Fill ----
 
   private var filling = false
@@ -4178,10 +4179,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     setSelection(recolored)
   }
 
-  /**
-   * Changes how the selected writing and shapes are drawn: [size] thick and/or in [line] style
-   * (null leaves that as it is). Pictures and text keep theirs.
-   */
   /** The selection as it looks at a thickness still being slid (not saved until the slider is let go). */
   private var restylePreview: List<CanvasItem>? = null
   private var pendingThickness: Float? = null
@@ -4202,6 +4199,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     invalidate()
   }
 
+  /**
+   * Changes how the selected writing and shapes are drawn: [size] thick and/or in [line] style
+   * (null leaves that as it is). Pictures and text keep theirs.
+   */
   fun restyleSelection(size: Float? = null, line: LineStyle? = null) {
     endThicknessPreview()
     val d = doc ?: return
@@ -4220,7 +4221,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (changed.size == 1 && changed[0] is ShapeItem) activeShapeId = changed[0].id
   }
 
-  /** Puts a picture in the middle of the current view, sized to fit comfortably. */
   /**
    * Adds a picture in the middle of the view, or centred on [at] (where it was dropped). [index]
    * steps each of several pictures added at once a little down and right, so none hides another.
@@ -5762,33 +5762,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   /**
-   * Removes page [index] with everything on it, and moves the pages below up. The writing comes
-   * back with undo; the last page left is only cleared.
-   */
-  /**
-   * Moves page [from] to position [to]: everything on it goes there, and the pages in between move
-   * up or down one. One undo step.
-   */
-  fun movePage(from: Int, to: Int) {
-    val d = doc ?: return
-    val n = pageCount ?: return
-    if (from == to || from !in 0 until n || to !in 0 until n) return
-    val pitch = pageLayout.pitch
-    val before = ArrayList<CanvasItem>()
-    val after = ArrayList<CanvasItem>()
-    for (item in d.all + d.memos) {
-      val p = floor(item.bounds.center.y / pitch).toInt().coerceIn(0, n - 1)
-      val q = Pages.movedIndex(p, from, to)
-      if (q != p) {
-        before += item
-        after += item.transformed(Affine.translate(0f, (q - p) * pitch))
-      }
-    }
-    clearSelection()
-    if (before.isNotEmpty()) d.commit(Change(before, after))
-  }
-
-  /**
    * Lays the pages out again as [order] (old page numbers, top to bottom): a page left out is
    * deleted with everything on it, a page listed again is copied (its writing too). One undo step.
    * With nothing left, one empty page stays.
@@ -5855,7 +5828,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     showPageWidth(currentPage().coerceAtMost((pageCount ?: 1) - 1))
   }
 
-  /** Glides to a page, fitting its width to the screen with the top just under the toolbar. */
   /** Where the view is in the whole notebook, for the side scroller (world units). */
   data class ScrollSpan(val top: Float, val bottom: Float, val viewTop: Float, val viewHeight: Float)
 
@@ -5877,6 +5849,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     afterCameraMove()
   }
 
+  /** Glides to a page, fitting its width to the screen with the top just under the toolbar. */
   fun goToPage(index: Int) {
     val r = pages.getOrNull(index) ?: return
     if (width == 0 || height == 0) return
@@ -5985,7 +5958,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     /** Typed text: about 11 pt when printed on A4. */
     const val TEXT_SIZE = 26f
 
-    /** How far into the next page outline she can scroll, and how far before letting go adds it (fractions of a page). */
     /** Space left under the last page at rest, how far it can be pulled, and how far adds a page (screen dp). */
     private const val REST_DP = 32f
     private const val MAX_PULL_DP = 210f
@@ -6090,7 +6062,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val PEN_NEARBY_MS = 1500L
     private const val HIT_RADIUS_DP = 10f
     private const val MULTI_TAP_MS = 300L
-    /** How long the view rests before PDF pages are drawn sharp for it. */
     /**
      * Frames to wait, after the frame that put waiting strokes into the page went to the screen,
      * before Ink's layer (shown at once) is cleared: one wasn't always enough on her 120 Hz tablet,
@@ -6098,6 +6069,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
      */
     private const val HIDE_AFTER_FRAMES = 3
 
+    /** How long the view rests before PDF pages are drawn sharp for it. */
     private const val SHARP_WAIT_MS = 140L
 
     /** How far a rectangle drawn round a selection stands clear of it (world units, ~2 mm). */

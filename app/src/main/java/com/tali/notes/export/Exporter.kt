@@ -56,10 +56,6 @@ object Exporter {
     ItemRenderer(CanvasStrokeRenderer.create(forcePathRendering = true, textureStore = Brushes.textureStore), images, sync = true).also { it.dark = dark }
 
   /**
-   * Renders the region [world] into a bitmap of the given width, keeping the aspect ratio. [page] is
-   * the A4 page the region lies on in a paged notebook (a picture background fills it).
-   */
-  /**
    * What a paged notebook's library card shows of its first [page]: its top, card-shaped. A page
    * much wider than the card (a slide) is shown whole, with blank above and below, rather than
    * cut at the sides; draw only the items on [page] then.
@@ -75,6 +71,10 @@ object Exporter {
   /** A library card's preview, width over height. */
   private const val CARD_ASPECT = 1.32f
 
+  /**
+   * Renders the region [world] into a bitmap of the given width, keeping the aspect ratio. [page] is
+   * the A4 page the region lies on in a paged notebook (a picture background fills it).
+   */
   fun thumbnail(
     items: Collection<CanvasItem>,
     world: Rect,

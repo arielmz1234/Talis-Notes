@@ -18,7 +18,6 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -46,11 +45,6 @@ object ShapeRecognizer {
   /** A half circle's ends this close to level or upright are made so. */
   private val LEVEL_SNAP = (10 * PI / 180).toFloat()
 
-  /**
-   * Like [recognize], but also tries her own saved shapes. A straight line always stays a line (so
-   * hold-to-straighten never surprises her); otherwise a close enough match with one of her shapes
-   * wins, since she saved it precisely because she draws it often.
-   */
   /**
    * The clean shape for a held stroke: one of the standard shapes, one of hers ([custom]), or one of
    * the starred subjects' shapes ([packs]; never a subject she hasn't starred), whichever it looks
@@ -588,11 +582,4 @@ object ShapeRecognizer {
     val firstOuter = if (outerIsEven) poly[0] else poly[1]
     return star(c, outer, (firstOuter - c).angle())
   }
-
-  /** Samples an ellipse, used by tests and by the selection hit-test fallback. */
-  internal fun ellipsePoints(e: EllipseShape, n: Int = 64): List<Pt> =
-    List(n) { i ->
-      val t = (2 * PI * i / n).toFloat()
-      e.center + Pt(e.rx * cos(t), e.ry * sin(t)).rotated(e.rotation)
-    }
 }

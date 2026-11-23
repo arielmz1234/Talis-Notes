@@ -50,7 +50,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -92,14 +91,14 @@ import androidx.compose.ui.graphics.SolidColor
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/**
- * Paper choices: the built-in styles, then her own backgrounds, then a tile to make a new one. Her
- * own ones can be removed with a long press.
- */
 /** The paper picker's More unfolding the rest (an entry), and folding them away (quicker, as exits are). */
 private const val PAPERS_OPEN_MS = 260
 private const val PAPERS_CLOSE_MS = 180
 
+/**
+ * Paper choices: the built-in styles, then her own backgrounds, then a tile to make a new one. Her
+ * own ones can be removed with a long press.
+ */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun PaperPicker(

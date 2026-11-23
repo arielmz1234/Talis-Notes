@@ -101,7 +101,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -119,13 +118,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tali.notes.CrashLog
-import com.tali.notes.data.COVER_COLORS
 import com.tali.notes.data.Folder
 import com.tali.notes.data.NotebookMeta
 import com.tali.notes.model.PaperStyle
-import com.tali.notes.model.ShapeKind
-import com.tali.notes.theme.Lilac
-import com.tali.notes.theme.Sky
 import com.tali.notes.theme.Tali
 import com.tali.notes.ui.components.SkyBand
 import com.tali.notes.ui.components.PuffBox
@@ -139,12 +134,10 @@ import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.RulerDivider
 import com.tali.notes.ui.components.SectionLabel
-import com.tali.notes.ui.components.ShapeIcon
 import com.tali.notes.ui.components.relativeTime
 import com.tali.notes.ui.components.rememberThumbnail
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import com.tali.notes.ui.components.SlidingSelection

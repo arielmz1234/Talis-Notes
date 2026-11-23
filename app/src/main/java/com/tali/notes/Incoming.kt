@@ -7,35 +7,18 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.IntentCompat
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.update
 
 /**
  * Files that come to the app from elsewhere: a PDF or picture opened with Tali's Notes or shared to
  * it (from Files, Drive, Gmail, WhatsApp, the gallery), or her backup file tapped in Files or Drive.
- * [offer] waits for her to choose where it goes (the card in [IncomingCard]); [forNotebook] holds
- * what a notebook should add once it's open.
+ * [offer] holds them until the app has opened them (`MainNavigation`) or asked to restore a backup.
  */
 object Incoming {
   enum class Kind { PDF, IMAGE, BACKUP }
 
   data class Files(val kind: Kind, val uris: List<Uri>, val name: String?)
 
-  /** Waiting for her to say where it goes. */
   val offer = MutableStateFlow<Files?>(null)
-
-  /** To add to a notebook once it's open, by notebook id. */
-  val forNotebook = MutableStateFlow<Map<String, Files>>(emptyMap())
-
-  fun sendTo(notebookId: String, files: Files) = forNotebook.update { it + (notebookId to files) }
-
-  fun take(notebookId: String): Files? {
-    var taken: Files? = null
-    forNotebook.update {
-      taken = it[notebookId]
-      it - notebookId
-    }
-    return taken
-  }
 
   /** Reads an "open with" or "share" intent; false when it isn't one with files the app takes. */
   fun receive(context: Context, intent: Intent?): Boolean {
@@ -77,15 +60,4 @@ object Incoming {
       .getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.contains('.') }
 
   private fun ClipData.uris(): List<Uri> = (0 until itemCount).mapNotNull { getItemAt(it).uri }
-
-  /**
-   * What she'd call it: "Lecture 3" for "Lecture 3.pdf"; "3 pictures" for several. Pictures are
-   * never named after their file ("IMG_20261011_094112" isn't a notebook name).
-   */
-  fun title(files: Files): String =
-    when {
-      files.kind == Kind.IMAGE -> if (files.uris.size > 1) english(R.string.n_pictures, files.uris.size) else english(R.string.picture)
-      files.uris.size > 1 -> english(R.string.n_pdfs, files.uris.size)
-      else -> files.name?.takeIf { it.contains('.') }?.substringBeforeLast('.')?.takeIf { it.isNotBlank() } ?: "PDF"
-    }
 }

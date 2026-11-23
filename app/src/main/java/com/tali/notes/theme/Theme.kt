@@ -83,9 +83,7 @@ data class TaliColors(
 /** Tali's palette, lightest to deepest. */
 object Lilac {
   val L50 = Color(0xFFE6D8FE)
-  val L100 = Color(0xFFE7D1FE)
   val L200 = Color(0xFFDFC4FF)
-  val L300 = Color(0xFFD7BAFF)
   val L400 = Color(0xFFD1AEFF)
 }
 
@@ -93,11 +91,7 @@ object Lilac {
 object Sky {
   val S50 = Color(0xFFE8F1FF)
   val S100 = Color(0xFFD6E6FF)
-  val S200 = Color(0xFFBFD9FF)
-  val S300 = Color(0xFF9DC2FA)
-  val S400 = Color(0xFF7FA6F2)
   val Blue = Color(0xFF4F7BE8)
-  val BlueDeep = Color(0xFF2F5AD1)
 }
 
 private val LilacLight =

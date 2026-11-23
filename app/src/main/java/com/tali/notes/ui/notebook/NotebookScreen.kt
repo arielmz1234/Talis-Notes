@@ -24,7 +24,6 @@ import androidx.compose.material.icons.outlined.LockOpen
 import com.tali.notes.model.LineStyle
 import com.tali.notes.ui.components.rememberSlidingSelection
 import com.tali.notes.ui.components.colorRing
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.mutableFloatStateOf
 import com.tali.notes.ui.components.StepSlider
 import android.app.Application
@@ -88,9 +87,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.ui.semantics.Role
-import androidx.compose.material.icons.outlined.ContentPasteGo
 import androidx.compose.material.icons.outlined.ContentPaste
-import com.tali.notes.canvas.Clipboard
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
@@ -116,7 +113,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
@@ -150,11 +146,9 @@ import com.tali.notes.ui.components.CloudCrown
 import com.tali.notes.ui.components.ColorDot
 import com.tali.notes.ui.components.FloatingBar
 import com.tali.notes.ui.components.Panel
-import com.tali.notes.ui.components.PaperSwatch
 import com.tali.notes.ui.components.PrimaryButton
 import com.tali.notes.ui.components.QuietButton
 import com.tali.notes.ui.components.Segmented
-import com.tali.notes.ui.components.SectionLabel
 import com.tali.notes.ui.components.Sparkle
 import com.tali.notes.ui.components.cloudSurface
 import com.tali.notes.ui.components.ToolButton
@@ -184,7 +178,6 @@ import androidx.compose.material.icons.outlined.CropSquare
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -192,7 +185,6 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.offset
-import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.FlipToFront
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.ui.graphics.graphicsLayer
@@ -342,7 +334,7 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
         }
       }
     }
-  // PDFs and pictures from other apps (opened with, shared to, or dragged onto the app).
+  // PDFs and pictures dragged onto the page from an app beside it.
   suspend fun addFiles(kind: com.tali.notes.Incoming.Kind, uris: List<android.net.Uri>, at: com.tali.notes.geometry.Pt?) {
     val canvas = holder.view ?: return
     when (kind) {
@@ -360,16 +352,6 @@ private fun NotebookContent(vm: NotebookViewModel, systemDark: Boolean, onBack: 
       // A backup dropped on the page asks to restore it, as when it's opened with the app.
       com.tali.notes.Incoming.Kind.BACKUP -> com.tali.notes.Incoming.offer.value = com.tali.notes.Incoming.Files(kind, uris, uris.firstOrNull()?.let { com.tali.notes.Incoming.nameOf(context, it) })
     }
-  }
-  val incoming by com.tali.notes.Incoming.forNotebook.collectAsState()
-  val waiting = incoming[vm.notebookId] != null
-  LaunchedEffect(waiting, holder.view, doc != null) {
-    val canvas = holder.view
-    if (!waiting || doc == null || canvas == null) return@LaunchedEffect
-    while (canvas.width == 0) delay(16)
-    val files = com.tali.notes.Incoming.take(vm.notebookId) ?: return@LaunchedEffect
-    // Not in this effect: taking the files restarts it.
-    scope.launch { addFiles(files.kind, files.uris, null) }
   }
   val savePdf =
     rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->

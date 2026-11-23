@@ -11,6 +11,7 @@ import kotlin.math.floor
  * shape of its own first page or picture ([of] with an aspect), as long on their long side as A4.
  * Everything is in world units (dp).
  */
+@ConsistentCopyVisibility
 data class Pages private constructor(val width: Float, val height: Float) {
   val landscape: Boolean
     get() = width > height
@@ -57,15 +58,6 @@ data class Pages private constructor(val width: Float, val height: Float) {
 
     /** Every page, each one in [copied] followed straight after by its copy. */
     fun withCopies(count: Int, copied: Set<Int>): List<Int> = (0 until count).flatMap { if (it in copied) listOf(it, it) else listOf(it) }
-
-    /** Where page [p] ends up when page [from] is moved to position [to] (the ones between shift one place). */
-    fun movedIndex(p: Int, from: Int, to: Int): Int =
-      when {
-        p == from -> to
-        from < to && p in from + 1..to -> p - 1
-        from > to && p in to until from -> p + 1
-        else -> p
-      }
 
     const val GAP = 40f
     val PORTRAIT = Pages(Exporter.A4_WIDTH, Exporter.A4_HEIGHT)

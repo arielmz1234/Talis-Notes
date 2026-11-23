@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.tali.notes.data.COVER_COLORS
 import com.tali.notes.data.Folder
 import com.tali.notes.data.NotebookMeta
-import com.tali.notes.model.PaperStyle
 import com.tali.notes.talisApp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -183,11 +182,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     adding.value = null
   }
 
-  fun failedToAdd(words: String) {
-    adding.value = Adding(words, busy = false, failed = true)
-    finishSoon()
-  }
-
   private fun folder(): String? = selectedFolder.value?.takeIf { it != TRASH && it != STARRED }
 
   /** Runs one adding job at a time; [block] returns what was made (for "Added …" and Open), or null. */
@@ -242,10 +236,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     }
   }
 
-  /** Moves a folder into [parentId]; a folder can't go inside itself or one of its own folders. */
   /** The colour a new folder in [parentId] starts with: its parent's, or the next cover colour. */
   fun nextFolderColor(parentId: String?): Int = parentId?.let { p -> folders.value.firstOrNull { it.id == p }?.color } ?: COVER_COLORS[folders.value.size % COVER_COLORS.size]
 
+  /** Moves a folder into [parentId]; a folder can't go inside itself or one of its own folders. */
   fun moveFolder(id: String, parentId: String?) {
     if (parentId != null && (parentId == id || parentId in descendants(folders.value, id))) return
     repo.moveFolder(id, parentId)

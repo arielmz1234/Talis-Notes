@@ -6,7 +6,6 @@ import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min

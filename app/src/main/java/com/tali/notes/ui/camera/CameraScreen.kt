@@ -5,20 +5,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.media.MediaActionSound
 import android.net.Uri
 import android.provider.Settings
 import android.util.Size
 import android.view.Surface
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
-import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -70,7 +66,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Crop
@@ -79,9 +74,8 @@ import androidx.compose.material.icons.outlined.FlashAuto
 import androidx.compose.material.icons.outlined.FlashOff
 import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.NoPhotography
-import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Replay
-import androidx.compose.material.icons.outlined.RotateRight
+import androidx.compose.material.icons.automirrored.outlined.RotateRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -96,7 +90,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -135,7 +128,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.tali.notes.R
@@ -147,13 +139,10 @@ import com.tali.notes.theme.Tali
 import com.tali.notes.theme.TaliColorsScope
 import com.tali.notes.ui.components.EaseOutStrong
 import com.tali.notes.ui.components.PrimaryButton
-import com.tali.notes.ui.components.Segmented
 import com.tali.notes.ui.library.ConfirmDialog
 import java.io.File
 import java.util.concurrent.Executors
-import kotlin.math.hypot
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -641,7 +630,7 @@ private fun EditPanel(
     if (wide) Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
       SmallTool(Icons.Outlined.Replay, stringResource(R.string.cam_retake), Modifier.weight(1f), onRetake)
-      SmallTool(Icons.Outlined.RotateRight, stringResource(R.string.cam_turn), Modifier.weight(1f), onTurn)
+      SmallTool(Icons.AutoMirrored.Outlined.RotateRight, stringResource(R.string.cam_turn), Modifier.weight(1f), onTurn)
       if (step == Step.CROP) SmallTool(if (whole) Icons.Outlined.Crop else Icons.Outlined.CropFree, stringResource(if (whole) R.string.cam_crop else R.string.cam_whole), Modifier.weight(1f), onWhole)
       else SmallTool(Icons.Outlined.Crop, stringResource(R.string.cam_crop), Modifier.weight(1f)) { onStep(Step.CROP) }
     }

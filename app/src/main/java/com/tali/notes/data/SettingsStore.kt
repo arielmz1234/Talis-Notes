@@ -251,8 +251,4 @@ class SettingsStore(context: Context) {
   private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "settings-writer").apply { isDaemon = true } }
 
   fun exportJson(): String = ItemCodec.json.encodeToString(AppSettings.serializer(), _settings.value)
-
-  fun importJson(json: String) {
-    runCatching { ItemCodec.json.decodeFromString(AppSettings.serializer(), json).migrated() }.getOrNull()?.let { s -> update { s } }
-  }
 }
