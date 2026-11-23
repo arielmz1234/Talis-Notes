@@ -21,7 +21,14 @@ not with a highlighter, only what the eraser's Erases filter takes, nothing lock
 pictures; the scribble is dropped (`dropInk`) and the rest goes in one `commit`, with fills they
 outline. A scribble over nothing stays ink. As Android 1.0.28: `ScratchOut.takes` also takes a thing with 15% under the
 scribble when it lies within the scribble's box grown by its larger side (tall letters sticking out),
-and the scribble and what it took vanish at once (no fade). UI tests can only drag straight, so `ScratchOutTests`
+and the scribble and what it took vanish at once (no fade).
+As Android 1.0.29 (ported from `geometry/ScratchOut.kt` and its tests): legs are looked for in 12
+directions (every 15°, from the main one) with legs reaching half the scribble, so slanted loops
+count; `ScratchOut.scribble` keeps its path and a reach (¾ of the legs' gap, at least 6 pt), and
+`takes` needs 60% of what's under it to be within that reach of the path (circling a word leaves
+it). `ScribbleKindsTests` is Android's rate bench with a SplitMix generator; a Python run of it gave
+scrub 99, zigzag 72, loops 100, tangle 99, in place 100; word 7, runs 28 (limit 30), spring 22, resistor,
+star and wave 0, spiral 1. UI tests can only drag straight, so `ScratchOutTests`
 checks the shapes and `PenTests.testScribbleToDeleteSetting` the toggle. Try it on the iPad.
 
 ## Owner's list of 23 Nov 2026 (Mac)

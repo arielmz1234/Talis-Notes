@@ -84,17 +84,51 @@ struct ScratchOutTests {
     #expect(!ScratchOut.covers([box], area))
   }
 
-  /// Android 1.0.28: a scribble across the middle of a word also takes the tall letters sticking out
-  /// of it, but nothing it only clips that runs far past it.
-  @Test func itTakesWhatSticksOutOfIt() throws {
-    let area = try #require(ScratchOut.area(zigzag(legs: 7) { Pt($0 % 2 == 0 ? 0 : 100, Float($0) * 3) }, zoom: 1))
-    let stem = [[Pt(30, -25), Pt(30, 45)]]
-    #expect(!ScratchOut.covers(stem, area), "a tall letter's stem is mostly outside the scribble")
-    #expect(ScratchOut.takes(stem, area), "but it goes with the word")
-    #expect(ScratchOut.takes([[Pt(60, -30), Pt(62, 40), Pt(50, 50)]], area), "a hooked stem (ן) goes")
-    #expect(ScratchOut.takes([[Pt(10, 5), Pt(90, 15)]], area), "a word under it")
-    #expect(!ScratchOut.takes([[Pt(80, 10), Pt(300, 10)]], area), "a long line it only crosses the start of")
-    #expect(!ScratchOut.takes([[Pt(0, 60), Pt(100, 60)]], area), "a line below it")
-    #expect(!ScratchOut.takes([[Pt(10, 10), Pt(90, 10), Pt(90, 200), Pt(10, 200), Pt(10, 10)]], area), "a box with one side under it")
+  /// Scrubbed across the middle of a word: legs 100 long between y 0 and 21.
+  private func acrossAWord() throws -> ScratchOut.Scribble {
+    try #require(ScratchOut.scribble(zigzag(legs: 7) { Pt($0 % 2 == 0 ? 0 : 100, Float($0) * 3) }, zoom: 1))
+  }
+
+  @Test func itTakesTallLettersItRunsAcross() throws {
+    let s = try acrossAWord()
+    let tallL = [[Pt(30, -25), Pt(30, 45)]]
+    #expect(!ScratchOut.covers(tallL, s.hull), "only a third of it is under it")
+    #expect(ScratchOut.takes(tallL, s), "but it's crossed and not much bigger")
+    #expect(ScratchOut.takes([[Pt(60, -30), Pt(62, 40), Pt(50, 50)]], s), "a hooked stem (ן) goes")
+  }
+
+  @Test func itLeavesWhatItOnlyCrossesASmallPartOf() throws {
+    let s = try acrossAWord()
+    #expect(!ScratchOut.takes([[Pt(80, 10), Pt(300, 10)]], s), "a long line")
+    #expect(!ScratchOut.takes([[Pt(0, 60), Pt(100, 60)]], s), "a line below it")
+    #expect(!ScratchOut.takes([[Pt(10, 10), Pt(90, 10), Pt(90, 200), Pt(10, 200), Pt(10, 10)]], s), "a box with one side under it")
+    #expect(ScratchOut.takes([[Pt(10, 5), Pt(90, 15)]], s), "a word under it")
+  }
+
+  /// Quick loops travelling across a word, leaning over like handwriting (Tali's scribbles).
+  @Test(arguments: [Float(0), 0.5, 1])
+  func slantedLoopsAreAScribble(slant: Float) {
+    let pts = (0...240).map { i -> Pt in
+      let t = Float(i) / 240 * 6 * 2 * .pi
+      let y = 22 * cosf(t)
+      return Pt(90 * Float(i) / 240 + 6 * sinf(t) + y * slant, y)
+    }
+    #expect(ScratchOut.area(pts, zoom: 1) != nil)
+  }
+
+  @Test func circlingAWordLeavesIt() {
+    let ring = (0...180).map { i -> Pt in
+      let t = Float(i) / 60 * 2 * .pi
+      return Pt(60 * cosf(t), 30 * sinf(t))
+    }
+    let word = [[Pt(-25, -5), Pt(-10, 5), Pt(5, -5), Pt(25, 5)]]
+    if let s = ScratchOut.scribble(ring, zoom: 1) { #expect(!ScratchOut.takes(word, s)) }
+  }
+
+  @Test func scrubbingInPlaceTakesTheWordItRunsThrough() throws {
+    let s = try #require(ScratchOut.scribble(path((0...9).map { Pt($0 % 2 == 0 ? 0 : 90, 0) }, jitter: 2), zoom: 1))
+    // Letters standing up through the scrub's thin band.
+    #expect(ScratchOut.takes([[Pt(20, -15), Pt(22, 15)]], s))
+    #expect(ScratchOut.takes([[Pt(60, -12), Pt(70, 10), Pt(80, -12)]], s))
   }
 }
