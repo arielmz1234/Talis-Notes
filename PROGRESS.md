@@ -10,6 +10,22 @@
    screenshots, macOS runners sometimes queue). Batch changes, and read compile errors with
    `gh run view <id> --log-failed | grep error:`.
 
+## Owner's list of 23 Nov 2026 (Mac)
+
+One commit per fix. What changed and what to know:
+- Tour slides 28 pt and is clipped to the card. Camera preview follows `RotationCoordinator`'s preview angle (KVO). Quick open shows thumbnails.
+- `StrokePreview.shownSize`: the sample maps the pen's range onto 1.6…10 world units, so the card is never filled.
+- `LaserIcon` (Android's `TaliIcons.Laser`). `CircleSelect.swift`: Android's circle to select, `PenSlot.circleSelect`, toggle in the pen panel.
+- `TopBarLayout` has a `.name` role: the name sits beside the corner while it gets ≥150 pt, else under it.
+- Selection drags carry picked ink as an image in the overlay (`liftInk`); PencilKit's drawing isn't reset every step.
+- The pen settings arrow takes the bar's whole height and the padding beside it, never a pen's area (SelectingTests checks taps on neighbours).
+- Library cards and page tiles: no system context menu / drag (`HoldMenu.swift`, `HoldPress`; the pages overview's own hold-and-drag with `PageFrames`).
+- `KeyboardDismiss`: a window tap recognizer ends editing of a `UITextField` (not the notebook's text boxes).
+- The page layer (CATiledLayer) is only invalidated where things changed: `updateContent` redraws only on a size change (it used to redraw every tile each zoom frame), `putShape`/fills redraw their rects, `load` redraws all. Pictures and fills decode off the main thread in `load` (`decodeLater`), reusing decoded ones.
+- `PenSmoother` (TaliCore, Android's One Euro filter) smooths each new stroke in `sync`; the stroke is swapped in PencilKit. PencilKit's undo of a stroke checks the drawing it made, so `undoKeepingSwaps` puts PencilKit's own drawing back (`pkSwaps`) before an undo/redo and `sync` swaps the forms back (`swappedForm`). This also fixed undo for strokes masked to their page.
+- `PageEdgeCover`: with Write between pages off, a snapshot covers everything around the stroke's page once the pen leaves it.
+- Not reproduced in the simulator: repeated bounce at the bottom (one normal bounce seen); per-frame SwiftUI updates while scrolling were cut instead. Check on the iPad.
+
 ## Thickness in whole numbers (17 Nov 2026, Windows, from Android 1.0.24)
 
 Android's df39537 (its CLAUDE.md item 91a): pen, shape-style and selection thickness step by 0.25
