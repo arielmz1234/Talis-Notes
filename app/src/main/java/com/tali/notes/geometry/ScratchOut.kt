@@ -113,27 +113,64 @@ object ScratchOut {
     return if (spans.isEmpty()) null else Legs(spans, length, side.max() - side.min())
   }
 
-  /** Whether the scribble's [area] covers enough of a thing drawn as [lines] for it to go. */
-  fun covers(lines: List<List<Pt>>, area: List<Pt>): Boolean {
+  /** How much of a thing the scribble has to cross for it to go, when it isn't mostly under it. */
+  private const val CROSS_NEEDED = 0.15f
+
+  /** How far past the scribble (against its size) a thing it crosses may reach and still go. */
+  private const val REACH_PAST = 1f
+
+  /**
+   * Whether the scribble's [area] takes a thing drawn as [lines]: mostly under it ([COVER_NEEDED]),
+   * or crossed by it ([CROSS_NEEDED]) and no bigger than the scribble plus its own size ([REACH_PAST])
+   * all round. So a word's tall letters go when the scribble runs across their middles, while a
+   * long line or a box it only crosses one side of stays.
+   */
+  fun takes(lines: List<List<Pt>>, area: List<Pt>): Boolean {
     val box = Rect.around(area) ?: return false
-    val step = max(max(box.width, box.height) / 40f, 0.5f)
     var inside = 0
     var all = 0
-    fun count(p: Pt) {
+    var l = Float.MAX_VALUE
+    var t = Float.MAX_VALUE
+    var r = -Float.MAX_VALUE
+    var b = -Float.MAX_VALUE
+    eachSample(lines, max(max(box.width, box.height) / 40f, 0.5f)) { p ->
+      all++
+      if (box.contains(p) && Geo.pointInPolygon(p, area)) inside++
+      l = minOf(l, p.x)
+      t = minOf(t, p.y)
+      r = maxOf(r, p.x)
+      b = maxOf(b, p.y)
+    }
+    if (all == 0) return false
+    if (inside >= COVER_NEEDED * all) return true
+    val near = box.outset(REACH_PAST * max(box.width, box.height))
+    return inside >= CROSS_NEEDED * all && l >= near.left && t >= near.top && r <= near.right && b <= near.bottom
+  }
+
+  /** Whether the scribble's [area] covers enough of a thing drawn as [lines] for it to go (the iPad app's rule). */
+  fun covers(lines: List<List<Pt>>, area: List<Pt>): Boolean {
+    val box = Rect.around(area) ?: return false
+    var inside = 0
+    var all = 0
+    eachSample(lines, max(max(box.width, box.height) / 40f, 0.5f)) { p ->
       all++
       if (box.contains(p) && Geo.pointInPolygon(p, area)) inside++
     }
+    return all > 0 && inside >= COVER_NEEDED * all
+  }
+
+  /** Points along [lines] at most [step] apart. */
+  private inline fun eachSample(lines: List<List<Pt>>, step: Float, f: (Pt) -> Unit) {
     for (line in lines) {
       val first = line.firstOrNull() ?: continue
-      count(first)
+      f(first)
       for (i in 1 until line.size) {
         val a = line[i - 1]
         val b = line[i]
         val parts = max(ceil(a.dist(b) / step).toInt(), 1)
-        for (k in 1..parts) count(a + (b - a) * (k / parts.toFloat()))
+        for (k in 1..parts) f(a + (b - a) * (k / parts.toFloat()))
       }
     }
-    return all > 0 && inside >= COVER_NEEDED * all
   }
 
   /** The convex hull of [pts] (Andrew's monotone chain), counter-clockwise. */

@@ -112,4 +112,37 @@ class PressureEdgesShotTest {
     val out = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "fountain-turns.png")
     out.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
   }
+  /** A sharp zigzag (over, back, over) at a few speeds: stock/ours, drawn as meshes and as paths. */
+  @Test
+  fun zigzags() {
+    val scale = 3f
+    val cell = 520
+    fun zig(u: Float): Pair<Float, Float> {
+      val legs = 3
+      val k = minOf((u * legs).toInt(), legs - 1)
+      val s = u * legs - k
+      val x = if (k % 2 == 0) 20f + 120f * s else 140f - 120f * s
+      return x to (40f + 30f * (k + s) - 20f * s)
+    }
+    val shapes = listOf(write(0.25f, listOf(0.333f, 0.666f), 11, ::zig), write(0.6f, listOf(0.333f, 0.666f), 12, ::zig), write(0.12f, listOf(), 13, ::zig))
+    val width = 14f
+    val families = listOf(StockBrushes.pressurePen(), Brushes.fountain)
+    val renderers = listOf(androidx.ink.rendering.android.canvas.CanvasStrokeRenderer.create(), androidx.ink.rendering.android.canvas.CanvasStrokeRenderer.create(forcePathRendering = true))
+    val bmp = Bitmap.createBitmap(cell * shapes.size, cell * 4, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    c.drawColor(0xFFFFFFFF.toInt())
+    shapes.forEachIndexed { col, samples ->
+      for (row in 0 until 4) {
+        val brush = Brush.createWithColorIntArgb(families[row % 2], 0xFF1B2230.toInt(), width, 0.02f)
+        val m = Matrix().apply { setScale(scale, scale); postTranslate(col * cell + 0f, row * cell + 0f) }
+        c.save()
+        c.clipRect(col * cell.toFloat(), row * cell.toFloat(), (col + 1f) * cell, (row + 1f) * cell)
+        c.concat(m)
+        renderers[row / 2].draw(c, stroke(samples, brush), m)
+        c.restore()
+      }
+    }
+    val out = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "zigzags.png")
+    out.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+  }
 }

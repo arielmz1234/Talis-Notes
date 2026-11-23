@@ -81,4 +81,22 @@ class ScratchOutTest {
     val box = listOf(Pt(10f, 10f), Pt(90f, 10f), Pt(90f, 200f), Pt(10f, 200f), Pt(10f, 10f))
     assertFalse(ScratchOut.covers(listOf(box), area))
   }
+  @Test fun itTakesTallLettersItRunsAcross() {
+    // Scrubbed across the middle of a word: legs 100 long between y 0 and 21.
+    val area = ScratchOut.area(zigzag(7) { Pt(if (it % 2 == 0) 0f else 100f, it * 3f) }, 1f)!!
+    val tallL = listOf(listOf(Pt(30f, -25f), Pt(30f, 45f)))
+    assertFalse("only a third of it is under it", ScratchOut.covers(tallL, area))
+    assertTrue("but it's crossed and not much bigger", ScratchOut.takes(tallL, area))
+    val hooked = listOf(listOf(Pt(60f, -30f), Pt(62f, 40f), Pt(50f, 50f)))
+    assertTrue(ScratchOut.takes(hooked, area))
+  }
+
+  @Test fun itLeavesWhatItOnlyCrossesASmallPartOf() {
+    val area = ScratchOut.area(zigzag(7) { Pt(if (it % 2 == 0) 0f else 100f, it * 3f) }, 1f)!!
+    assertFalse("a long line", ScratchOut.takes(listOf(listOf(Pt(80f, 10f), Pt(300f, 10f))), area))
+    assertFalse("a line below it", ScratchOut.takes(listOf(listOf(Pt(0f, 60f), Pt(100f, 60f))), area))
+    val box = listOf(Pt(10f, 10f), Pt(90f, 10f), Pt(90f, 200f), Pt(10f, 200f), Pt(10f, 10f))
+    assertFalse("a box with one side under it", ScratchOut.takes(listOf(box), area))
+    assertTrue("a word under it", ScratchOut.takes(listOf(listOf(Pt(10f, 5f), Pt(90f, 15f))), area))
+  }
 }
