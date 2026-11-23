@@ -829,4 +829,6 @@
     <string name="feat_colours_body">Em Configurações, escolha Lilás, Céu, Sálvia ou Pêssego, no claro ou no escuro, com estilo Nuvens ou Minimalista.</string>
     <string name="scribble_to_delete">Rabiscar para apagar</string>
     <string name="scribble_to_delete_detail">Com uma caneta, rabisque de um lado para o outro sobre a escrita para apagá-la</string>
+    <string name="feat_scribble_title">Rabiscar para apagar</string>
+    <string name="feat_scribble_body">Ative Rabiscar para apagar no painel da borracha. Depois rabisque de um lado para o outro sobre a escrita com a caneta, e ela some junto com o rabisco. Desfazer traz de volta.</string>
 </resources>

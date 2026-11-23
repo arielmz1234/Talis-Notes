@@ -829,4 +829,6 @@
     <string name="feat_colours_body">من الإعدادات، اختر ليلكي أو سماوي أو أخضر هادئ أو خوخي، بالوضع الفاتح أو الداكن، مع نمط غيوم أو بسيط.</string>
     <string name="scribble_to_delete">الخربشة للحذف</string>
     <string name="scribble_to_delete_detail">بالقلم، اخربش ذهابًا وإيابًا فوق الكتابة لحذفها</string>
+    <string name="feat_scribble_title">الخربشة للحذف</string>
+    <string name="feat_scribble_body">فعّل «الخربشة للحذف» في لوحة الممحاة. ثم اخربش ذهابًا وإيابًا فوق الكتابة بالقلم، فتُحذف مع الخربشة. التراجع يعيدها.</string>
 </resources>

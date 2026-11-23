@@ -829,4 +829,6 @@
     <string name="feat_colours_body">Dans Réglages, choisissez Lilas, Ciel, Sauge ou Pêche, en clair ou en sombre, avec le style Nuages ou Épuré.</string>
     <string name="scribble_to_delete">Gribouiller pour effacer</string>
     <string name="scribble_to_delete_detail">Avec un stylo, gribouillez d\'avant en arrière sur l\'écriture pour l\'effacer</string>
+    <string name="feat_scribble_title">Gribouiller pour effacer</string>
+    <string name="feat_scribble_body">Activez Gribouiller pour effacer dans le panneau de la gomme. Gribouillez ensuite d\'avant en arrière sur l\'écriture avec le stylo : elle s\'efface avec le gribouillis. Annuler la fait revenir.</string>
 </resources>

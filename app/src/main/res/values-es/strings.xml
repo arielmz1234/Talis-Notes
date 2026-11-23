@@ -829,4 +829,6 @@
     <string name="feat_colours_body">En Ajustes, elige Lila, Cielo, Salvia o Melocotón, en claro u oscuro, con estilo Nubes o Minimalista.</string>
     <string name="scribble_to_delete">Garabatear para borrar</string>
     <string name="scribble_to_delete_detail">Con un bolígrafo, garabatea de un lado a otro sobre lo escrito para borrarlo</string>
+    <string name="feat_scribble_title">Garabatear para borrar</string>
+    <string name="feat_scribble_body">Activa Garabatear para borrar en el panel de la goma. Luego garabatea de un lado a otro sobre lo escrito con el bolígrafo y se borra junto con el garabato. Deshacer lo recupera.</string>
 </resources>

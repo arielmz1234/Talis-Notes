@@ -829,4 +829,6 @@
     <string name="feat_colours_body">In Settings, choose Lilac, Sky, Sage or Peach, in light or dark, with a Cloudy or Minimal style.</string>
     <string name="scribble_to_delete">Scribble to delete</string>
     <string name="scribble_to_delete_detail">With a pen, scribble back and forth over writing to delete it</string>
+    <string name="feat_scribble_title">Scribble to delete</string>
+    <string name="feat_scribble_body">Turn on Scribble to delete in the eraser\'s panel. Then scribble back and forth over writing with the pen, and it goes with the scribble. Undo brings it back.</string>
 </resources>

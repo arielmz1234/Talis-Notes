@@ -33,6 +33,7 @@ private val features =
     TourStep(R.string.feat_paste_title, R.string.feat_paste_body) { PastePicture(it) },
     TourStep(R.string.feat_circle_title, R.string.feat_circle_body) { CircleSelectPicture(it) },
     TourStep(R.string.feat_box_title, R.string.feat_box_body) { BoxPicture(it) },
+    TourStep(R.string.feat_scribble_title, R.string.feat_scribble_body) { ScribblePicture(it) },
     TourStep(R.string.feat_starpens_title, R.string.feat_starpens_body) { StarPensPicture(it) },
     TourStep(R.string.feat_fingers_title, R.string.feat_fingers_body) { FingersPicture(it) },
     TourStep(R.string.feat_tidy_title, R.string.feat_tidy_body) { AnglePicture(it) },
@@ -187,6 +188,26 @@ private fun BoxPicture(modifier: Modifier) {
     val g = 5.dp.toPx()
     val outline = listOf(Offset(l + g, top + g), Offset(r - g, top + g), Offset(r - g, b - g), Offset(l + g, b - g), Offset(l + g, top + g))
     if (box > 0f) ink(partial(outline, box), Blue, 2.6.dp.toPx())
+  }
+}
+
+@Composable
+private fun ScribblePicture(modifier: Modifier) {
+  val c = Tali.colors
+  val t = loop(3600)
+  Canvas(modifier) {
+    val w = size.width; val h = size.height
+    ruledPage(c)
+    // A word, scrubbed over back and forth; on lift both fade away together.
+    val gone = 1f - ease(phase(t, 0.58f, 0.72f))
+    val back = ease(phase(t, 0.88f, 1f))
+    val word = cursive(w * 0.3f, w * 0.7f, h * 0.58f, 12.dp.toPx(), seed = 3)
+    val wordAlpha = if (t < 0.72f) gone else back
+    if (wordAlpha > 0f) ink(partial(word, 1f), c.ink.copy(alpha = wordAlpha), 2.4.dp.toPx())
+    val legs = 9
+    val scrub = List(legs + 1) { k -> Offset(if (k % 2 == 0) w * 0.27f else w * 0.73f, h * 0.4f + k * h * 0.032f) }
+    val drawn = phase(t, 0.12f, 0.52f)
+    if (drawn > 0f && t < 0.72f) ink(partial(scrub, drawn), c.ink.copy(alpha = 0.85f * gone), 2.4.dp.toPx())
   }
 }
 

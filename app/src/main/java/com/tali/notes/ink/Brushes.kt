@@ -152,6 +152,33 @@ object Brushes {
   private val lineFamilies = java.util.concurrent.ConcurrentHashMap<LineStyle, BrushFamily>()
 
   /**
+   * The fountain pen: Ink's pressure pen, except that its width follows the pen over distance, not
+   * time. Ink's swells (downstrokes, sharp turns, pressing hard) each catch up over 25-30 ms, so
+   * where the pen slows and turns back (the top of a "d", the corner into its tail) the whole
+   * change happened in one spot: a flat, slanted tip with a step, or a notch (Tali, 23 Nov 2026).
+   * Caught up over [FOUNTAIN_SETTLE] pen widths of travel, a change always tapers along the line.
+   * Same family id, so strokes written before redraw the same way.
+   */
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  internal val fountain: BrushFamily by lazy {
+    val stock = StockBrushes.pressurePen()
+    runCatching { stock.copy(coats = stock.coats.map { c -> c.copy(tip = c.tip.copy(behaviors = c.tip.behaviors.map(::dampedByDistance))) }) }.getOrDefault(stock)
+  }
+
+  @OptIn(ExperimentalInkCustomBrushApi::class)
+  private fun dampedByDistance(b: BrushBehavior): BrushBehavior =
+    BrushBehavior(
+      b.terminalNodes.map { t ->
+        val input = (t as? BrushBehavior.TargetNode)?.input as? BrushBehavior.DampingNode
+        if (input == null || input.dampingSource != BrushBehavior.DampingSource.TIME_IN_SECONDS) t
+        else (t as BrushBehavior.TargetNode).let { BrushBehavior.TargetNode(it.target, it.targetModifierRangeStart, it.targetModifierRangeEnd, BrushBehavior.DampingNode(BrushBehavior.DampingSource.DISTANCE_IN_MULTIPLES_OF_BRUSH_SIZE, FOUNTAIN_SETTLE, input.input)) }
+      }
+    )
+
+  /** How far (in pen widths) the fountain pen's width takes to follow a change. */
+  private const val FOUNTAIN_SETTLE = 0.8f
+
+  /**
    * The highlighter's two tips. Round is built here: a circle, so strokes end in round caps (the
    * stock highlighter's chisel looked the same whichever tip was chosen). Square is the stock
    * slanted chisel with its corners left sharp: the owner liked its angled look. Both discard
@@ -201,7 +228,7 @@ object Brushes {
   fun family(type: PenType): BrushFamily =
     when (type) {
       PenType.FINELINER -> StockBrushes.marker()
-      PenType.FOUNTAIN -> StockBrushes.pressurePen()
+      PenType.FOUNTAIN -> fountain
       PenType.PENCIL -> StockBrushes.pencilUnstable
       PenType.CALLIGRAPHY -> calligraphy
       PenType.HIGHLIGHTER -> roundHighlighter
