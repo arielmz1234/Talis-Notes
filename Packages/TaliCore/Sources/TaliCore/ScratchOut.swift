@@ -19,6 +19,13 @@ public enum ScratchOut {
   static let maxDrift: Float = 0.25
   /// How much of a thing has to lie under the scribble for it to go.
   public static let coverNeeded: Float = 0.6
+  /// Less of it will do when the thing is small beside the scribble: a scribble across the middle of
+  /// a word leaves the tops and tails of tall letters (l, d, ן, ל) sticking out (Android 1.0.28's
+  /// `CROSS_NEEDED`).
+  public static let crossNeeded: Float = 0.15
+  /// How far past the scribble's box such a thing may reach, against the scribble's larger side
+  /// (Android's `REACH_PAST`: at 0.5 a ן whose hook dipped just past it stayed behind).
+  public static let reachPast: Float = 1.0
 
   /// The area [pts] scrubbed over (a convex outline, in the same units), or nil when it isn't a scribble.
   public static func area(_ pts: [Pt], zoom: Float) -> [Pt]? {
@@ -91,22 +98,36 @@ public enum ScratchOut {
 
   /// Whether the scribble's [area] covers enough of a thing drawn as [lines] for it to go.
   public static func covers(_ lines: [[Pt]], _ area: [Pt]) -> Bool {
-    guard let box = Rect.around(area) else { return false }
+    guard let box = Rect.around(area), let found = under(lines, area, box) else { return false }
+    return found.part >= coverNeeded
+  }
+
+  /// Whether a scribble over [area] takes a thing drawn as [lines]: most of it is under the
+  /// scribble (`covers`), or some of it is and the whole thing lies near the scribble.
+  public static func takes(_ lines: [[Pt]], _ area: [Pt]) -> Bool {
+    guard let box = Rect.around(area), let found = under(lines, area, box) else { return false }
+    if found.part >= coverNeeded { return true }
+    guard found.part >= crossNeeded else { return false }
+    let near = box.outset(reachPast * max(box.width, box.height))
+    return near.contains(Pt(found.box.left, found.box.top)) && near.contains(Pt(found.box.right, found.box.bottom))
+  }
+
+  /// [lines] sampled along their length (a point every 1/40 of the scribble's size): how much of
+  /// them is inside [area], and the box round them.
+  static func under(_ lines: [[Pt]], _ area: [Pt], _ box: Rect) -> (part: Float, box: Rect)? {
     let step = max(max(box.width, box.height) / 40, 0.5)
-    var inside = 0, all = 0
-    func count(_ p: Pt) {
-      all += 1
-      if box.contains(p) && Geo.pointInPolygon(p, area) { inside += 1 }
-    }
+    var samples: [Pt] = []
     for line in lines {
       guard let first = line.first else { continue }
-      count(first)
+      samples.append(first)
       for (a, b) in zip(line, line.dropFirst()) {
         let parts = max(Int((a.dist(b) / step).rounded(.up)), 1)
-        for k in 1...parts { count(a + (b - a) * (Float(k) / Float(parts))) }
+        for k in 1...parts { samples.append(a + (b - a) * (Float(k) / Float(parts))) }
       }
     }
-    return all > 0 && Float(inside) >= coverNeeded * Float(all)
+    guard let around = Rect.around(samples) else { return nil }
+    let inside = samples.filter { box.contains($0) && Geo.pointInPolygon($0, area) }.count
+    return (Float(inside) / Float(samples.count), around)
   }
 
   /// The convex hull of [pts] (Andrew's monotone chain), counter-clockwise.

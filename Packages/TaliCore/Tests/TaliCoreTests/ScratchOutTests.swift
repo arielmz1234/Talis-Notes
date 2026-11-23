@@ -83,4 +83,18 @@ struct ScratchOutTests {
     let box = [Pt(10, 10), Pt(90, 10), Pt(90, 200), Pt(10, 200), Pt(10, 10)]
     #expect(!ScratchOut.covers([box], area))
   }
+
+  /// Android 1.0.28: a scribble across the middle of a word also takes the tall letters sticking out
+  /// of it, but nothing it only clips that runs far past it.
+  @Test func itTakesWhatSticksOutOfIt() throws {
+    let area = try #require(ScratchOut.area(zigzag(legs: 7) { Pt($0 % 2 == 0 ? 0 : 100, Float($0) * 3) }, zoom: 1))
+    let stem = [[Pt(30, -25), Pt(30, 45)]]
+    #expect(!ScratchOut.covers(stem, area), "a tall letter's stem is mostly outside the scribble")
+    #expect(ScratchOut.takes(stem, area), "but it goes with the word")
+    #expect(ScratchOut.takes([[Pt(60, -30), Pt(62, 40), Pt(50, 50)]], area), "a hooked stem (ן) goes")
+    #expect(ScratchOut.takes([[Pt(10, 5), Pt(90, 15)]], area), "a word under it")
+    #expect(!ScratchOut.takes([[Pt(80, 10), Pt(300, 10)]], area), "a long line it only crosses the start of")
+    #expect(!ScratchOut.takes([[Pt(0, 60), Pt(100, 60)]], area), "a line below it")
+    #expect(!ScratchOut.takes([[Pt(10, 10), Pt(90, 10), Pt(90, 200), Pt(10, 200), Pt(10, 10)]], area), "a box with one side under it")
+  }
 }

@@ -19,7 +19,9 @@ most of it, legs close together, at least 16 pt on screen) and what it mostly co
 thing's line inside its hull). `ScribbleDelete.swift` runs from `holdEnded` before circle to select:
 not with a highlighter, only what the eraser's Erases filter takes, nothing locked, no text or
 pictures; the scribble is dropped (`dropInk`) and the rest goes in one `commit`, with fills they
-outline. A scribble over nothing stays ink. UI tests can only drag straight, so `ScratchOutTests`
+outline. A scribble over nothing stays ink. As Android 1.0.28: `ScratchOut.takes` also takes a thing with 15% under the
+scribble when it lies within the scribble's box grown by its larger side (tall letters sticking out),
+and the scribble and what it took vanish at once (no fade). UI tests can only drag straight, so `ScratchOutTests`
 checks the shapes and `PenTests.testScribbleToDeleteSetting` the toggle. Try it on the iPad.
 
 ## Owner's list of 23 Nov 2026 (Mac)
