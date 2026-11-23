@@ -827,4 +827,6 @@
     <string name="feat_star_body">اضغط مطولًا على دفتر واختر «تمييز بنجمة». للدفاتر المميزة مكان خاص في الشريط الجانبي، تحت كل الدفاتر.</string>
     <string name="feat_colours_title">اختر عائلة ألوان</string>
     <string name="feat_colours_body">من الإعدادات، اختر ليلكي أو سماوي أو أخضر هادئ أو خوخي، بالوضع الفاتح أو الداكن، مع نمط غيوم أو بسيط.</string>
+    <string name="scribble_to_delete">الخربشة للحذف</string>
+    <string name="scribble_to_delete_detail">بالقلم، اخربش ذهابًا وإيابًا فوق الكتابة لحذفها</string>
 </resources>

@@ -827,4 +827,6 @@
     <string name="feat_star_body">Mantén un cuaderno y elige Destacar. Los cuadernos destacados tienen su propio lugar en la barra lateral, bajo Todos los cuadernos.</string>
     <string name="feat_colours_title">Elige una familia de colores</string>
     <string name="feat_colours_body">En Ajustes, elige Lila, Cielo, Salvia o Melocotón, en claro u oscuro, con estilo Nubes o Minimalista.</string>
+    <string name="scribble_to_delete">Garabatear para borrar</string>
+    <string name="scribble_to_delete_detail">Con un bolígrafo, garabatea de un lado a otro sobre lo escrito para borrarlo</string>
 </resources>

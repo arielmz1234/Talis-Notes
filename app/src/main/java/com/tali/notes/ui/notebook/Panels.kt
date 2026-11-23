@@ -344,6 +344,8 @@ fun EraserPanel(settings: AppSettings, vm: NotebookViewModel) {
     FilterChips {
       PenType.offered.forEach { type -> FilterChip(stringResource(type.nameRes), settings.eraserHits(type)) { vm.setEraserAffects(type, it) } }
     }
+    Spacer(Modifier.height(8.dp))
+    ToggleRow(stringResource(R.string.scribble_to_delete), settings.scribbleDelete, vm::setScribbleDelete, detail = stringResource(R.string.scribble_to_delete_detail))
     Spacer(Modifier.height(14.dp))
     Text(stringResource(R.string.tip_hold_the_s_pen_button), style = MaterialTheme.typography.bodySmall, color = c.inkFaint)
   }

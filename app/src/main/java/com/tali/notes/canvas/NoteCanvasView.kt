@@ -39,6 +39,7 @@ import com.tali.notes.geometry.Affine
 import com.tali.notes.geometry.Geo
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
+import com.tali.notes.geometry.ScratchOut
 import com.tali.notes.geometry.ShapeRecognizer
 import com.tali.notes.model.ArcShape
 import com.tali.notes.model.AudioItem
@@ -1005,6 +1006,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (any) {
       invalidate()
       hideInkLayerAfterDraw()
+      // Ink keeps its own copy until it hands them over, and draws it again as soon as the next
+      // stroke's mask lets it: a stroke undone or erased right after writing came back while she
+      // wrote the next one, until she lifted (the owner, 23 Nov 2026). Asked now, Ink hands them
+      // over while nothing is being written, and the hand-off finds them taken.
+      runCatching { inProgress.requestHandoff() }
     }
   }
 
@@ -1384,6 +1390,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     drawLasso(canvas)
     drawCircleCatch(canvas)
+    drawScribbleFade(canvas)
     drawShotFlash(canvas)
     drawSelection(canvas)
     drawCrop(canvas)
@@ -2805,6 +2812,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           // A quick tap on a shape's outline picks the shape up to change it, rather than leaving a dot.
           dropStroke(e)
           selectShape(tapped)
+        } else if (scribbleDelete(e)) {
+          // A scribble over writing: it took what it covered, and leaves nothing itself.
         } else {
           noteLoop()
           val g = gesture
@@ -4319,6 +4328,89 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       sh.finished && strokePens.containsKey(id) && settings.lassoHits(sh.pen) &&
         Lasso.touchesPath(List(sh.inputs.size) { i -> sh.inputs.populate(i, input); Pt(input.x, input.y) }, loop)
     }
+  }
+
+  // ---- Scribble to delete ----
+  //
+  // With *Scribble to delete* on (the eraser's panel, `AppSettings.scribbleDelete`, off at first), a
+  // pen scribbled back and forth over writing or shapes takes them off the page together with the
+  // scribble, in one undo step, and the scribble fades so it's clear what happened. The rules are
+  // the iPad app's (geometry/ScratchOut.kt). Only what lies mostly under it goes, and only what the
+  // eraser's *Erases* filter takes; never locked things, typed text, pictures or memos. A scribble
+  // over nothing stays ink; the highlighter never deletes (zigzag highlighting is common).
+
+  /** A scribble fading out where it was drawn (world points, its colour and width). */
+  private class ScribbleFade(val pts: List<Pt>, val color: Int, val width: Float, val since: Long)
+
+  private var scribbleFade: ScribbleFade? = null
+  private val scribblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+  }
+
+  /** The stroke being lifted: true when it was a scribble that took things off the page. */
+  private fun scribbleDelete(e: MotionEvent): Boolean {
+    val slot = settings.activeSlot
+    if (!settings.scribbleDelete || viewOnly || slot.type.isHighlighter) return false
+    if (e.getToolType(e.actionIndex.coerceAtLeast(0)) != MotionEvent.TOOL_TYPE_STYLUS) return false
+    val d = doc ?: return false
+    // Every sample of it (the events' batched ones too: a quick scribble's turns were lost otherwise).
+    val input = androidx.ink.strokes.StrokeInput()
+    val pts = gesture?.full?.inputs?.let { all -> List(all.size) { i -> all.populate(i, input); Pt(input.x, input.y) } }?.takeIf { it.size >= strokePoints.size } ?: strokePoints.toList()
+    val area = ScratchOut.area(pts, camera.scale / density) ?: return false
+    val reach = Rect.around(area) ?: return false
+    // Writing still waiting for Ink's hand-off counts too (scribbling straight after writing).
+    val waiting = shadows.any { (id, sh) ->
+      sh.finished && strokePens.containsKey(id) && settings.eraserHits(sh.pen) &&
+        ScratchOut.covers(listOf(List(sh.inputs.size) { i -> sh.inputs.populate(i, input); Pt(input.x, input.y) }), area)
+    }
+    if (!waiting && d.intersecting(reach).none { scribbleTakes(it, area, reach) }) return false
+    // The scribble leaves without being kept, then the waiting writing goes in so it can go.
+    dropStroke(e)
+    stopHolds()
+    mode = Mode.NONE
+    drawPointer = -1
+    commitWaitingInk()
+    val gone = d.intersecting(reach).filter { scribbleTakes(it, area, reach) }
+    if (gone.isEmpty()) return true
+    val ids = withFills(gone, locked = false).map { it.id }.toSet()
+    clearSelection()
+    d.commit(Change(d.all.filter { it.id in ids }, emptyList()))
+    performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+    scribbleFade = ScribbleFade(pts, if (darkPaper) Brushes.onDarkPaper(slot.color) else slot.color, slot.size, SystemClock.uptimeMillis())
+    invalidate()
+    return true
+  }
+
+  /** Whether the scribble's [area] takes [item]: writing and shapes the eraser takes, mostly under it. */
+  private fun scribbleTakes(item: CanvasItem, area: List<Pt>, reach: Rect): Boolean {
+    if (item.locked || !item.bounds.intersects(reach) || !settings.eraserHits(item.pen)) return false
+    val lines = when (item) {
+      is InkItem -> {
+        val inputs = item.stroke.inputs
+        val input = androidx.ink.strokes.StrokeInput()
+        listOf(List(inputs.size) { i -> inputs.populate(i, input); Pt(input.x, input.y) })
+      }
+      is ShapeItem -> item.geometry.paths(item.size)
+      else -> return false
+    }
+    return ScratchOut.covers(lines, area)
+  }
+
+  /** The scribble lingers a moment and fades out (`SCRIBBLE_FADE_MS`, strong ease-out). */
+  private fun drawScribbleFade(canvas: Canvas) {
+    val f = scribbleFade ?: return
+    val t = (SystemClock.uptimeMillis() - f.since).toFloat() / SCRIBBLE_FADE_MS
+    if (t >= 1f) {
+      scribbleFade = null
+      return
+    }
+    scribblePaint.color = f.color
+    scribblePaint.alpha = (153 * (1f - easeOut(t))).toInt()
+    scribblePaint.strokeWidth = max(f.width * camera.scale, 1.5f * density)
+    canvas.drawPath(pathThrough(f.pts.map(camera::toScreen), close = false), scribblePaint)
+    postInvalidateOnAnimation()
   }
 
   /** A stroke is being finished: remember it if it's a loop round something (with a pen that circles to select). */
@@ -6021,6 +6113,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
      * where the page can reach the screen a frame or two after it's sent.
      */
     private const val HIDE_AFTER_FRAMES = 3
+
+    /** How long a scribble that deleted something takes to fade (the iPad app's 350 ms). */
+    private const val SCRIBBLE_FADE_MS = 350f
     private const val SHARP_WAIT_MS = 140L
 
     /** How far a rectangle drawn round a selection stands clear of it (world units, ~2 mm). */

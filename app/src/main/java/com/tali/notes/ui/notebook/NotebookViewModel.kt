@@ -592,6 +592,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setEraserSize(size: Float) = store.update { it.copy(eraserSize = size) }
 
+  fun setScribbleDelete(on: Boolean) = store.update { it.copy(scribbleDelete = on) }
+
   fun setHoldToShape(on: Boolean) = store.update { it.copy(holdToShape = on) }
 
   fun setSnapShapes(on: Boolean) = store.update { it.copy(snapShapes = on) }

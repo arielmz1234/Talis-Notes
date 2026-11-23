@@ -80,6 +80,8 @@ data class AppSettings(
   val lassoLocked: Boolean = false,
   val eraserMode: EraserMode = EraserMode.STROKE,
   val eraserSize: Float = 16f,
+  /** Scribbling back and forth over writing with a pen deletes it (`canvas/ScratchOut.kt`). Off at first. */
+  val scribbleDelete: Boolean = false,
   val holdToShape: Boolean = true,
   /** Shapes, pictures and text lock onto each other when moved or drawn close (ends, edges, lining up). */
   val snapShapes: Boolean = true,

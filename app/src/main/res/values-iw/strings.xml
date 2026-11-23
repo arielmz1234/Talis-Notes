@@ -828,4 +828,6 @@
     <string name="feat_star_body">מחזיקים מחברת ובוחרים סימון בכוכב. למחברות המסומנות יש מקום משלהן בסרגל הצד, מתחת לכל המחברות.</string>
     <string name="feat_colours_title">בחירת משפחת צבעים</string>
     <string name="feat_colours_body">בהגדרות בוחרים לילך, שמיים, מרווה או אפרסק, בהיר או כהה, בסגנון עננים או מינימלי.</string>
+    <string name="scribble_to_delete">קשקוש למחיקה</string>
+    <string name="scribble_to_delete_detail">עם עט, מקשקשים הלוך ושוב על הכתב כדי למחוק אותו</string>
 </resources>
