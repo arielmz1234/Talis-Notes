@@ -441,6 +441,11 @@ struct NoteCanvas: UIViewRepresentable {
       shapeZ = 0
       var under = UnderItems()
       var lockedStrokes: [InkStroke] = []
+      // Pictures and fills already decoded are kept; new ones are decoded off the main thread, so
+      // opening a notebook with photos doesn't stall its opening (they come in a moment later).
+      let had = pages?.pages.under
+      var pictureSlots: [Slot<PlacedPicture, PictureRow>] = []
+      var fillSlots: [Slot<FillPicture, ItemRow>] = []
       for row in rows {
         if let text = TextRow(row) {
           under.texts.append(text)
@@ -451,8 +456,8 @@ struct NoteCanvas: UIViewRepresentable {
           shapeZ = max(shapeZ, row.z)
           continue
         }
-        if let fill = FillPicture(row) {
-          under.fills.append(fill)
+        if let fillRow = FillRow(row) {
+          if let known = had?.fills.first(where: { $0.row == fillRow }) { fillSlots.append(.ready(known)) } else { fillSlots.append(.later(row)) }
           shapeZ = max(shapeZ, row.z)
           continue
         }
@@ -460,16 +465,19 @@ struct NoteCanvas: UIViewRepresentable {
           under.pdfPages.append(sharp)
           continue
         }
-        if row.kind == 2, let pic = picture(from: row) {
-          under.pictures.append(pic)
+        if row.kind == 2, let p = PictureRow(row) {
+          if let known = had?.pictures.first(where: { $0.row == p }) { pictureSlots.append(.ready(known)) } else { pictureSlots.append(.later(p)) }
           continue
         }
         guard let ink = InkStroke(row: row) else { continue }
         if ink.locked { lockedStrokes.append(ink) } else { inks.append(ink) }
       }
       under.setLockedInk(lockedStrokes) { self.mask(for: $0) }
+      under.pictures = pictureSlots.compactMap(\.ready)
+      under.fills = fillSlots.compactMap(\.ready)
       pages?.pages.under = under
       pages?.layer.setNeedsDisplay()
+      decodeLater(pictureSlots, fillSlots)
       let drawn = Self.highlighterFirst(inks) { $0 }.map { ($0.pkStroke(mask: mask(for: $0)), $0) }
       stored = drawn.map { (StrokeKey($0.0), $0.1) }
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
@@ -477,6 +485,41 @@ struct NoteCanvas: UIViewRepresentable {
       updateContent()
       applyTool()
       reportUndo()
+    }
+
+    /// Bumped by each load: decoded pictures from an older one are dropped.
+    var loadTicket = 0
+
+    /// Decodes the pictures and fills [load] hadn't yet, off the main thread, then puts every one in
+    /// its place in the stack and redraws where they are.
+    private func decodeLater(_ pictures: [Slot<PlacedPicture, PictureRow>], _ fills: [Slot<FillPicture, ItemRow>]) {
+      loadTicket += 1
+      guard pictures.contains(where: { $0.ready == nil }) || fills.contains(where: { $0.ready == nil }) else { return }
+      let ticket = loadTicket
+      nonisolated(unsafe) let pictures = pictures, fills = fills
+      DispatchQueue.global(qos: .userInitiated).async {
+        let placedPictures = pictures.compactMap { slot -> PlacedPicture? in
+          switch slot {
+          case .ready(let p): p
+          case .later(let row): placed(row)
+          }
+        }
+        let placedFills = fills.compactMap { slot -> FillPicture? in
+          switch slot {
+          case .ready(let f): f
+          case .later(let row): FillPicture(row)
+          }
+        }
+        nonisolated(unsafe) let done = (placedPictures, placedFills)
+        DispatchQueue.main.async { [weak self] in
+          guard let self, self.loadTicket == ticket, let pages = self.pages else { return }
+          pages.pages.under.pictures = done.0
+          pages.pages.under.fills = done.1
+          let fresh = done.0.filter { p in !pictures.contains { $0.ready?.row == p.row } }.map(\.rect)
+            + done.1.filter { f in !fills.contains { $0.ready?.row == f.row } }.map { CGRect($0.row.rect) }
+          self.redrawPage(fresh.reduce(nil) { joined($0, $1) })
+        }
+      }
     }
 
     /// What the eraser left of the strokes it cut, waiting to be stored with their own pen.
@@ -1041,4 +1084,12 @@ final class SharpPage: @unchecked Sendable {
     page.draw(with: .mediaBox, to: cg)
     cg.restoreGState()
   }
+}
+
+/// Something [load] has already (ready) or will decode in a moment (later).
+enum Slot<Ready, Source> {
+  case ready(Ready)
+  case later(Source)
+
+  var ready: Ready? { if case .ready(let r) = self { r } else { nil } }
 }
