@@ -9554,6 +9554,88 @@
         }
       }
     },
+    "feat_scribble_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scribble back and forth over writing with a pen and it goes, no eraser needed. Turn it on in the eraser’s settings: tap the eraser, then tap it again."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garabatea de un lado a otro sobre lo escrito con un bolígrafo y desaparece, sin borrador. Actívalo en los ajustes del borrador: toca el borrador y vuelve a tocarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gribouillez d’avant en arrière sur l’écriture avec un stylo et elle disparaît, sans gomme. Activez-le dans les réglages de la gomme : touchez la gomme, puis touchez-la à nouveau."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rabisque de um lado para o outro sobre a escrita com uma caneta e ela some, sem borracha. Ative nos ajustes da borracha: toque na borracha e toque de novo."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اخربش ذهابًا وإيابًا فوق الكتابة بالقلم فتختفي، دون ممحاة. فعّلها من إعدادات الممحاة: انقر على الممحاة ثم انقر عليها مرة أخرى."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מקשקשים הלוך ושוב על הכתב עם עט והוא נמחק, בלי מחק. מפעילים את זה בהגדרות המחק: מקישים על המחק ואז מקישים עליו שוב."
+          }
+        }
+      }
+    },
+    "feat_scribble_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scribble to delete"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garabatear para borrar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gribouiller pour effacer"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rabiscar para apagar"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الخربشة للحذف"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קשקוש למחיקה"
+          }
+        }
+      }
+    },
     "feat_shot_body": {
       "extractionState": "manual",
       "localizations": {

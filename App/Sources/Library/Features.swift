@@ -11,6 +11,7 @@ struct FeaturesCard: View {
         TourStep(title: L("feat_paste_title"), body: L("feat_paste_body_ios"), picture: AnyView(PastePicture())),
         TourStep(title: L("feat_box_title"), body: L("feat_box_body"), picture: AnyView(BoxPicture())),
         TourStep(title: L("feat_pencil_title"), body: L("feat_pencil_body"), picture: AnyView(DoubleTapPicture())),
+        TourStep(title: L("feat_scribble_title"), body: L("feat_scribble_body"), picture: AnyView(ScribblePicture())),
         TourStep(title: L("feat_fingers_title"), body: L("feat_fingers_body"), picture: AnyView(FingersPicture())),
         TourStep(title: L("feat_tidy_title"), body: L("feat_tidy_body"), picture: AnyView(AnglePicture())),
         TourStep(title: L("feat_dots_title"), body: L("feat_dots_body"), picture: AnyView(RadiusPicture())),
@@ -161,6 +162,28 @@ private struct DoubleTapPicture: View {
         }
         let tapped = t < 0.5 ? phase(t, 0.36, 0.48) : phase(t, 0.86, 0.98)
         pencil(ctx, c, y: h * 0.86, l: w * 0.16, r: w * 0.74, tapped: tapped)
+      }
+    }
+  }
+}
+
+/// Scribble to delete: a word is scrubbed over and goes with the scribble; the word below stays.
+private struct ScribblePicture: View {
+  @Environment(\.tali) private var c
+  var body: some View {
+    Loop(seconds: 4.2, still: 0.6) { t in
+      Canvas { ctx, size in
+        let w = size.width, h = size.height
+        ruledPage(ctx, size, c)
+        let gone = 1 - ease(phase(t, 0.62, 0.76))
+        if gone > 0 { ink(ctx, partial(cursive(w * 0.2, w * 0.62, h * 0.4, 13, seed: 5), ease(phase(t, 0, 0.22))), c.ink.opacity(gone), 2.4) }
+        ink(ctx, partial(cursive(w * 0.2, w * 0.78, h * 0.72, 13, seed: 6), 1), c.ink, 2.4)
+        let legs = 9
+        let zigzag = (0...legs).map { k in
+          CGPoint(x: k % 2 == 0 ? w * 0.16 : w * 0.66, y: h * 0.27 + CGFloat(k) * h * 0.016)
+        }
+        let drawn = ease(phase(t, 0.3, 0.56))
+        if drawn > 0 && gone > 0 { ink(ctx, partial(zigzag, drawn), blue.opacity(gone), 2.4) }
       }
     }
   }

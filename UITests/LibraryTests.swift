@@ -174,8 +174,8 @@ final class LibraryTests: ShotCase {
     tapSidebar(app, "settings")
     app.buttons["tips-and-tricks"].firstMatch.tap()
     settle()
-    walk(app, steps: 15, name: "lib-50-tips")
-    XCTAssertFalse(app.buttons["tour-next"].exists, "Done closes the tips after the fifteenth")
+    walk(app, steps: 16, name: "lib-50-tips")
+    XCTAssertFalse(app.buttons["tour-next"].exists, "Done closes the tips after the sixteenth")
   }
 
   /// Her own paper made from the new-notebook card: the card comes back with it chosen, the notebook
