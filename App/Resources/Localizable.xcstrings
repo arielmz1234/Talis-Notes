@@ -21567,6 +21567,88 @@
         }
       }
     },
+    "scribble_to_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scribble to delete"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garabatear para borrar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gribouiller pour effacer"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rabiscar para apagar"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الخربشة للحذف"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קשקוש למחיקה"
+          }
+        }
+      }
+    },
+    "scribble_to_delete_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With a pen, scribble back and forth over writing to delete it"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con un bolígrafo, garabatea de un lado a otro sobre lo escrito para borrarlo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avec un stylo, gribouillez d'avant en arrière sur l'écriture pour l'effacer"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Com uma caneta, rabisque de um lado para o outro sobre a escrita para apagá-la"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "بالقلم، اخربش ذهابًا وإيابًا فوق الكتابة لحذفها"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עם עט, מקשקשים הלוך ושוב על הכתב כדי למחוק אותו"
+          }
+        }
+      }
+    },
     "search_notebooks": {
       "extractionState": "manual",
       "localizations": {

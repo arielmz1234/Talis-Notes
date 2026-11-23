@@ -7,6 +7,8 @@ struct EraserSettings: Equatable {
   /// Across, in screen points (Android's `eraserSize`): it covers less of the page when zoomed in.
   var size: Float = 16
   var affects = PenFilter()
+  /// Scribbling over writing with a pen deletes it (ScribbleDelete.swift).
+  var scribbleDelete = false
 
   var mode: Eraser.Mode { precise ? .AREA : .STROKE }
 }

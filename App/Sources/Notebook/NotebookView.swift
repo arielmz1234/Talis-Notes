@@ -41,6 +41,7 @@ struct NotebookView: View {
   @State private var toolBefore: Tool?
   @AppStorage("eraserPrecise") private var eraserPrecise = false
   @AppStorage("eraserSize") private var eraserSize: Double = 16
+  @AppStorage("scribbleDelete") private var scribbleDelete = false
   @State private var eraserAffects = PenFilters.load("eraserAffects")
   @State private var canUndo = false
   @State private var canRedo = false
@@ -108,7 +109,7 @@ struct NotebookView: View {
           settings: CanvasSettings(
             paper: paperSpec, fingerDraws: fingerDraws, smartUndo: smartUndo, between: between, pageGuides: PaperSettings.shared.pageGuides),
           bridge: bridge,
-          eraser: EraserSettings(precise: eraserPrecise, size: Float(eraserSize), affects: eraserAffects),
+          eraser: EraserSettings(precise: eraserPrecise, size: Float(eraserSize), affects: eraserAffects, scribbleDelete: scribbleDelete),
           shape: shapeSource,
           onUndoState: { u, r in
             canUndo = u
@@ -198,7 +199,8 @@ struct NotebookView: View {
               case .pen:
                 if let i = activePenIndex { PenPanel(pen: $pens[i], onAddPen: addPen, onRemovePen: pens.count > 1 ? { removePen(pens[i].id) } : nil) }
               case .eraser:
-                EraserPanel(precise: $eraserPrecise, size: Binding(get: { Float(eraserSize) }, set: { eraserSize = Double($0) }), affects: $eraserAffects)
+                EraserPanel(precise: $eraserPrecise, size: Binding(get: { Float(eraserSize) }, set: { eraserSize = Double($0) }), affects: $eraserAffects,
+                  scribbleDelete: $scribbleDelete)
               case .shapes:
                 ShapesPanel(picker: shapePicker, pen: shapePen, compact: geo.size.width < 660) {
                   withAnimation(Ease.outStrong(duration: 0.24)) { browsingShapes = true }
@@ -744,7 +746,7 @@ enum ViewOnly {
 enum PenStore {
   private static let reset: Void = {
     if ProcessInfo.processInfo.arguments.contains("-uitest"), !ProcessInfo.processInfo.arguments.contains("-keep-pens") {
-      for key in ["pens", "activePen", "savedColors", "highlighterColors", "eraserAffects", "eraserPrecise", "eraserSize"] + LassoSettings.Key.all {
+      for key in ["pens", "activePen", "savedColors", "highlighterColors", "eraserAffects", "eraserPrecise", "eraserSize", "scribbleDelete"] + LassoSettings.Key.all {
         UserDefaults.standard.removeObject(forKey: key)
       }
     }

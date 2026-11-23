@@ -199,7 +199,7 @@ extension NoteCanvas.Coordinator {
       dropInk(since: hold.began.addingTimeInterval(-0.2))
       pickUpShape(tapped)
     } else if !cancelled {
-      noteCircle()
+      if scribbleDelete() { forgetCircle() } else { noteCircle() }
     }
     hold.points = []
   }

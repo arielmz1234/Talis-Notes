@@ -10,6 +10,18 @@
    screenshots, macOS runners sometimes queue). Batch changes, and read compile errors with
    `gh run view <id> --log-failed | grep error:`.
 
+## Scribble to delete (23 Nov 2026, Windows)
+
+Owner's request: a toggle in the eraser panel (`scribbleDelete`, off by default) so a pen scribble
+over writing deletes it; Apple Pencil has no button to hold, and the 1st-gen and USB-C Pencils
+have no gesture at all. `TaliCore/ScratchOut.swift` tells a scribble (at least 4 turns, legs across
+most of it, legs close together, at least 16 pt on screen) and what it mostly covers (60% of a
+thing's line inside its hull). `ScribbleDelete.swift` runs from `holdEnded` before circle to select:
+not with a highlighter, only what the eraser's Erases filter takes, nothing locked, no text or
+pictures; the scribble is dropped (`dropInk`) and the rest goes in one `commit`, with fills they
+outline. A scribble over nothing stays ink. UI tests can only drag straight, so `ScratchOutTests`
+checks the shapes and `PenTests.testScribbleToDeleteSetting` the toggle. Try it on the iPad.
+
 ## Owner's list of 23 Nov 2026 (Mac)
 
 One commit per fix. What changed and what to know:

@@ -703,6 +703,7 @@ struct EraserPanel: View {
   @Binding var precise: Bool
   @Binding var size: Float
   @Binding var affects: PenFilter
+  @Binding var scribbleDelete: Bool
   @Environment(\.tali) private var c
 
   var body: some View {
@@ -721,6 +722,9 @@ struct EraserPanel: View {
       SectionLabel(text: L("erases"))
       Spacer().frame(height: 8)
       PenFilterChips(filter: $affects, images: nil)
+      Spacer().frame(height: 8)
+      ToggleRow(label: L("scribble_to_delete"), on: $scribbleDelete, detail: L("scribble_to_delete_detail"))
+        .accessibilityIdentifier("scribble-delete")
       if !PhoneWriting.onPhone {
         Spacer().frame(height: 14)
         Text(L("tip_double_tap_apple_pencil")).font(TaliType.bodySmall).foregroundStyle(c.inkFaint)
