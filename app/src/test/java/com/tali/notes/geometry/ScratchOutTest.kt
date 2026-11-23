@@ -83,20 +83,46 @@ class ScratchOutTest {
   }
   @Test fun itTakesTallLettersItRunsAcross() {
     // Scrubbed across the middle of a word: legs 100 long between y 0 and 21.
-    val area = ScratchOut.area(zigzag(7) { Pt(if (it % 2 == 0) 0f else 100f, it * 3f) }, 1f)!!
+    val scribble = ScratchOut.scribble(zigzag(7) { Pt(if (it % 2 == 0) 0f else 100f, it * 3f) }, 1f)!!
+    val area = scribble.hull
     val tallL = listOf(listOf(Pt(30f, -25f), Pt(30f, 45f)))
     assertFalse("only a third of it is under it", ScratchOut.covers(tallL, area))
-    assertTrue("but it's crossed and not much bigger", ScratchOut.takes(tallL, area))
+    assertTrue("but it's crossed and not much bigger", ScratchOut.takes(tallL, scribble))
     val hooked = listOf(listOf(Pt(60f, -30f), Pt(62f, 40f), Pt(50f, 50f)))
-    assertTrue(ScratchOut.takes(hooked, area))
+    assertTrue(ScratchOut.takes(hooked, scribble))
   }
 
   @Test fun itLeavesWhatItOnlyCrossesASmallPartOf() {
-    val area = ScratchOut.area(zigzag(7) { Pt(if (it % 2 == 0) 0f else 100f, it * 3f) }, 1f)!!
-    assertFalse("a long line", ScratchOut.takes(listOf(listOf(Pt(80f, 10f), Pt(300f, 10f))), area))
-    assertFalse("a line below it", ScratchOut.takes(listOf(listOf(Pt(0f, 60f), Pt(100f, 60f))), area))
+    val scribble = ScratchOut.scribble(zigzag(7) { Pt(if (it % 2 == 0) 0f else 100f, it * 3f) }, 1f)!!
+    assertFalse("a long line", ScratchOut.takes(listOf(listOf(Pt(80f, 10f), Pt(300f, 10f))), scribble))
+    assertFalse("a line below it", ScratchOut.takes(listOf(listOf(Pt(0f, 60f), Pt(100f, 60f))), scribble))
     val box = listOf(Pt(10f, 10f), Pt(90f, 10f), Pt(90f, 200f), Pt(10f, 200f), Pt(10f, 10f))
-    assertFalse("a box with one side under it", ScratchOut.takes(listOf(box), area))
-    assertTrue("a word under it", ScratchOut.takes(listOf(listOf(Pt(10f, 5f), Pt(90f, 15f))), area))
+    assertFalse("a box with one side under it", ScratchOut.takes(listOf(box), scribble))
+    assertTrue("a word under it", ScratchOut.takes(listOf(listOf(Pt(10f, 5f), Pt(90f, 15f))), scribble))
+  }
+  @Test fun slantedLoopsAreAScribble() {
+    // Quick loops travelling across a word, leaning over like handwriting (Tali's scribbles).
+    for (slant in listOf(0f, 0.5f, 1f)) {
+      val pts = (0..240).map { i ->
+        val t = i / 240f * 6 * 2 * PI.toFloat()
+        val y = 22f * cos(t)
+        Pt(90f * i / 240 + 6f * sin(t) + y * slant, y)
+      }
+      assertNotNull("slant $slant", ScratchOut.area(pts, 1f))
+    }
+  }
+
+  @Test fun circlingAWordLeavesIt() {
+    val ring = (0..180).map { i -> val t = i / 60f * 2 * PI.toFloat(); Pt(60f * cos(t), 30f * sin(t)) }
+    val word = listOf(listOf(Pt(-25f, -5f), Pt(-10f, 5f), Pt(5f, -5f), Pt(25f, 5f)))
+    val s = ScratchOut.scribble(ring, 1f)
+    if (s != null) assertFalse(ScratchOut.takes(word, s))
+  }
+
+  @Test fun scrubbingInPlaceTakesTheWordItRunsThrough() {
+    val s = ScratchOut.scribble(path((0..9).map { Pt(if (it % 2 == 0) 0f else 90f, 0f) }, jitter = 2f), 1f)!!
+    // Letters standing up through the scrub's thin band.
+    assertTrue(ScratchOut.takes(listOf(listOf(Pt(20f, -15f), Pt(22f, 15f))), s))
+    assertTrue(ScratchOut.takes(listOf(listOf(Pt(60f, -12f), Pt(70f, 10f), Pt(80f, -12f))), s))
   }
 }

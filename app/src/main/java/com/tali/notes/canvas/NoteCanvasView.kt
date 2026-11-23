@@ -4343,10 +4343,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   //
   // With *Scribble to delete* on (the eraser's panel, `AppSettings.scribbleDelete`, off at first), a
   // pen scribbled back and forth over writing or shapes takes them off the page together with the
-  // scribble, in one undo step, at once (no animation). What counts as a scribble is the iPad app's
-  // rule (geometry/ScratchOut.kt); what goes is what lies mostly under it or what it crosses that
-  // isn't much bigger than it (`ScratchOut.takes`), and only what the eraser's *Erases* filter
-  // takes; never locked things, typed text, pictures or memos. A scribble over nothing stays ink; the highlighter never deletes (zigzag highlighting is common).
+  // scribble, in one undo step, at once (no animation). What counts as a scribble and what it takes
+  // are in geometry/ScratchOut.kt (shared with the iPad app): only what its path ran over, and only
+  // what the eraser's *Erases* filter takes; never locked things, typed text, pictures or memos. A
+  // scribble over nothing stays ink; the highlighter never deletes (zigzag highlighting is common).
 
   /** The stroke being lifted: true when it was a scribble that took things off the page. */
   private fun scribbleDelete(e: MotionEvent): Boolean {
@@ -4357,21 +4357,21 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     // Every sample of it (the events' batched ones too: a quick scribble's turns were lost otherwise).
     val input = androidx.ink.strokes.StrokeInput()
     val pts = gesture?.full?.inputs?.let { all -> List(all.size) { i -> all.populate(i, input); Pt(input.x, input.y) } }?.takeIf { it.size >= strokePoints.size } ?: strokePoints.toList()
-    val area = ScratchOut.area(pts, camera.scale / density) ?: return false
-    val reach = Rect.around(area) ?: return false
+    val scribble = ScratchOut.scribble(pts, camera.scale / density) ?: return false
+    val reach = Rect.around(scribble.hull) ?: return false
     // Writing still waiting for Ink's hand-off counts too (scribbling straight after writing).
     val waiting = shadows.any { (id, sh) ->
       sh.finished && strokePens.containsKey(id) && settings.eraserHits(sh.pen) &&
-        ScratchOut.takes(listOf(List(sh.inputs.size) { i -> sh.inputs.populate(i, input); Pt(input.x, input.y) }), area)
+        ScratchOut.takes(listOf(List(sh.inputs.size) { i -> sh.inputs.populate(i, input); Pt(input.x, input.y) }), scribble)
     }
-    if (!waiting && d.intersecting(reach).none { scribbleTakes(it, area, reach) }) return false
+    if (!waiting && d.intersecting(reach).none { scribbleTakes(it, scribble, reach) }) return false
     // The scribble leaves without being kept, then the waiting writing goes in so it can go.
     dropStroke(e)
     stopHolds()
     mode = Mode.NONE
     drawPointer = -1
     commitWaitingInk()
-    val gone = d.intersecting(reach).filter { scribbleTakes(it, area, reach) }
+    val gone = d.intersecting(reach).filter { scribbleTakes(it, scribble, reach) }
     if (gone.isEmpty()) return true
     val ids = withFills(gone, locked = false).map { it.id }.toSet()
     clearSelection()
@@ -4381,8 +4381,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     return true
   }
 
-  /** Whether the scribble's [area] takes [item]: writing and shapes the eraser takes, under it or crossed by it. */
-  private fun scribbleTakes(item: CanvasItem, area: List<Pt>, reach: Rect): Boolean {
+  /** Whether [scribble] takes [item]: writing and shapes the eraser takes, that it ran over. */
+  private fun scribbleTakes(item: CanvasItem, scribble: ScratchOut.Scribble, reach: Rect): Boolean {
     if (item.locked || !item.bounds.intersects(reach) || !settings.eraserHits(item.pen)) return false
     val lines = when (item) {
       is InkItem -> {
@@ -4393,7 +4393,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       is ShapeItem -> item.geometry.paths(item.size)
       else -> return false
     }
-    return ScratchOut.takes(lines, area)
+    return ScratchOut.takes(lines, scribble)
   }
 
 

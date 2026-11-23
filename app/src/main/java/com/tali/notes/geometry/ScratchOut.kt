@@ -1,9 +1,11 @@
 package com.tali.notes.geometry
 
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.sin
 
@@ -12,9 +14,14 @@ import kotlin.math.sin
  * the page. Off unless she turns it on in the eraser's settings (`AppSettings.scribbleDelete`).
  * The same rules as the iPad app's (TaliCore's ScratchOut), so both tell a scribble alike.
  *
- * A scribble is told from writing by its legs: it turns back on itself at least [MIN_TURNS] times,
- * each leg runs across most of the scribble, and the legs lie close together (a zigzag line drawn
- * across the page moves on too far between legs, and handwriting's legs are short and uneven).
+ * A scribble is told from writing by its legs: along some direction it turns back on itself at
+ * least [MIN_TURNS] times, its legs run across at least half of it on average, and they lie close
+ * together (a zigzag line drawn across the page moves on too far between legs). Every direction is
+ * tried, every 15 degrees, since a quick scribble is often slanted loops rather than a level scrub.
+ *
+ * What it takes is what its pen actually ran over: a thing must lie mostly under it, or be crossed
+ * by it and not much bigger than it, and the scribble's path must pass over most of what lies under
+ * it (so circling a word, however many times, leaves the word alone).
  */
 object ScratchOut {
   /** Five legs or more: over, back, over, back, over. */
@@ -27,16 +34,37 @@ object ScratchOut {
   private const val TURN_BACK = 0.3f
 
   /** Each leg on average runs across at least this much of the scribble. */
-  private const val LEG_REACH = 0.6f
+  private const val LEG_REACH = 0.5f
 
   /** How far it may move on between legs, against a leg's length. */
   private const val MAX_DRIFT = 0.25f
 
+  /** Directions tried for the legs, spread over half a turn (every 15 degrees). */
+  private const val DIRECTIONS = 12
+
   /** How much of a thing has to lie under the scribble for it to go. */
   const val COVER_NEEDED = 0.6f
 
-  /** The area [pts] scrubbed over (a convex outline, in the same units), or null when it isn't a scribble. */
-  fun area(pts: List<Pt>, zoom: Float): List<Pt>? {
+  /** How much of a thing the scribble has to cross for it to go, when it isn't mostly under it. */
+  private const val CROSS_NEEDED = 0.15f
+
+  /** How far past the scribble (against its size) a thing it crosses may reach and still go. */
+  private const val REACH_PAST = 1f
+
+  /** How much of what lies under the scribble its path must have passed over. */
+  private const val PASSED_NEEDED = 0.6f
+
+  /** "Passed over" is within this share of the gap between its legs of its path... */
+  private const val PASS_GAP = 0.75f
+
+  /** ...and never less than this, on screen (dp). */
+  private const val PASS_MIN_SCREEN = 6f
+
+  /** A scribble: the area it scrubbed over (a convex outline), its path, and how near its path counts as passed over. */
+  class Scribble(val hull: List<Pt>, val path: List<Pt>, val reach: Float)
+
+  /** [pts] as a scribble, or null when it isn't one. [zoom] is screen dp per unit. */
+  fun scribble(pts: List<Pt>, zoom: Float): Scribble? {
     if (pts.size < 12) return null
     var mx = 0f
     var my = 0f
@@ -56,20 +84,25 @@ object ScratchOut {
       syy += dy * dy
       sxy += dx * dy
     }
-    // Its main direction and the one across it: the legs run along one of them. Both are tried, as
-    // the hand's wobble across a scribble scrubbed in place can look like many small legs.
+    // Starting from its main direction, the legs' way is the one where they lie closest together.
     val angle = 0.5f * atan2(2 * sxy, sxx - syy)
-    val u = Pt(cos(angle), sin(angle))
-    val v = Pt(-u.y, u.x)
-    val scrubbed = listOf(legs(pts, u, v), legs(pts, v, u)).any { l ->
-      if (l == null || l.spans.size - 1 < MIN_TURNS || l.length * zoom < MIN_LEG_SCREEN) return@any false
+    var gap = Float.MAX_VALUE
+    for (k in 0 until DIRECTIONS) {
+      val a = angle + k * PI.toFloat() / DIRECTIONS
+      val u = Pt(cos(a), sin(a))
+      val l = legs(pts, u, Pt(-u.y, u.x)) ?: continue
+      if (l.spans.size - 1 < MIN_TURNS || l.length * zoom < MIN_LEG_SCREEN) continue
       val meanSpan = l.spans.sum() / l.spans.size
-      meanSpan >= LEG_REACH * l.length && l.width / l.spans.size <= MAX_DRIFT * meanSpan
+      val drift = l.width / l.spans.size
+      if (meanSpan >= LEG_REACH * l.length && drift <= MAX_DRIFT * meanSpan) gap = minOf(gap, drift)
     }
-    if (!scrubbed) return null
+    if (gap == Float.MAX_VALUE) return null
     val hull = convexHull(pts)
-    return if (hull.size >= 3) hull else null
+    return if (hull.size >= 3) Scribble(hull, pts, max(PASS_GAP * gap, PASS_MIN_SCREEN / zoom)) else null
   }
+
+  /** The area [pts] scrubbed over (a convex outline, in the same units), or null when it isn't a scribble. */
+  fun area(pts: List<Pt>, zoom: Float): List<Pt>? = scribble(pts, zoom)?.hull
 
   /** Its legs' lengths, and its size along the legs and across them. */
   internal class Legs(val spans: List<Float>, val length: Float, val width: Float)
@@ -113,21 +146,19 @@ object ScratchOut {
     return if (spans.isEmpty()) null else Legs(spans, length, side.max() - side.min())
   }
 
-  /** How much of a thing the scribble has to cross for it to go, when it isn't mostly under it. */
-  private const val CROSS_NEEDED = 0.15f
-
-  /** How far past the scribble (against its size) a thing it crosses may reach and still go. */
-  private const val REACH_PAST = 1f
-
   /**
-   * Whether the scribble's [area] takes a thing drawn as [lines]: mostly under it ([COVER_NEEDED]),
-   * or crossed by it ([CROSS_NEEDED]) and no bigger than the scribble plus its own size ([REACH_PAST])
-   * all round. So a word's tall letters go when the scribble runs across their middles, while a
-   * long line or a box it only crosses one side of stays.
+   * Whether the scribble [s] takes a thing drawn as [lines]: mostly under it ([COVER_NEEDED]), or
+   * crossed by it ([CROSS_NEEDED]) and no bigger than the scribble plus its own size ([REACH_PAST])
+   * all round; and its path passed over most of the part under it ([PASSED_NEEDED]). So a word's
+   * tall letters go when the scribble runs across their middles, while a long line, a box it only
+   * crosses one side of, or a word it only circled stays.
    */
-  fun takes(lines: List<List<Pt>>, area: List<Pt>): Boolean {
+  fun takes(lines: List<List<Pt>>, s: Scribble): Boolean {
+    val area = s.hull
     val box = Rect.around(area) ?: return false
+    val near = PathIndex(s.path, s.reach)
     var inside = 0
+    var passed = 0
     var all = 0
     var l = Float.MAX_VALUE
     var t = Float.MAX_VALUE
@@ -135,19 +166,24 @@ object ScratchOut {
     var b = -Float.MAX_VALUE
     eachSample(lines, max(max(box.width, box.height) / 40f, 0.5f)) { p ->
       all++
-      if (box.contains(p) && Geo.pointInPolygon(p, area)) inside++
+      val ranOver = near.has(p)
+      // Under it: inside its outline, or right by its path (a scrub in place leaves a thin outline).
+      if (ranOver || box.contains(p) && Geo.pointInPolygon(p, area)) {
+        inside++
+        if (ranOver) passed++
+      }
       l = minOf(l, p.x)
       t = minOf(t, p.y)
       r = maxOf(r, p.x)
       b = maxOf(b, p.y)
     }
-    if (all == 0) return false
+    if (all == 0 || inside == 0 || passed < PASSED_NEEDED * inside) return false
     if (inside >= COVER_NEEDED * all) return true
-    val near = box.outset(REACH_PAST * max(box.width, box.height))
-    return inside >= CROSS_NEEDED * all && l >= near.left && t >= near.top && r <= near.right && b <= near.bottom
+    val reach = box.outset(REACH_PAST * max(box.width, box.height))
+    return inside >= CROSS_NEEDED * all && l >= reach.left && t >= reach.top && r <= reach.right && b <= reach.bottom
   }
 
-  /** Whether the scribble's [area] covers enough of a thing drawn as [lines] for it to go (the iPad app's rule). */
+  /** Whether the scribble's [area] covers enough of a thing drawn as [lines] for it to go (the iPad app's first rule). */
   fun covers(lines: List<List<Pt>>, area: List<Pt>): Boolean {
     val box = Rect.around(area) ?: return false
     var inside = 0
@@ -157,6 +193,26 @@ object ScratchOut {
       if (box.contains(p) && Geo.pointInPolygon(p, area)) inside++
     }
     return all > 0 && inside >= COVER_NEEDED * all
+  }
+
+  /** Finds whether a point lies within [reach] of [path] (filled in so no gap is wider than half of it). */
+  private class PathIndex(path: List<Pt>, private val reach: Float) {
+    private val cells = HashMap<Long, MutableList<Pt>>()
+
+    init {
+      eachSample(listOf(path), reach / 2) { p -> cells.getOrPut(key(cell(p.x), cell(p.y))) { ArrayList() } += p }
+    }
+
+    private fun cell(v: Float) = floor(v / reach).toInt()
+
+    private fun key(x: Int, y: Int) = (x.toLong() shl 32) or (y.toLong() and 0xffffffffL)
+
+    fun has(p: Pt): Boolean {
+      val cx = cell(p.x)
+      val cy = cell(p.y)
+      for (dx in -1..1) for (dy in -1..1) cells[key(cx + dx, cy + dy)]?.forEach { q -> if (q.dist(p) <= reach) return true }
+      return false
+    }
   }
 
   /** Points along [lines] at most [step] apart. */
