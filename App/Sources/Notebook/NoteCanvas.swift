@@ -809,7 +809,16 @@ struct NoteCanvas: UIViewRepresentable {
       parent.onView(p, z)
     }
 
-    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) { updateContent() }
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+      updateContent()
+      makeRoom()
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { makeRoom() }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+      if !decelerate { makeRoom() }
+    }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
       growEndless()
