@@ -237,7 +237,8 @@ struct NotebookView: View {
           }
         }
         if let puff {
-          BarPuffs(puff: puff).ignoresSafeArea()
+          // Over dark paper the mist is the dark theme's pale, see-through one, as on Android.
+          BarPuffs(puff: puff).ignoresSafeArea().environment(\.tali, dark ? ColorTheme.current.dark : barColors)
         }
         if hidden, !viewing {
           ShowToolbarsButton { setHidden(false) }
