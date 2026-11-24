@@ -8699,37 +8699,37 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap a shape to see its dots. Drag a circle's dot to change its radius, a part circle's ends to choose how much of a circle, a triangle's corners for its angles. The badge shows centimetres and degrees."
+            "value": "Pick a shape up with the lasso, or tap it with the Shapes tool, to see its dots. Drag a circle's dot to change its radius, a part circle's ends to choose how much of a circle, a triangle's corners for its angles. The badge shows centimetres and degrees."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toca una forma para ver sus puntos. Arrastra el punto de un círculo para cambiar su radio, los extremos de un sector para elegir cuánto círculo, las esquinas de un triángulo para sus ángulos. La etiqueta muestra centímetros y grados."
+            "value": "Toma una forma con el lazo, o tócala con la herramienta Formas, para ver sus puntos. Arrastra el punto de un círculo para cambiar su radio, los extremos de un sector para elegir cuánto círculo, las esquinas de un triángulo para sus ángulos. La etiqueta muestra centímetros y grados."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Touchez une forme pour voir ses points. Faites glisser le point d’un cercle pour changer son rayon, les bouts d’un secteur pour choisir la part du cercle, les coins d’un triangle pour ses angles. L’étiquette indique centimètres et degrés."
+            "value": "Prenez une forme au lasso, ou touchez-la avec l’outil Formes, pour voir ses points. Faites glisser le point d’un cercle pour changer son rayon, les bouts d’un secteur pour choisir la part du cercle, les coins d’un triangle pour ses angles. L’étiquette indique centimètres et degrés."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toque numa forma para ver seus pontos. Arraste o ponto de um círculo para mudar o raio, as pontas de um setor para escolher quanto do círculo, os cantos de um triângulo para os ângulos. A etiqueta mostra centímetros e graus."
+            "value": "Pegue uma forma com o laço, ou toque nela com a ferramenta Formas, para ver seus pontos. Arraste o ponto de um círculo para mudar o raio, as pontas de um setor para escolher quanto do círculo, os cantos de um triângulo para os ângulos. A etiqueta mostra centímetros e graus."
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "اضغط على شكل لترى نقاطه. اسحب نقطة الدائرة لتغيير نصف قطرها، وطرفي القطاع لاختيار مقدار الدائرة، وزوايا المثلث لزواياه. تعرض الشارة السنتيمترات والدرجات."
+            "value": "حدّد شكلًا باللاسو، أو اضغط عليه بأداة الأشكال، لترى نقاطه. اسحب نقطة الدائرة لتغيير نصف قطرها، وطرفي القطاع لاختيار مقدار الدائرة، وزوايا المثلث لزواياه. تعرض الشارة السنتيمترات والدرجات."
           }
         },
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "מקישים על צורה כדי לראות את הנקודות שלה. גוררים את הנקודה של עיגול כדי לשנות את הרדיוס, את הקצוות של גזרה כדי לבחור כמה מהעיגול, ואת הפינות של משולש בשביל הזוויות. התווית מציגה סנטימטרים ומעלות."
+            "value": "בוחרים צורה בלאסו, או מקישים עליה בכלי הצורות, כדי לראות את הנקודות שלה. גוררים את הנקודה של עיגול כדי לשנות את הרדיוס, את הקצוות של גזרה כדי לבחור כמה מהעיגול, ואת הפינות של משולש בשביל הזוויות. התווית מציגה סנטימטרים ומעלות."
           }
         }
       }

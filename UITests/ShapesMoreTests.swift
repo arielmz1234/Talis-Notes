@@ -195,6 +195,39 @@ final class ShapesMoreTests: ShotCase {
     calmShot("f4-recoloured-and-removed")
   }
 
+  /// A tap with the pen only writes: on a rectangle's edge it leaves its dot and picks nothing up
+  /// (the owner's rule, as on Android 1.0.30). The Shapes tool and the lasso still pick it up with a
+  /// tap. (A finger draws here as Apple Pencil does, through the same stroke.)
+  func testATapWithThePenOnlyWrites() {
+    let app = openNewNotebook()
+    shapesPanel(app)
+    tab(app, style: false)
+    app.buttons["shape-RECTANGLE"].firstMatch.tap()
+    settle()
+    drag(app, (0.40, 0.38), (0.60, 0.62))
+    let delete = app.buttons["selection-delete"].firstMatch
+    // Another tool puts the rectangle just drawn down.
+    app.buttons["pen-p1"].firstMatch.tap()
+    settle()
+    XCTAssertFalse(delete.waitForExistence(timeout: 1), "nothing is picked up to begin with")
+    let edge = (CGFloat(0.40), CGFloat(0.50))
+
+    at(app, edge.0, edge.1).tap()
+    settle()
+    XCTAssertFalse(delete.waitForExistence(timeout: 1.5), "a tap with the pen on a shape's edge picks nothing up")
+    calmShot("tap1-pen-tap-left-a-dot")
+
+    tool(app, "tool-shapes")
+    if app.buttons["more-shapes"].exists { tool(app, "tool-shapes") }
+    at(app, edge.0, edge.1).tap()
+    XCTAssertTrue(delete.waitForExistence(timeout: 3), "a tap with the Shapes tool picks the shape up")
+
+    tool(app, "tool-lasso")
+    XCTAssertFalse(delete.waitForExistence(timeout: 1), "another tool puts it down")
+    at(app, edge.0, edge.1).tap()
+    XCTAssertTrue(delete.waitForExistence(timeout: 3), "a tap with the lasso picks the shape up")
+  }
+
   func testSaveShape() {
     let app = openNewNotebook()
     // A Z in three strokes, picked up by a lasso drawn across it.

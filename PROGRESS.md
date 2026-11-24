@@ -9,6 +9,17 @@
 3. There is no Swift on the Windows PC; every compile happens in CI (about 15–20 minutes with
    screenshots, macOS runners sometimes queue). Batch changes, and read compile errors with
    `gh run view <id> --log-failed | grep error:`.
+4. **Rule: never change what a basic tap, hold or touch does without the owner asking.** (A Pencil
+   tap that picked shapes up was added unasked and had to be taken out; see 24 Nov below.)
+
+## A Pencil tap only writes (24 Nov 2026, Windows)
+
+At the owner's request (Tali kept picking shapes up by accident while writing), as Android 1.0.30:
+a tap with the pen no longer picks up a shape under it (`shapeTappedByPen` and `penTap` are gone);
+it leaves its dot like any tap. Shapes are picked up with the lasso or a Shapes-tool tap
+(`ShapeTool.swift`), both unchanged, as are circle to select, scribble to delete and text boxes
+(finger taps only). The shape-dots tip (`feat_dots_body`) now says to use the lasso or the Shapes
+tool. `ShapesMoreTests.testATapWithThePenOnlyWrites` checks all three taps.
 
 ## Scribble to delete (23 Nov 2026, Windows)
 

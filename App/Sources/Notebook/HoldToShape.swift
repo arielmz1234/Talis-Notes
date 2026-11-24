@@ -195,20 +195,12 @@ extension NoteCanvas.Coordinator {
           self.hold.layer.path = nil
         }
       }
-    } else if !cancelled, let tapped = shapeTappedByPen() {
-      dropInk(since: hold.began.addingTimeInterval(-0.2))
-      pickUpShape(tapped)
     } else if !cancelled {
+      // A tap with the pen only writes: it leaves its dot and never picks anything up (the owner's
+      // rule, as on Android 1.0.30). Shapes are picked up with the lasso or the Shapes tool.
       if scribbleDelete() { forgetCircle() } else { noteCircle() }
     }
     hold.points = []
-  }
-
-  private func shapeTappedByPen() -> ShapeRow? {
-    guard let first = hold.points.first, Date().timeIntervalSince(hold.began) < Self.penTap else { return nil }
-    if hold.points.contains(where: { $0.dist(first) * zoom > 4 }) { return nil }
-    guard case let .shape(s)? = item(at: first, since: hold.began.addingTimeInterval(-0.2)) else { return nil }
-    return s
   }
 
   /// Takes back the ink PencilKit drew since [since] (the dot of a tap): it lets go of a stroke still

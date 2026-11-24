@@ -92,7 +92,6 @@ extension TaliCore.Rect {
 
 extension NoteCanvas.Coordinator {
   static let menuBack: TimeInterval = 0.45
-  static let penTap: TimeInterval = 0.25
   static let hitRadius: Float = 10
 
   var zoom: Float { Float(canvas?.zoomScale ?? 1) }
