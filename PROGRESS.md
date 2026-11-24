@@ -42,6 +42,19 @@ scrub 99, zigzag 72, loops 100, tangle 99, in place 100; word 7, runs 28 (limit 
 star and wave 0, spiral 1. UI tests can only drag straight, so `ScratchOutTests`
 checks the shapes and `PenTests.testScribbleToDeleteSetting` the toggle. Try it on the iPad.
 
+## Owner's list of 24 Nov 2026 (Mac, after testing on the iPad)
+
+One commit per fix. What changed and what to know:
+- `OwnInk.swift`: every pen is drawn live by the notebook (PencilKit's drawing gesture is off for pens). The live picture is PencilKit's own renderer (`PKDrawing.image`, about 2–3 ms) of the very `InkStroke.pkStroke(mask:)` that's kept, smoothed live with `PenSmoother` and masked to its page; on lift it stays until `canvasViewDidFinishRendering` (`afterRender`). This fixed the flicker on lift (the old smooth-on-lift swap), live smoothing and strokes showing past the page edge. `PageEdgeCover` is gone. Strokes kept from here are remembered (`own.kept`) so a scribble or a caught loop can take them back (`dropInk`).
+- Selection put-down: `endDrag` no longer draws the old drawing back; `inkBase` holds it for `commit`, `restoreLifted(redraw: false)` leaves the overlay where it was, and `dropShapes` waits for the canvas to render.
+- `InkStack.swift`: the page layer draws shapes, text, front pictures and locked or covered ink in one z order; ink covered by something above it is hidden in PencilKit with a far-off 1 pt mask (an empty mask is ignored) and drawn by the page instead (`restack()` after every change).
+- `CircleCatch`: Android's close-in animation (`drawCircleCatch`, `framePoints`).
+- Text boxes keep the height they grew to while typing. Dark paper's toolbar puff uses the dark theme's mist.
+- First open: the canvas is hidden until its saved zoom and place are set (`firstPlacing`).
+- Pages overview: the tap ending a hold is ignored; carried tiles share the held tile's offset.
+- Endless: `makeRoom` moves everything into 6000 units of room (and again near the left/top edge when a scroll ends); the shift is kept per notebook in UserDefaults (`endlessShift-<id>`) and taken back first when going to pages. Undo is cleared on the switch.
+- Toolbar tools 40 pt wide and pens 32 pt; the name stays beside the tools down to 110 pt.
+
 ## Owner's list of 23 Nov 2026 (Mac)
 
 One commit per fix. What changed and what to know:
