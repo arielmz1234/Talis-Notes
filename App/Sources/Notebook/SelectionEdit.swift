@@ -422,7 +422,8 @@ extension NoteCanvas.Coordinator {
   /// are under them; a PDF's own page is never found. Locked items are left alone unless they're
   /// asked for ([locked]) or anything goes ([anyLock]); [filter] is the lasso's choice of pens.
   /// Ink newer than [since] is left out: the dot a pen tap leaves isn't what the tap was on.
-  func item(at p: Pt, locked: Bool = false, anyLock: Bool = false, filter: (PenType?) -> Bool = { _ in true }, since: Date? = nil) -> PageItem? {
+  /// [shapesOnly]: only a shape counts (the Shapes tool's tap), whatever lies over it.
+  func item(at p: Pt, locked: Bool = false, anyLock: Bool = false, filter: (PenType?) -> Bool = { _ in true }, since: Date? = nil, shapesOnly: Bool = false) -> PageItem? {
     let r = Self.hitRadius / zoom
     func near(_ line: [Pt], _ reach: Float) -> Bool {
       if line.count == 1 { return line[0].dist(p) <= reach }
@@ -434,16 +435,19 @@ extension NoteCanvas.Coordinator {
       if top.map({ item.z >= $0.z }) ?? true { top = item }
     }
     func onInk(_ s: InkStroke) -> Bool { s.bounds.outset(r).contains(p) && wanted(.ink(s)) && near(s.inputs.points.map { Pt($0.x, $0.y) }, r + s.size / 2) }
-    for (key, s) in stored {
-      if let since, key.created >= since.timeIntervalSinceReferenceDate { continue }
+    // Writing is drawn by the notebook now (see OwnInk), which remembers when each stroke began.
+    let fresh = since.map(ownStrokes(since:)) ?? []
+    for (key, s) in stored where !shapesOnly {
+      if let since, key.created >= since.timeIntervalSinceReferenceDate || fresh.contains(s.id) { continue }
       if onInk(s) { offer(.ink(s)) }
     }
-    for s in lockedInk where onInk(s) { offer(.ink(s)) }
+    for s in lockedInk where !shapesOnly && onInk(s) { offer(.ink(s)) }
     for sh in shapes where wanted(.shape(sh)) {
       guard let b = sh.geometry.bounds(sh.size), b.outset(r).contains(p), sh.geometry.paths(sh.size).contains(where: { near($0, r + sh.size / 2) }) else { continue }
       offer(.shape(sh))
     }
     if let top { return top }
+    if shapesOnly { return nil }
     if let text = texts.filter({ wanted(.text($0)) && TextLook.frame($0).contains(CGPoint(p)) }).max(by: { $0.z < $1.z }) { return .text(text) }
     let under = (pictures + fills.map(\.picture)).filter { wanted(.picture($0)) && !$0.pdfPage && $0.rect.contains(p) }
     return under.max { $0.z < $1.z }.map(PageItem.picture)

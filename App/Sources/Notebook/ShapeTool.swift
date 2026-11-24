@@ -113,7 +113,7 @@ extension NoteCanvas.Coordinator {
     if let shape {
       pickUpShape(addShape(shape), soft: true)
     } else if let tapped {
-      if case let .shape(under)? = item(at: tapped) { pickUpShape(under) } else { tipOnce("shape-drag", L("drag_on_the_page_to_draw")) }
+      if case let .shape(under)? = item(at: tapped, shapesOnly: true) { pickUpShape(under) } else { tipOnce("shape-drag", L("drag_on_the_page_to_draw")) }
     }
   }
 
