@@ -45,7 +45,9 @@ extension NoteCanvas.Coordinator {
     let upShapes = under.shapes.filter { picked.contains($0.id) }, upTexts = under.texts.filter { picked.contains($0.id) }
     let upPictures = under.pictures.filter { picked.contains($0.row.id) }, upFills = under.fills.filter { picked.contains($0.row.id) }
     let upInk = under.lockedInk.filter { picked.contains($0.id) }
-    guard !(upShapes.isEmpty && upTexts.isEmpty && upPictures.isEmpty && upFills.isEmpty && upInk.isEmpty) else { return }
+    // Covered writing rides with the rest of the writing (see liftInk); only the page's copy goes.
+    let upBuried = under.buried.contains { picked.contains($0.stroke.id) }
+    guard !(upShapes.isEmpty && upTexts.isEmpty && upPictures.isEmpty && upFills.isEmpty && upInk.isEmpty && !upBuried) else { return }
     lasso.overlayTicket += 1
     let z = canvas.zoomScale
     let scale = canvas.traitCollection.displayScale
@@ -105,6 +107,7 @@ extension NoteCanvas.Coordinator {
     left.texts.removeAll { picked.contains($0.id) }
     left.pictures.removeAll { picked.contains($0.row.id) }
     left.fills.removeAll { picked.contains($0.row.id) }
+    left.buried.removeAll { picked.contains($0.stroke.id) }
     left.setLockedInk(under.lockedInk.filter { !picked.contains($0.id) }) { self.mask(for: $0) }
     // Without actions: left to animate, the lifted shapes faded in while the page's had already gone.
     CATransaction.begin()

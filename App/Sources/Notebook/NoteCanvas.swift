@@ -29,11 +29,14 @@ struct UnderItems: @unchecked Sendable {
   var fills: [FillPicture] = []
   /// Locked writing, kept out of PencilKit's drawing (see PageItems.swift), and how it's drawn.
   private(set) var lockedInk: [InkStroke] = []
-  private(set) var lockedDrawing = PKDrawing()
+  private(set) var lockedStrokes: [PKStroke] = []
+  /// Writing under a shape, text box or picture in front (sent back, or written before it): drawn
+  /// here in its place in the stack, while PencilKit, which draws over the page, hides its own (see InkStack.swift).
+  var buried: [(stroke: InkStroke, pk: PKStroke)] = []
 
   mutating func setLockedInk(_ strokes: [InkStroke], mask: (InkStroke) -> UIBezierPath?) {
     lockedInk = strokes
-    lockedDrawing = PKDrawing(strokes: strokes.map { $0.pkStroke(mask: mask($0)) })
+    lockedStrokes = strokes.map { $0.pkStroke(mask: mask($0)) }
   }
 }
 
@@ -114,34 +117,46 @@ final class PagesLayer: CATiledLayer, @unchecked Sendable {
       TextLook.attributed(t).draw(with: CGRect(x: box.minX, y: box.minY, width: box.width, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, context: nil)
       UIGraphicsPopContext()
     }
+    // Everything over the pictures behind goes by its place in the stack (Android's `drawAll`); equal
+    // places keep shapes under text under pictures under writing, each in its own order.
     let front = under.pictures.filter(\.row.front)
-    if front.isEmpty {
-      under.shapes.forEach(draw)
-      under.texts.forEach(draw)
-    } else {
-      // Equal places keep shapes under text under pictures, each in its own order.
-      var stack: [(z: Int64, kind: Int, index: Int)] = under.shapes.indices.map { (under.shapes[$0].z, 0, $0) }
-      stack += under.texts.indices.map { (under.texts[$0].z, 1, $0) }
-      stack += front.indices.map { (front[$0].row.z, 2, $0) }
-      for item in stack.sorted(by: { ($0.z, $0.kind, $0.index) < ($1.z, $1.kind, $1.index) }) {
-        switch item.kind {
-        case 0: draw(under.shapes[item.index])
-        case 1: draw(under.texts[item.index])
-        default: draw(front[item.index])
-        }
-      }
-    }
-    let locked = under.lockedDrawing
-    if !locked.strokes.isEmpty, locked.bounds.intersects(rect) {
-      // PencilKit draws ink for the interface style in force: the paper's own, as on the canvas.
+    var ink: [(z: Int64, pk: PKStroke)] = zip(under.lockedInk, under.lockedStrokes).map { ($0.z, $1) }
+    ink += under.buried.map { ($0.stroke.z, $0.pk) }
+    ink = ink.filter { $0.pk.renderBounds.intersects(rect) }
+    var stack: [(z: Int64, kind: Int, index: Int)] = under.shapes.indices.map { (under.shapes[$0].z, 0, $0) }
+    stack += under.texts.indices.map { (under.texts[$0].z, 1, $0) }
+    stack += front.indices.map { (front[$0].row.z, 2, $0) }
+    stack += ink.indices.map { (ink[$0].z, 3, $0) }
+    // PencilKit draws ink for the interface style in force: the paper's own, as on the canvas.
+    let style = UITraitCollection(userInterfaceStyle: paper.dark ? .dark : .light)
+    let inkScale = max(abs(cg.ctm.a), 0.05)
+    // Writing next to other writing in the stack is drawn in one go.
+    var run: [PKStroke] = []
+    func flush() {
+      guard !run.isEmpty else { return }
+      let drawing = PKDrawing(strokes: run)
+      run = []
+      let area = drawing.bounds.intersection(rect)
+      guard !area.isNull, !area.isEmpty else { return }
       var image: UIImage?
-      UITraitCollection(userInterfaceStyle: paper.dark ? .dark : .light).performAsCurrent {
-        image = locked.image(from: rect, scale: max(abs(cg.ctm.a), 0.05))
-      }
+      style.performAsCurrent { image = drawing.image(from: area, scale: inkScale) }
       UIGraphicsPushContext(cg)
-      image?.draw(in: rect)
+      image?.draw(in: area)
       UIGraphicsPopContext()
     }
+    for item in stack.sorted(by: { ($0.z, $0.kind, $0.index) < ($1.z, $1.kind, $1.index) }) {
+      if item.kind == 3 {
+        run.append(ink[item.index].pk)
+        continue
+      }
+      flush()
+      switch item.kind {
+      case 0: draw(under.shapes[item.index])
+      case 1: draw(under.texts[item.index])
+      default: draw(front[item.index])
+      }
+    }
+    flush()
   }
 }
 
@@ -482,6 +497,7 @@ struct NoteCanvas: UIViewRepresentable {
       stored = drawn.map { (StrokeKey($0.0), $0.1) }
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
       loading = false
+      restack()
       updateContent()
       applyTool()
       reportUndo()
@@ -518,6 +534,7 @@ struct NoteCanvas: UIViewRepresentable {
           let fresh = done.0.filter { p in !pictures.contains { $0.ready?.row == p.row } }.map(\.rect)
             + done.1.filter { f in !fills.contains { $0.ready?.row == f.row } }.map { CGRect($0.row.rect) }
           self.redrawPage(fresh.reduce(nil) { joined($0, $1) })
+          self.restack()
         }
       }
     }
@@ -944,6 +961,7 @@ struct NoteCanvas: UIViewRepresentable {
           if pkSwaps.count > 200 { pkSwaps.removeFirst(pkSwaps.count - 200) }
         }
       }
+      restack()
     }
 
     /// Whether two forms of one stroke (same key) are drawn the same: both kept to a page or not,

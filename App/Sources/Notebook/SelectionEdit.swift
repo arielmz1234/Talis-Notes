@@ -247,7 +247,7 @@ extension NoteCanvas.Coordinator {
     guard let canvas, let before = lasso.before else { return }
     var up: [PKStroke] = [], left: [PKStroke] = []
     for (i, s) in before.strokes.enumerated() {
-      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(s) } else { left.append(s) }
+      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(shown(s, at: i)) } else { left.append(s) }
     }
     guard !up.isEmpty else { return }
     let z = canvas.zoomScale
@@ -363,6 +363,7 @@ extension NoteCanvas.Coordinator {
       }
     }
     inkBase = nil
+    restack()
     dropShapes()
     setSelection(lasso.picked, menu: menu)
   }

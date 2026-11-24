@@ -239,6 +239,7 @@ extension NoteCanvas.Coordinator {
     setPictures(state.pictures)
     setFills(state.fills)
     setLockedInk(state.lockedInk)
+    restack()
   }
 
   /// Takes [old] off the page and puts [new] on it (an item in both is replaced where it is), as one
@@ -294,6 +295,7 @@ extension NoteCanvas.Coordinator {
     let fillRows = merged(fills.map(\.picture), newFills, id: { $0.id })
     setFills(fillRows.compactMap { p in (byId[p.id] ?? fills.first { $0.row.file == p.file })?.with(p) ?? FillPicture(p.itemRow) })
     if let box = new.map(\.bounds).reduce(nil, { (all: TaliCore.Rect?, r) in all?.union(r) ?? r }) { growPages(toHold: box) }
+    restack()
   }
 
   private func setInk(_ next: [(key: StrokeKey, stroke: InkStroke)], drawing: PKDrawing, on canvas: PKCanvasView) {
