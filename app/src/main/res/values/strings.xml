@@ -798,7 +798,7 @@
     <string name="feat_tidy_title">Tidy lines and snapping</string>
     <string name="feat_tidy_body">Lines lock to level, upright and 45° while you draw or turn them, and shapes snap to each other\'s edges, corners and middles. Turn snapping off in Shapes › Style.</string>
     <string name="feat_dots_title">Change a shape with its dots</string>
-    <string name="feat_dots_body">Tap a shape to see its dots. Drag a circle\'s dot to change its radius, a part circle\'s ends to choose how much of a circle, a triangle\'s corners for its angles. The badge shows centimetres and degrees.</string>
+    <string name="feat_dots_body">Pick a shape up with the lasso, or tap it with the Shapes tool, to see its dots. Drag a circle\'s dot to change its radius, a part circle\'s ends to choose how much of a circle, a triangle\'s corners for its angles. The badge shows centimetres and degrees.</string>
     <string name="feat_fill_title">Fill a shape</string>
     <string name="feat_fill_body">Choose the fill tool and tap inside any closed shape, even an outline you drew by hand. Choose the colour and how see-through it is in the tool\'s panel.</string>
     <string name="feat_shot_title">Screenshot part of a page</string>

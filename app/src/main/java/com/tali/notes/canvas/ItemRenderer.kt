@@ -41,6 +41,9 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
   private val fillPath = android.graphics.Path()
   private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
+  /** Shapes' outlines: sharp corners, round ends ([com.tali.notes.model.ShapeOutline]). */
+  private val outlinePaint = com.tali.notes.model.ShapeOutline.paint()
+
   /** Typed text laid out in its dark-paper colour, made the first time dark paper draws it. */
   private val darkText = java.util.WeakHashMap<TextItem, android.text.StaticLayout>()
 
@@ -134,7 +137,14 @@ class ItemRenderer(private val strokes: CanvasStrokeRenderer, private val images
             canvas.drawPath(fillPath, fillPaint)
           }
         }
-        (if (dark) item.darkStrokes else item.strokes).forEach { drawStroke(canvas, it, worldToScreen) }
+        if (item.vector) {
+          val ink = com.tali.notes.ink.Brushes.shapeInk(item.pen, item.color)
+          outlinePaint.color = if (dark) com.tali.notes.ink.Brushes.onDarkPaper(ink) else ink
+          outlinePaint.strokeWidth = item.size
+          canvas.drawPath(item.outlinePath, outlinePaint)
+        } else {
+          (if (dark) item.darkStrokes else item.strokes).forEach { drawStroke(canvas, it, worldToScreen) }
+        }
       }
       is TextItem -> {
         canvas.save()

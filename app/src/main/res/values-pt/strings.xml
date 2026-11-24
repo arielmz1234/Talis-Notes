@@ -798,7 +798,7 @@
     <string name="feat_tidy_title">Linhas retas e encaixe</string>
     <string name="feat_tidy_body">As linhas travam na horizontal, na vertical e em 45° enquanto você desenha ou gira, e as formas se encaixam nas bordas, cantos e centros umas das outras. Desligue o encaixe em Formas › Estilo.</string>
     <string name="feat_dots_title">Mude uma forma pelos pontos</string>
-    <string name="feat_dots_body">Toque numa forma para ver seus pontos. Arraste o ponto de um círculo para mudar o raio, as pontas de um setor para escolher quanto do círculo, os cantos de um triângulo para os ângulos. A etiqueta mostra centímetros e graus.</string>
+    <string name="feat_dots_body">Pegue uma forma com o laço, ou toque nela com a ferramenta Formas, para ver seus pontos. Arraste o ponto de um círculo para mudar o raio, as pontas de um setor para escolher quanto do círculo, os cantos de um triângulo para os ângulos. A etiqueta mostra centímetros e graus.</string>
     <string name="feat_fill_title">Preencha uma forma</string>
     <string name="feat_fill_body">Escolha a ferramenta de preenchimento e toque dentro de qualquer forma fechada, até um contorno desenhado à mão. Escolha a cor e a transparência no painel da ferramenta.</string>
     <string name="feat_shot_title">Capture parte da página</string>

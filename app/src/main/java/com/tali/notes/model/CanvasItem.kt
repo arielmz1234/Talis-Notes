@@ -71,11 +71,28 @@ private constructor(
 
   companion object {
     fun deferred(id: String, z: Long, pen: PenType, bounds: Rect, color: Int, locked: Boolean = false, build: () -> Stroke) = InkItem(id, z, pen, lazy(build), bounds, color, locked)
+
+    /** Below a hundredth of a unit (far under a pixel) bounds count as holding the stroke. */
+    private const val BOUNDS_SLACK = 0.01f
   }
 
   override fun transformed(m: Affine, newId: String, newZ: Long) = InkItem(newId, newZ, pen, StrokeFactory.transform(stroke, m))
 
   override fun withZ(newZ: Long) = InkItem(id, newZ, pen, built, bounds, knownColor, locked)
+
+  /**
+   * This stroke (built now if it wasn't) with bounds that hold all of it, or null when they already do.
+   * Bounds saved before version 1.0.28 came from Ink's stroke as it was written, whose outline can
+   * fall a little short of the same stroke built again from its points (what's drawn after
+   * reopening): the canvas tiles beyond the saved bounds left that bit out, slicing a stroke's end
+   * flat until it was moved.
+   */
+  fun withTrueBounds(): InkItem? {
+    val real = StrokeFactory.bounds(stroke)
+    val b = bounds
+    if (real.left >= b.left - BOUNDS_SLACK && real.top >= b.top - BOUNDS_SLACK && real.right <= b.right + BOUNDS_SLACK && real.bottom <= b.bottom + BOUNDS_SLACK) return null
+    return InkItem(id, z, pen, built, real.union(b), knownColor, locked)
+  }
 
   override fun withLocked(on: Boolean) = InkItem(id, z, pen, built, bounds, knownColor, on)
 
@@ -137,7 +154,25 @@ class ShapeItem(
   val isBuilt: Boolean
     get() = built.isInitialized()
 
-  override val bounds: Rect = knownBounds ?: strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)
+  /**
+   * Drawn as a vector outline with sharp corners ([ShapeOutline]). The pencil keeps its grain and
+   * the old dashed pen its own pattern, so those are drawn from their Ink strokes (round corners).
+   */
+  val vector: Boolean
+    get() = pen != PenType.PENCIL && pen != PenType.DASHED
+
+  /** The lines of its outline as drawn ([ShapeOutline]). */
+  val pieces: List<ShapeOutline.Piece> by lazy { ShapeOutline.pieces(geometry, size, line) }
+
+  /** [pieces] as an Android path, made the first time it's drawn. */
+  val outlinePath: android.graphics.Path by lazy { ShapeOutline.path(pieces) }
+
+  // A vector outline's mitred corners reach a little past the round ones of its Ink strokes (and
+  // past bounds saved before shapes were drawn this way), so they're always counted.
+  override val bounds: Rect =
+    (knownBounds ?: strokes.map(StrokeFactory::bounds).reduceOrNull(Rect::union) ?: geometry.bounds(size)).let { b ->
+      if (vector) ShapeOutline.bounds(pieces, size)?.union(b) ?: b else b
+    }
 
   override fun transformed(m: Affine, newId: String, newZ: Long) =
     ShapeItem(newId, newZ, pen, color, (size * m.scaleFactor()).coerceAtLeast(0.5f), geometry.transformed(m), fill = fill, line = line)

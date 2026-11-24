@@ -798,7 +798,7 @@
     <string name="feat_tidy_title">Traits nets et aimantation</string>
     <string name="feat_tidy_body">Les traits se calent à l’horizontale, à la verticale et à 45° quand vous les tracez ou les tournez, et les formes s’aimantent aux bords, coins et milieux des autres. Désactivez l’aimantation dans Formes › Style.</string>
     <string name="feat_dots_title">Modifier une forme par ses points</string>
-    <string name="feat_dots_body">Touchez une forme pour voir ses points. Faites glisser le point d’un cercle pour changer son rayon, les bouts d’un secteur pour choisir la part du cercle, les coins d’un triangle pour ses angles. L’étiquette indique centimètres et degrés.</string>
+    <string name="feat_dots_body">Prenez une forme au lasso, ou touchez-la avec l’outil Formes, pour voir ses points. Faites glisser le point d’un cercle pour changer son rayon, les bouts d’un secteur pour choisir la part du cercle, les coins d’un triangle pour ses angles. L’étiquette indique centimètres et degrés.</string>
     <string name="feat_fill_title">Remplir une forme</string>
     <string name="feat_fill_body">Choisissez l’outil de remplissage et touchez l’intérieur de n’importe quelle forme fermée, même un contour tracé à la main. Choisissez la couleur et sa transparence dans le panneau de l’outil.</string>
     <string name="feat_shot_title">Capturer une partie de la page</string>

@@ -333,7 +333,7 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
       val doc = Document(items)
       doc.listeners += { change ->
         repo.applyChange(notebookId, change)
-        revision++
+        if (!change.tidy) revision++
         if (change.added.any { it is com.tali.notes.model.AudioItem } || change.removed.any { it is com.tali.notes.model.AudioItem }) {
           memos = doc.memos.toList()
           // A memo taken away (deleted, or an undo) stops playing and closes.
@@ -363,13 +363,17 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
    * core. The screen draws immediately; anything it reaches first is simply built on the spot.
    */
   private fun warmUp(items: List<CanvasItem>, viewport: Viewport?) {
-    val pending = items.filter { (it is InkItem && !it.isBuilt) || it is ShapeItem }
+    // Strokes already built are checked too (their bounds, see [InkItem.withTrueBounds]).
+    val pending = items.filter { it is InkItem || it is ShapeItem }
     if (pending.isEmpty()) return
     val cx = (viewport?.x ?: 0f) + 600f / (viewport?.zoom ?: 1f)
     val cy = (viewport?.y ?: 0f) + 400f / (viewport?.zoom ?: 1f)
     val queue = pending.sortedBy { val c = it.bounds.center; (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy) }
     val next = java.util.concurrent.atomic.AtomicInteger(0)
     val workers = Runtime.getRuntime().availableProcessors().coerceIn(1, 6)
+    val done = java.util.concurrent.atomic.AtomicInteger(0)
+    // Strokes whose saved bounds fall short of them ([InkItem.withTrueBounds]): stored again once all are built.
+    val truer = ArrayList<Pair<InkItem, InkItem>>()
     repeat(workers) {
       viewModelScope.launch(Dispatchers.Default) {
         // Stops as soon as she leaves the notebook (the scope is cancelled).
@@ -377,12 +381,22 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
           val item = queue.getOrNull(next.getAndIncrement()) ?: break
           runCatching {
             when (item) {
-              is InkItem -> item.stroke
+              is InkItem -> item.withTrueBounds()?.let { fixed -> synchronized(truer) { truer += item to fixed } }
               is ShapeItem -> item.strokes
               else -> Unit
             }
           }
           com.tali.notes.canvas.StrokeBuilds.progress()
+        }
+        if (done.incrementAndGet() == workers && isActive) {
+          val fixes = synchronized(truer) { truer.toList() }
+          if (fixes.isNotEmpty()) {
+            withContext(Dispatchers.Main) {
+              val d = document ?: return@withContext
+              // Only strokes still exactly as loaded (not moved, erased or restyled meanwhile).
+              d.tidy(fixes.filter { (was, _) -> d[was.id] === was }.map { it.second })
+            }
+          }
         }
       }
     }

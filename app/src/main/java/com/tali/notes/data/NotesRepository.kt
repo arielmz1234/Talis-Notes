@@ -542,6 +542,20 @@ class NotesRepository(private val context: Context) {
   fun applyChange(notebookId: String, change: Change) {
     val removed = change.removed.map { it.id }
     val added = change.added.map(ItemCodec::encode)
+    if (change.tidy) {
+      // The same items stored better: the notebook isn't edited (its time and backups stay).
+      scope.launch {
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+          added.forEach { w.insertWithOnConflict("items", null, it.toValues(notebookId), SQLiteConflict.REPLACE) }
+          w.setTransactionSuccessful()
+        } finally {
+          w.endTransaction()
+        }
+      }
+      return
+    }
     scope.launch {
       val w = db.writableDatabase
       w.beginTransaction()

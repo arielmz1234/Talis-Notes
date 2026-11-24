@@ -613,7 +613,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc
     if (d != null && selection.isNotEmpty()) {
       val live = selection.mapNotNull { d[it.id] }
-      if (live.size != selection.size) setSelection(live)
+      if (live.size != selection.size) setSelection(live) else if (change.tidy) selection = live
     }
     if (activeShapeId != null && d?.get(activeShapeId!!) == null) activeShapeId = null
     invalidate()
@@ -949,9 +949,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * paste, a second finger): its part on screen is cancelled, and parts already finished are
    * dropped as Ink hands them over.
    */
-  private fun dropStroke(e: MotionEvent?) {
+  private fun dropStroke(e: MotionEvent?, afterDraw: Boolean = false) {
     strokeId?.let {
-      inProgress.cancelStroke(it, e)
+      if (afterDraw) cancelAfterDraw(it) else inProgress.cancelStroke(it, e)
       strokePens.remove(it)
       strokeColors.remove(it)
       splitParts.remove(it)
@@ -1027,6 +1027,23 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val gen = ++hideGen
     hidePending = true
     viewTreeObserver.registerFrameCommitCallback { hideAfterFrames(gen, frames) }
+    invalidate()
+  }
+
+  /**
+   * Takes stroke [id] off Ink's layer once the page's next frame is on the screen (plus the usual
+   * frames). Ink's layer shows changes at once, the page a frame or two later: a scribble taken
+   * away straight off left what it deleted showing on its own for those frames, so it blinked out
+   * a moment after the scribble (the owner, 24 Nov 2026). This way the scribble covers it until
+   * the page no longer has it.
+   */
+  private fun cancelAfterDraw(id: InProgressStrokeId) {
+    fun after(frames: Int) {
+      postOnAnimation {
+        if (frames > 1) after(frames - 1) else runCatching { inProgress.cancelStroke(id, null) }
+      }
+    }
+    viewTreeObserver.registerFrameCommitCallback { after(HIDE_AFTER_FRAMES) }
     invalidate()
   }
 
@@ -2720,18 +2737,14 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   }
 
-  private val previewPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    style = Paint.Style.STROKE
-    strokeCap = Paint.Cap.ROUND
-    strokeJoin = Paint.Join.ROUND
-  }
+  private val previewPaint = com.tali.notes.model.ShapeOutline.paint()
   private val previewFill = Paint(Paint.ANTI_ALIAS_FLAG)
   private val previewPath = android.graphics.Path()
 
   /**
    * A shape that is still moving (after hold-to-shape, a dot being dragged, the shapes tool), drawn
-   * as plain lines in its colour, thickness and line style. Building its real Ink strokes every
-   * frame made it lag; they're built once it's let go.
+   * as its outline ([com.tali.notes.model.ShapeOutline]) in its colour, thickness and line style.
+   * Building its real Ink strokes every frame made it lag; they're built once it's let go.
    */
   private fun drawShapePreview(canvas: Canvas, item: ShapeItem) {
     val paths = item.geometry.paths(item.size)
@@ -2745,19 +2758,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         canvas.drawPath(previewPath, previewFill)
       }
     }
-    val color = if (darkPaper) Brushes.onDarkPaper(item.color) else item.color
-    previewPaint.color = Brushes.shapeInk(item.pen, color)
+    val ink = Brushes.shapeInk(item.pen, item.color)
+    previewPaint.color = if (darkPaper) Brushes.onDarkPaper(ink) else ink
     previewPaint.strokeWidth = item.size
-    val pattern = item.line.pattern
-    previewPaint.pathEffect =
-      if (pattern.isEmpty()) null
-      else android.graphics.DashPathEffect(pattern.mapIndexed { i, v -> if (i % 2 == 0) maxOf((v - 1f) * item.size, 0.01f) else (v + 1f) * item.size }.toFloatArray(), 0f)
-    for (path in paths) {
-      if (path.size < 2) continue
-      previewPath.rewind()
-      path.forEachIndexed { i, p -> if (i == 0) previewPath.moveTo(p.x, p.y) else previewPath.lineTo(p.x, p.y) }
-      canvas.drawPath(previewPath, previewPaint)
-    }
+    canvas.drawPath(com.tali.notes.model.ShapeOutline.path(com.tali.notes.model.ShapeOutline.pieces(item.geometry, item.size, item.line), previewPath), previewPaint)
   }
 
   private fun snapToShape() {
@@ -2811,18 +2815,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     removeCallbacks(pasteHold)
     when (mode) {
       Mode.INK -> {
-        val quickTap = e.eventTime - e.downTime < PEN_TAP_MS
-        val text = if (quickTap) textTappedByPen() else null
-        val tapped = if (quickTap && text == null) shapeTappedByPen() else null
-        if (text != null) {
-          // A quick tap on a text box opens it for typing.
-          dropStroke(e)
-          post { editText(text.id) }
-        } else if (tapped != null) {
-          // A quick tap on a shape's outline picks the shape up to change it, rather than leaving a dot.
-          dropStroke(e)
-          selectShape(tapped)
-        } else if (scribbleDelete(e)) {
+        // The pen writes: a tap leaves a dot, on a shape or a text box too (the owner, 24 Nov 2026:
+        // a pen tap used to pick a shape up or open a text box, as a finger never does). Things
+        // are picked up with the lasso, a finger on a selection, or a tap with the Shapes tool.
+        if (scribbleDelete(e)) {
           // A scribble over writing: it took what it covered, and leaves nothing itself.
         } else {
           noteLoop()
@@ -3785,24 +3781,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       ?: near.firstOrNull { item -> item is ImageItem && (pages || !item.pdfPage) && item.rect.contains(p) }
   }
 
-  /** The text box under a pen tap that barely moved, if any (writing over a text box still writes). */
-  private fun textTappedByPen(): TextItem? {
-    if (strokePoints.isEmpty()) return null
-    val first = camera.toScreen(strokePoints.first())
-    if (strokePoints.any { camera.toScreen(it).dist(first) > touchSlop / 2 }) return null
-    return textAt(strokePoints.first())
-  }
-
   /** The (unlocked) text box at [p], topmost first. */
   fun textAt(p: Pt): TextItem? = doc?.all?.filterIsInstance<TextItem>()?.filter { !it.locked && it.bounds.contains(p) }?.maxByOrNull { it.z }
-
-  /** The shape under a pen tap that barely moved, if any (writing on top of a shape still writes). */
-  private fun shapeTappedByPen(): ShapeItem? {
-    if (strokePoints.isEmpty()) return null
-    val first = camera.toScreen(strokePoints.first())
-    if (strokePoints.any { camera.toScreen(it).dist(first) > touchSlop / 2 }) return null
-    return hitTest(strokePoints.first(), pages = false) { true } as? ShapeItem
-  }
 
   private fun selectShape(shape: ShapeItem, soft: Boolean = false) {
     selectSingle(shape)
@@ -4365,8 +4345,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         ScratchOut.takes(listOf(List(sh.inputs.size) { i -> sh.inputs.populate(i, input); Pt(input.x, input.y) }), scribble)
     }
     if (!waiting && d.intersecting(reach).none { scribbleTakes(it, scribble, reach) }) return false
-    // The scribble leaves without being kept, then the waiting writing goes in so it can go.
-    dropStroke(e)
+    // The scribble leaves without being kept (once the page shows what it took gone), then the
+    // waiting writing goes in so it can go.
+    dropStroke(e, afterDraw = true)
     stopHolds()
     mode = Mode.NONE
     drawPointer = -1
@@ -5598,7 +5579,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       return
     }
     // A finger tap only picks something up with the lasso tool (she found taps picking things up by
-    // accident); elsewhere it just lets go of the selection. A pen tap on a shape still picks it up.
+    // accident); elsewhere it just lets go of the selection. A pen tap only writes.
     val item = if (tool == Tool.LASSO && !settings.lassoShot) hitTest(p, pages = false, anyLock = settings.lassoLocked, filter = settings::lassoHits) else null
     if (item == null) clearSelection() else selectGroup(item)
   }
@@ -6032,8 +6013,6 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val EDGE_MAX_DP_S = 900f
     /** How close a turn has to come to a 45° step to snap onto it (5°). */
     private const val SNAP_ROTATE_RAD = 0.087f
-    /** A pen touch shorter than this that doesn't move is a tap. */
-    private const val PEN_TAP_MS = 250L
 
     /** How long a pen or finger stays still on the page before Paste is offered (after hold-to-shape's 450 ms, which needs a stroke). */
     private const val PASTE_HOLD_MS = 600L
