@@ -91,6 +91,8 @@ struct PagesOverview: View {
   @State private var order: [Int]?
   @State private var held: Int?
   @State private var carried: [Int] = []
+  /// When the last hold let go (a tap ending it is ignored).
+  @State private var heldUntil = Date.distantPast
   /// Where each page's tile is in the grid, where the finger is while holding one, and where on the tile it took hold.
   @State private var frames: [Int: CGRect] = [:]
   @State private var dragAt: CGPoint?
@@ -120,6 +122,8 @@ struct PagesOverview: View {
                 picked: picked?.contains(i) == true, lifted: held != nil && carried.contains(i), picture: thumbs[i], bridge: bridge, version: version,
                 onPicture: { thumbs[i] = $0 }
               ) {
+                // The touch that ended a hold can still count as a tap: it mustn't undo the pick.
+                if held != nil || Date().timeIntervalSince(heldUntil) < 0.5 { return }
                 order = nil
                 held = nil
                 carried = []
@@ -341,6 +345,7 @@ struct PagesOverview: View {
   /// Let go: moved pages go to their new places; held without moving, the page just stays picked.
   private func letGo() {
     guard held != nil else { return }
+    heldUntil = Date()
     dragAt = nil
     if let o = order, o != Array(0..<count) {
       finishMove()
@@ -353,9 +358,10 @@ struct PagesOverview: View {
     }
   }
 
-  /// The held page sits under the finger, wherever its slot is now.
+  /// The held page sits under the finger, wherever its slot is now; the pages carried with it move
+  /// by as much, so they travel as one block (Android's `lift`).
   private func heldOffset(_ i: Int) -> CGSize {
-    guard held == i, let at = dragAt, let f = frames[i] else { return .zero }
+    guard let h = held, h == i || carried.contains(i), let at = dragAt, let f = frames[h] else { return .zero }
     return CGSize(width: at.x - grab.width - f.midX, height: at.y - grab.height - f.midY)
   }
 
