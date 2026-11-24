@@ -530,7 +530,6 @@ struct NoteCanvas: UIViewRepresentable {
     var lasso = LassoState()
     /// Hold-to-shape (see HoldToShape.swift).
     var hold = HoldState()
-    var edgeCover = PageEdgeCoverState()
     /// New strokes swapped for the stored form (smoothed, kept to their page), by PencilKit's key:
     /// after an undo or redo PencilKit puts its own form back, and it's swapped again.
     var swappedForm: [StrokeKey: PKStroke] = [:]
@@ -793,6 +792,28 @@ struct NoteCanvas: UIViewRepresentable {
 
     // MARK: Keeping the store in step
 
+    /// Waiting for the canvas to show what was just set (see `afterRender`).
+    var renderWaiters: [(ticket: Int, run: () -> Void)] = []
+    var renderTicket = 0
+
+    /// Runs [f] once the canvas has drawn its drawing as it is now (or after half a second at most),
+    /// so a live picture of something just kept can stay over it until then without a blink.
+    func afterRender(_ f: @escaping () -> Void) {
+      renderTicket += 1
+      let ticket = renderTicket
+      renderWaiters.append((ticket, f))
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        guard let self, let i = self.renderWaiters.firstIndex(where: { $0.ticket == ticket }) else { return }
+        self.renderWaiters.remove(at: i).run()
+      }
+    }
+
+    func canvasViewDidFinishRendering(_ canvasView: PKCanvasView) {
+      let due = renderWaiters
+      renderWaiters = []
+      for w in due { w.run() }
+    }
+
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
       guard !loading, canvasView.drawing != ownDrawing else { return }
       sync(canvasView.drawing)
@@ -869,35 +890,12 @@ struct NoteCanvas: UIViewRepresentable {
           // on (in clear ink): neither is kept.
           needsRebuild = true
         } else {
-          // A new stroke from the pen, its jitter smoothed as Android smooths it (PenSmoother).
-          var s = InkStroke.from(pk, pen: pen, id: newId(), z: z)
-          let smoothed = !pen.straight && s.inputs.points.count > 2
-          if smoothed { s.inputs.points = PenSmoother.smooth(s.inputs.points, zoom: Float(canvas?.zoomScale ?? 1)) }
-          if !pen.type.pressureSensitive, pk.path.count > 2 {
-            // Keep the live width matching the stored one (see InkWidth).
-            let mid = pk.path[pk.path.count / 2]
-            InkWidth.learn(pen.type.ink, size: pen.size, pointSize: mid.size.width, secondary: mid.secondaryScale)
-          }
+          // A new stroke PencilKit drew (pens are drawn by the notebook now; see OwnInk).
+          let s = InkStroke.from(pk, pen: pen, id: newId(), z: z)
           z += 1
           changed.append(s)
           if let box = s.inputs.bounds { growPages(toHold: box) }
-          let m = mask(for: s)
-          if smoothed {
-            // Drawn from the smoothed points from now on (and hidden past its page's edge): the same
-            // PencilKit stroke with its points moved, so its own undo still finds it.
-            var fresh = pk
-            fresh.path = PKStrokePath(
-              controlPoints: zip(pk.path, s.inputs.points).map { old, p in
-                PKStrokePoint(
-                  location: CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)), timeOffset: old.timeOffset, size: old.size, opacity: old.opacity,
-                  force: old.force, azimuth: old.azimuth, altitude: old.altitude, secondaryScale: old.secondaryScale)
-              }, creationDate: pk.path.creationDate)
-            if let m, !m.bounds.contains(CGRect(s.bounds)) { fresh.mask = m }
-            rebuilt.append(fresh)
-            remember(pk, swappedFor: fresh)
-            next.append((StrokeKey(fresh), s))
-            needsRebuild = true
-          } else if let m, !m.bounds.contains(CGRect(s.bounds)) {
+          if let m = mask(for: s), !m.bounds.contains(CGRect(s.bounds)) {
             // It runs off its page: draw it hidden past the edge, as it will be from now on.
             var masked = pk
             masked.mask = m

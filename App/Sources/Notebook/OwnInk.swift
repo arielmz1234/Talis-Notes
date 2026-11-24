@@ -2,12 +2,15 @@ import PencilKit
 import TaliCore
 import UIKit
 
-/// What the notebook draws itself because PencilKit can't: the laser, the highlighter's straight
-/// line, and strokes shaped by an `InkLook`.
+/// Every pen's ink is drawn live by the notebook, not by PencilKit: the stroke is smoothed as it's
+/// written (Android's `PenSmoother`, so slow writing shows no jitter), kept to its page when Write
+/// between pages is off (Android's split strokes), and shown with PencilKit's own renderer from the
+/// very stroke that's kept. Nothing about it changes when the pen lifts: the live picture stays until
+/// the canvas has drawn the kept stroke. The laser is drawn here too.
 enum OwnInk {
   case laser
-  case straight(PenSlot, InkLook)
-  case trace(PenSlot, InkLook)
+  case straight(PenSlot)
+  case trace(PenSlot)
 }
 
 struct OwnInkState {
@@ -20,19 +23,23 @@ struct OwnInkState {
   var end = Pt.zero
   var startTime: TimeInterval = 0
   var began = Date()
-  let live = CAShapeLayer()
-  let liveClip = CAShapeLayer()
+  /// The stroke in hand, as PencilKit will draw it once kept.
+  var live = CALayer()
+  /// Strokes just kept, still shown here until the canvas has drawn them.
+  var handedIn: [CALayer] = []
+  /// Strokes kept from here and when they began, so a scribble or a caught loop can take them back.
+  var kept: [(id: String, began: Date)] = []
 }
 
 extension NoteCanvas.Coordinator {
-  /// Nil when PencilKit writes, or the tool has a watcher of its own.
+  /// Nil when the tool isn't one that writes (or she's only looking).
   var ownInk: OwnInk? {
     guard !parent.viewOnly else { return nil }
     switch parent.tool {
     case .laser: return .laser
     case .pen(let id):
-      guard let pen = parent.pens.first(where: { $0.id == id }), let look = InkLook(pen) else { return nil }
-      return pen.straight ? .straight(pen, look) : .trace(pen, look)
+      let pen = parent.pens.first { $0.id == id } ?? PenSlot.defaults[0]
+      return pen.straight ? .straight(pen) : .trace(pen)
     default: return nil
     }
   }
@@ -56,7 +63,6 @@ extension NoteCanvas.Coordinator {
     own.laser.layer.zPosition = 11
     v.layer.addSublayer(own.laser.layer)
     own.live.zPosition = 8
-    own.live.strokeColor = nil
     v.layer.addSublayer(own.live)
   }
 
@@ -70,17 +76,16 @@ extension NoteCanvas.Coordinator {
     own.mode = ownInk
     switch own.mode {
     case .laser: laserBegan(worldPoint(of: t))
-    case .straight(let pen, let look):
+    case .straight(let pen):
+      own.began = Date()
       own.start = worldPoint(of: t)
       own.end = StraightLine.end(from: own.start, to: own.start)
-      startLive(pen, at: own.start)
-      showLive(look, pen, [own.start, own.end])
-    case .trace(let pen, let look):
+      showLive(pen, StraightLine.inputs(own.start, own.end))
+    case .trace(let pen):
       own.startTime = t.timestamp
       own.began = Date()
       own.samples = [sample(t)]
-      startLive(pen, at: worldPoint(of: t))
-      showLive(look, pen, [worldPoint(of: t)])
+      showLive(pen, InkInputs(points: own.samples, tool: .stylus))
     case nil: break
     }
   }
@@ -89,10 +94,10 @@ extension NoteCanvas.Coordinator {
     let touches = e.coalescedTouches(for: t) ?? [t]
     switch own.mode {
     case .laser: laserMoved(touches.map(worldPoint(of:)))
-    case .straight(let pen, let look):
+    case .straight(let pen):
       own.end = StraightLine.end(from: own.start, to: worldPoint(of: touches.last ?? t))
-      showLive(look, pen, [own.start, own.end])
-    case .trace(let pen, let look):
+      showLive(pen, StraightLine.inputs(own.start, own.end))
+    case .trace(let pen):
       own.samples += touches.map(sample)
       // The stroke just became a shape (hold-to-shape draws that): this one isn't shown any more.
       if hold.live != nil {
@@ -100,7 +105,8 @@ extension NoteCanvas.Coordinator {
         return
       }
       // Where the pen is about to be, so the line keeps up with it; only what it really did is kept.
-      showLive(look, pen, own.samples.map { Pt($0.x, $0.y) } + (e.predictedTouches(for: t) ?? []).map(worldPoint(of:)))
+      let ahead = (e.predictedTouches(for: t) ?? []).map(sample)
+      showLive(pen, InkInputs(points: smoothed(pen, own.samples + ahead), tool: .stylus))
     case nil: break
     }
   }
@@ -108,17 +114,21 @@ extension NoteCanvas.Coordinator {
   private func ownEnded(_ cancelled: Bool) {
     let mode = own.mode
     own.mode = nil
-    clearLive()
     switch mode {
     case .laser: laserEnded()
-    case .straight(let pen, _):
-      if !cancelled { keep(pen, StraightLine.inputs(own.start, own.end)) }
-    case .trace(let pen, _):
-      let becameShape = hold.dropSince.map { own.began >= $0 } ?? false
-      if !cancelled, !becameShape { keep(pen, InkInputs(points: own.samples, tool: .stylus)) }
+    case .straight(let pen):
+      if cancelled { clearLive() } else { hand(pen, StraightLine.inputs(own.start, own.end), began: own.began) }
+    case .trace(let pen):
+      let inputs = InkInputs(points: smoothed(pen, own.samples), tool: .stylus)
+      let began = own.began
       own.samples = []
+      if cancelled || hold.live != nil { clearLive() } else { hand(pen, inputs, began: began) }
     case nil: break
     }
+  }
+
+  private func smoothed(_ pen: PenSlot, _ points: [InkInput]) -> [InkInput] {
+    PenSmoother.smooth(points, zoom: Float(canvas?.zoomScale ?? 1))
   }
 
   /// One pen sample as Android keeps them (see `InkStroke.from`): seconds since the stroke began,
@@ -131,43 +141,75 @@ extension NoteCanvas.Coordinator {
       tilt: Float(max(0, .pi / 2 - t.altitudeAngle)), orientation: Float(lean < 0 ? lean + 2 * .pi : lean))
   }
 
-  /// The colour PencilKit will show once the stroke is kept, hidden past the page it started on as
-  /// the kept stroke will be.
-  private func startLive(_ pen: PenSlot, at p: Pt) {
-    guard let canvas else { return }
-    let z = canvas.zoomScale
-    let color = UIColor(argb: pen.inkColor)
-    CATransaction.begin()
-    CATransaction.setDisableActions(true)
-    own.live.fillColor = (parent.settings.dark ? PKInkingTool.convertColor(color, from: .light, to: .dark) : color).cgColor
-    if let page = pageClip(startingAt: p.y) {
-      own.liveClip.path = CGPath(rect: CGRect(x: page.minX * z, y: page.minY * z, width: page.width * z, height: page.height * z), transform: nil)
-      own.live.mask = own.liveClip
-    } else {
-      own.live.mask = nil
-    }
-    CATransaction.commit()
+  private func stroke(_ pen: PenSlot, _ inputs: InkInputs, id: String = "") -> InkStroke {
+    InkStroke(id: id, z: topZ + 1, pen: pen.type, tags: InkStroke.tags(for: pen), color: pen.inkColor, size: pen.size, inputs: inputs)
   }
 
-  private func showLive(_ look: InkLook, _ pen: PenSlot, _ points: [Pt]) {
-    guard let canvas else { return }
+  /// The stroke in hand drawn as the canvas will draw it once kept (its page's edge included), over
+  /// the part of it on screen.
+  private func showLive(_ pen: PenSlot, _ inputs: InkInputs) {
+    guard let canvas, !inputs.points.isEmpty else { return }
+    let s = stroke(pen, inputs)
+    let pk = s.pkStroke(mask: mask(for: s))
     let z = canvas.zoomScale
+    let seen = CGRect(x: canvas.bounds.minX / z, y: canvas.bounds.minY / z, width: canvas.bounds.width / z, height: canvas.bounds.height / z)
+    var box = pk.renderBounds.intersection(seen).integral
+    if let m = pk.mask { box = box.intersection(m.bounds.insetBy(dx: -1, dy: -1)) }
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    own.live.path = look.outline(size: CGFloat(pen.size) * z, points: points.map { CGPoint(x: CGFloat($0.x) * z, y: CGFloat($0.y) * z) })
+    if box.isNull || box.isEmpty {
+      own.live.contents = nil
+    } else {
+      let scale = canvas.traitCollection.displayScale
+      var image: UIImage?
+      canvas.traitCollection.performAsCurrent { image = PKDrawing(strokes: [pk]).image(from: box, scale: z * scale) }
+      own.live.frame = CGRect(x: box.minX * z, y: box.minY * z, width: box.width * z, height: box.height * z)
+      own.live.contentsScale = scale
+      own.live.contents = image?.cgImage
+    }
     CATransaction.commit()
   }
 
   private func clearLive() {
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    own.live.path = nil
+    own.live.contents = nil
     CATransaction.commit()
   }
 
-  private func keep(_ pen: PenSlot, _ inputs: InkInputs) {
-    guard !inputs.points.isEmpty else { return }
-    let stroke = InkStroke(id: newId(), z: topZ + 1, pen: pen.type, tags: InkStroke.tags(for: pen), color: pen.inkColor, size: pen.size, inputs: inputs)
-    commit(remove: [], add: [.ink(stroke)])
+  /// The stroke is kept: its live picture stays on until the canvas shows it, and the next stroke
+  /// is drawn in a new one. Kept a moment later, so a scribble to delete or a stroke that became a
+  /// shape (which end on the same lift) can still say it isn't.
+  private func hand(_ pen: PenSlot, _ inputs: InkInputs, began: Date) {
+    guard let canvas, !inputs.points.isEmpty else { return clearLive() }
+    showLive(pen, inputs)
+    let shown = own.live
+    own.handedIn.append(shown)
+    let next = CALayer()
+    next.zPosition = shown.zPosition
+    canvas.layer.addSublayer(next)
+    own.live = next
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      if self.hold.dropSince.map({ began >= $0 }) ?? false {
+        self.letGo(shown, now: true)
+        return
+      }
+      let s = self.stroke(pen, inputs, id: newId())
+      self.own.kept.append((s.id, began))
+      if self.own.kept.count > 50 { self.own.kept.removeFirst() }
+      self.commit(remove: [], add: [.ink(s)])
+      self.afterRender { self.letGo(shown, now: false) }
+    }
+  }
+
+  private func letGo(_ shown: CALayer, now: Bool) {
+    shown.removeFromSuperlayer()
+    own.handedIn.removeAll { $0 === shown }
+  }
+
+  /// Ids of strokes kept from here that began at or after [since].
+  func ownStrokes(since: Date) -> Set<String> {
+    Set(own.kept.filter { $0.began >= since }.map(\.id))
   }
 }

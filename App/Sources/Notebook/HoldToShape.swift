@@ -145,7 +145,6 @@ extension NoteCanvas.Coordinator {
     let p = worldPoint(t)
     hold.began = Date()
     circlePressBegan(t, at: Pt(Float(p.x), Float(p.y)))
-    edgeCoverBegan(at: p)
     hold.points = [Pt(Float(p.x), Float(p.y))]
     hold.anchor = t.location(in: canvas)
     hold.last = hold.anchor
@@ -166,7 +165,6 @@ extension NoteCanvas.Coordinator {
       hold.last = sp
       let p = CGPoint(x: sp.x / canvas.zoomScale, y: sp.y / canvas.zoomScale)
       hold.points.append(Pt(Float(p.x), Float(p.y)))
-      edgeCoverMoved(to: p)
       if hypot(sp.x - hold.anchor.x, sp.y - hold.anchor.y) > Self.holdTolerance {
         hold.anchor = sp
         scheduleHold()
@@ -176,7 +174,6 @@ extension NoteCanvas.Coordinator {
 
   private func holdEnded(_ cancelled: Bool) {
     stopHoldTimer()
-    edgeCoverEnded()
     if circlePressEnded() {
       hold.points = []
       return
@@ -203,15 +200,15 @@ extension NoteCanvas.Coordinator {
     hold.points = []
   }
 
-  /// Takes back the ink PencilKit drew since [since] (the dot of a tap): it lets go of a stroke still
-  /// in hand, and one already handed in is taken out again, without an undo step of its own.
+  /// Takes back the ink written since [since]: a stroke still in hand isn't kept, and one already
+  /// kept is taken out again, without an undo step of its own.
   func dropInk(since: Date) {
     guard let canvas else { return }
     hold.dropSince = since
-    canvas.drawingGestureRecognizer.isEnabled = false
-    canvas.drawingGestureRecognizer.isEnabled = inkOn
-    let kept = canvas.drawing.strokes.filter { $0.path.creationDate < since }
-    if kept.count == canvas.drawing.strokes.count { return }
+    let gone = ownStrokes(since: since)
+    let strokes = canvas.drawing.strokes
+    let kept = strokes.indices.filter { i in !(i < stored.count && gone.contains(stored[i].stroke.id)) }.map { strokes[$0] }
+    if kept.count == strokes.count { return }
     loading = true
     canvas.undoManager?.disableUndoRegistration()
     setDrawing(PKDrawing(strokes: kept))
