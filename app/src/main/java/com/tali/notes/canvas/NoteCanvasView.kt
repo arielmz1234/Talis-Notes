@@ -736,6 +736,11 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
   override fun onStrokesFinished(strokes: Map<InProgressStrokeId, Stroke>) {
+    // Handed over: Ink no longer draws them (its hand-off clears its list of strokes).
+    if (heldByInk.isNotEmpty()) {
+      heldByInk.keys.removeAll(strokes.keys)
+      invalidate()
+    }
     // Parts of a stroke that went off its page: drawn here until the whole stroke is kept.
     val parts = strokes.filterKeys { it in splitParts }
     if (parts.isNotEmpty()) {
@@ -985,7 +990,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       keepWhole(g)
       g.dropped = true
       // Its parts aren't drawn here again if the page moves before Ink hands them over.
-      g.parts.forEach { shadows.remove(it) }
+      g.parts.forEach { pid -> shadows.remove(pid)?.let { heldByInk[pid] = heldArea(it) } }
       any = true
     }
     val waiting = shadows.entries.filter { (id, sh) -> sh.finished && strokePens.containsKey(id) && id !in splitParts }
@@ -1003,6 +1008,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
       strokePens.remove(id)
       strokeColors.remove(id)
       shadows.remove(id)
+      heldByInk[id] = heldArea(sh)
       any = true
     }
     if (any) {
@@ -1116,6 +1122,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** Drawn on the page by us instead of by Ink's layer (the page moved before the hand-off). */
     var item: InkItem? = null
+
+    /** Its copy drawn here where strokes Ink still holds are masked out of its layer ([drawUnderHeld]). */
+    var underHeld: InkItem? = null
 
     /** Where its samples went on the page (world units), for keeping it in view on Ink's layer. */
     val bounds = android.graphics.RectF()
@@ -1243,6 +1252,59 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   /** Strokes that went away without being kept (cancelled) are forgotten here too. */
   private fun inkLayerIdle() {
     shadows.keys.retainAll(strokePens.keys)
+  }
+
+  // ---- Strokes Ink still holds after they were taken ----
+  //
+  // Ink keeps every finished stroke in its own list, and draws it again wherever its layer is
+  // redrawn, until it hands the stroke over. A stroke taken from it early ([commitWaitingInk]: the
+  // eraser, undo, the lasso or a scribble right after writing) stays in that list until then. Ink
+  // can't be told to drop it (cancelStroke only works while a stroke is being written), and the
+  // hand-off asked for then can't always happen in time: after every hand-off Ink holds the next
+  // one back for half a second while it clears its spare buffer, and none happens while a stroke is
+  // being written. So a letter erased with the S Pen button right after writing came back around
+  // the next stroke, wherever that stroke redrew Ink's layer, until she lifted (Tali, Nov 2026:
+  // "sometimes the letter I just erased flashes"; only when writing quickly, so not every time).
+  //
+  // Now every stroke taken that way is remembered with its area until Ink hands it over; while any
+  // are, each new stroke masks those areas out of Ink's layer, and the strokes on Ink's layer are
+  // drawn here instead, inside those areas only. Everywhere else Ink draws as before.
+
+  /** Strokes Ink still holds although they were taken (or erased, undone, moved): their areas on the page. */
+  private val heldByInk = HashMap<InProgressStrokeId, android.graphics.RectF>()
+
+  /** Where [sh]'s ink can reach on the page: its samples' box, a whole pen width round it. */
+  private fun heldArea(sh: InkShadow) = android.graphics.RectF(sh.bounds).apply {
+    val pad = sh.brush.size
+    inset(-pad, -pad)
+  }
+
+  /** [heldByInk]'s areas on screen, for Ink's mask. */
+  private fun heldMask(): android.graphics.Path? {
+    if (heldByInk.isEmpty()) return null
+    return android.graphics.Path().apply {
+      heldByInk.values.forEach { addRect(it, android.graphics.Path.Direction.CW) }
+      transform(camera.worldToScreen)
+    }
+  }
+
+  /** The strokes on Ink's layer, drawn here inside the areas masked out of it ([heldByInk]). The canvas is in world units. */
+  private fun drawUnderHeld(canvas: Canvas) {
+    if (heldByInk.isEmpty()) return
+    val live = shadows.entries.filter { (id, sh) -> sh.item == null && sh.inputs.size > 0 && strokePens.containsKey(id) }
+    if (live.isEmpty()) return
+    canvas.save()
+    canvas.clipPath(android.graphics.Path().apply { heldByInk.values.forEach { addRect(it, android.graphics.Path.Direction.CW) } })
+    for ((id, sh) in live) {
+      val pen = strokePens[id] ?: continue
+      // A finished one doesn't change: built once.
+      val item = sh.underHeld?.takeIf { sh.finished } ?: runCatching {
+        InkItem("held-$id", 0L, pen, realColoured(id, pen, androidx.ink.strokes.Stroke(sh.brush, sh.inputs)))
+      }.getOrNull() ?: continue
+      if (sh.finished) sh.underHeld = item
+      itemRenderer.draw(canvas, item, camera.worldToScreen)
+    }
+    canvas.restore()
   }
 
   fun viewport(): Viewport = camera.viewport()
@@ -1392,6 +1454,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     splitShown.forEach { g -> if (g.handed.isNotEmpty()) itemRenderer.drawAll(canvas, g.handed, camera.worldToScreen) }
     // Strokes still waiting for Ink's hand-off when the page moved, drawn here in Ink's place.
     if (shadows.isNotEmpty()) shadows.values.mapNotNull { it.item }.takeIf { it.isNotEmpty() }?.let { itemRenderer.drawAll(canvas, it, camera.worldToScreen) }
+    drawUnderHeld(canvas)
     if (mode == Mode.LIVE_SHAPE) updateLiveShape()
     liveShape?.let { drawShapePreview(canvas, it) }
     straightPreview?.let { preview ->
@@ -2476,7 +2539,10 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         inset(-pad, -pad)
       }
     }
-    inProgress.maskPath = inkMask(areas, waiting)
+    // Strokes Ink still holds that were taken from it (erased, undone, picked up) are masked out
+    // too, so they can't show again around this one; this stroke is drawn here in those areas.
+    val held = heldMask()
+    inProgress.maskPath = inkMask(areas, waiting)?.also { m -> held?.let { m.op(it, android.graphics.Path.Op.UNION) } } ?: held
     // Ink's stroke unit: how far the pen moves (cm) for one world unit, as Ink works it out.
     val unitCm = camera.scale * 2.54f / resources.displayMetrics.xdpi
     // Half the pen in, so a stretch shown never reaches past the edge (nothing for the mask to clear).
@@ -2526,6 +2592,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         predictionGuard.record(se)
         val prediction = predictionGuard.tame(predictor.predict())
         gesture?.let { g -> feedInk(g, se, prediction, last = false) }
+        if (heldByInk.isNotEmpty()) invalidate()
         prediction?.recycle()
         se.recycle()
         for (h in 0 until e.historySize) addInkPoint(camera.toWorld(e.getHistoricalX(idx, h), e.getHistoricalY(idx, h)))
