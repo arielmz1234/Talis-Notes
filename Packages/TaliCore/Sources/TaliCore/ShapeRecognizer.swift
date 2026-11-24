@@ -114,7 +114,8 @@ public enum ShapeRecognizer {
   private static let arcMax: Float = 300 * deg
   private static let halfSnap: Float = 15 * deg
   private static let levelSnap: Float = 10 * deg
-  public static let lineSnapDeg: Float = 6
+  /// Within this of every 45° a line locks on (3° since Android 1.0.32: 6° pulled 141° to 135°).
+  public static let lineSnapDeg: Float = 3
 
   public static func recognize(_ raw: [Pt]) -> ShapeGeometry? {
     let points = dedupe(raw)

@@ -266,14 +266,60 @@ struct ShapeFormsTests {
     #expect(abs(narrow[1].x - 130) < 0.01)
   }
 
-  @Test func aCurveHasDotsAllAlongAndEachBendsIt() {
+  @Test func aCurveIsOneWaveWithAPointDotAndAnAddDotBetween() {
     let c = ShapeKind.CURVE.create(Pt(0, 100), Pt(300, 100))
-    #expect(c.handles().count == curveDots)
+    // Both ends, the top and the bottom: four points, an add dot between each two.
+    #expect(corners(c).count == 4)
+    #expect(c.handles().count == 7)
     #expect(corners(c).first == Pt(0, 100) && corners(c).last == Pt(300, 100))
-    let bent = c.withHandle(1, Pt(75, 180))
-    #expect(corners(bent)[1] == Pt(75, 180))
-    // The curve passes through its dots.
-    #expect(bent.paths(1)[0].contains { $0.dist(Pt(75, 180)) < 1 })
+    #expect(corners(c)[1].y < 100, "up first")
+    #expect(corners(c)[2].y > 100, "then down")
+    #expect(abs(corners(c)[1].y - (100 - 0.17 * 300)) < 0.01 && abs(corners(c)[1].x - 90) < 0.01)
+    #expect(c.handles().indices.map { c.addsPoint($0) } == [false, true, false, true, false, true, false])
+    // Every dot sits on the curve.
+    let path = c.paths(1)[0]
+    for h in c.handles() { #expect(path.contains { $0.dist(h) < 1 }, "\(h) on the curve") }
+  }
+
+  @Test func draggingAPointBendsTheCurveThroughIt() {
+    let c = ShapeKind.CURVE.create(Pt(0, 100), Pt(300, 100))
+    let bent = c.withHandle(2, Pt(75, 20))
+    #expect(corners(bent).count == 4)
+    #expect(corners(bent)[1] == Pt(75, 20))
+    #expect(bent.paths(1)[0].contains { $0.dist(Pt(75, 20)) < 1 })
+  }
+
+  @Test func draggingAnAddDotMakesANewPointThereWithAddDotsEitherSide() {
+    let c = ShapeKind.CURVE.create(Pt(0, 100), Pt(300, 100))
+    let grown = c.withHandle(5, Pt(260, 180))
+    #expect(corners(grown).count == 5)
+    #expect(corners(grown)[3] == Pt(260, 180))
+    #expect(Array(corners(grown).prefix(3)) == Array(corners(c).prefix(3)))
+    #expect(corners(grown).last == corners(c).last)
+    #expect(grown.handles().count == 9)
+    #expect(grown.addsPoint(5) && grown.addsPoint(7) && !grown.addsPoint(6))
+    #expect(grown.paths(1)[0].contains { $0.dist(Pt(260, 180)) < 1 })
+    // Out of range does nothing; a drag rebuilt from the shape it began with inserts once.
+    #expect(c.withHandle(7, Pt(0, 0)) == c)
+    #expect(c.withHandle(5, Pt(250, 170)).withHandle(5, Pt(260, 180)) != grown)
+    #expect(c.withHandle(5, Pt(260, 180)) == grown)
+  }
+
+  @Test func curvesSavedBeforeKeepTheirPointsAndGetAddDots() {
+    let points = (0..<5).map { Pt(Float($0) * 50, $0 % 2 == 0 ? 0 : 30) }
+    let old = ShapeGeometry.curve(points: points)
+    #expect(old.handles().count == 9)
+    #expect(old.handles().enumerated().filter { $0.offset % 2 == 0 }.map(\.element) == points)
+  }
+
+  @Test func anAddDotHidesWithoutRoomBesideThePoints() {
+    let c = ShapeKind.CURVE.create(Pt(0, 100), Pt(300, 100))
+    #expect(SelectionHandles.shown(c, dots: c.handles()) == Array(0..<7))
+    // Zoomed out to a tenth: the add dots would sit on the points.
+    #expect(SelectionHandles.shown(c, dots: c.handles().map { $0 * 0.1 }) == [0, 2, 4, 6])
+    // Other shapes' dots always show.
+    let line = ShapeKind.LINE.create(Pt(0, 0), Pt(5, 0))
+    #expect(SelectionHandles.shown(line, dots: line.handles()) == [0, 1])
   }
 
   @Test func formsAndCurvesAreSavedAndReadBack() throws {
@@ -353,7 +399,10 @@ struct ShapeDotTests {
       return (b - a).angle() * 180 / .pi
     }
     #expect(abs(angle(ShapeRecognizer.snappedLine(Pt(0, 0), Pt.polar(100, 31 * .pi / 180))) - 31) < 0.01)
-    #expect(abs(angle(ShapeRecognizer.snappedLine(Pt(0, 0), Pt.polar(100, 41 * .pi / 180))) - 45) < 0.01)
+    // Within 3° it locks on (Android 1.0.32: 6° pulled 141° to 135°); 4° off stays as drawn.
+    #expect(abs(angle(ShapeRecognizer.snappedLine(Pt(0, 0), Pt.polar(100, 42.5 * .pi / 180))) - 45) < 0.01)
+    #expect(abs(angle(ShapeRecognizer.snappedLine(Pt(0, 0), Pt.polar(100, 141 * .pi / 180))) - 141) < 0.01)
+    #expect(abs(angle(ShapeRecognizer.snappedLine(Pt(0, 0), Pt.polar(100, 41 * .pi / 180))) - 41) < 0.01)
   }
 
   @Test func rectangleToolSnapsToASquare() {

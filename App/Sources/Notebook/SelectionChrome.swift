@@ -8,6 +8,8 @@ struct SelectionChrome {
   var moveChip: CGPoint?
   var rotate: (at: CGPoint, stemFrom: CGFloat)?
   var dots: [CGPoint] = []
+  /// A curve's add dots: smaller, filled blue with a white rim.
+  var addDots: [CGPoint] = []
   var dotRadius: CGFloat = 6.5
   var badges: [Measure.Badge] = []
   var angle: Measure.Badge?
@@ -19,7 +21,7 @@ struct SelectionChrome {
   var zoom: CGFloat = 1
 
   var isEmpty: Bool {
-    frame == nil && outline.isEmpty && resizeChip == nil && moveChip == nil && rotate == nil && dots.isEmpty && badges.isEmpty && angle == nil && hints.isEmpty
+    frame == nil && outline.isEmpty && resizeChip == nil && moveChip == nil && rotate == nil && dots.isEmpty && addDots.isEmpty && badges.isEmpty && angle == nil && hints.isEmpty
       && guides.isEmpty
   }
 }
@@ -85,6 +87,7 @@ final class SelectionChromeView: UIView {
       cg.strokePath()
     }
     for d in c.dots { disc(cg, d, c.dotRadius) }
+    for d in c.addDots { addDot(cg, d, c.dotRadius * CGFloat(SelectionHandles.addDotScale)) }
     chips(cg, c)
     for b in c.badges { badge(cg, b, Self.badgeFont, extra: 18) }
     if let a = c.angle { badge(cg, a, Self.angleFont, extra: 16) }
@@ -143,6 +146,15 @@ final class SelectionChromeView: UIView {
     cg.setStrokeColor(Self.handle.cgColor)
     cg.setLineWidth(2)
     cg.strokeEllipse(in: r)
+  }
+
+  /// A curve's add dot: filled in the dots' blue with a white rim, so it reads apart from the points.
+  private func addDot(_ cg: CGContext, _ at: CGPoint, _ radius: CGFloat) {
+    let rim = radius + 1.5
+    cg.setFillColor(UIColor.white.cgColor)
+    cg.fillEllipse(in: CGRect(x: at.x - rim, y: at.y - rim, width: rim * 2, height: rim * 2))
+    cg.setFillColor(Self.handle.cgColor)
+    cg.fillEllipse(in: CGRect(x: at.x - radius, y: at.y - radius, width: radius * 2, height: radius * 2))
   }
 
   private func hint(_ cg: CGContext, _ from: CGPoint, _ to: CGPoint, centre: Bool) {

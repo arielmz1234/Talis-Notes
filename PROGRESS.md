@@ -12,6 +12,21 @@
 4. **Rule: never change what a basic tap, hold or touch does without the owner asking.** (A Pencil
    tap that picked shapes up was added unasked and had to be taken out; see 24 Nov below.)
 
+## Curve with add dots, lines lock within 3° (25 Nov 2026, Windows)
+
+As Android 1.0.32 (the owner's reference video). The Shapes tool draws a Curve as one S-shaped
+wave from pen-down to lift (`ShapeKind.curveBetween`: four points, a; a + 0.3d + n·w;
+a + 0.7d − n·w; b, with w = `curveWave` 0.17 of its length, up first on the left of the way it's
+drawn). Its dots (`handles()`): point, add dot, point, …; the add dot sits on the curve halfway
+along each stretch (`curveMiddle`, Catmull-Rom at t = ½). `withHandle` moves a point for an even
+index and inserts one for an odd index (`addsPoint`); the dot drag rebuilds from the shape it began
+with, so it inserts once. Add dots are drawn smaller (`addDotScale` 0.7, blue with a white rim,
+`SelectionChromeView.addDot`) and hide, taking no touch, with less than `addDotRoom` (16 pt) clear of
+the points either side (`SelectionHandles.shown`). Curves saved before keep their points and gain
+add dots; hold-to-shape curves are unchanged. Lines lock onto 45° steps only within 3°
+(`ShapeRecognizer.lineSnapDeg`, was 6°): drawing, end dots, hold-to-shape, a load's ends. Turning a
+selection still locks within 5°. Tests in `ShapeHandleTests`; not yet tried with a Pencil.
+
 ## A Pencil tap only writes (24 Nov 2026, Windows)
 
 At the owner's request (Tali kept picking shapes up by accident while writing), as Android 1.0.30:

@@ -136,7 +136,11 @@ extension NoteCanvas.Coordinator {
   }
 
   private struct OnScreen {
+    /// The dots that show and take touches (a curve's add dots only with room), on screen.
     var dots: [Pt]
+    /// Each one's index in the shape's `handles()`, and whether it's an add dot.
+    var ids: [Int]
+    var adds: [Bool]
     var size: Float
     var area: TaliCore.Rect
   }
@@ -145,7 +149,9 @@ extension NoteCanvas.Coordinator {
     guard let b = s.geometry.bounds(s.size) else { return nil }
     let z = zoom
     let r = TaliCore.Rect(b.left * z, b.top * z, b.right * z, b.bottom * z)
-    return OnScreen(dots: s.geometry.handles().map { $0 * z }, size: SelectionHandles.shapeSize(s.geometry, on: r), area: r.outset(SelectionHandles.pad))
+    let all = s.geometry.handles().map { $0 * z }
+    let ids = SelectionHandles.shown(s.geometry, dots: all)
+    return OnScreen(dots: ids.map { all[$0] }, ids: ids, adds: ids.map { s.geometry.addsPoint($0) }, size: SelectionHandles.shapeSize(s.geometry, on: r), area: r.outset(SelectionHandles.pad))
   }
 
   private func rotateHandle(_ frame: TaliCore.Rect) -> Pt {
@@ -169,7 +175,7 @@ extension NoteCanvas.Coordinator {
     if let shape = activeShape, let on = onScreen(shape),
       let i = SelectionHandles.dot(at: s, dots: on.dots, shapeSize: on.size, area: on.area, chips: chips(frame))
     {
-      return .dot(i, of: shape)
+      return .dot(on.ids[i], of: shape)
     }
     if canRotate, rotateHandle(frame).dist(s) < SelectionHandles.hit { return .turn }
     let writesThrough = lasso.soft && pencil && parent.tool != .shape
@@ -500,7 +506,8 @@ extension NoteCanvas.Coordinator {
     guard alone, let shape, let on = onScreen(shape) else { return }
     // Smaller dots on a small shape; none on a tiny one (it's moved and resized whole).
     if on.size >= SelectionHandles.tinyShape || reshaping != nil {
-      c.dots = on.dots.map { CGPoint($0) }
+      c.dots = on.dots.indices.filter { !on.adds[$0] }.map { CGPoint(on.dots[$0]) }
+      c.addDots = on.dots.indices.filter { on.adds[$0] }.map { CGPoint(on.dots[$0]) }
       c.dotRadius = CGFloat(SelectionHandles.dotRadius(shapeSize: on.size))
     }
     let origin = Pt(canvas.bounds.origin)

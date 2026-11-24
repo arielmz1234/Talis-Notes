@@ -109,18 +109,17 @@ public enum ShapeKind: String, CaseIterable, Sendable {
   /// How many gaps a distributed load of [length] has (arrows about 28 units apart).
   public static func loadArrows(_ length: Float) -> Int { min(max(Int(length / 28), 2), 40) }
 
-  /// A gentle bow from [a] to [b] through `curveDots` dots (Android's `CurveShape.between`).
+  /// How far a new curve's top and bottom stand off the line between its ends, against its length.
+  public static let curveWave: Float = 0.17
+
+  /// One wave from [a] to [b]: up first on the left of the way it's drawn, then down, its top and
+  /// bottom a third of the way in from each end (Android's `CurveShape.between`, 1.0.32).
   public static func curveBetween(_ a: Pt, _ b: Pt) -> ShapeGeometry {
     let d = b - a
     let len = d.length()
     let normal = len < 1e-3 ? Pt(0, -1) : Pt(d.y / len, -d.x / len)
-    let bulge = len * 0.2
-    return .curve(points: (0..<curveDots).map { (i: Int) -> Pt in
-      let t = Float(i) / Float(curveDots - 1)
-      if i == 0 { return a }
-      if i == curveDots - 1 { return b }
-      return a + d * t + normal * (bulge * sinf(.pi * t))
-    })
+    let wave = len * curveWave
+    return .curve(points: [a, a + d * 0.3 + normal * wave, a + d * 0.7 - normal * wave, b])
   }
 
   private static func hatch(_ from: Pt, _ to: Pt, _ count: Int, _ offset: Pt) -> [ShapeGeometry] {

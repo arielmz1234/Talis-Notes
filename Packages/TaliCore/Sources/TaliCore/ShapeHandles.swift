@@ -106,7 +106,14 @@ extension ShapeGeometry {
       // A moment (the arc with an arrow) keeps its form: no end dots.
       if arrowEnd { return [] }
       return [center + .polar(radius, start), center + .polar(radius, start + sweep), center + .polar(radius, start + sweep / 2)]
-    case let .curve(points): return points
+    case let .curve(points):
+      // Point, add dot, point, ... point: an add dot halfway along each stretch.
+      var out: [Pt] = []
+      for (i, p) in points.enumerated() {
+        if i > 0 { out.append(Self.curveMiddle(points, i - 1)) }
+        out.append(p)
+      }
+      return out
     case let .sector(center, radius, start, sweep):
       return [center + .polar(radius, start), center + .polar(radius, start + sweep), center + .polar(radius, start + sweep / 2)]
     case let .triangle(a, b, c, _): return [a, b, c]
@@ -171,10 +178,11 @@ extension ShapeGeometry {
         return .arc(center: center, radius: max(4, p.dist(center)), start: ang - sweep / 2, sweep: sweep, arrowEnd: arrowEnd)
       }
     case let .curve(points):
-      guard points.indices.contains(index) else { return self }
-      var moved = points
-      moved[index] = p
-      return .curve(points: moved)
+      // Even dots move point `index / 2`; odd ones (add dots) put a new point there.
+      guard index >= 0, index <= 2 * (points.count - 1) else { return self }
+      var next = points
+      if index % 2 == 0 { next[index / 2] = p } else { next.insert(p, at: index / 2 + 1) }
+      return .curve(points: next)
     case let .sector(center, radius, start, sweep):
       let ang = (p - center).angle()
       switch index {
@@ -222,6 +230,21 @@ extension ShapeGeometry {
     let g = withHandle(index, p)
     guard case let .line(a, b, arrowStart, arrowEnd, ticks) = g else { return g }
     return .line(a: index == 1 ? a : tidy(b, a), b: index == 1 ? tidy(a, b) : b, arrowStart: arrowStart, arrowEnd: arrowEnd, ticks: ticks)
+  }
+
+  /// Whether dot [index] adds a new point where it's dragged (a curve's add dot, drawn smaller)
+  /// rather than moving one.
+  public func addsPoint(_ index: Int) -> Bool {
+    if case .curve = self { return index % 2 == 1 }
+    return false
+  }
+
+  /// The curve halfway along its stretch from point [i] to the next, as `paths` draws it
+  /// (Catmull-Rom at t = ½, the ends repeated at the ends).
+  static func curveMiddle(_ points: [Pt], _ i: Int) -> Pt {
+    let p0 = points[max(i - 1, 0)], p1 = points[i], p2 = points[i + 1], p3 = points[min(i + 2, points.count - 1)]
+    let inner = (p1 + p2) * 9
+    return (inner - p0 - p3) / 16
   }
 
   private static func across(_ a: Pt, _ b: Pt) -> Pt {

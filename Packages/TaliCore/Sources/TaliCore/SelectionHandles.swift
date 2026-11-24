@@ -31,6 +31,20 @@ public enum SelectionHandles {
 
   public static func dotRadius(shapeSize: Float) -> Float { min(max(shapeSize * 0.12, 4.5), 6.5) }
 
+  /// A curve's add dot against its points' dots, and the room it needs clear of the points either
+  /// side (screen points) to show.
+  public static let addDotScale: Float = 0.7
+  public static let addDotRoom: Float = 16
+
+  /// Which of a shape's [dots] (on screen, in `handles()` order) show and take touches: a curve's
+  /// add dot only while it has room clear of the points either side (zoomed out, or between two
+  /// points close together, it would sit on them).
+  public static func shown(_ g: ShapeGeometry, dots: [Pt]) -> [Int] {
+    dots.indices.filter { i in
+      !g.addsPoint(i) || i == 0 || i == dots.count - 1 || min(dots[i].dist(dots[i - 1]), dots[i].dist(dots[i + 1])) >= addDotRoom
+    }
+  }
+
   public static func dot(at touch: Pt, dots: [Pt], shapeSize: Float, area: Rect, chips: [Pt]) -> Int? {
     if dots.isEmpty || shapeSize < tinyShape { return nil }
     let dists = dots.map { $0.dist(touch) }
