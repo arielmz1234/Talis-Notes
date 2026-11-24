@@ -231,6 +231,10 @@ extension NoteCanvas.Coordinator: UITextViewDelegate {
   /// replaced; one undo step.
   func finishText() {
     guard let v = textEdit.view, var t = textEdit.editing else { return }
+    // The box keeps the height it grew to while typing (it showed that tall), not only its text's.
+    if let canvas, canvas.zoomScale > 0, v.text != textEdit.original?.text {
+      t.height = min(max(t.height, Float((v.frame.height / canvas.zoomScale).rounded(.up))), TextRow.maxHeight)
+    }
     textEdit.view = nil
     textEdit.editing = nil
     v.resignFirstResponder()
