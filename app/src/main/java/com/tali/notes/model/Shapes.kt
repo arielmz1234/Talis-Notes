@@ -31,6 +31,9 @@ sealed interface ShapeGeometry {
 
   fun withHandle(index: Int, p: Pt): ShapeGeometry
 
+  /** Whether dot [index] adds a new point where it's dragged (drawn smaller) rather than moving one. */
+  fun addsPoint(index: Int): Boolean = false
+
   fun bounds(penSize: Float): Rect = Rect.around(paths(penSize).flatten())!!.outset(penSize)
 }
 
@@ -358,9 +361,14 @@ data class ArcShape(val center: Pt, val radius: Float, val start: Float, val swe
 }
 
 /**
- * A smooth curve through its dots (Catmull-Rom, no corners): drawn from where the pen landed to
- * where it lifted as a gentle bow with [CURVE_DOTS] dots spread along it, straight stretches
- * included, so any part of it can be bent. Each dot moves on its own.
+ * A smooth curve through its [points] (Catmull-Rom, no corners). The Shapes tool draws it from
+ * where the pen landed to where it lifted as one S-shaped wave: both ends, its top and its bottom.
+ *
+ * Its dots (the owner's reference video, 24 Nov 2026): each point has a dot, and halfway along each
+ * stretch between two points sits a smaller "add" dot ([addsPoint]). Dragging a point reshapes the
+ * curve through it; dragging an add dot makes it a new point there, so the curve gets a new place
+ * to bend, with new add dots on both sides of it. [handles] lists them in order along the curve:
+ * point, add dot, point, ... point.
  */
 @Serializable
 @SerialName("curve")
@@ -369,26 +377,52 @@ data class CurveShape(val points: List<Pt>) : ShapeGeometry {
 
   override fun transformed(m: Affine) = copy(points = points.map(m::apply))
 
-  override fun handles() = points
+  override fun handles(): List<Pt> = buildList {
+    points.forEachIndexed { i, p ->
+      if (i > 0) add(middleOf(i - 1))
+      add(p)
+    }
+  }
 
-  override fun withHandle(index: Int, p: Pt): ShapeGeometry = copy(points = points.toMutableList().also { if (index in it.indices) it[index] = p })
+  /** Even dots are the curve's points (point `index / 2`); odd ones are add dots between two points. */
+  override fun withHandle(index: Int, p: Pt): ShapeGeometry {
+    if (index < 0 || index > 2 * (points.size - 1)) return this
+    val i = index / 2
+    val next = points.toMutableList()
+    if (index % 2 == 0) next[i] = p else next.add(i + 1, p)
+    return copy(points = next)
+  }
+
+  override fun addsPoint(index: Int) = index % 2 == 1
+
+  /** The curve halfway along its stretch from point [i] to the next, as [paths] draws it (Catmull-Rom at t = ½). */
+  fun middleOf(i: Int): Pt {
+    val p0 = points[maxOf(i - 1, 0)]
+    val p1 = points[i]
+    val p2 = points[i + 1]
+    val p3 = points[minOf(i + 2, points.size - 1)]
+    return (p1 * 9f + p2 * 9f - p0 - p3) / 16f
+  }
 
   companion object {
-    /** A gentle bow from [a] to [b] (bulging to the left of the way it's drawn), dots evenly along it. */
+    /**
+     * One wave from [a] to [b]: up first on the left of the way it's drawn, then down, its top and
+     * bottom a third of the way in from each end (as in the owner's reference).
+     */
     fun between(a: Pt, b: Pt): CurveShape {
       val d = b - a
       val len = d.length()
       val normal = if (len < 1e-3f) Pt(0f, -1f) else Pt(d.y / len, -d.x / len)
-      val bulge = len * 0.2f
-      return CurveShape(List(CURVE_DOTS) { i ->
-        val t = i / (CURVE_DOTS - 1f)
-        if (i == 0) a else if (i == CURVE_DOTS - 1) b else a + d * t + normal * (bulge * kotlin.math.sin(PI.toFloat() * t))
-      })
+      val wave = len * CURVE_WAVE
+      return CurveShape(listOf(a, a + d * 0.3f + normal * wave, a + d * 0.7f - normal * wave, b))
     }
   }
 }
 
-/** How many dots a new curve has (both ends and three between). */
+/** How far a new curve's top and bottom stand off the line between its ends, against its length. */
+const val CURVE_WAVE = 0.17f
+
+/** At least how many points hold-to-shape gives a curve it makes from a stroke (both ends and three between). */
 const val CURVE_DOTS = 5
 
 /**

@@ -62,8 +62,13 @@ class RoundThreeTest {
   fun linesSnapOnlyToFortyFives() {
     val near30 = ShapeRecognizer.snappedLine(Pt(0f, 0f), Pt.polar(100f, Math.toRadians(31.0).toFloat()))
     assertEquals(31.0, Math.toDegrees((near30.b - near30.a).angle().toDouble()), 0.01)
-    val near45 = ShapeRecognizer.snappedLine(Pt(0f, 0f), Pt.polar(100f, Math.toRadians(41.0).toFloat()))
+    // Within 3° it locks on (the owner, 24 Nov 2026: 6° pulled 141° to 135°); 4° off stays as drawn.
+    val near45 = ShapeRecognizer.snappedLine(Pt(0f, 0f), Pt.polar(100f, Math.toRadians(42.5).toFloat()))
     assertEquals(45.0, Math.toDegrees((near45.b - near45.a).angle().toDouble()), 0.01)
+    val near135 = ShapeRecognizer.snappedLine(Pt(0f, 0f), Pt.polar(100f, Math.toRadians(141.0).toFloat()))
+    assertEquals(141.0, Math.toDegrees((near135.b - near135.a).angle().toDouble()), 0.01)
+    val off45 = ShapeRecognizer.snappedLine(Pt(0f, 0f), Pt.polar(100f, Math.toRadians(41.0).toFloat()))
+    assertEquals(41.0, Math.toDegrees((off45.b - off45.a).angle().toDouble()), 0.01)
   }
 
   @Test

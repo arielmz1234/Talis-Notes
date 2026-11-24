@@ -52,16 +52,50 @@ class ShapeFormsTest {
   }
 
   @Test
-  fun aCurveHasDotsAllAlongAndEachBendsIt() {
+  fun aCurveIsOneWaveWithAPointDotAndAnAddDotBetween() {
     val c = ShapeKind.CURVE.create(Pt(0f, 100f), Pt(300f, 100f)) as CurveShape
-    assertEquals(CURVE_DOTS, c.handles().size)
+    // Both ends, the top and the bottom: four points, an add dot between each two.
+    assertEquals(4, c.points.size)
+    assertEquals(7, c.handles().size)
     assertEquals(Pt(0f, 100f), c.points.first())
     assertEquals(Pt(300f, 100f), c.points.last())
-    val bent = c.withHandle(1, Pt(75f, 180f)) as CurveShape
-    assertEquals(Pt(75f, 180f), bent.points[1])
-    // The curve passes through its dots.
-    val path = bent.paths(1f).first()
-    assertTrue(path.any { it.dist(Pt(75f, 180f)) < 1f })
+    assertTrue("up first", c.points[1].y < 100f)
+    assertTrue("then down", c.points[2].y > 100f)
+    assertEquals(listOf(false, true, false, true, false, true, false), c.handles().indices.map { c.addsPoint(it) })
+    // Every dot sits on the curve.
+    val path = c.paths(1f).first()
+    for (h in c.handles()) assertTrue("$h on the curve", path.any { it.dist(h) < 1f })
+  }
+
+  @Test
+  fun draggingAPointBendsTheCurveThroughIt() {
+    val c = ShapeKind.CURVE.create(Pt(0f, 100f), Pt(300f, 100f)) as CurveShape
+    val bent = c.withHandle(2, Pt(75f, 20f)) as CurveShape
+    assertEquals(4, bent.points.size)
+    assertEquals(Pt(75f, 20f), bent.points[1])
+    assertTrue(bent.paths(1f).first().any { it.dist(Pt(75f, 20f)) < 1f })
+  }
+
+  @Test
+  fun draggingAnAddDotMakesANewPointThereWithAddDotsEitherSide() {
+    val c = ShapeKind.CURVE.create(Pt(0f, 100f), Pt(300f, 100f)) as CurveShape
+    val grown = c.withHandle(5, Pt(260f, 180f)) as CurveShape
+    assertEquals(5, grown.points.size)
+    assertEquals(Pt(260f, 180f), grown.points[3])
+    assertEquals(c.points.take(3), grown.points.take(3))
+    assertEquals(c.points.last(), grown.points.last())
+    assertEquals(9, grown.handles().size)
+    assertTrue(grown.addsPoint(5) && grown.addsPoint(7) && !grown.addsPoint(6))
+    assertTrue(grown.paths(1f).first().any { it.dist(Pt(260f, 180f)) < 1f })
+    // Out of range does nothing.
+    assertEquals(c, c.withHandle(7, Pt(0f, 0f)))
+  }
+
+  @Test
+  fun curvesSavedBeforeKeepTheirPointsAndGetAddDots() {
+    val old = CurveShape(List(5) { Pt(it * 50f, if (it % 2 == 0) 0f else 30f) })
+    assertEquals(9, old.handles().size)
+    assertEquals(old.points, old.handles().filterIndexed { i, _ -> i % 2 == 0 })
   }
 
   @Test

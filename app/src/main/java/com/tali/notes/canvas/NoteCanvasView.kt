@@ -467,6 +467,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     }
   private val lassoFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x1C7A4ED6 }
   private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+  private val addDotFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF4F7BE8.toInt() }
   private val handleStroke =
     Paint(Paint.ANTI_ALIAS_FLAG).apply {
       style = Paint.Style.STROKE
@@ -2027,10 +2028,27 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val size = shapeScreenSize(shape)
     if (size < TINY_SHAPE_DP * density && liveEdit == null) return
     val r = (size * 0.12f / density).coerceIn(4.5f, 6.5f)
-    shape.geometry.handles().forEach { p ->
+    val g = shape.geometry
+    shownHandles(shape).forEach { (i, p) ->
       val s = camera.toScreen(p)
-      drawHandle(canvas, s.x, s.y, r)
+      if (g.addsPoint(i)) drawAddDot(canvas, s.x, s.y, r * ADD_DOT_SCALE) else drawHandle(canvas, s.x, s.y, r)
     }
+  }
+
+  /**
+   * The dots of [shape] that show and take touches, with their index in its handles. A curve's add
+   * dot shows only while its stretch leaves it room clear of the points either side on screen
+   * ([ADD_DOT_ROOM_DP]): zoomed out, or between two points close together, it would sit on them.
+   */
+  private fun shownHandles(shape: ShapeItem): List<Pair<Int, Pt>> {
+    val g = shape.geometry
+    val hs = g.handles()
+    return hs.indices.filter { i ->
+      !g.addsPoint(i) || i == 0 || i == hs.lastIndex || run {
+        val s = camera.toScreen(hs[i])
+        minOf(s.dist(camera.toScreen(hs[i - 1])), s.dist(camera.toScreen(hs[i + 1]))) >= ADD_DOT_ROOM_DP * density
+      }
+    }.map { it to hs[it] }
   }
 
   /**
@@ -2049,21 +2067,22 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * the nearest dot moves the shape instead, so a tiny box can still be picked up and carried.
    */
   private fun handleAt(shape: ShapeItem, screen: Pt): Int {
-    val handles = shape.geometry.handles()
-    if (handles.isEmpty() || shapeScreenSize(shape) < TINY_SHAPE_DP * density) return -1
-    val dists = handles.map { camera.toScreen(it).dist(screen) }
-    val i = dists.indices.minBy { dists[it] }
+    val shown = shownHandles(shape)
+    if (shown.isEmpty() || shapeScreenSize(shape) < TINY_SHAPE_DP * density) return -1
+    val dists = shown.map { (_, p) -> camera.toScreen(p).dist(screen) }
+    val nearest = dists.indices.minBy { dists[it] }
+    val i = shown[nearest].first
     val reach = (shapeScreenSize(shape) * 0.3f).coerceIn(MIN_HANDLE_HIT_DP * density, HANDLE_HIT_DP * density)
-    if (dists[i] >= reach) return -1
+    if (dists[nearest] >= reach) return -1
     val area = screenRect(shape.bounds, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
-    if (area.contains(screen.x, screen.y) && camera.toScreen(shape.bounds.center).dist(screen) < dists[i]) return -1
+    if (area.contains(screen.x, screen.y) && camera.toScreen(shape.bounds.center).dist(screen) < dists[nearest]) return -1
     // A dot beside the rotate handle or a chip (a bar chart's corner, a Gantt row's end): the
     // nearer of the two takes the touch, so the chips stay easy to grab.
     if (shape.id == activeShapeId) {
       selectionBounds?.let { sb ->
         val r = screenRect(sb, Affine.IDENTITY).apply { inset(-8f * density, -8f * density) }
         val chips = listOfNotNull(resizeChip(r), moveChip(r), rotateHandle(r).takeIf { canRotateSelection() })
-        if (chips.any { it.dist(screen) < dists[i] }) return -1
+        if (chips.any { it.dist(screen) < dists[nearest] }) return -1
       }
     }
     return i
@@ -2164,6 +2183,12 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   private fun drawHandle(canvas: Canvas, x: Float, y: Float, radiusDp: Float) {
     canvas.drawCircle(x, y, radiusDp * density, handleFill)
     canvas.drawCircle(x, y, radiusDp * density, handleStroke)
+  }
+
+  /** A curve's add dot: smaller, filled in the dots' blue with a white rim, so it reads apart from the points. */
+  private fun drawAddDot(canvas: Canvas, x: Float, y: Float, radiusDp: Float) {
+    canvas.drawCircle(x, y, (radiusDp + 1.5f) * density, handleFill)
+    canvas.drawCircle(x, y, radiusDp * density, addDotFill)
   }
 
   private fun drawEraserCursor(canvas: Canvas) {
@@ -6047,6 +6072,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     private const val TINY_SHAPE_DP = 32f
     /** The least a shape's dot reaches (dp), however small the shape. */
     private const val MIN_HANDLE_HIT_DP = 9f
+    /** A curve's add dot against its points' dots, and the room it needs clear of the points either side (dp) to show. */
+    private const val ADD_DOT_SCALE = 0.7f
+    private const val ADD_DOT_ROOM_DP = 16f
     private const val BUBBLE_H = 24f
     /** How long the laser stays lit after it was last lifted, so several strokes can be drawn. */
     private const val LASER_IDLE_MS = 1000L

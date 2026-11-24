@@ -299,7 +299,7 @@ object ShapeRecognizer {
     return LineShape(a, end, arrowEnd = arrowEnd)
   }
 
-  const val LINE_SNAP_DEG = 6f
+  const val LINE_SNAP_DEG = 3f
 
   /**
    * One-stroke arrows: a shaft followed by one barb, or by a barb, a return to the tip and a second
