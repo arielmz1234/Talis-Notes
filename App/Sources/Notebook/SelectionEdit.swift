@@ -318,14 +318,25 @@ extension NoteCanvas.Coordinator {
     lasso.drag = nil
     lasso.transform = .identity
     canvas.drawingGestureRecognizer.isEnabled = inkOn
-    // Everything back where it was, then the change is made in one step (nothing is drawn in between).
+    let changes: Bool
+    switch drag {
+    case let .dot(_, _, base, live): changes = !cancelled && live != base
+    case .move, .scale, .turn: changes = !cancelled && t != .identity
+    }
+    // Everything back where it was, then the change is made in one step. When something changes,
+    // the writing is put back only in what's stored (`inkBase`), not on screen: drawn back first, it
+    // showed at its old place until the canvas caught up, beside the overlay at the new one.
     if let before = lasso.before {
       lasso.before = nil
-      loading = true
-      setDrawing(before)
-      loading = false
+      if changes {
+        inkBase = before
+      } else {
+        loading = true
+        setDrawing(before)
+        loading = false
+      }
     }
-    restoreLifted()
+    restoreLifted(redraw: !changes)
     endSnap()
     // nil leaves the menu as it was; an edit keeps it away for a moment; a tap brings it back.
     var menu: Bool?
@@ -351,6 +362,7 @@ extension NoteCanvas.Coordinator {
         menu = true
       }
     }
+    inkBase = nil
     dropShapes()
     setSelection(lasso.picked, menu: menu)
   }

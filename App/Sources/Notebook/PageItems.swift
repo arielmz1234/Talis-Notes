@@ -205,7 +205,7 @@ extension NoteCanvas.Coordinator {
   var pageState: PageState {
     let under = lasso.lifted ?? pages?.pages.under ?? UnderItems()
     return PageState(
-      drawing: canvas?.drawing ?? PKDrawing(), stored: stored, shapes: under.shapes, texts: under.texts, pictures: under.pictures.map(\.row), fills: under.fills,
+      drawing: inkBase ?? canvas?.drawing ?? PKDrawing(), stored: stored, shapes: under.shapes, texts: under.texts, pictures: under.pictures.map(\.row), fills: under.fills,
       lockedInk: under.lockedInk)
   }
 
@@ -273,13 +273,13 @@ extension NoteCanvas.Coordinator {
       return out + added.filter { waiting[id($0)] != nil }
     }
     // Writing: PencilKit's drawing and what's stored of it change together, in stacking order.
-    let strokes = canvas.drawing.strokes
+    let strokes = (inkBase ?? canvas.drawing).strokes
     let live = stored.enumerated().compactMap { i, entry in i < strokes.count ? (pk: strokes[i], key: entry.key, stroke: entry.stroke) : nil }
     let fresh = ink.map { s -> (pk: PKStroke, key: StrokeKey, stroke: InkStroke) in
       let pk = s.pkStroke(mask: mask(for: s))
       return (pk, StrokeKey(pk), s)
     }
-    if !fresh.isEmpty || live.contains(where: { gone.contains($0.stroke.id) }) {
+    if !fresh.isEmpty || inkBase != nil || live.contains(where: { gone.contains($0.stroke.id) }) {
       let stacked = merged(live, fresh, id: { $0.stroke.id }).enumerated().sorted { a, b in a.element.stroke.z != b.element.stroke.z ? a.element.stroke.z < b.element.stroke.z : a.offset < b.offset }.map(\.element)
       let next = Self.highlighterFirst(stacked) { $0.stroke }
       setInk(next.map { ($0.key, $0.stroke) }, drawing: PKDrawing(strokes: next.map(\.pk)), on: canvas)

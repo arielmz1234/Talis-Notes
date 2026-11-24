@@ -116,11 +116,13 @@ extension NoteCanvas.Coordinator {
     redrawPage(lasso.bounds)
   }
 
-  /// Straight back on the page with nothing saved: a tap on a selection isn't an edit.
-  func restoreLifted() {
+  /// What was carried is put back where it was. With [redraw] off (a change to it follows at once)
+  /// the page and the overlay are left as they are, so nothing shows at the old place in between.
+  func restoreLifted(redraw: Bool = true) {
     guard let pages, let lifted = lasso.lifted else { return }
     lasso.lifted = nil
     pages.pages.under = lifted
+    guard redraw else { return }
     redrawPage(lasso.bounds)
     carryShapes(.identity)
   }
@@ -164,17 +166,26 @@ extension NoteCanvas.Coordinator {
   }
 
   /// The overlay goes once what it carried is back on the page: a moment later, when the page has
-  /// drawn it (taken away at once, there was a blink with nothing there).
+  /// drawn it and the canvas says it shows it (taken away at once, there was a blink with nothing there).
   func dropShapes() {
     lasso.overlayTicket += 1
     let ticket = lasso.overlayTicket
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-      guard let self, self.lasso.overlayTicket == ticket else { return }
+    var rendered = false, waited = false
+    let clear = { [weak self] in
+      guard let self, rendered, waited, self.lasso.overlayTicket == ticket else { return }
       CATransaction.begin()
       CATransaction.setDisableActions(true)
       self.lasso.shapeLayer.sublayers = nil
       self.lasso.shapeLayer.setAffineTransform(.identity)
       CATransaction.commit()
+    }
+    afterRender {
+      rendered = true
+      clear()
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+      waited = true
+      clear()
     }
   }
 }

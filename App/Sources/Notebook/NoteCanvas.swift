@@ -792,6 +792,9 @@ struct NoteCanvas: UIViewRepresentable {
 
     // MARK: Keeping the store in step
 
+    /// While a carried selection is put down: the writing as it was before it was lifted, which the
+    /// change is made from, though the canvas still shows it without what was carried.
+    var inkBase: PKDrawing?
     /// Waiting for the canvas to show what was just set (see `afterRender`).
     var renderWaiters: [(ticket: Int, run: () -> Void)] = []
     var renderTicket = 0
