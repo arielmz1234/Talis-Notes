@@ -99,8 +99,9 @@ extension NoteCanvas.Coordinator {
       showLive(pen, StraightLine.inputs(own.start, own.end))
     case .trace(let pen):
       own.samples += touches.map(sample)
-      // The stroke just became a shape (hold-to-shape draws that): this one isn't shown any more.
-      if hold.live != nil {
+      // The stroke just became a shape (hold-to-shape draws that), or was taken back (the press that
+      // caught a loop): it isn't shown any more.
+      if hold.live != nil || (hold.dropSince.map { own.began >= $0 } ?? false) {
         clearLive()
         return
       }
@@ -170,7 +171,7 @@ extension NoteCanvas.Coordinator {
     CATransaction.commit()
   }
 
-  private func clearLive() {
+  func clearLive() {
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     own.live.contents = nil

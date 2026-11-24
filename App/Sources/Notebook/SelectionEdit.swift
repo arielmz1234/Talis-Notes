@@ -129,7 +129,7 @@ extension NoteCanvas.Coordinator {
 
   // MARK: Where things are
 
-  private func screenFrame(_ b: CGRect, by t: Affine = .identity) -> TaliCore.Rect {
+  func screenFrame(_ b: CGRect, by t: Affine = .identity) -> TaliCore.Rect {
     let z = zoom
     let a = t.apply(Pt(Float(b.minX), Float(b.minY))) * z, c = t.apply(Pt(Float(b.maxX), Float(b.maxY))) * z
     return TaliCore.Rect(min(a.x, c.x), min(a.y, c.y), max(a.x, c.x), max(a.y, c.y)).outset(SelectionHandles.pad)

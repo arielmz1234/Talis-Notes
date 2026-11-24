@@ -89,6 +89,7 @@ struct HoldState {
   let layer = CAShapeLayer()
   /// Circle to select: the last stroke when it was a loop round something, and the press on it.
   var circle: CircleLoop?
+  var catcher: CircleCatch?
   var circleTimer: Timer?
   var circlePress: CGPoint?
   let ring = CAShapeLayer()
@@ -205,6 +206,7 @@ extension NoteCanvas.Coordinator {
   func dropInk(since: Date) {
     guard let canvas else { return }
     hold.dropSince = since
+    if own.mode != nil, own.began >= since { clearLive() }
     let gone = ownStrokes(since: since)
     let strokes = canvas.drawing.strokes
     let kept = strokes.indices.filter { i in !(i < stored.count && gone.contains(stored[i].stroke.id)) }.map { strokes[$0] }
