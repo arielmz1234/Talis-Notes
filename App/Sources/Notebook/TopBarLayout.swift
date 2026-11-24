@@ -21,7 +21,7 @@ struct TopBarLayout: SwiftUI.Layout {
   /// The tools bar's middle line, from its top.
   var mid: CGFloat = 30
   /// Narrower than this beside the tools, the name moves under the corner instead (it's always seen).
-  var nameMin: CGFloat = 150
+  var nameMin: CGFloat = 110
 
   func sizeThatFits(proposal: ProposedViewSize, subviews: LayoutSubviews, cache: inout ()) -> CGSize {
     let width = proposal.width ?? 0

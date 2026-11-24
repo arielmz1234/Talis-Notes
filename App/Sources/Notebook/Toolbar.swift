@@ -156,7 +156,7 @@ struct MainToolbar: View {
           let on = pen.id == activeId
           PenGlyph(type: pen.type, color: Color(uiColor: UIColor(argb: shown(pen.color))), line: pen.lineStyle)
             .offset(y: on ? 2 : 16)
-            .frame(width: 34, height: 56, alignment: .top)
+            .frame(width: 32, height: 56, alignment: .top)
             .contentShape(Rectangle())
             .onTapGesture { tapPen(pen) }
             .accessibilityLabel(penName(pen.type))
@@ -274,7 +274,7 @@ struct MainToolbar: View {
             toolsOpen = false
             onKeyboard()
           } label: {
-            Image(systemName: "keyboard").font(.system(size: 19)).foregroundStyle(c.ink).frame(width: 44, height: 44).contentShape(Rectangle())
+            Image(systemName: "keyboard").font(.system(size: 19)).foregroundStyle(c.ink).frame(width: compactTools ? 44 : 40, height: 44).contentShape(Rectangle())
           }
           .buttonStyle(PressStyle(scale: 0.9))
           .accessibilityLabel(L("keyboard"))
@@ -353,7 +353,7 @@ struct MainToolbar: View {
           Image(systemName: icon).font(.system(size: 19)).foregroundStyle(on ? c.blue : c.ink)
         }
       }
-        .frame(width: 44, height: 44)
+        .frame(width: compactTools ? 44 : 40, height: 44)
         .background {
           if on { RoundedRectangle(cornerRadius: 14).fill(c.blueSoft).matchedGeometryEffect(id: "tool", in: toolGlide) }
         }
