@@ -735,6 +735,9 @@ struct NoteCanvas: UIViewRepresentable {
       if !didFit, canvas.bounds.width > 0 {
         didFit = true
         fittedSize = canvas.bounds.size
+        // Hidden until it's where she left off, so it doesn't show at the top first and then jump.
+        firstPlacing = true
+        canvas.alpha = 0
         // The page's whole width on screen (a slide-shaped PDF page is far wider than A4), once the
         // canvas has its size.
         DispatchQueue.main.async { [weak self] in self?.fitWidth() }
@@ -746,6 +749,8 @@ struct NoteCanvas: UIViewRepresentable {
     /// She pinched: the first fit doesn't come back over it.
     var zoomedByHand = false
     var fittedSize: CGSize = .zero
+    /// The first fit is still being made (the canvas is hidden until then).
+    var firstPlacing = false
 
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
       if scrollView.isTracking || scrollView.isZoomBouncing || scrollView.pinchGestureRecognizer?.state == .began { zoomedByHand = true }
@@ -758,17 +763,25 @@ struct NoteCanvas: UIViewRepresentable {
       let saved = parent.notebook.viewport.flatMap { v -> Viewport? in v.zoom > 0.05 ? v : nil }
       let fit = min((canvas.bounds.width - 48) / (paged ? pages.worldSize.width : CGFloat(layout.width)), 1.2)
       let zoom = saved.map { min(max(CGFloat($0.zoom), canvas.minimumZoomScale), canvas.maximumZoomScale) } ?? fit
-      // Animated: PKCanvasView ignored the plain zoom change here (the zoom chip's animated one works).
-      canvas.setZoomScale(zoom, animated: true)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-        guard let self, let canvas = self.canvas else { return }
+      func place() {
+        guard let canvas = self.canvas else { return }
         self.updateContent()
         let z = canvas.zoomScale
         let at = saved.map { CGPoint(x: CGFloat($0.x) * z - canvas.contentInset.left, y: CGFloat($0.y) * z - canvas.contentInset.top) }
           ?? CGPoint(x: -canvas.contentInset.left, y: -canvas.contentInset.top)
         canvas.setContentOffset(at, animated: false)
         self.reportView()
+        if self.firstPlacing {
+          self.firstPlacing = false
+          UIView.animate(withDuration: 0.12) { canvas.alpha = 1 }
+        }
       }
+      canvas.setZoomScale(zoom, animated: false)
+      if abs(canvas.zoomScale - zoom) < 0.0005 { return place() }
+      // PKCanvasView can ignore a plain zoom change this early (the animated one works); the page
+      // stays hidden while it zooms.
+      canvas.setZoomScale(zoom, animated: true)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { place() }
     }
 
     private func centre() {
