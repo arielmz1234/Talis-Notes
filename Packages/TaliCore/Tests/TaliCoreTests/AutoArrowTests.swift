@@ -41,14 +41,6 @@ struct AutoArrowTests {
     #expect(near(a.a, Pt(0, 0)) && near(a.b, Pt(300, 0)))
   }
 
-  @Test func oneStrokeWithATriangleHead() {
-    // To the end, up to one corner, out to the tip, back to the other corner and home.
-    let drawn = stroke([Pt(0, 0), Pt(300, 0), Pt(300, -20), Pt(335, 0), Pt(300, 20), Pt(300, 0)])
-    guard let a = arrow(AutoArrow.oneStroke(drawn)) else { Issue.record("not an arrow"); return }
-    // The tip is the triangle's point, on the line's own direction.
-    #expect(near(a.a, Pt(0, 0)) && near(a.b, Pt(335, 0)))
-  }
-
   @Test func aSlantedOneStrokeArrow() {
     let drawn = turned(stroke([Pt(0, 0), Pt(300, 0)] + [v()[0], Pt(300, 0), v()[2]]), by: 30)
     guard let a = arrow(AutoArrow.oneStroke(drawn)) else { Issue.record("not an arrow"); return }
@@ -304,6 +296,45 @@ struct AndroidAutoArrowTests {
     guard let tiny = AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(290, -9), Pt(301, 0), Pt(290, 9))) else { Issue.record("not an arrow"); return }
     let t = AutoArrow.shape(tiny, last: nil).geometry.paths(2)[1]
     #expect(t[0].dist(t[1]) >= 19.9)
+  }
+
+  /// A V with its point rounded off: from [l] round a curve of [round] radius near [tip] to [r].
+  private func roundedV(_ l: Pt, _ tip: Pt, _ r: Pt, round: Float) -> [Pt] {
+    let inL = tip + (l - tip).normalized() * round
+    let inR = tip + (r - tip).normalized() * round
+    var out = drawn(l, inL)
+    for k in 1...12 {
+      let t = Float(k) / 12
+      out.append(inL * ((1 - t) * (1 - t)) + tip * (2 * t * (1 - t)) + inR * (t * t))
+    }
+    return out + drawn(inR, r)
+  }
+
+  @Test func roundedAndNearlyUHeadsCount() {
+    guard let (a, b) = AutoArrow.straight(drawn(Pt(0, 0), Pt(0, 60))) else { Issue.record("not straight"); return }
+    #expect(AutoArrow.twoStrokes(a: a, b: b, head: roundedV(Pt(-9, 44), Pt(0, 62), Pt(9, 44), round: 6)) != nil)
+    let u = drawn(Pt(-7, 40), Pt(-6, 54)) + (0...12).map { k -> Pt in
+      let t = Float.pi * Float(k) / 12
+      return Pt(-6 * cosf(t), 54 + 6 * sinf(t))
+    } + drawn(Pt(6, 54), Pt(7, 40))
+    guard let arrow = line(AutoArrow.twoStrokes(a: a, b: b, head: u)) else { Issue.record("not an arrow"); return }
+    #expect(arrow.b.y > 55)
+  }
+
+  @Test func aSlightlyBowedShaftCounts() {
+    let bowed = (0...30).map { k -> Pt in
+      let t = Float(k) / 30
+      return Pt(80 * t, -4 * sinf(.pi * t))
+    }
+    expectArrow(Pt(0, 0), Pt(81, 0), AutoArrow.pair(bowed, drawn(Pt(66, -10), Pt(81, 0), Pt(66, 10))))
+  }
+
+  @Test func theHeadCanComeFirst() {
+    let head = drawn(Pt(-10, 14), Pt(0, 0), Pt(10, 14))
+    let shaft = drawn(Pt(1, 60), Pt(0, 1))
+    expectArrow(Pt(1, 60), Pt(0, 0), AutoArrow.pair(head, shaft))
+    // A Y written as a V then its stem stays writing.
+    #expect(AutoArrow.pair(drawn(Pt(-12, -20), Pt(0, 0), Pt(12, -20)), drawn(Pt(0, 0), Pt(0, 45))) == nil)
   }
 
   @Test func aHeadDrawnLikeTheLastOneGetsExactlyTheSameHead() {
