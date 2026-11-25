@@ -364,31 +364,6 @@ extension NoteCanvas.Coordinator {
     touch()
   }
 
-  /// What of [s] its page shows. A stroke that ran past its page (Write between pages off) or past
-  /// the pages' sides is hidden there by its mask, but while its points were kept whole, moving or
-  /// copying it brought the hidden part back into view. Android never keeps that part (its strokes
-  /// are split at the page's edge), so it's cut away here: when a stroke is kept, and before one
-  /// kept whole earlier is carried or copied. The first piece keeps the stroke's id.
-  func keptToPage(_ s: InkStroke) -> [InkStroke] {
-    guard let first = s.inputs.points.first, let page = pageClip(startingAt: first.y) else { return [s] }
-    func outside(_ x: Float, _ y: Float) -> Bool { !page.contains(CGPoint(x: CGFloat(x), y: CGFloat(y))) }
-    guard s.inputs.points.contains(where: { outside($0.x, $0.y) }),
-      let pieces = StrokeCut.split(s.inputs, maxGap: 1, erased: outside), !pieces.isEmpty
-    else { return [s] }
-    return pieces.enumerated().map { i, inputs in
-      var piece = s
-      piece.inputs = inputs
-      if i > 0 { piece.id = newId() }
-      return piece
-    }
-  }
-
-  /// [item] as it shows on the page: writing without what its page hides of it (see `keptToPage`).
-  func asShown(_ item: PageItem) -> [PageItem] {
-    if case .ink(let s) = item { return keptToPage(s).map(PageItem.ink) }
-    return [item]
-  }
-
   /// Something new reaches below the last page: pages are added to hold it (they "keep coming as you write").
   func growPages(toHold box: TaliCore.Rect) {
     guard paged else { return }

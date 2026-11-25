@@ -331,7 +331,7 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
   }
 
   func copySelection() {
-    let items = pickedItems.flatMap(asShown)
+    let items = pickedItems
     guard !items.isEmpty else { return }
     Clipboard.items = items
     parent.onHint(items.count == 1 ? L("copied_hold_anywhere_to_paste_it") : L("copied_n_items_hold_anywhere_to", items.count))
@@ -339,7 +339,7 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
 
   /// Cuts the selection: onto the clipboard, then off the page (undo brings it back).
   func cutSelection() {
-    let items = pickedItems.flatMap(asShown)
+    let items = pickedItems
     guard !items.isEmpty else { return }
     Clipboard.items = items
     deleteSelection()
@@ -382,7 +382,7 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
 
   /// Copies a little down and to the right, and picks the copies up instead (Android: 24 units).
   func duplicateSelection() {
-    let copies = copiesOf(pickedItems.flatMap(asShown), .translate(Self.duplicateOffset, Self.duplicateOffset))
+    let copies = copiesOf(pickedItems, .translate(Self.duplicateOffset, Self.duplicateOffset))
     guard !copies.isEmpty else { return }
     commit(remove: [], add: copies)
     select(copies)

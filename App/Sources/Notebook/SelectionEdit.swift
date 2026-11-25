@@ -249,11 +249,14 @@ extension NoteCanvas.Coordinator {
 
   /// The picked-up writing leaves PencilKit's drawing for the overlay while it's carried: moved in
   /// PencilKit every step, it was redrawn late, so it jumped to the end and showed in both places.
+  /// It's carried whole, as Android draws a selection being dragged: what its page hid of it (Write
+  /// between pages off) shows while it moves, and once it's put down it's drawn only as far as the
+  /// page it now starts on (its points are all kept, so moved onto the page it shows in full).
   private func liftInk() {
     guard let canvas, let before = lasso.before else { return }
     var up: [PKStroke] = [], left: [PKStroke] = []
     for (i, s) in before.strokes.enumerated() {
-      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(shown(s, at: i)) } else { left.append(s) }
+      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(stored[i].stroke.pkStroke(mask: nil)) } else { left.append(s) }
     }
     guard !up.isEmpty else { return }
     let z = canvas.zoomScale
@@ -362,12 +365,10 @@ extension NoteCanvas.Coordinator {
       if case .move = drag { lasso.chipsBackAt = Date() }
       if !cancelled, t != .identity {
         if case let .turn(_, _, _, angle) = drag { noteTurn(angle, items) }
-        // Writing goes as it showed: what its page hid of it stays hidden for good (see `keptToPage`).
-        var moved = items.flatMap(asShown).map { $0.transformed(t) }
+        var moved = items.map { $0.transformed(t) }
         // Pictures land back on a page (in the same undo step).
         if let nudge = pageNudge(moved) { moved = moved.map { $0.transformed(nudge) } }
         commit(remove: items, add: moved)
-        lasso.picked = Set(moved.map(\.id))
         menu = false
       } else if !cancelled {
         menu = true

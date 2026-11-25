@@ -98,7 +98,8 @@ extension NoteCanvas.Coordinator {
       return l
     }
     if !upInk.isEmpty {
-      let drawing = PKDrawing(strokes: upInk.map { $0.pkStroke(mask: mask(for: $0)) })
+      // Whole while carried, as the rest of the writing (see liftInk).
+      let drawing = PKDrawing(strokes: upInk.map { $0.pkStroke(mask: nil) })
       let box = drawing.bounds.insetBy(dx: -2, dy: -2)
       let l = placed(box)
       canvas.traitCollection.performAsCurrent { l.contents = drawing.image(from: box, scale: z * scale).cgImage }
