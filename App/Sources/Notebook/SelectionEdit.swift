@@ -359,10 +359,12 @@ extension NoteCanvas.Coordinator {
       if case .move = drag { lasso.chipsBackAt = Date() }
       if !cancelled, t != .identity {
         if case let .turn(_, _, _, angle) = drag { noteTurn(angle, items) }
-        var moved = items.map { $0.transformed(t) }
+        // Writing goes as it showed: what its page hid of it stays hidden for good (see `keptToPage`).
+        var moved = items.flatMap(asShown).map { $0.transformed(t) }
         // Pictures land back on a page (in the same undo step).
         if let nudge = pageNudge(moved) { moved = moved.map { $0.transformed(nudge) } }
         commit(remove: items, add: moved)
+        lasso.picked = Set(moved.map(\.id))
         menu = false
       } else if !cancelled {
         menu = true

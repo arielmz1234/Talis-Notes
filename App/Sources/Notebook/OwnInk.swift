@@ -207,14 +207,19 @@ extension NoteCanvas.Coordinator {
         return
       }
       let s = self.stroke(pen, inputs, id: newId())
-      self.own.kept.append((s.id, began))
-      if self.own.kept.count > 50 { self.own.kept.removeFirst() }
-      self.commit(remove: [], add: [.ink(s)])
-      if let raw, self.autoArrow(after: s, pen: pen, raw: raw, began: began, lifted: lifted) {
+      // Only what its page shows is kept (Android's split strokes): the rest would come back into
+      // view when it's moved.
+      let kept = self.keptToPage(s)
+      for piece in kept { self.own.kept.append((piece.id, began)) }
+      if self.own.kept.count > 50 { self.own.kept.removeFirst(self.own.kept.count - 50) }
+      self.commit(remove: [], add: kept.map(PageItem.ink))
+      // A stroke cut at its page's edge isn't looked at for an arrow: part of what was drawn is gone.
+      let whole = kept.count == 1 && kept[0].inputs.points.count == s.inputs.points.count
+      if let raw, whole, self.autoArrow(after: s, pen: pen, raw: raw, began: began, lifted: lifted) {
         // The clean arrow is already up, in this same frame: the hand-drawn ink goes as it comes.
         self.letGo(shown, now: true)
       } else {
-        if raw == nil { self.forgetArrowLine() }
+        if raw == nil || !whole { self.forgetArrowLine() }
         self.afterRender { self.letGo(shown, now: false) }
       }
     }
