@@ -51,13 +51,15 @@ extension NoteCanvas.Coordinator {
     shape.z = topZ + 1
     shapeZ = max(shapeZ, shape.z)
     forgetCircle()
-    showArrow(shape)
     commit(remove: drawn, add: [.shape(shape)])
+    // The clean arrow is up in the frame the hand-drawn ink leaves: a picture of the page with the
+    // arrow on it lies over its tiles until they've drawn it, or failing that the arrow itself is
+    // drawn over the page for that moment. Nothing blinks in between.
+    if !coverPage(shape.geometry.bounds(shape.size).map { CGRect($0) }) { showArrow(shape) }
     return true
   }
 
-  /// The clean arrow drawn over the page at once, in the frame the hand-drawn ink leaves, and
-  /// taken away once the page's tiles have drawn the kept one: nothing blinks in between.
+  /// The arrow drawn over the page, taken away once the page's tiles have drawn the kept one.
   private func showArrow(_ shape: ShapeRow) {
     guard let canvas else { return }
     let z = canvas.zoomScale

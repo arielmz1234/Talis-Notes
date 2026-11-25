@@ -261,6 +261,7 @@ extension NoteCanvas.Coordinator {
     let drawing = PKDrawing(strokes: up)
     let box = drawing.bounds.insetBy(dx: -2, dy: -2)
     let l = CALayer()
+    l.name = Self.carriedInk
     l.frame = CGRect(x: box.minX * z, y: box.minY * z, width: box.width * z, height: box.height * z)
     l.contentsScale = scale
     canvas.traitCollection.performAsCurrent { l.contents = drawing.image(from: box, scale: z * scale).cgImage }
@@ -342,7 +343,9 @@ extension NoteCanvas.Coordinator {
         loading = false
       }
     }
-    restoreLifted(redraw: !changes)
+    // Where it was, and whether the page shows it there again already (nothing changed).
+    let from = lasso.bounds
+    var pageShows = restoreLifted(redraw: !changes)
     endSnap()
     // nil leaves the menu as it was; an edit keeps it away for a moment; a tap brings it back.
     var menu: Bool?
@@ -372,7 +375,13 @@ extension NoteCanvas.Coordinator {
     }
     inkBase = nil
     restack()
-    dropShapes()
+    if changes {
+      // The page as it is now, where it was and where it is, shown at once (its tiles follow).
+      let to = pickedItems.reduce(nil) { joined($0, CGRect($1.bounds)) }
+      let old = coverPage(from), new = coverPage(to)
+      pageShows = old && new
+    }
+    dropShapes(pageShows: pageShows)
     setSelection(lasso.picked, menu: menu)
   }
 

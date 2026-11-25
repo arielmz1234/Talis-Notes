@@ -86,6 +86,8 @@ struct HoldState {
   /// PencilKit strokes begun after this are the one that became a shape: dropped if they arrive.
   var dropSince: Date?
   var began = Date()
+  /// The shape last kept already shows on the page (see `coverPage`): its live copy can go at once.
+  var pageShows = false
   let layer = CAShapeLayer()
   /// Circle to select: the last stroke when it was a loop round something, and the press on it.
   var circle: CircleLoop?
@@ -187,10 +189,14 @@ extension NoteCanvas.Coordinator {
         hold.layer.path = nil
       } else {
         pickUpShape(addShape(shape), soft: true)
-        // The live shape stays until the page's tiles have drawn the kept one, so it doesn't blink.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-          guard let self, self.hold.live == nil else { return }
-          self.hold.layer.path = nil
+        if hold.pageShows {
+          hold.layer.path = nil
+        } else {
+          // The live shape stays until the page's tiles have drawn the kept one, so it doesn't blink.
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, self.hold.live == nil else { return }
+            self.hold.layer.path = nil
+          }
         }
       }
     } else if !cancelled {
@@ -349,6 +355,7 @@ extension NoteCanvas.Coordinator {
     touch()
     // Only where it is: redrawing every tile blanked the page around it for a moment.
     redrawPage(s.geometry.bounds(s.size).map { CGRect($0) })
+    hold.pageShows = coverPage(s.geometry.bounds(s.size).map { CGRect($0) })
     reportUndo()
   }
 
