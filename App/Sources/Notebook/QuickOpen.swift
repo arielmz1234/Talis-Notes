@@ -23,8 +23,12 @@ struct QuickOpen: View {
 
   var body: some View {
     FloatingBar(crown: .littleTwin) {
-      ToolIcon(system: "clock.arrow.circlepath", label: L("recent_notebooks")) { open = true }
-        .accessibilityIdentifier("quick-open")
+      Button { open = true } label: {
+        RecentNotebookIcon(color: c.ink).frame(width: 44, height: 44).contentShape(Rectangle())
+      }
+      .buttonStyle(PressStyle(scale: 0.9))
+      .accessibilityLabel(L("recent_notebooks"))
+      .accessibilityIdentifier("quick-open")
     }
     .popover(isPresented: $open, arrowEdge: .top) {
       VStack(alignment: .leading, spacing: 0) {
@@ -94,5 +98,40 @@ private struct QuickOpenRow: View {
     .onAppear {
       withAnimation(Ease.outStrong(duration: 0.24).delay(Double(min(order, 6)) * 0.03)) { shown = true }
     }
+  }
+}
+
+/// A notebook with a clock beside it (Android's `TaliIcons.RecentNotebook`), on its 24-unit grid with
+/// the same 1.8 stroke and round ends.
+struct RecentNotebookIcon: View {
+  var color: Color
+  var size: CGFloat = 22
+
+  var body: some View {
+    Canvas { ctx, canvasSize in
+      let k = canvasSize.width / 24
+      func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+      var p = Path()
+      // The notebook: its outline with rounded corners, open at the bottom right where the clock sits.
+      p.move(to: pt(10.4, 19))
+      p.addLine(to: pt(5, 19))
+      p.addArc(center: pt(5, 17.5), radius: 1.5 * k, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+      p.addLine(to: pt(3.5, 4))
+      p.addArc(center: pt(5, 4), radius: 1.5 * k, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+      p.addLine(to: pt(13, 2.5))
+      p.addArc(center: pt(13, 4), radius: 1.5 * k, startAngle: .degrees(270), endAngle: .degrees(360), clockwise: false)
+      p.addLine(to: pt(14.5, 10.9))
+      // Its spine and two lines of writing.
+      p.move(to: pt(6.6, 2.5)); p.addLine(to: pt(6.6, 19))
+      p.move(to: pt(9, 6.6)); p.addLine(to: pt(11.9, 6.6))
+      p.move(to: pt(9, 9.6)); p.addLine(to: pt(11, 9.6))
+      // The clock: most of a circle round (17, 17) with an arrowhead at its start, and its hands.
+      p.move(to: pt(12.47, 14.89))
+      p.addArc(center: pt(17, 17), radius: 5 * k, startAngle: .degrees(205), endAngle: .degrees(155), clockwise: false)
+      p.move(to: pt(14.35, 14.21)); p.addLine(to: pt(12.47, 14.89)); p.addLine(to: pt(11.79, 13.01))
+      p.move(to: pt(17, 14.6)); p.addLine(to: pt(17, 17)); p.addLine(to: pt(18.7, 18.1))
+      ctx.stroke(p, with: .color(color), style: StrokeStyle(lineWidth: 1.8 * k, lineCap: .round, lineJoin: .round))
+    }
+    .frame(width: size, height: size)
   }
 }

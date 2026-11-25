@@ -67,15 +67,20 @@ The list:
 - **A page being moved leaves the finger** (pages overview): the carried pages float at the finger
   (`PagesOverview.floating`) instead of being their grid tiles pushed over.
 - **The notebook's name under the bar**: e9ec94c keeps it beside the tools while it gets 110 pt
-  (`TopBarLayout.nameMin`). On an 11-inch iPad on its side that isn't left, so `topRowScale` draws
-  the row smaller (never under 0.86) just enough to leave it `nameMin`; it does nothing where
-  e9ec94c's rule already works. `ScreenshotTests.testNotebookNameOnTheToolbarRow` shoots it both
-  ways (`-noTopRowScale`) on CI's 11-inch iPad (`ipad11` job).
+  (`TopBarLayout.nameMin`). On an 11-inch iPad on its side that isn't left (CI's iPad Air 11: the
+  name went under the bar, and at 110 pt it showed as "New n…"). The owner's Android pictures show
+  the whole name in the row, so `topRowScale` draws the row just small enough for the whole name
+  (measured with a hidden copy of the name bar; never under 0.86); it does nothing where it fits.
+  `ScreenshotTests.testNotebookNameOnTheToolbarRow` shoots it both ways (`-noTopRowScale`) on CI's
+  11-inch iPad (`ipad11` job). The quick-open button has Android's icon (`RecentNotebookIcon`, a
+  port of `TaliIcons.RecentNotebook`). Android's pictures had 2 pens and 5 colours: that tablet's
+  own settings; both apps start with the same 4 pens and 3 toolbar colours.
 - **Lasso makes text far too big**: not found. The iPad uses Android's rule exactly (scale = the
-  corner's distance from the top-left corner, then `TextRow.transformed` = `TextItem.transformed`,
-  font times the scale; same chip offsets). `SelectingTests.testTypedTextInTheLasso` now measures
-  the growth for a 1.15 drag and fails above 1.3. If it passes on CI, the owner's case is something
-  else (handwriting, a box from the phone, several things at once): ask for a recording.
+  corner's distance from the top-left corner; `TextRow.transformed` = `TextItem.transformed`,
+  `InkStroke.transformed` = `StrokeFactory.transform`; same chip offsets). The owner's Android video
+  shows handwriting resized with the box's corner following the finger. On CI's iPad Air 11,
+  `testTypedTextInTheLasso` grew text by less than 1.3 for a 1.15 drag (passed). Needs a recording
+  from the iPad.
 
 ## Curve with add dots, lines lock within 3° (25 Nov 2026, Windows)
 
