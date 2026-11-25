@@ -46,11 +46,17 @@ data class LineShape(
   val arrowEnd: Boolean = false,
   /** A dimension line: short marks across each end (with arrows both ways), like on a drawing. */
   val ticks: Boolean = false,
+  /**
+   * How long its arrowheads' barbs are, and how far each opens from the line (radians), when they
+   * follow a head she drew (*Auto arrow*); 0 = the usual head ([arrowHead]).
+   */
+  val head: Float = 0f,
+  val spread: Float = 0f,
 ) : ShapeGeometry {
   override fun paths(penSize: Float): List<List<Pt>> {
     val out = mutableListOf(listOf(a, b))
-    if (arrowEnd) out += arrowHead(a, b, penSize)
-    if (arrowStart) out += arrowHead(b, a, penSize)
+    if (arrowEnd) out += arrowHead(a, b, penSize, head = head, spread = spread)
+    if (arrowStart) out += arrowHead(b, a, penSize, head = head, spread = spread)
     if (ticks) {
       val dir = (b - a).normalized()
       if (dir != Pt.ZERO) {
@@ -62,7 +68,7 @@ data class LineShape(
     return out
   }
 
-  override fun transformed(m: Affine) = copy(a = m.apply(a), b = m.apply(b))
+  override fun transformed(m: Affine) = copy(a = m.apply(a), b = m.apply(b), head = head * m.scaleFactor())
 
   override fun handles() = listOf(a, b)
 
@@ -670,15 +676,19 @@ internal fun positiveTurn(a: Float): Float {
 fun arrowHeadLength(penSize: Float, room: Float): Float = min(max(20f, penSize * 7f), room * 0.4f)
 
 /** Two short barbs at [tip], pointing back toward [from]. [room] is the length of what it heads. */
-fun arrowHead(from: Pt, tip: Pt, penSize: Float, room: Float = from.dist(tip)): List<List<Pt>> {
+fun arrowHead(from: Pt, tip: Pt, penSize: Float, room: Float = from.dist(tip), head: Float = 0f, spread: Float = 0f): List<List<Pt>> {
   val dir = (tip - from).normalized()
   if (dir == Pt.ZERO) return emptyList()
   // A clear head, like a hand-drawn arrow's: about 3 mm or 7 pen widths, whichever is bigger,
-  // opening at 30° each side (it used to be small enough to get lost on a thin pen).
-  val len = arrowHeadLength(penSize, room)
+  // opening at 30° each side (it used to be small enough to get lost on a thin pen). A head made
+  // from hers ([head], [spread]) is as big as she drew it (never smaller than the usual head, at
+  // most 60% of the line) and opens as wide.
+  val usual = arrowHeadLength(penSize, room)
+  val len = if (head > 0f) max(usual, min(head, room * 0.6f)) else usual
+  val open = if (spread > 0f) spread else 0.52f
   val back = dir * -len
-  val left = tip + back.rotated(0.52f)
-  val right = tip + back.rotated(-0.52f)
+  val left = tip + back.rotated(open)
+  val right = tip + back.rotated(-open)
   return listOf(listOf(left, tip, right))
 }
 

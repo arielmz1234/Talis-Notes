@@ -20,6 +20,9 @@ object AutoArrow {
   /** The head's barbs leave the tip between these angles from the shaft. */
   private val BARB_MIN = cos(Math.toRadians(10.0)).toFloat()
   private val BARB_MAX = cos(Math.toRadians(80.0)).toFloat()
+  /** A drawn head's opening is kept between these (each side, from the line). */
+  private val SPREAD_MIN = Math.toRadians(18.0).toFloat()
+  private val SPREAD_MAX = Math.toRadians(50.0).toFloat()
 
   /** A straight stroke, which a head drawn next can make into an arrow: its two ends, or null. */
   fun straight(raw: List<Pt>): Pair<Pt, Pt>? {
@@ -77,15 +80,17 @@ object AutoArrow {
     val width = across(left) - across(right)
     val box = Rect.around(head) ?: return null
     // A head's size: not a speck, and not a second shape as big as the shaft.
-    if (width < max(10f, 0.08f * shaft) || max(box.width, box.height) > 0.75f * shaft) return null
+    if (width < max(10f, 0.05f * shaft) || max(box.width, box.height) > 0.75f * shaft) return null
     // One barb on either side of the shaft, the tip on its line.
     if (across(left) < 0.2f * width || across(right) > -0.2f * width) return null
     if (kotlin.math.abs(across(tip)) > 0.3f * width) return null
     // Both barbs run back from the tip, neither straight back nor square to the shaft.
     val back = Pt(-u.x, -u.y)
+    var opens = 0f
     for (side in listOf(left, right)) {
       val c = back.dot((side - tip).normalized())
       if (c > BARB_MIN || c < BARB_MAX) return null
+      opens += kotlin.math.acos(c.coerceIn(-1f, 1f))
     }
     // The shaft ends on the head's axis: at its tip, its base, or anywhere between.
     val base = (left + right) / 2f
@@ -95,7 +100,11 @@ object AutoArrow {
     val edges = listOf(tip to left, tip to right, left to right, end to tip)
     if (head.any { p -> edges.none { (x, y) -> Geo.distToSegment(p, x, y) < tol } }) return null
     val point = end + u * along(tip)
-    return com.tali.notes.geometry.ShapeRecognizer.snappedLine(start, point, arrowEnd = true)
+    // The clean head is the size she drew hers, opening as wide (within reason), so arrows differ
+    // as hers do instead of all wearing one head.
+    val barbs = (left.dist(tip) + right.dist(tip)) / 2f
+    val spread = (opens / 2f).coerceIn(SPREAD_MIN, SPREAD_MAX)
+    return ShapeRecognizer.snappedLine(start, point, arrowEnd = true).copy(head = barbs, spread = spread)
   }
 
   private fun dedupe(points: List<Pt>): List<Pt> {

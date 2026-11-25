@@ -476,8 +476,11 @@ fun ShapesPanel(settings: AppSettings, current: ShapeKind, vm: NotebookViewModel
     if (styling) {
       ShapeStylePicker(settings, vm)
     } else {
+      // Auto arrow first, where she picks shapes (the owner's call); off at first.
+      Spacer(Modifier.height(6.dp))
+      ToggleRow(stringResource(R.string.auto_arrow), settings.autoArrow, vm::setAutoArrow, detail = stringResource(R.string.auto_arrow_detail))
       // The standard shapes, then the subjects she starred, then hers; every subject is under More shapes.
-      Spacer(Modifier.height(12.dp))
+      Spacer(Modifier.height(6.dp))
       SectionLabel(stringResource(ShapeGroup.BASIC.nameRes))
       Spacer(Modifier.height(8.dp))
       FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -641,7 +644,6 @@ private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
       Spacer(Modifier.height(8.dp))
       ToggleRow(stringResource(R.string.snap_to_other_shapes), settings.snapShapes, vm::setSnapShapes, detail = stringResource(R.string.ends_and_edges_lock_on_shapes))
       ToggleRow(stringResource(R.string.hold_to_perfect_shapes), settings.holdToShape, vm::setHoldToShape, detail = stringResource(R.string.pause_at_the_end_of_a))
-      ToggleRow(stringResource(R.string.auto_arrow), settings.autoArrow, vm::setAutoArrow, detail = stringResource(R.string.auto_arrow_detail))
     }
   }
 }

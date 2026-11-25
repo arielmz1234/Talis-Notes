@@ -99,4 +99,26 @@ class AutoArrowTest {
   @Test fun aWobblyLineIsNotAShaft() {
     assertNull(AutoArrow.straight(drawn(Pt(0f, 0f), Pt(60f, 30f), Pt(120f, 0f), Pt(200f, 30f))))
   }
+
+  @Test fun theCleanHeadIsTheSizeAndOpeningOfTheDrawnOne() {
+    val line = drawn(Pt(0f, 0f), Pt(300f, 0f))
+    val (a, b) = AutoArrow.straight(line)!!
+    // A small, narrow head and a big, wide one: barbs about 22 and 60 long.
+    val small = AutoArrow.twoStrokes(a, b, drawn(Pt(280f, -8f), Pt(301f, 0f), Pt(280f, 8f)))!!
+    val big = AutoArrow.twoStrokes(a, b, drawn(Pt(255f, -40f), Pt(301f, 0f), Pt(255f, 40f)))!!
+    assertEquals(22.5f, small.head, 3f)
+    assertEquals(61f, big.head, 4f)
+    assertTrue(big.spread > small.spread + 0.25f)
+    // Drawn that way: the barbs end where hers did.
+    val barb = big.paths(2f)[1]
+    assertEquals(255f, barb.first().x, 5f)
+    assertEquals(40f, kotlin.math.abs(barb.first().y), 5f)
+    // Resized, the head grows with it.
+    val doubled = big.transformed(Affine.scaleAround(Pt(0f, 0f), 2f)) as LineShape
+    assertEquals(big.head * 2f, doubled.head, 0.5f)
+    // A tiny drawn head still gets at least the usual head (20 long).
+    val tiny = AutoArrow.twoStrokes(a, b, drawn(Pt(290f, -9f), Pt(301f, 0f), Pt(290f, 9f)))!!
+    val tip = tiny.paths(2f)[1][1]
+    assertTrue(tiny.paths(2f)[1].first().dist(tip) >= 19.9f)
+  }
 }
