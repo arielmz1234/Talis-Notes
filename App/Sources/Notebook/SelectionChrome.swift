@@ -24,6 +24,41 @@ struct SelectionChrome {
     frame == nil && outline.isEmpty && resizeChip == nil && moveChip == nil && rotate == nil && dots.isEmpty && addDots.isEmpty && badges.isEmpty && angle == nil && hints.isEmpty
       && guides.isEmpty
   }
+
+  /// The box round everything it draws, in the canvas's own coordinates; nil when there's nothing.
+  @MainActor var extent: CGRect? {
+    var box = CGRect.null
+    func add(_ p: CGPoint, _ r: CGFloat) { box = box.union(CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)) }
+    func addBadge(_ b: Measure.Badge) {
+      let w = CGFloat(SelectionChromeView.badgeWidth(b.label)) + 12, h = CGFloat(Measure.badgeHeight) + 6
+      box = box.union(CGRect(x: CGFloat(b.at.x) - w / 2, y: CGFloat(b.at.y) - h / 2, width: w, height: h))
+    }
+    if let frame { box = box.union(frame) }
+    for p in outline { add(p, 2) }
+    if let p = resizeChip { add(p, 16) }
+    if let p = moveChip { add(p, 16) }
+    if let r = rotate {
+      add(r.at, 10)
+      add(CGPoint(x: r.at.x, y: r.stemFrom), 2)
+    }
+    for d in dots + addDots { add(d, dotRadius + 4) }
+    for b in badges { addBadge(b) }
+    if let angle { addBadge(angle) }
+    for h in hints {
+      add(h.from, 5)
+      add(h.to, 5)
+    }
+    for g in guides {
+      switch g {
+      case let .align(vertical, at, from, to):
+        let a = CGFloat(at) * zoom, lo = CGFloat(from) * zoom - 16, hi = CGFloat(to) * zoom + 16
+        add(vertical ? CGPoint(x: a, y: lo) : CGPoint(x: lo, y: a), 2)
+        add(vertical ? CGPoint(x: a, y: hi) : CGPoint(x: hi, y: a), 2)
+      case let .touch(p): add(CGPoint(x: CGFloat(p.x) * zoom, y: CGFloat(p.y) * zoom), 6)
+      }
+    }
+    return box.isNull ? nil : box
+  }
 }
 
 final class SelectionChromeView: UIView {
@@ -42,6 +77,7 @@ final class SelectionChromeView: UIView {
     backgroundColor = .clear
     isUserInteractionEnabled = false
     isHidden = true
+    contentMode = .redraw
     layer.zPosition = 11
   }
 
@@ -53,11 +89,18 @@ final class SelectionChromeView: UIView {
 
   func show(_ chrome: SelectionChrome, over canvas: UIScrollView) {
     self.chrome = chrome
-    isHidden = chrome.isEmpty
+    // Only as big as what it draws (and no bigger than the screen), in the canvas's own
+    // coordinates: it's redrawn at every step of a drag, and redrawing a view the size of the
+    // screen each time made carrying things choppy.
+    let seen = canvas.bounds.insetBy(dx: -32, dy: -32)
+    let area = (chrome.extent?.insetBy(dx: -8, dy: -8).intersection(seen) ?? .null).integral
+    isHidden = chrome.isEmpty || area.isNull || area.isEmpty
     guard !isHidden else { return }
-    // Over what's on screen, in the canvas's own coordinates.
-    frame = canvas.bounds
-    bounds.origin = canvas.bounds.origin
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    frame = area
+    bounds.origin = area.origin
+    CATransaction.commit()
     setNeedsDisplay()
   }
 
