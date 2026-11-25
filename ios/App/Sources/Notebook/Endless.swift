@@ -35,50 +35,73 @@ extension NoteCanvas.Coordinator {
 
   var leastZoom: CGFloat { paged ? Self.pagesLeastZoom : Self.endlessLeastZoom }
 
-  /// A pinch begins on an endless canvas: where resistance begins for it (where everything written
-  /// fits), and where it's measured from.
-  func pinchBegan(_ sv: UIScrollView) {
-    pinchStart = nil
-    guard !paged, let spread = fingerSpread(sv) else { return }
-    let room = (width: Float(sv.bounds.width - 32), height: Float(sv.bounds.height - parent.topClearance - 40))
-    let free = ZoomResist.freeAt(ZoomResist.free(content: contentBounds, room: room), zoomNow: Float(sv.zoomScale))
-    pinchStart = (spread, sv.zoomScale, CGFloat(free), sv.pinchGestureRecognizer?.numberOfTouches ?? 0)
+  /// On an endless canvas the notebook zooms itself (Android's camera): the scroll view's own pinch
+  /// is off and this one sets the zoom and the place. Changing the zoom from inside the scroll view's
+  /// pinch fought it: a small pinch out jumped down and to the right, to 24%, and her writing was
+  /// gone (the owner's video, 25 Nov 2026). Pages keep the scroll view's pinch.
+  func installEndlessPinch(on v: UIScrollView) {
+    let pinch = UIPinchGestureRecognizer(target: self, action: #selector(endlessPinched(_:)))
+    pinch.delegate = self
+    pinch.cancelsTouchesInView = false
+    v.addGestureRecognizer(pinch)
+    endlessPinch.recognizer = pinch
+    applyPinchMode()
   }
 
-  /// How far apart the pinching fingers are, or nil without two.
-  private func fingerSpread(_ sv: UIScrollView) -> CGFloat? {
-    guard let pinch = sv.pinchGestureRecognizer, pinch.numberOfTouches >= 2 else { return nil }
-    let a = pinch.location(ofTouch: 0, in: sv), b = pinch.location(ofTouch: 1, in: sv)
-    let spread = hypot(a.x - b.x, a.y - b.y)
-    return spread > 10 ? spread : nil
+  /// Which pinch zooms: the scroll view's for pages, this one for an endless canvas.
+  func applyPinchMode() {
+    guard let canvas else { return }
+    canvas.pinchGestureRecognizer?.isEnabled = paged
+    endlessPinch.recognizer?.isEnabled = !paged
+    canvas.minimumZoomScale = leastZoom
   }
 
-  /// During a pinch on an endless canvas (Android 1.0.34's `PinchResist`): out, the zoom carries on
-  /// along the resistance; in, it follows the fingers (`ZoomResist.pinched`), measured from how far
-  /// apart they are against where the pinch was taken from, so it doesn't matter how the scroll view
-  /// works its own zoom out. The page under the fingers' middle stays where it is. A finger lifting or
-  /// landing, or the zoom held at its closest, starts the measure again from here, so nothing jumps.
-  /// True when it set the zoom itself (the scroll view's own update is then replaced).
-  func resistZoom(_ sv: UIScrollView) -> Bool {
-    guard !paged, !resisting, let start = pinchStart, let pinch = sv.pinchGestureRecognizer, let spread = fingerSpread(sv) else { return false }
-    let now = sv.zoomScale
-    if pinch.numberOfTouches != start.touches {
-      pinchStart = (spread, now, start.free, pinch.numberOfTouches)
-      return false
+  /// The pinch on an endless canvas (Android's `PinchResist` with its own camera). Out, the zoom
+  /// carries on along the resistance; in, it follows the fingers (`ZoomResist.pinched`), measured from
+  /// how far apart they are against where it was last taken from. The page under the fingers' middle
+  /// stays under it, so moving the fingers together moves the page too. A finger lifting or landing,
+  /// or the zoom held at its closest, takes the measure again from there, so nothing jumps.
+  @objc func endlessPinched(_ g: UIPinchGestureRecognizer) {
+    guard let canvas, !paged else { return }
+    switch g.state {
+    case .began:
+      // The scroll view's own drag lets go: this pinch moves the page itself.
+      canvas.panGestureRecognizer.isEnabled = false
+      canvas.panGestureRecognizer.isEnabled = true
+      zoomedByHand = true
+      let room = (width: Float(canvas.bounds.width - 32), height: Float(canvas.bounds.height - parent.topClearance - 40))
+      endlessPinch.free = CGFloat(ZoomResist.freeAt(ZoomResist.free(content: contentBounds, room: room), zoomNow: Float(canvas.zoomScale)))
+      anchorPinch(g)
+    case .changed:
+      guard g.numberOfTouches >= 2 else { return }
+      if g.numberOfTouches != endlessPinch.touches { return anchorPinch(g) }
+      let ratio = g.scale / max(endlessPinch.scale, 0.0001)
+      let asked = CGFloat(ZoomResist.pinched(startZoom: Float(endlessPinch.zoom), free: Float(endlessPinch.free), ratio: Float(ratio)))
+      let want = min(max(asked, canvas.minimumZoomScale), canvas.maximumZoomScale)
+      let mid = g.location(in: canvas)
+      let onScreen = CGPoint(x: mid.x - canvas.contentOffset.x, y: mid.y - canvas.contentOffset.y)
+      if abs(canvas.zoomScale - want) > want * 0.0002 { canvas.setZoomScale(want, animated: false) }
+      let focus = endlessPinch.focus
+      canvas.contentOffset = CGPoint(x: focus.x * want - onScreen.x, y: focus.y * want - onScreen.y)
+      // Held at the closest zoom (or the floor): carry on from there, so pinching back acts at once.
+      if abs(want - asked) > asked * 1e-3 { anchorPinch(g) }
+    case .ended, .cancelled, .failed:
+      updateContent()
+      makeRoom()
+    default: break
     }
-    let asked = CGFloat(ZoomResist.pinched(startZoom: Float(start.zoom), free: Float(start.free), ratio: Float(spread / start.spread)))
-    let want = min(max(asked, sv.minimumZoomScale), sv.maximumZoomScale)
-    // Held at the closest zoom (or the floor): carry on from there, so pinching back acts at once.
-    if abs(want - asked) > asked * 1e-3 { pinchStart = (spread, want, start.free, start.touches) }
-    guard now > 0, abs(want - now) > now * 0.0005 else { return false }
-    let mid = pinch.location(in: sv)
-    let onScreen = CGPoint(x: mid.x - sv.contentOffset.x, y: mid.y - sv.contentOffset.y)
-    let world = CGPoint(x: mid.x / now, y: mid.y / now)
-    resisting = true
-    sv.zoomScale = want
-    sv.contentOffset = CGPoint(x: world.x * want - onScreen.x, y: world.y * want - onScreen.y)
-    resisting = false
-    return true
+  }
+
+  /// Takes the pinch's measure from here: the zoom now, the fingers' scale and count, and the point
+  /// of the page under their middle.
+  private func anchorPinch(_ g: UIPinchGestureRecognizer) {
+    guard let canvas else { return }
+    let z = max(canvas.zoomScale, 0.0001)
+    let mid = g.location(in: canvas)
+    endlessPinch.zoom = z
+    endlessPinch.scale = g.scale
+    endlessPinch.touches = g.numberOfTouches
+    endlessPinch.focus = CGPoint(x: mid.x / z, y: mid.y / z)
   }
 
   /// How much room an endless canvas keeps round the writing on every side (world units): it's
@@ -191,4 +214,15 @@ extension NoteCanvas.Coordinator {
     updateContent()
     canvas.setContentOffset(CGPoint(x: r.minX * fit - (canvas.bounds.width - r.width * fit) / 2, y: r.minY * fit - canvas.contentInset.top), animated: true)
   }
+}
+
+/// The endless canvas's pinch: the recogniser, where resistance begins, and the measure it's taken
+/// from (the zoom, the fingers' scale and count, the page's point under their middle).
+struct EndlessPinchState {
+  var recognizer: UIPinchGestureRecognizer?
+  var free: CGFloat = 1
+  var zoom: CGFloat = 1
+  var scale: CGFloat = 1
+  var touches = 0
+  var focus = CGPoint.zero
 }

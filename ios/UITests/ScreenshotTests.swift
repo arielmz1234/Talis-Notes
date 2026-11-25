@@ -153,31 +153,30 @@ final class ScreenshotTests: ShotCase {
     shot("s19-text-resized")
   }
 
-  /// The notebook's name on the toolbar row, as on Android (an 11-inch iPad on its side has the
-  /// least room). Shot as the app draws it, then without the row drawn smaller (`-noTopRowScale`),
-  /// to compare the two; only the first must keep the name in the row.
+  /// The notebook's name on the toolbar row, as on Android: beside the tools, shortened when the
+  /// row is short, never under the bar (an 11-inch iPad on its side has the least room).
   func testNotebookNameOnTheToolbarRow() {
     continueAfterFailure = true
     guard UIDevice.current.userInterfaceIdiom == .pad else { return }
     XCUIDevice.shared.orientation = .landscapeLeft
-    for (extra, name) in [([String](), "n1-name-row"), (["-noTopRowScale"], "n2-name-row-unscaled")] {
-      let app = launch(extra)
-      settle()
-      app.buttons["add"].firstMatch.tap()
-      settle()
-      if app.buttons["add-notebook"].firstMatch.waitForExistence(timeout: 3) { app.buttons["add-notebook"].firstMatch.tap() }
-      XCTAssertTrue(app.buttons["create"].firstMatch.waitForExistence(timeout: 4))
-      app.buttons["create"].firstMatch.tap()
-      settle()
-      shot(name)
-      let title = app.descendants(matching: .any)["notebook-title"].firstMatch
-      let pen = app.descendants(matching: .any)["pen-p1"].firstMatch
-      XCTAssertTrue(title.waitForExistence(timeout: 3), "the name shows")
-      let beside = title.frame.midY < pen.frame.maxY && title.frame.minX > pen.frame.maxX
-      print("name row \(name): name \(title.frame) pen \(pen.frame) window \(app.windows.firstMatch.frame) beside \(beside)")
-      if extra.isEmpty { XCTAssertTrue(beside, "the name sits on the toolbar row") }
-      app.terminate()
-    }
+    let app = launch()
+    settle()
+    app.buttons["add"].firstMatch.tap()
+    settle()
+    if app.buttons["add-notebook"].firstMatch.waitForExistence(timeout: 3) { app.buttons["add-notebook"].firstMatch.tap() }
+    XCTAssertTrue(app.buttons["create"].firstMatch.waitForExistence(timeout: 4))
+    app.buttons["create"].firstMatch.tap()
+    settle()
+    shot("n1-name-row")
+    let title = app.descendants(matching: .any)["notebook-title"].firstMatch
+    let pen = app.descendants(matching: .any)["pen-p1"].firstMatch
+    XCTAssertTrue(title.waitForExistence(timeout: 3), "the name shows")
+    print("name row: name \(title.frame) pen \(pen.frame) window \(app.windows.firstMatch.frame)")
+    XCTAssertTrue(title.frame.midY < pen.frame.maxY && title.frame.minX > pen.frame.maxX, "the name sits on the toolbar row")
+    // With another tool the pen's colours leave the toolbar, and the name gets their room.
+    tapTool(app, "tool-lasso")
+    settle()
+    shot("n2-name-row-lasso")
   }
 
   func testLibraryAndNotebook() {

@@ -252,30 +252,55 @@ extension NoteCanvas.Coordinator {
   /// It's carried whole, as Android draws a selection being dragged: what its page hid of it (Write
   /// between pages off) shows while it moves, and once it's put down it's drawn only as far as the
   /// page it now starts on (its points are all kept, so moved onto the page it shows in full).
+  ///
+  /// See-through ink (the highlighter) shows in the overlay only once the canvas has drawn the page
+  /// without it: until then the canvas still shows it where it was, and the two copies on top of each
+  /// other looked darker for a moment, so the highlighter flashed at every pick-up (the owner's video,
+  /// 25 Nov 2026). Solid ink shows at once: two copies of it look like one.
   private func liftInk() {
     guard let canvas, let before = lasso.before else { return }
-    var up: [PKStroke] = [], left: [PKStroke] = []
+    var solid: [PKStroke] = [], seeThrough: [PKStroke] = [], left: [PKStroke] = []
     for (i, s) in before.strokes.enumerated() {
-      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(stored[i].stroke.pkStroke(mask: nil)) } else { left.append(s) }
+      guard i < stored.count, lasso.picked.contains(stored[i].stroke.id) else {
+        left.append(s)
+        continue
+      }
+      let ink = stored[i].stroke
+      if ink.seeThrough { seeThrough.append(ink.pkStroke(mask: nil)) } else { solid.append(ink.pkStroke(mask: nil)) }
     }
-    guard !up.isEmpty else { return }
+    guard !solid.isEmpty || !seeThrough.isEmpty else { return }
     let z = canvas.zoomScale
     let scale = canvas.traitCollection.displayScale
-    let drawing = PKDrawing(strokes: up)
-    let box = drawing.bounds.insetBy(dx: -2, dy: -2)
-    let l = CALayer()
-    l.name = Self.carriedInk
-    l.frame = CGRect(x: box.minX * z, y: box.minY * z, width: box.width * z, height: box.height * z)
-    l.contentsScale = scale
-    canvas.traitCollection.performAsCurrent { l.contents = drawing.image(from: box, scale: z * scale).cgImage }
+    func layer(_ strokes: [PKStroke]) -> CALayer? {
+      guard !strokes.isEmpty else { return nil }
+      let drawing = PKDrawing(strokes: strokes)
+      let box = drawing.bounds.insetBy(dx: -2, dy: -2)
+      let l = CALayer()
+      l.name = Self.carriedInk
+      l.frame = CGRect(x: box.minX * z, y: box.minY * z, width: box.width * z, height: box.height * z)
+      l.contentsScale = scale
+      canvas.traitCollection.performAsCurrent { l.contents = drawing.image(from: box, scale: z * scale).cgImage }
+      return l
+    }
+    // The highlighter goes under the writing in the overlay too, as it does on the page.
+    let behind = layer(seeThrough), front = layer(solid)
+    behind?.opacity = 0
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    lasso.shapeLayer.addSublayer(l)
+    for l in [behind, front].compactMap({ $0 }) { lasso.shapeLayer.addSublayer(l) }
     CATransaction.commit()
     lasso.overlayTicket += 1
     loading = true
     setDrawing(PKDrawing(strokes: left))
     loading = false
+    if let behind {
+      afterRender {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        behind.opacity = 1
+        CATransaction.commit()
+      }
+    }
   }
 
   func continueDrag(to p: Pt) {

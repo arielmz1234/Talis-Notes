@@ -437,6 +437,20 @@ final class SelectingTests: ShotCase {
     let smaller = selectionFrame(app)
     XCTAssertLessThan(smaller.width, f.width * 0.85, "resized from the corner")
     calmShot("i2-moved-and-resized")
+    // A line written across the picture shows over it; brought to the front, the picture covers it
+    // (the owner: pictures didn't react to Bring to front). The test picture has no black in it.
+    app.buttons["pen-p1"].firstMatch.tap()
+    settle()
+    let lineY = smaller.minY + smaller.height * 0.25
+    drag(app, CGPoint(x: smaller.minX - 40, y: lineY), CGPoint(x: smaller.maxX + 40, y: lineY))
+    let rows = ((lineY - 5) / window.height)...((lineY + 5) / window.height)
+    func inkOnPicture() -> Int {
+      Pixels().count(rows: rows, from: (smaller.minX + 14) / window.width, to: (smaller.maxX - 14) / window.width) { $0.r < 90 && $0.g < 90 && $0.b < 110 }
+    }
+    XCTAssertGreaterThan(inkOnPicture(), 0, "the line shows over the picture")
+    lasso(app)
+    point(app, CGPoint(x: smaller.midX, y: smaller.maxY - smaller.height * 0.2)).tap()
+    XCTAssertTrue(app.buttons["selection-crop"].waitForExistence(timeout: 3), "the picture is picked up again")
     openMore(app)
     XCTAssertFalse(app.buttons["selection-colour"].exists, "a picture has no colour or thickness to change")
     XCTAssertFalse(app.buttons["selection-thickness"].exists)
@@ -445,6 +459,12 @@ final class SelectingTests: ShotCase {
     Thread.sleep(forTimeInterval: 0.6)
     shot("i3-brought-to-the-front")
     settle()
+    XCTAssertEqual(inkOnPicture(), 0, "brought to the front, the picture covers the line")
+    if !app.buttons["selection-back"].exists { openMore(app) }
+    menuButton(app, "selection-back").tap()
+    settle()
+    XCTAssertGreaterThan(inkOnPicture(), 0, "sent to the back, the line shows over it again")
+    shot("i3b-sent-to-the-back")
     // A loop drawn wholly inside a picture leaves it; one across its edge picks it up.
     lasso(app)
     at(app, 0.5, 0.88).tap()

@@ -82,6 +82,10 @@ struct InkStroke {
 
   var square: Bool { tags.contains("SQUARE") }
 
+  /// Drawn see-through (the highlighter, or a colour with some transparency): two copies of it on top
+  /// of each other show darker.
+  var seeThrough: Bool { pen.isHighlighter || UInt32(bitPattern: color) >> 24 < 0xFF }
+
   /// The same stroke [size] thick in [line] style (Android's `InkItem.restyled`): the old dashed
   /// pen's strokes become fineliner strokes in that line, and a highlighter stays solid.
   func restyled(size: Float, line: LineStyle) -> InkStroke {
@@ -126,18 +130,24 @@ struct InkStroke {
     }
     let ink = PKInk(pen.ink, color: UIColor(argb: color))
     let start = Date(timeIntervalSinceReferenceDate: 0)
-    // Built like PencilKit's own live points for this ink (see InkWidth).
     let style = InkWidth.pointStyle(pen.ink)
-    let w = CGFloat(size) * style.perSize
     let points = inputs.points.map { p -> PKStrokePoint in
       let pressure = CGFloat(p.pressure ?? 0.5)
-      let width = pen.pressureSensitive ? w * (0.55 + 0.9 * pressure) : w
+      // Each point given the size that makes PencilKit draw it as wide as the pen (Android's brush
+      // size), so a stroke made bigger or smaller is drawn in proportion (see InkWidth.pointSize).
+      let width = InkWidth.pointSize(drawing: drawnWidth(pressure), pen.ink)
       let tilt = CGFloat(p.tilt ?? 0)
       return PKStrokePoint(
         location: CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)), timeOffset: TimeInterval(p.t), size: CGSize(width: width, height: width),
         opacity: 1, force: force(pressure), azimuth: CGFloat(p.orientation ?? 0), altitude: .pi / 2 - tilt, secondaryScale: style.secondary)
     }
     return PKStroke(ink: ink, path: PKStrokePath(controlPoints: points, creationDate: start), transform: .identity, mask: mask)
+  }
+
+  /// How wide the stroke is drawn where the pen's pressure was [pressure]: the pen's size, and for
+  /// pens that respond to pressure from 0.55 to 1.45 times it.
+  func drawnWidth(_ pressure: CGFloat) -> CGFloat {
+    pen.pressureSensitive ? CGFloat(size) * (0.55 + 0.9 * pressure) : CGFloat(size)
   }
 
   /// A stroke PencilKit just drew, in world units (the canvas's drawing is kept at zoom 1).
@@ -176,6 +186,21 @@ enum InkWidth {
 
   /// The tool width that draws a stroke [size] wide with [ink].
   static func toolWidth(_ size: Float, _ ink: PKInk.InkType) -> CGFloat { CGFloat(size) / factor(ink) }
+
+  /// The point size that makes PencilKit draw [ink] [drawing] wide. PencilKit doesn't draw a point
+  /// in proportion to its size: a point P across is drawn 2P − 4 wide by the monoline, 1.75P − 0.4
+  /// by the pencil, and the fountain pen's nib reaches P − 2 either way from its middle (measured in
+  /// the simulator and on a Mac, at every zoom; see InkOutline.swift). Sizes used to be the pen's
+  /// size times a fixed factor, so a stroke made 1.4 times bigger with the lasso was drawn 2.4
+  /// times as thick, and one made small faded away (the owner's video, 25 Nov 2026).
+  nonisolated static func pointSize(drawing width: CGFloat, _ ink: PKInk.InkType) -> CGFloat {
+    let w = max(width, 0.05)
+    switch ink {
+    case .pencil: return (w + 0.4) / 1.75
+    case .fountainPen: return w / 2 + 2
+    default: return (w + 4) / 2
+    }
+  }
 
   /// Point size per pen size, and secondary scale, as live strokes of [ink] have them.
   nonisolated static func pointStyle(_ ink: PKInk.InkType) -> (perSize: CGFloat, secondary: CGFloat) {

@@ -204,8 +204,16 @@ extension NoteCanvas.Coordinator {
       self.lasso.shapeLayer.setAffineTransform(.identity)
       CATransaction.commit()
     }
-    afterRender {
+    afterRender { [weak self] in
       rendered = true
+      // The canvas shows the writing where it was put down: the carried copy goes now. Left on until
+      // the page's tiles were ready too, see-through ink showed twice, darker, after every drop.
+      if let self, self.lasso.overlayTicket == ticket {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for l in self.lasso.shapeLayer.sublayers ?? [] where l.name == Self.carriedInk { l.removeFromSuperlayer() }
+        CATransaction.commit()
+      }
       clear()
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {

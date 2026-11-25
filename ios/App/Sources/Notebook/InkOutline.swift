@@ -41,8 +41,7 @@ extension InkStroke {
 
   /// The size of the [i]th point as `pkStroke` builds it.
   private func pointSize(_ i: Int) -> CGFloat {
-    let w = CGFloat(size) * InkWidth.pointStyle(pen.ink).perSize
-    return pen.pressureSensitive ? w * (0.55 + 0.9 * CGFloat(inputs.points[i].pressure ?? 0.5)) : w
+    InkWidth.pointSize(drawing: drawnWidth(CGFloat(inputs.points[i].pressure ?? 0.5)), pen.ink)
   }
 
   /// Nothing is drawn thinner (on screen PencilKit keeps such lines a pixel or so wide).

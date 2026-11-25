@@ -27,6 +27,43 @@ with *full*, or a `full-ci` label), since the owner tries the rest on a real iPa
 read the Android app (`import_strings`, `import_palettes`, `make_icon`, `check_shape_port`) default
 to `../`. Whoever pushes from the Mac (`idanlo`) needs write access to `Talis-Notes` now.
 
+## The owner's videos of 25 Nov 2026, evening (Mac without Xcode)
+
+Written on a Mac with only the command line tools: the core tests pass and the whole app
+type-checks for Mac Catalyst (see the entry below for how); nothing was run on a simulator or an
+iPad here. The full UI suite runs in CI on this branch's pull request.
+
+- **Ink thickened when resized** (his video: the pen's writing grew ~2.5 times thicker for a
+  1.4 times bigger box, and stayed thick when shrunk). PencilKit doesn't draw a point in
+  proportion to its size: a point P across is drawn 2P − 4 wide by the monoline (1.75P − 0.4 the
+  pencil; the fountain pen's nib reaches P − 2), measured again on a Mac at every zoom and
+  matching InkOutline's simulator numbers. `pkStroke` gave points the pen's size times a fixed
+  factor, so widths weren't proportional. Now `InkWidth.pointSize(drawing:)` works the point size
+  out from the width wanted: every stroke is drawn as wide as its size (× 0.55…1.45 for pressure
+  pens), as Android's brushes are, and a resize scales it exactly. Note: solid lines now draw at
+  the pen's size (a 2.4 fineliner was about 1.6 wide), the same as dashed lines and Android.
+- **The highlighter flashed** at every pick-up and drop: the carried copy and the canvas both
+  showed it for a moment, and see-through ink drawn twice looks darker. `liftInk` shows see-through
+  ink in the overlay only once the canvas has drawn the page without it (`afterRender`), and
+  `dropShapes` takes carried ink away as soon as the canvas has drawn it put down.
+- **Endless zoom jumped** (a small pinch out went to 24% and down-right, the writing gone):
+  changing the zoom from inside the scroll view's own pinch fought it. On an endless canvas the
+  scroll view's pinch is now off and `endlessPinched` (Endless.swift) zooms and places the page
+  itself, Android's `PinchResist`: out along `ZoomResist`, in following the fingers, the page under
+  the fingers' middle kept under it, the measure taken again when a finger lifts or lands.
+- **A page picked up in the overview jumped**: the hold ended before the drag gave the finger's
+  place, so the grab was taken as the page's middle; now it's taken at the first place the finger
+  is reported (`PagesOverview.grab`).
+- **Selection menu**: Bring to front / Send to back use Android's Material icons (`FlipToFront`,
+  `FlipToBack`, `MaterialIcons.swift`, read by Folders.swift's `SVGPath`). Pictures behind the
+  writing are now drawn in their stack order, so Send to back puts one behind another picture.
+  `SelectingTests.testPicturesInTheLasso` writes a line over a picture and checks Bring to front
+  covers it and Send to back shows it again (the owner said pictures didn't react).
+- **Top row as Android**: `TopBarLayout` is Android's `Layout` exactly: the name and the eye and ⋯
+  are one corner measured with the room the title and tools leave (the name shortens, never moves
+  under the bar), the tools in the middle sliding between them. The row is no longer drawn smaller
+  for the name (that was today's earlier try).
+
 ## Auto arrow, and the owner's list of 25 Nov 2026 (a second Mac, without Xcode)
 
 **Nothing from this session has been run on a simulator or an iPad yet**: this Mac has only Apple's
