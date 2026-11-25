@@ -324,7 +324,7 @@ struct NoteCanvas: UIViewRepresentable {
     c.installOwnInk(on: v)
     c.installPencilGestures(on: v)
     bridge?.coordinator = c
-    v.minimumZoomScale = Coordinator.leastZoom
+    v.minimumZoomScale = Coordinator.pagesLeastZoom
     v.maximumZoomScale = 6
     v.showsVerticalScrollIndicator = false
     v.showsHorizontalScrollIndicator = false
@@ -379,6 +379,11 @@ struct NoteCanvas: UIViewRepresentable {
     /// being drawn again (see PagePatch.swift).
     weak var underlay: PaperUnderlay?
     var patches: [UIView] = []
+    /// A pinch on an endless canvas: how far apart the fingers landed, the zoom they started from
+    /// (as the fingers would ask for it) and where resistance begins; and on while the zoom is set
+    /// from here (see Endless.swift).
+    var pinchStart: (spread: CGFloat, raw: CGFloat, free: CGFloat)?
+    var resisting = false
     /// What's stored, in drawing order, with the key that recognises each stroke in the PKDrawing.
     var stored: [(key: StrokeKey, stroke: InkStroke)] = []
     var pageCount = 1
@@ -508,7 +513,7 @@ struct NoteCanvas: UIViewRepresentable {
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
       loading = false
       restack()
-      applyLeastZoom()
+      canvas.minimumZoomScale = leastZoom
       updateContent()
       applyTool()
       reportUndo()
@@ -770,15 +775,13 @@ struct NoteCanvas: UIViewRepresentable {
     var firstPlacing = false
 
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
-      applyLeastZoom()
+      pinchBegan(scrollView)
       if scrollView.isTracking || scrollView.isZoomBouncing || scrollView.pinchGestureRecognizer?.state == .began { zoomedByHand = true }
     }
 
     /// The first page's whole width on screen, from the top of the first page.
     private func fitWidth() {
       guard let canvas, let pages else { return }
-      // Now that the canvas has a size (it had none when the notebook was read).
-      applyLeastZoom()
       // It opens where she left off (Android keeps the view per notebook); the first time, the page's width.
       let saved = parent.notebook.viewport.flatMap { v -> Viewport? in v.zoom > 0.05 ? v : nil }
       let fit = min((canvas.bounds.width - 48) / (paged ? pages.worldSize.width : CGFloat(layout.width)), 1.2)
@@ -817,6 +820,9 @@ struct NoteCanvas: UIViewRepresentable {
     }
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
+      // Zooming out on an endless canvas gets harder past what's written: the zoom is set again
+      // from here, and that change comes back through here to update the rest.
+      if resistZoom(scrollView) { return }
       // Pictures of the page were made for the zoom as it was.
       dropPatches()
       zoomEndsPull()
@@ -836,6 +842,7 @@ struct NoteCanvas: UIViewRepresentable {
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+      pinchStart = nil
       updateContent()
       makeRoom()
     }

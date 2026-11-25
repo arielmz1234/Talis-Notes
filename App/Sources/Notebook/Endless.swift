@@ -27,28 +27,50 @@ extension NoteCanvas.Coordinator {
     if right > world.width || bottom > world.height { updateContent() }
   }
 
-  /// How far out pages zoom (a phone needs this much to fit a page across), and how far an endless
-  /// canvas does when everything written already fits the screen.
-  static let leastZoom: CGFloat = 0.2
-  static let endlessLeastZoom: CGFloat = 0.5
+  /// How far out pages zoom (a phone needs this much to fit a page across). An endless canvas has
+  /// no wall: zooming out gets harder the farther past what's written (`ZoomResist`); its floor is
+  /// only there so the scroll view never bounces back from one.
+  static let pagesLeastZoom: CGFloat = 0.2
+  static let endlessLeastZoom: CGFloat = 0.05
 
-  /// How far out the canvas zooms. An endless canvas went down to 20% like pages, where the
-  /// writing was a speck on a sheet many screens wide and easily lost: it now stops once
-  /// everything written is on screen, and no further out than half size when that already fits.
-  func leastZoomNow() -> CGFloat {
-    guard !paged, let canvas else { return Self.leastZoom }
-    let content = contentBounds.map(CGRect.init) ?? .null
-    let room = CGSize(width: canvas.bounds.width - 32, height: canvas.bounds.height - parent.topClearance - 40)
-    guard !content.isNull, content.width > 1 || content.height > 1, room.width > 0, room.height > 0 else { return Self.endlessLeastZoom }
-    let r = content.insetBy(dx: -24, dy: -24)
-    return min(max(min(room.width / r.width, room.height / r.height), Self.leastZoom), Self.endlessLeastZoom)
+  var leastZoom: CGFloat { paged ? Self.pagesLeastZoom : Self.endlessLeastZoom }
+
+  /// A pinch begins on an endless canvas: where it starts from, and the zoom at which everything
+  /// written fits (where resistance begins).
+  func pinchBegan(_ sv: UIScrollView) {
+    pinchStart = nil
+    guard !paged, let pinch = sv.pinchGestureRecognizer, pinch.numberOfTouches >= 2 else { return }
+    let a = pinch.location(ofTouch: 0, in: sv), b = pinch.location(ofTouch: 1, in: sv)
+    let spread = hypot(a.x - b.x, a.y - b.y)
+    guard spread > 1 else { return }
+    let room = (width: Float(sv.bounds.width - 32), height: Float(sv.bounds.height - parent.topClearance - 40))
+    let z = sv.zoomScale
+    // Already further out than resistance would take her (the writing grew, the screen turned): it begins here instead.
+    let free = CGFloat(min(ZoomResist.free(content: contentBounds, room: room), Float(z) * ZoomResist.reach / 1.01))
+    pinchStart = (spread, CGFloat(ZoomResist.raw(forShown: Float(z), free: Float(free))), free)
   }
 
-  /// Sets how far out the canvas zooms (when a pinch begins, and when what's written is read again).
-  func applyLeastZoom() {
-    guard let canvas else { return }
-    let least = leastZoomNow()
-    if abs(canvas.minimumZoomScale - least) > 0.0005 { canvas.minimumZoomScale = least }
+  /// During a pinch on an endless canvas: the zoom the fingers ask for (from how far apart they are
+  /// now against when they landed, so it doesn't matter how the scroll view works its own out),
+  /// resisted past where everything written fits, with the page under the fingers' middle kept
+  /// where it is. True when it set the zoom itself (the scroll view's own update is then replaced).
+  func resistZoom(_ sv: UIScrollView) -> Bool {
+    guard !paged, !resisting, let start = pinchStart, let pinch = sv.pinchGestureRecognizer, pinch.numberOfTouches >= 2 else { return false }
+    let a = pinch.location(ofTouch: 0, in: sv), b = pinch.location(ofTouch: 1, in: sv)
+    let spread = hypot(a.x - b.x, a.y - b.y)
+    guard spread > 1 else { return false }
+    let raw = start.raw * spread / start.spread
+    let want = min(max(CGFloat(ZoomResist.resisted(Float(raw), free: Float(start.free))), sv.minimumZoomScale), sv.maximumZoomScale)
+    let now = sv.zoomScale
+    guard now > 0, abs(want - now) > now * 0.0005 else { return false }
+    let mid = pinch.location(in: sv)
+    let onScreen = CGPoint(x: mid.x - sv.contentOffset.x, y: mid.y - sv.contentOffset.y)
+    let world = CGPoint(x: mid.x / now, y: mid.y / now)
+    resisting = true
+    sv.zoomScale = want
+    sv.contentOffset = CGPoint(x: world.x * want - onScreen.x, y: world.y * want - onScreen.y)
+    resisting = false
+    return true
   }
 
   /// How much room an endless canvas keeps round the writing on every side (world units): it's
@@ -156,7 +178,6 @@ extension NoteCanvas.Coordinator {
     guard !content.isNull, content.width > 1 || content.height > 1 else { return }
     let r = content.insetBy(dx: -24, dy: -24)
     let room = CGSize(width: canvas.bounds.width - 32, height: canvas.bounds.height - parent.topClearance - 40)
-    applyLeastZoom()
     let fit = min(max(min(room.width / r.width, room.height / r.height), canvas.minimumZoomScale), 1.5)
     canvas.setZoomScale(fit, animated: false)
     updateContent()
