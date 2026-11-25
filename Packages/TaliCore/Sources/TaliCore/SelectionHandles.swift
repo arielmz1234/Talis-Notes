@@ -88,7 +88,7 @@ public enum SelectionHandles {
 extension ShapeGeometry {
   public var facing: Float? {
     switch self {
-    case let .line(a, b, _, _, _): (b - a).angle()
+    case let .line(a, b, _, _, _, _): (b - a).angle()
     // Level with its arrows hanging down is 0°.
     case let .load(a, b, depth, _): (b - a).angle() + (depth < 0 ? .pi : 0)
     case let .poly(_, _, _, rotation, _): rotation
@@ -137,7 +137,7 @@ public enum Measure {
   public static func badges(_ g: ShapeGeometry, _ phase: Phase, toScreen: (Pt) -> Pt, width: (String) -> Float) -> [Badge] {
     let h = badgeHeight
     switch g {
-    case let .line(a, b, _, _, _): return lineBadge(a, b, phase, toScreen, width)
+    case let .line(a, b, _, _, _, _): return lineBadge(a, b, phase, toScreen, width)
     case let .load(a, b, _, _): return lineBadge(a, b, phase, toScreen, width)
     case let .arc(center, radius, _, _, arrowEnd):
       return arrowEnd ? [] : [Badge(label: "\(g.arcDegrees)°  ·  r \(cm(radius)) cm", at: toScreen(center))]

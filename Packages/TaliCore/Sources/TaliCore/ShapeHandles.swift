@@ -93,7 +93,7 @@ public enum SectorShape {
 extension ShapeGeometry {
   public func handles() -> [Pt] {
     switch self {
-    case let .line(a, b, _, _, _): return [a, b]
+    case let .line(a, b, _, _, _, _): return [a, b]
     case let .poly(points, _, smooth, _, form):
       if smooth || form == .REGULAR { return [] }
       if form == .DIAMOND, points.count == 4 { return [points[1], points[2]] }
@@ -126,7 +126,7 @@ extension ShapeGeometry {
   public func withHandle(_ index: Int, _ p: Pt) -> ShapeGeometry {
     let p0 = p
     switch self {
-    case let .line(a, b, arrowStart, arrowEnd, ticks):
+    case let .line(a, b, arrowStart, arrowEnd, ticks, head):
       // Within 2° of its direction the drag is projected onto it, so the line keeps its exact angle
       // while its length changes; beyond that it turns freely.
       let fixed = index == 0 ? b : a, moving = index == 0 ? a : b
@@ -134,7 +134,7 @@ extension ShapeGeometry {
       let v = p - fixed
       let cosAngle: Float = v.length() < 1e-3 ? 1 : dir.dot(v.normalized())
       let target = cosAngle > Float(cos(2.0 * Double.pi / 180)) ? fixed + dir * max(1, v.dot(dir)) : p
-      return .line(a: index == 0 ? target : a, b: index == 0 ? b : target, arrowStart: arrowStart, arrowEnd: arrowEnd, ticks: ticks)
+      return .line(a: index == 0 ? target : a, b: index == 0 ? b : target, arrowStart: arrowStart, arrowEnd: arrowEnd, ticks: ticks, head: head)
     case let .poly(points, closed, smooth, rotation, form):
       if smooth || form == .REGULAR { return self }
       if form != nil, points.count == 4, let shaped = withForm(index, p) { return shaped }
@@ -223,13 +223,13 @@ extension ShapeGeometry {
   /// Without snapping onto other shapes, which Android's `HANDLE_DRAG` does first (not ported).
   public func dragging(_ index: Int, to p: Pt) -> ShapeGeometry {
     func tidy(_ fixed: Pt, _ end: Pt) -> Pt {
-      if case let .line(_, b, _, _, _) = ShapeRecognizer.snappedLine(fixed, end) { return b }
+      if case let .line(_, b, _, _, _, _) = ShapeRecognizer.snappedLine(fixed, end) { return b }
       return end
     }
     if case let .load(a, b, _, _) = self, index < 2 { return withHandle(index, tidy(index == 0 ? b : a, p)) }
     let g = withHandle(index, p)
-    guard case let .line(a, b, arrowStart, arrowEnd, ticks) = g else { return g }
-    return .line(a: index == 1 ? a : tidy(b, a), b: index == 1 ? tidy(a, b) : b, arrowStart: arrowStart, arrowEnd: arrowEnd, ticks: ticks)
+    guard case let .line(a, b, arrowStart, arrowEnd, ticks, head) = g else { return g }
+    return .line(a: index == 1 ? a : tidy(b, a), b: index == 1 ? tidy(a, b) : b, arrowStart: arrowStart, arrowEnd: arrowEnd, ticks: ticks, head: head)
   }
 
   /// Whether dot [index] adds a new point where it's dragged (a curve's add dot, drawn smaller)

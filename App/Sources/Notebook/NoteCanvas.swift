@@ -566,6 +566,8 @@ struct NoteCanvas: UIViewRepresentable {
     var textEdit = TextEditState()
     /// The laser and the ink the notebook draws itself (see OwnInk.swift).
     var own = OwnInkState()
+    /// Auto arrow: the straight line that may get its head next (see AutoArrow.swift).
+    var arrows = AutoArrowState()
     var lastTool: Tool?
     var lastPenId: String?
 
@@ -616,6 +618,7 @@ struct NoteCanvas: UIViewRepresentable {
       if lastTool.map({ $0 != parent.tool }) ?? false || parent.viewOnly, lasso.bounds != nil || !lasso.loop.isEmpty {
         DispatchQueue.main.async { self.clearSelection() }
       }
+      if lastTool.map({ $0 != parent.tool }) ?? false || parent.viewOnly { forgetArrowLine() }
       lastTool = parent.tool
       // Draw with finger: Auto follows iOS's own Apple Pencil setting (fingers write in UI tests, which have no pencil).
       switch parent.settings.fingerDraws {
@@ -868,6 +871,7 @@ struct NoteCanvas: UIViewRepresentable {
     /// swaps them back straight after.
     func undoKeepingSwaps(redo: Bool) {
       guard let canvas, let undo = canvas.undoManager else { return }
+      forgetArrowLine()
       if let swap = pkSwaps.last(where: { $0.ours == canvas.drawing }) {
         loading = true
         undo.disableUndoRegistration()

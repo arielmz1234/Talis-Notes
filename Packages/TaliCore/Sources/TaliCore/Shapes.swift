@@ -40,11 +40,20 @@ extension Geo {
 public enum Arrow {
   public static func headLength(_ penSize: Float, _ room: Float) -> Float { min(max(20, penSize * 7), room * 0.4) }
 
+  /// How long each barb is drawn: the usual head, or a hand-drawn head's own length ([drawn], up
+  /// to 0.6 of the line) when that's longer.
+  public static func barbLength(_ penSize: Float, _ room: Float, drawn: Float = 0) -> Float {
+    let usual = headLength(penSize, room)
+    return drawn > 0 ? max(usual, min(drawn, room * 0.6)) : usual
+  }
+
   /// Two short barbs at [tip], pointing back toward [from].
-  public static func head(_ from: Pt, _ tip: Pt, _ penSize: Float, room: Float? = nil) -> [[Pt]] {
+  /// [drawn]: the head's own length when it was drawn by hand (Auto arrow), never shorter than
+  /// the usual head nor longer than 0.6 of the line; 0 = the usual head.
+  public static func head(_ from: Pt, _ tip: Pt, _ penSize: Float, room: Float? = nil, drawn: Float = 0) -> [[Pt]] {
     let dir = (tip - from).normalized()
     if dir == .zero { return [] }
-    let len = headLength(penSize, room ?? from.dist(tip))
+    let len = barbLength(penSize, room ?? from.dist(tip), drawn: drawn)
     let back = dir * -len
     return [[tip + back.rotated(0.52), tip, tip + back.rotated(-0.52)]]
   }
@@ -56,7 +65,8 @@ public enum PolyForm: String, Sendable {
 
 /// A shape's geometry as the Android app stores it (JSON with a "type" key, `model/Shapes.kt`).
 public indirect enum ShapeGeometry: Sendable, Equatable {
-  case line(a: Pt, b: Pt, arrowStart: Bool, arrowEnd: Bool, ticks: Bool)
+  /// [head]: how long an arrowhead's barbs are when it was drawn by hand (Auto arrow); 0 = the usual head.
+  case line(a: Pt, b: Pt, arrowStart: Bool, arrowEnd: Bool, ticks: Bool, head: Float = 0)
   case poly(points: [Pt], closed: Bool, smooth: Bool = false, rotation: Float = 0, form: PolyForm? = nil)
   /// [stretchable]: drawn with the Ellipse tool, so it keeps its four dots even while perfectly round.
   case ellipse(center: Pt, rx: Float, ry: Float, rotation: Float, stretchable: Bool = false)
@@ -73,10 +83,10 @@ public indirect enum ShapeGeometry: Sendable, Equatable {
   /// Polylines to ink, each one continuous stroke. [penSize] sizes arrowheads.
   public func paths(_ penSize: Float) -> [[Pt]] {
     switch self {
-    case let .line(a, b, arrowStart, arrowEnd, ticks):
+    case let .line(a, b, arrowStart, arrowEnd, ticks, head):
       var out = [[a, b]]
-      if arrowEnd { out += Arrow.head(a, b, penSize) }
-      if arrowStart { out += Arrow.head(b, a, penSize) }
+      if arrowEnd { out += Arrow.head(a, b, penSize, drawn: head) }
+      if arrowStart { out += Arrow.head(b, a, penSize, drawn: head) }
       if ticks {
         let dir = (b - a).normalized()
         if dir != .zero {
@@ -153,7 +163,7 @@ public indirect enum ShapeGeometry: Sendable, Equatable {
     switch type {
     case "line":
       guard let a = pt("a"), let bb = pt("b") else { return nil }
-      return .line(a: a, b: bb, arrowStart: b("arrowStart"), arrowEnd: b("arrowEnd"), ticks: b("ticks"))
+      return .line(a: a, b: bb, arrowStart: b("arrowStart"), arrowEnd: b("arrowEnd"), ticks: b("ticks"), head: max(f("head"), 0))
     case "poly":
       return .poly(points: pts("points"), closed: b("closed"), smooth: b("smooth"), rotation: f("rotation"), form: (o["form"] as? String).flatMap(PolyForm.init))
     case "ellipse":
@@ -223,11 +233,12 @@ extension ShapeGeometry {
     func pt(_ p: Pt) -> [String: Any] { ["x": num(p.x), "y": num(p.y)] }
     var o: [String: Any]
     switch self {
-    case let .line(a, b, arrowStart, arrowEnd, ticks):
+    case let .line(a, b, arrowStart, arrowEnd, ticks, head):
       o = ["type": "line", "a": pt(a), "b": pt(b)]
       if arrowStart { o["arrowStart"] = true }
       if arrowEnd { o["arrowEnd"] = true }
       if ticks { o["ticks"] = true }
+      if head != 0 { o["head"] = num(head) }
     case let .poly(points, closed, smooth, rotation, form):
       o = ["type": "poly", "points": points.map(pt), "closed": closed]
       if rotation != 0 { o["rotation"] = num(rotation) }
@@ -271,7 +282,8 @@ extension ShapeGeometry {
   public func transformed(_ m: Affine) -> ShapeGeometry {
     let s = m.scaleFactor
     switch self {
-    case let .line(a, b, s1, e1, t): return .line(a: m.apply(a), b: m.apply(b), arrowStart: s1, arrowEnd: e1, ticks: t)
+    // A hand-drawn head grows and shrinks with its arrow.
+    case let .line(a, b, s1, e1, t, head): return .line(a: m.apply(a), b: m.apply(b), arrowStart: s1, arrowEnd: e1, ticks: t, head: head * s)
     case let .poly(points, closed, smooth, rotation, form):
       return .poly(points: points.map(m.apply), closed: closed, smooth: smooth, rotation: m.mapAngle(rotation), form: form)
     case let .ellipse(center, rx, ry, rotation, stretchable):

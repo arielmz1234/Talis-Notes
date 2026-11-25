@@ -40,7 +40,7 @@ public enum ShapeKind: String, CaseIterable, Sendable {
   /// a tidy angle first, unless [keepEnd] (Android's `buildShape`).
   public func drawn(_ p0: Pt, _ p1: Pt, keepEnd: Bool = false) -> ShapeGeometry {
     let end: Pt
-    if !keepEnd && drawnAsLine, case let .line(_, b, _, _, _) = ShapeRecognizer.snappedLine(p0, p1) { end = b } else { end = p1 }
+    if !keepEnd && drawnAsLine, case let .line(_, b, _, _, _, _) = ShapeRecognizer.snappedLine(p0, p1) { end = b } else { end = p1 }
     return create(p0, end)
   }
 

@@ -21,7 +21,7 @@ struct ShapePacksTests {
   /// the middles of sides and round shapes' centres.
   private func features(_ g: ShapeGeometry) -> [Pt] {
     switch g {
-    case let .line(a, b, _, _, _): [a, b, (a + b) * 0.5]
+    case let .line(a, b, _, _, _, _): [a, b, (a + b) * 0.5]
     case let .poly(points, closed, false, _, _):
       points + points.indices.dropLast(closed ? 0 : 1).map { (points[$0] + points[($0 + 1) % points.count]) * 0.5 }
     case let .poly(points, _, true, _, _): [points[0], points[points.count - 1]]

@@ -747,7 +747,7 @@ enum ViewOnly {
 enum PenStore {
   private static let reset: Void = {
     if ProcessInfo.processInfo.arguments.contains("-uitest"), !ProcessInfo.processInfo.arguments.contains("-keep-pens") {
-      for key in ["pens", "activePen", "savedColors", "highlighterColors", "eraserAffects", "eraserPrecise", "eraserSize", "scribbleDelete"] + LassoSettings.Key.all {
+      for key in ["pens", "activePen", "savedColors", "highlighterColors", "eraserAffects", "eraserPrecise", "eraserSize", "scribbleDelete", ShapeSettings.Key.autoArrow] + LassoSettings.Key.all {
         UserDefaults.standard.removeObject(forKey: key)
       }
     }

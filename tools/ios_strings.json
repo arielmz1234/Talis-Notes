@@ -46,5 +46,21 @@
     "pt-BR": "Copie ou recorte algo e depois segure a caneta ou um dedo parado em qualquer lugar da página: uma bolha Colar aparece ali mesmo.",
     "ar": "انسخ شيئًا أو قصّه، ثم اترك القلم أو إصبعك ثابتًا في أي مكان من الصفحة: تظهر فقاعة «لصق» هناك.",
     "he": "מעתיקים או גוזרים משהו, ואז מחזיקים את העט או אצבע במקום כלשהו בעמוד: בועת הדבקה מופיעה בדיוק שם."
+  },
+  "auto_arrow": {
+    "en": "Auto arrow",
+    "es": "Flecha automática",
+    "fr": "Flèche automatique",
+    "pt-BR": "Seta automática",
+    "ar": "سهم تلقائي",
+    "he": "חץ אוטומטי"
+  },
+  "auto_arrow_detail": {
+    "en": "Draw a line, then its head.",
+    "es": "Dibuja una línea y luego su punta.",
+    "fr": "Tracez un trait, puis sa pointe.",
+    "pt-BR": "Desenhe uma linha e depois a ponta.",
+    "ar": "ارسم خطًا ثم رأسه.",
+    "he": "מציירים קו ואז את ראש החץ."
   }
 }

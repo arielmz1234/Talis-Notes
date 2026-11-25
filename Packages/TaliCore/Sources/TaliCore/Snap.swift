@@ -557,7 +557,7 @@ public enum Snap {
   public static func lineEnd(fixed: Pt, raw: Pt, _ targets: [SnapFeatures], _ s: SnapSession) -> (at: Pt, on: Bool) {
     if let c = corner(raw, targets, s) { return (c, true) }
     var angled = raw
-    if case let .line(_, b, _, _, _) = ShapeRecognizer.snappedLine(fixed, raw) { angled = b }
+    if case let .line(_, b, _, _, _, _) = ShapeRecognizer.snappedLine(fixed, raw) { angled = b }
     if let q = alongLine(fixed, angled, targets, s) { return (q, true) }
     if let q = point(raw, targets, s) { return (q, true) }
     return (angled, false)
@@ -568,7 +568,7 @@ public enum Snap {
 // hold-to-shape follows the pen (Android's `HANDLE_DRAG`, `SHAPE_CREATE` and `updateLiveShape`).
 extension Snap {
   private static func tidyEnd(_ fixed: Pt, _ raw: Pt) -> Pt {
-    if case let .line(_, b, _, _, _) = ShapeRecognizer.snappedLine(fixed, raw) { return b }
+    if case let .line(_, b, _, _, _, _) = ShapeRecognizer.snappedLine(fixed, raw) { return b }
     return raw
   }
 
@@ -632,7 +632,7 @@ extension ShapeGeometry {
     // A line's or a distributed load's end: the other end, which it turns about.
     let lineFixed: Pt?
     switch self {
-    case let .line(a, b, _, _, _): lineFixed = index == 0 ? b : a
+    case let .line(a, b, _, _, _, _): lineFixed = index == 0 ? b : a
     case let .load(a, b, _, _) where index < 2: lineFixed = index == 0 ? b : a
     default: lineFixed = nil
     }
@@ -647,7 +647,7 @@ extension ShapeGeometry {
     if stuck == nil {
       // A line's end on a tidy angle keeps the angle and slides along the line to line up.
       let tidy = lineFixed.map { ShapeRecognizer.snappedLine($0, raw) }.flatMap { g -> Pt? in
-        if case let .line(_, b, _, _, _) = g, b.dist(raw) > 0.01 { return b }
+        if case let .line(_, b, _, _, _, _) = g, b.dist(raw) > 0.01 { return b }
         return nil
       }
       let found = if let lineFixed, let tidy { Snap.alongAngle(lineFixed, tidy, targets, s) } else { Snap.alignPoint(raw, targets + ownCorners(index), s) }
@@ -658,8 +658,8 @@ extension ShapeGeometry {
     switch self {
     case let .triangle(a, b, c, turn):
       return (.triangle(a: index == 0 ? at : a, b: index == 1 ? at : b, c: index >= 2 ? at : c, turn: turn), guides)
-    case let .line(a, b, arrowStart, arrowEnd, ticks):
-      return (.line(a: index == 0 ? at : a, b: index == 0 ? b : at, arrowStart: arrowStart, arrowEnd: arrowEnd, ticks: ticks), guides)
+    case let .line(a, b, arrowStart, arrowEnd, ticks, head):
+      return (.line(a: index == 0 ? at : a, b: index == 0 ? b : at, arrowStart: arrowStart, arrowEnd: arrowEnd, ticks: ticks, head: head), guides)
     default:
       return (withHandle(index, at), guides)
     }
@@ -679,7 +679,7 @@ extension ShapeGeometry {
     let points: [Pt]
     let segments: [(a: Pt, b: Pt)]
     switch self {
-    case let .line(a, b, _, _, _):
+    case let .line(a, b, _, _, _, _):
       points = [a, b, mid(a, b)]
       segments = [(a, b)]
     case let .poly(pts, closed, smooth, _, _):
@@ -722,7 +722,7 @@ extension ShapeGeometry {
       let box = Rect.around(parts.flatMap { $0.paths(1).joined() })
       let reach = box.map { Pt($0.width, $0.height).length() } ?? 0
       func short(_ g: ShapeGeometry) -> Bool {
-        if case let .line(a, b, false, false, false) = g { return a.dist(b) < reach * 0.3 }
+        if case let .line(a, b, false, false, false, _) = g { return a.dist(b) < reach * 0.3 }
         return false
       }
       let hatching = parts.filter(short).count >= 5

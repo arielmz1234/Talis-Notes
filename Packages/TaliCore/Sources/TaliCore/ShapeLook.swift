@@ -134,7 +134,7 @@ public enum ShapeSource: Sendable {
     case .kind(let k): return k.drawn(p0, p1, keepEnd: keepEnd)
     case .custom(let shape): return shape.fitInto(p0, p1)
     case .pack(let shape):
-      if !keepEnd && shape.drawnAsLine, case let .line(_, end, _, _, _) = ShapeRecognizer.snappedLine(p0, p1) { return shape.create(p0, end) }
+      if !keepEnd && shape.drawnAsLine, case let .line(_, end, _, _, _, _) = ShapeRecognizer.snappedLine(p0, p1) { return shape.create(p0, end) }
       return shape.create(p0, p1)
     }
   }
