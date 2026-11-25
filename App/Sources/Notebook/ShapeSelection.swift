@@ -135,8 +135,12 @@ extension NoteCanvas.Coordinator {
     guard redraw else { return false }
     redrawPage(lasso.bounds)
     carryShapes(.identity)
-    return coverPage(lasso.bounds)
+    return carriesPageItems && coverPage(lasso.bounds)
   }
+
+  /// Whether the overlay carries anything the page draws (shapes, text, pictures, fills, locked
+  /// writing), not only writing, which PencilKit draws.
+  var carriesPageItems: Bool { lasso.shapeLayer.sublayers?.contains { $0.name != Self.carriedInk } ?? false }
 
   private func trace(_ s: ShapeRow, on l: CAShapeLayer, zoom z: CGFloat) {
     let path = CGMutablePath()

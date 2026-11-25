@@ -375,7 +375,7 @@ extension NoteCanvas.Coordinator {
     }
     inkBase = nil
     restack()
-    if changes {
+    if changes, carriesPageItems {
       // The page as it is now, where it was and where it is, shown at once (its tiles follow).
       let to = pickedItems.reduce(nil) { joined($0, CGRect($1.bounds)) }
       let old = coverPage(from), new = coverPage(to)
