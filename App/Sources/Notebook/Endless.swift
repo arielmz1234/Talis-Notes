@@ -27,6 +27,30 @@ extension NoteCanvas.Coordinator {
     if right > world.width || bottom > world.height { updateContent() }
   }
 
+  /// How far out pages zoom (a phone needs this much to fit a page across), and how far an endless
+  /// canvas does when everything written already fits the screen.
+  static let leastZoom: CGFloat = 0.2
+  static let endlessLeastZoom: CGFloat = 0.5
+
+  /// How far out the canvas zooms. An endless canvas went down to 20% like pages, where the
+  /// writing was a speck on a sheet many screens wide and easily lost: it now stops once
+  /// everything written is on screen, and no further out than half size when that already fits.
+  func leastZoomNow() -> CGFloat {
+    guard !paged, let canvas else { return Self.leastZoom }
+    let content = contentBounds.map(CGRect.init) ?? .null
+    let room = CGSize(width: canvas.bounds.width - 32, height: canvas.bounds.height - parent.topClearance - 40)
+    guard !content.isNull, content.width > 1 || content.height > 1, room.width > 0, room.height > 0 else { return Self.endlessLeastZoom }
+    let r = content.insetBy(dx: -24, dy: -24)
+    return min(max(min(room.width / r.width, room.height / r.height), Self.leastZoom), Self.endlessLeastZoom)
+  }
+
+  /// Sets how far out the canvas zooms (when a pinch begins, and when what's written is read again).
+  func applyLeastZoom() {
+    guard let canvas else { return }
+    let least = leastZoomNow()
+    if abs(canvas.minimumZoomScale - least) > 0.0005 { canvas.minimumZoomScale = least }
+  }
+
   /// How much room an endless canvas keeps round the writing on every side (world units): it's
   /// moved into the middle of that much paper, so she can go left and up as well as right and down.
   static let endlessRoom: Float = 6000
@@ -132,6 +156,7 @@ extension NoteCanvas.Coordinator {
     guard !content.isNull, content.width > 1 || content.height > 1 else { return }
     let r = content.insetBy(dx: -24, dy: -24)
     let room = CGSize(width: canvas.bounds.width - 32, height: canvas.bounds.height - parent.topClearance - 40)
+    applyLeastZoom()
     let fit = min(max(min(room.width / r.width, room.height / r.height), canvas.minimumZoomScale), 1.5)
     canvas.setZoomScale(fit, animated: false)
     updateContent()

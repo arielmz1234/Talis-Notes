@@ -324,7 +324,7 @@ struct NoteCanvas: UIViewRepresentable {
     c.installOwnInk(on: v)
     c.installPencilGestures(on: v)
     bridge?.coordinator = c
-    v.minimumZoomScale = 0.2
+    v.minimumZoomScale = Coordinator.leastZoom
     v.maximumZoomScale = 6
     v.showsVerticalScrollIndicator = false
     v.showsHorizontalScrollIndicator = false
@@ -508,6 +508,7 @@ struct NoteCanvas: UIViewRepresentable {
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
       loading = false
       restack()
+      applyLeastZoom()
       updateContent()
       applyTool()
       reportUndo()
@@ -769,6 +770,7 @@ struct NoteCanvas: UIViewRepresentable {
     var firstPlacing = false
 
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
+      applyLeastZoom()
       if scrollView.isTracking || scrollView.isZoomBouncing || scrollView.pinchGestureRecognizer?.state == .began { zoomedByHand = true }
     }
 
