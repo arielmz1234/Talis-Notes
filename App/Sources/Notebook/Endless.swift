@@ -35,33 +35,41 @@ extension NoteCanvas.Coordinator {
 
   var leastZoom: CGFloat { paged ? Self.pagesLeastZoom : Self.endlessLeastZoom }
 
-  /// A pinch begins on an endless canvas: where it starts from, and the zoom at which everything
-  /// written fits (where resistance begins).
+  /// A pinch begins on an endless canvas: where resistance begins for it (where everything written
+  /// fits), and where it's measured from.
   func pinchBegan(_ sv: UIScrollView) {
     pinchStart = nil
-    guard !paged, let pinch = sv.pinchGestureRecognizer, pinch.numberOfTouches >= 2 else { return }
-    let a = pinch.location(ofTouch: 0, in: sv), b = pinch.location(ofTouch: 1, in: sv)
-    let spread = hypot(a.x - b.x, a.y - b.y)
-    guard spread > 1 else { return }
+    guard !paged, let spread = fingerSpread(sv) else { return }
     let room = (width: Float(sv.bounds.width - 32), height: Float(sv.bounds.height - parent.topClearance - 40))
-    let z = sv.zoomScale
-    // Already further out than resistance would take her (the writing grew, the screen turned): it begins here instead.
-    let free = CGFloat(min(ZoomResist.free(content: contentBounds, room: room), Float(z) * ZoomResist.reach / 1.01))
-    pinchStart = (spread, CGFloat(ZoomResist.raw(forShown: Float(z), free: Float(free))), free)
+    let free = ZoomResist.freeAt(ZoomResist.free(content: contentBounds, room: room), zoomNow: Float(sv.zoomScale))
+    pinchStart = (spread, sv.zoomScale, CGFloat(free), sv.pinchGestureRecognizer?.numberOfTouches ?? 0)
   }
 
-  /// During a pinch on an endless canvas: the zoom the fingers ask for (from how far apart they are
-  /// now against when they landed, so it doesn't matter how the scroll view works its own out),
-  /// resisted past where everything written fits, with the page under the fingers' middle kept
-  /// where it is. True when it set the zoom itself (the scroll view's own update is then replaced).
-  func resistZoom(_ sv: UIScrollView) -> Bool {
-    guard !paged, !resisting, let start = pinchStart, let pinch = sv.pinchGestureRecognizer, pinch.numberOfTouches >= 2 else { return false }
+  /// How far apart the pinching fingers are, or nil without two.
+  private func fingerSpread(_ sv: UIScrollView) -> CGFloat? {
+    guard let pinch = sv.pinchGestureRecognizer, pinch.numberOfTouches >= 2 else { return nil }
     let a = pinch.location(ofTouch: 0, in: sv), b = pinch.location(ofTouch: 1, in: sv)
     let spread = hypot(a.x - b.x, a.y - b.y)
-    guard spread > 1 else { return false }
-    let raw = start.raw * spread / start.spread
-    let want = min(max(CGFloat(ZoomResist.resisted(Float(raw), free: Float(start.free))), sv.minimumZoomScale), sv.maximumZoomScale)
+    return spread > 10 ? spread : nil
+  }
+
+  /// During a pinch on an endless canvas (Android 1.0.34's `PinchResist`): out, the zoom carries on
+  /// along the resistance; in, it follows the fingers (`ZoomResist.pinched`), measured from how far
+  /// apart they are against where the pinch was taken from, so it doesn't matter how the scroll view
+  /// works its own zoom out. The page under the fingers' middle stays where it is. A finger lifting or
+  /// landing, or the zoom held at its closest, starts the measure again from here, so nothing jumps.
+  /// True when it set the zoom itself (the scroll view's own update is then replaced).
+  func resistZoom(_ sv: UIScrollView) -> Bool {
+    guard !paged, !resisting, let start = pinchStart, let pinch = sv.pinchGestureRecognizer, let spread = fingerSpread(sv) else { return false }
     let now = sv.zoomScale
+    if pinch.numberOfTouches != start.touches {
+      pinchStart = (spread, now, start.free, pinch.numberOfTouches)
+      return false
+    }
+    let asked = CGFloat(ZoomResist.pinched(startZoom: Float(start.zoom), free: Float(start.free), ratio: Float(spread / start.spread)))
+    let want = min(max(asked, sv.minimumZoomScale), sv.maximumZoomScale)
+    // Held at the closest zoom (or the floor): carry on from there, so pinching back acts at once.
+    if abs(want - asked) > asked * 1e-3 { pinchStart = (spread, want, start.free, start.touches) }
     guard now > 0, abs(want - now) > now * 0.0005 else { return false }
     let mid = pinch.location(in: sv)
     let onScreen = CGPoint(x: mid.x - sv.contentOffset.x, y: mid.y - sv.contentOffset.y)

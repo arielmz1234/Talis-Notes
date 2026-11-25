@@ -27,14 +27,16 @@ command line tools. What was checked here:
   `@Entry` macro, `glassEffect`, a few slow expressions); none are files changed here.
 - `UITests/` was only read. CI runs them (the PR for this branch), with a new run on an 11-inch iPad.
 
-Auto arrow (Android 1.0.33), checked against the Kotlin (`geometry/AutoArrow.kt`,
+Auto arrow (Android 1.0.34), checked against the Kotlin (`geometry/AutoArrow.kt`,
 `NoteCanvasView.autoArrow`):
 - `TaliCore/AutoArrow.swift` is a port of the Kotlin, same order and thresholds. A line shape has
   a sixth part, `head` (JSON `"head"`, left out when 0, scaled with the shape, kept by end dots).
+- 1.0.34 is more forgiving: rounded and nearly-U heads, slightly bowed lines, and the head may come
+  first (`AutoArrow.pair`). Android's `AutoArrowTest` is ported as it is (`AndroidAutoArrowTests`).
 - App (`AutoArrow.swift`): runs from `OwnInk.hand` once the stroke is kept (so the strokes are their
-  own undo steps and the swap one more); looks at the stroke as kept (smoothed), one stroke first,
-  then the line before it (same pen slot and colour, lifted less than 3 s before this stroke
-  lifted); the arrow is then picked up softly and there's a success haptic, as on Android.
+  own undo steps and the swap one more); looks at the stroke as kept (smoothed), alone first, then
+  with the stroke before it (any stroke of at most 2000 points, same pen slot and colour, lifted
+  less than 3 s before this one). As 1.0.34, the arrow isn't picked up and there's no haptic.
 - The setting `autoArrow` and the strings `auto_arrow`, `auto_arrow_detail` are Android's names (the
   strings are also in `tools/ios_strings.json` until they're imported from Android; then they come
   out of that file, or the import stops with a clash).
@@ -55,11 +57,13 @@ The list:
   tiles' sharpness (up to 12 megapixels, 192 MB kept) and the tiles are cut from it.
 - **Text boxes open under the keyboard**: `showForTyping` (keyboard notifications, the cursor's
   line, room under the page while typing; also for a box opened from the page).
-- **Endless canvas zoom-out**: no hard limit. `ZoomResist`: down to where everything written fits
-  (at most 100%), the fingers' zoom; past it each step out counts for less, never beyond 2.5 times
-  further out (`resisted`; `raw(forShown:)` so a new pinch carries on without a jump). Done in
-  `scrollViewDidZoom` (`resistZoom`) from the fingers' spread against when they landed, keeping the
-  page under their middle. Pages keep their 20% floor. Not in Android yet (a prompt was written).
+- **Endless canvas zoom-out**: no hard limit. `ZoomResist` (Android 1.0.34 has the same,
+  `canvas/ZoomResist.kt`): down to where everything written fits (at most 100%), the fingers' zoom;
+  past it each step out counts for less, never beyond 2.5 times further out. Pinching in follows
+  the fingers from where the pinch began (`pinched`); out carries on along the resistance with no
+  jump. Done in `scrollViewDidZoom` (`resistZoom`) from the fingers' spread against when the pinch
+  was last measured from (again when a finger lifts or lands, or the zoom is held at its closest),
+  keeping the page under their middle. Pages keep their 20% floor.
 - **A page being moved leaves the finger** (pages overview): the carried pages float at the finger
   (`PagesOverview.floating`) instead of being their grid tiles pushed over.
 - **The notebook's name under the bar**: e9ec94c keeps it beside the tools while it gets 110 pt
