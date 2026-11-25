@@ -4496,9 +4496,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (!settings.autoArrow || viewOnly || slot.type.isHighlighter || pts.size < 2) return
     val d = doc ?: return
     val now = SystemClock.uptimeMillis()
-    val one = AutoArrow.oneStroke(pts)
+    val one = AutoArrow.oneStroke(pts, lastArrowHead)
     val prev = shaft?.takeIf { one == null && it.slot == slot.id && it.color == slot.color && now - it.at < AUTO_ARROW_GAP_MS }
-    val arrow = one ?: prev?.let { AutoArrow.twoStrokes(it.a, it.b, pts) }
+    val arrow = one ?: prev?.let { AutoArrow.twoStrokes(it.a, it.b, pts, lastArrowHead) }
     if (arrow == null) {
       lastShaft = AutoArrow.straight(pts)?.let { (a, b) -> Rect.around(pts)?.let { ShaftStroke(a, b, it, slot.id, slot.color, now) } }
       return
@@ -4510,6 +4510,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     if (drawn.size != (if (one == null) 2 else 1) || drawn.distinctBy { it.id }.size != drawn.size) return
     val shape = ShapeItem(d.newId(), d.nextZ(), slot.type, slot.color, slot.size, arrow, line = slot.lineStyle)
     d.commit(Change(drawn, listOf(shape)))
+    lastArrowHead = arrow.head
     lastLoop = null
     // Picked up softly, as after hold-to-shape: its dots are there, and the pen writes on through it.
     selectShape(shape, soft = true)
@@ -6067,6 +6068,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** Auto arrow: a head drawn within this long after a straight line makes the two an arrow. */
     private const val AUTO_ARROW_GAP_MS = 3000L
+
+    /** The last auto arrow's head length (any notebook, while the app runs): one drawn near it gets exactly it. */
+    private var lastArrowHead = 0f
 
     /** How near the loop's line (on screen) a press counts as on it. */
     private const val LOOP_REACH_DP = 14f

@@ -20,9 +20,10 @@ object AutoArrow {
   /** The head's barbs leave the tip between these angles from the shaft. */
   private val BARB_MIN = cos(Math.toRadians(10.0)).toFloat()
   private val BARB_MAX = cos(Math.toRadians(80.0)).toFloat()
-  /** A drawn head's opening is kept between these (each side, from the line). */
-  private val SPREAD_MIN = Math.toRadians(18.0).toFloat()
-  private val SPREAD_MAX = Math.toRadians(50.0).toFloat()
+  /** Head lengths go in steps of this (world units: about 1.6 mm on an A4 page), rounded down. */
+  const val HEAD_STEP = 10f
+  /** A head drawn within this share of the last arrow's head is given exactly that head. */
+  const val HEAD_LOCK = 0.2f
 
   /** A straight stroke, which a head drawn next can make into an arrow: its two ends, or null. */
   fun straight(raw: List<Pt>): Pair<Pt, Pt>? {
@@ -37,7 +38,7 @@ object AutoArrow {
   }
 
   /** One stroke: a straight shaft, then without lifting a head (a V or a triangle) at its end. */
-  fun oneStroke(raw: List<Pt>): LineShape? {
+  fun oneStroke(raw: List<Pt>, lastHead: Float = 0f): LineShape? {
     val points = dedupe(raw)
     if (points.size < 4) return null
     val box = Rect.around(points) ?: return null
@@ -50,16 +51,16 @@ object AutoArrow {
     val at = points.indexOf(end)
     if (at < 1) return null
     if (points.subList(0, at + 1).any { Geo.distToSegment(it, start, end) > max(0.06f * shaft, 3f) }) return null
-    return headAt(start, end, points.subList(at, points.size))
+    return headAt(start, end, points.subList(at, points.size), lastHead)
   }
 
   /**
    * Two strokes: [head] drawn just after the straight line [a]–[b], at either of its ends. The
    * arrow points the way the head does (a head at [a] makes it point back towards [a]).
    */
-  fun twoStrokes(a: Pt, b: Pt, head: List<Pt>): LineShape? {
+  fun twoStrokes(a: Pt, b: Pt, head: List<Pt>, lastHead: Float = 0f): LineShape? {
     val h = dedupe(head)
-    return headAt(a, b, h) ?: headAt(b, a, h)
+    return headAt(a, b, h, lastHead) ?: headAt(b, a, h, lastHead)
   }
 
   /**
@@ -67,7 +68,7 @@ object AutoArrow {
    * pointing on along the shaft, one barb either side of it, small beside the shaft, with the
    * shaft's end on its axis (at the tip, the base or between). Its tip lands on the shaft's line.
    */
-  fun headAt(start: Pt, end: Pt, head: List<Pt>): LineShape? {
+  fun headAt(start: Pt, end: Pt, head: List<Pt>, lastHead: Float = 0f): LineShape? {
     val shaft = start.dist(end)
     if (shaft < MIN_SHAFT || head.size < 3) return null
     val u = (end - start) / shaft
@@ -86,11 +87,9 @@ object AutoArrow {
     if (kotlin.math.abs(across(tip)) > 0.3f * width) return null
     // Both barbs run back from the tip, neither straight back nor square to the shaft.
     val back = Pt(-u.x, -u.y)
-    var opens = 0f
     for (side in listOf(left, right)) {
       val c = back.dot((side - tip).normalized())
       if (c > BARB_MIN || c < BARB_MAX) return null
-      opens += kotlin.math.acos(c.coerceIn(-1f, 1f))
     }
     // The shaft ends on the head's axis: at its tip, its base, or anywhere between.
     val base = (left + right) / 2f
@@ -100,11 +99,19 @@ object AutoArrow {
     val edges = listOf(tip to left, tip to right, left to right, end to tip)
     if (head.any { p -> edges.none { (x, y) -> Geo.distToSegment(p, x, y) < tol } }) return null
     val point = end + u * along(tip)
-    // The clean head is the size she drew hers, opening as wide (within reason), so arrows differ
-    // as hers do instead of all wearing one head.
+    // The clean head is a standard arrowhead (equal barbs, 30° each side) as long as hers.
     val barbs = (left.dist(tip) + right.dist(tip)) / 2f
-    val spread = (opens / 2f).coerceIn(SPREAD_MIN, SPREAD_MAX)
-    return ShapeRecognizer.snappedLine(start, point, arrowEnd = true).copy(head = barbs, spread = spread)
+    return ShapeRecognizer.snappedLine(start, point, arrowEnd = true).copy(head = headSize(barbs, lastHead))
+  }
+
+  /**
+   * The head length for barbs [drawn] long: the last arrow's head ([last], 0 = none yet) when it's
+   * within [HEAD_LOCK] of it, so arrows drawn alike come out exactly alike; otherwise rounded down to
+   * a step of [HEAD_STEP].
+   */
+  fun headSize(drawn: Float, last: Float = 0f): Float {
+    if (last > 0f && kotlin.math.abs(drawn - last) <= last * HEAD_LOCK) return last
+    return max(HEAD_STEP, kotlin.math.floor(drawn / HEAD_STEP) * HEAD_STEP)
   }
 
   private fun dedupe(points: List<Pt>): List<Pt> {

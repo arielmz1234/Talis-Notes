@@ -6,6 +6,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -100,25 +101,41 @@ class AutoArrowTest {
     assertNull(AutoArrow.straight(drawn(Pt(0f, 0f), Pt(60f, 30f), Pt(120f, 0f), Pt(200f, 30f))))
   }
 
-  @Test fun theCleanHeadIsTheSizeAndOpeningOfTheDrawnOne() {
+  @Test fun theCleanHeadIsAStandardHeadAsLongAsTheDrawnOneInStepsOfFive() {
     val line = drawn(Pt(0f, 0f), Pt(300f, 0f))
     val (a, b) = AutoArrow.straight(line)!!
-    // A small, narrow head and a big, wide one: barbs about 22 and 60 long.
+    // A small head and a big one: barbs about 22.5 and 61 long, rounded down to 20 and 60 (steps of 10).
     val small = AutoArrow.twoStrokes(a, b, drawn(Pt(280f, -8f), Pt(301f, 0f), Pt(280f, 8f)))!!
     val big = AutoArrow.twoStrokes(a, b, drawn(Pt(255f, -40f), Pt(301f, 0f), Pt(255f, 40f)))!!
-    assertEquals(22.5f, small.head, 3f)
-    assertEquals(61f, big.head, 4f)
-    assertTrue(big.spread > small.spread + 0.25f)
-    // Drawn that way: the barbs end where hers did.
-    val barb = big.paths(2f)[1]
-    assertEquals(255f, barb.first().x, 5f)
-    assertEquals(40f, kotlin.math.abs(barb.first().y), 5f)
+    assertEquals(20f, small.head, 0.01f)
+    assertEquals(60f, big.head, 0.01f)
+    // Drawn as a standard arrowhead: equal barbs at 30° either side of the line.
+    val (left, tip, right) = big.paths(2f)[1]
+    assertEquals(60f, left.dist(tip), 0.5f)
+    assertEquals(60f, right.dist(tip), 0.5f)
+    assertEquals(30f, abs(left.y - tip.y), 0.5f)
+    assertEquals(30f, abs(right.y - tip.y), 0.5f)
     // Resized, the head grows with it.
     val doubled = big.transformed(Affine.scaleAround(Pt(0f, 0f), 2f)) as LineShape
-    assertEquals(big.head * 2f, doubled.head, 0.5f)
+    assertEquals(120f, doubled.head, 0.5f)
     // A tiny drawn head still gets at least the usual head (20 long).
     val tiny = AutoArrow.twoStrokes(a, b, drawn(Pt(290f, -9f), Pt(301f, 0f), Pt(290f, 9f)))!!
-    val tip = tiny.paths(2f)[1][1]
-    assertTrue(tiny.paths(2f)[1].first().dist(tip) >= 19.9f)
+    val t = tiny.paths(2f)[1]
+    assertTrue(t[0].dist(t[1]) >= 19.9f)
+  }
+
+  @Test fun aHeadDrawnLikeTheLastOneGetsExactlyTheSameHead() {
+    assertEquals(60f, AutoArrow.headSize(58f, last = 60f), 0f)
+    assertEquals(60f, AutoArrow.headSize(70f, last = 60f), 0f)
+    assertEquals(60f, AutoArrow.headSize(50f, last = 60f), 0f)
+    // Too far off: its own size, in steps of 10.
+    assertEquals(40f, AutoArrow.headSize(47f, last = 60f), 0f)
+    assertEquals(70f, AutoArrow.headSize(79f, last = 60f), 0f)
+    assertEquals(30f, AutoArrow.headSize(38.9f), 0f)
+    // Through the recogniser: the second arrow takes the first one's head.
+    val (a, b) = AutoArrow.straight(drawn(Pt(0f, 0f), Pt(300f, 0f)))!!
+    val first = AutoArrow.twoStrokes(a, b, drawn(Pt(255f, -40f), Pt(301f, 0f), Pt(255f, 40f)))!!
+    val second = AutoArrow.twoStrokes(a, b, drawn(Pt(250f, -42f), Pt(301f, 0f), Pt(250f, 42f)), lastHead = first.head)!!
+    assertEquals(first.head, second.head, 0f)
   }
 }
