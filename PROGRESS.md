@@ -14,77 +14,64 @@
 
 ## Auto arrow, and the owner's list of 25 Nov 2026 (a second Mac, without Xcode)
 
-**Nothing from this session has been run, on a simulator or an iPad.** This Mac has only Apple's
-command line tools (no Xcode, so no simulator), and the Android repository is private to this
-account, so the Kotlin couldn't be read either. What was checked here:
-- The core package builds and all 441 core tests pass (`sh scripts/core-test.sh`).
+**Nothing from this session has been run on a simulator or an iPad yet**: this Mac has only Apple's
+command line tools. What was checked here:
+- The core package builds and all its tests pass (`sh scripts/core-test.sh`), Android's
+  `AutoArrowTest` ported as it is (`AndroidAutoArrowTests`) and `ZoomResistTests`.
 - The whole app target type-checks in Swift 6 mode with no errors, built for Mac Catalyst (the
   command line tools' macOS SDK has UIKit, PencilKit, PDFKit and SwiftUI under
   `System/iOSSupport`): `swiftc -emit-module` of TaliCore for `arm64-apple-ios17.0-macabi`, then
   `swiftc -emit-sil -wmo -parse-as-library -target arm64-apple-ios17.0-macabi -sdk <MacOSX.sdk>
   -Fsystem <sdk>/System/iOSSupport/System/Library/Frameworks -swift-version 6 -I <module dir>` over
-  `App/Sources`. Nine older files needed small edits in a scratch copy for this older toolchain
-  (the `@Entry` macro, `glassEffect`, a few slow expressions); none are files changed here.
-- `UITests/` was only read (XCTest's UI part isn't in the command line tools).
-- A second reader went over the diff; what it found is fixed (one undo step for the arrow's swap,
-  the least zoom worked out once the canvas has its size, page pictures dropped at whole-page redraws).
+  `App/Sources`. Nine older files need small edits in a scratch copy for this older toolchain (the
+  `@Entry` macro, `glassEffect`, a few slow expressions); none are files changed here.
+- `UITests/` was only read. CI runs them (the PR for this branch), with a new run on an 11-inch iPad.
 
-So: it compiles, and how it behaves is unseen. It's on the branch `auto-arrow-and-fixes`, one commit
-per item, not pushed. First thing with Xcode or CI: run the UI suites, then try each item below on
-the iPad.
+Auto arrow (Android 1.0.33), checked against the Kotlin (`geometry/AutoArrow.kt`,
+`NoteCanvasView.autoArrow`):
+- `TaliCore/AutoArrow.swift` is a port of the Kotlin, same order and thresholds. A line shape has
+  a sixth part, `head` (JSON `"head"`, left out when 0, scaled with the shape, kept by end dots).
+- App (`AutoArrow.swift`): runs from `OwnInk.hand` once the stroke is kept (so the strokes are their
+  own undo steps and the swap one more); looks at the stroke as kept (smoothed), one stroke first,
+  then the line before it (same pen slot and colour, lifted less than 3 s before this stroke
+  lifted); the arrow is then picked up softly and there's a success haptic, as on Android.
+- The setting `autoArrow` and the strings `auto_arrow`, `auto_arrow_detail` are Android's names (the
+  strings are also in `tools/ios_strings.json` until they're imported from Android; then they come
+  out of that file, or the import stops with a clash).
 
-Auto arrow (Android 1.0.33), from the Android session's written rules:
-- `TaliCore/AutoArrow.swift`: `oneStroke`, `straight`, `twoStrokes`, `headAt`, `headSize`, `shape`;
-  `AutoArrowTests` ports the listed cases (what becomes an arrow, what stays ink, head sizes, the lock).
-- A line shape has a sixth part, `head` (0 = the usual head): `Arrow.barbLength`, scaled with the
-  shape, kept by end dots, written to JSON only when set.
-- App: `AutoArrow.swift` (`autoArrow(after:)`, called from `OwnInk.hand` once the stroke is kept, so
-  the drawn strokes are their own undo steps and the swap is one more), `ShapeSettings.autoArrow`,
-  the switch at the top of the Shapes panel's Choose tab (`auto-arrow`), `ShapesMoreTests.testAutoArrowSetting`.
-- Guessed, to check against Android: the JSON key is `"head"`; the setting's key is `autoArrow`; the
-  string keys are `auto_arrow` and `auto_arrow_detail` (added by hand to the catalog and to
-  `tools/ios_strings.json`: if Android uses the same names the next import says so and they come
-  out of that file); the three seconds run from the line's lift to the head's pen-down; a line
-  waiting for its head is tried first, then the one-stroke test; the arrow is not left picked up
-  (the rules' "picked up the same way as after hold-to-shape" was read as the pen's colour, width
-  and line style being taken the same way). A stroke cut at its page's edge is never made an arrow.
-
-The list (one commit each):
-- **Strokes past the page come back when moved.** They were kept whole and only hidden by a mask.
-  `keptToPage` cuts a stroke to what its page shows when it's kept (`OwnInk.hand`), and before one
-  kept whole earlier is carried, copied, cut or duplicated (`asShown`). Not for Mirror. A stroke
-  carried half off its page and back later has lost the hidden half (Android keeps it): the price
-  of also fixing strokes written before this. Pages are still added for a stroke that runs past the
-  last one (`growPages` with the whole stroke, before it's cut). With Write between pages on, the
-  cut is at the pages' sides and the last page's bottom.
-- **Carrying things is choppy.** `SelectionChromeView` was as big as the screen and redrawn whole
-  at every step of a drag; it's now only as big as what it draws (`SelectionChrome.extent`).
-- **A filled circle flickers or changes opacity when moved.** A tile shows nothing while it's
-  redrawn, so the desk showed through, and a see-through fill was drawn twice (page and overlay)
-  for a moment at every pick-up and put-down. `PagePatch.swift`: `PaperUnderlay` (plain paper under
-  the tiles) and `coverPage` (a picture of that part of the page as it now is, drawn at once and
-  left over the tiles for 0.4 s); `dropShapes(pageShows:)` takes what the page draws out of the
-  overlay as soon as the page shows it. Also used when a shape is drawn or an arrow made.
-- **PDFs load square by square.** Each tile read the whole PDF page (one tile at a time).
-  `SharpPage.Way.picture`: the page is drawn once as a picture at the tiles' sharpness (up to
-  12 megapixels, 192 MB kept) and tiles are cut from it; zoomed in further, its lines as before.
-  Export, thumbnails and page pictures still draw lines.
-- **Text boxes open under the keyboard.** `showForTyping` (keyboard notifications, the cursor's
-  line, room under the page while typing); a box opened from the page (`typeInTextBox`) had no
-  scrolling at all.
-- **Endless canvas zooms out too far.** `leastZoomNow`: out to everything written on screen, never
-  beyond half size when that already fits; pages keep 20%. The number is a judgement, not Android's.
-- **A page being moved leaves the finger.** The held tile was the grid's own, offset from its slot;
-  the slot moved with an animation as the others made way. `PagesOverview.floating` draws the
-  carried pages over the grid at the finger.
-- **The notebook's name is still under the bar.** On an 11-inch iPad on its side the row has no
-  room left at all (1180 pt; an Android tablet that size has about 1280 dp). `topRowScale` lays the
-  row out as wide as it needs and draws it smaller (about 0.89 there, never under 0.86), which is
-  also the size it is on Android. Check how sharp the bars look scaled.
-- **Not done: "Lasso drastically enlarges font when changing object size".** A text box resized
-  with the lasso's chip grows in proportion (`TextRow.transformed`, tested, and a UI test expects
-  it), as does ink and a shape's line. Nothing was found that doubles it. Needs the owner to say
-  what was picked up (typed text or handwriting) and what Android does with the same drag.
+The list:
+- **Lines across page edges** (Write between pages off): strokes keep all their points (as Android,
+  item 40 of its notes). Kept still, a stroke is drawn only on the page it starts on; carried with
+  the lasso it's drawn whole (`liftInk`, locked ink in `liftShapes`); put down, it's drawn on the
+  page it now starts on, so moved onto that page it shows in full. An earlier version on this
+  branch cut strokes at the edge when kept; that was taken back.
+- **Carrying things is choppy**: `SelectionChromeView` is only as big as what it draws
+  (`SelectionChrome.extent`), not the whole screen redrawn at every step of a drag.
+- **A filled circle flickers or changes opacity when moved**: `PagePatch.swift`. `PaperUnderlay`
+  is plain paper under the tiles; `coverPage` draws a picture of that part of the page as it now is
+  over tiles being drawn again (0.4 s); `dropShapes(pageShows:)` takes what the page draws out of
+  the overlay as soon as the page shows it. Also when a shape is drawn or an arrow made.
+- **PDFs load square by square**: `SharpPage.Way.picture` draws a PDF page once as a picture at the
+  tiles' sharpness (up to 12 megapixels, 192 MB kept) and the tiles are cut from it.
+- **Text boxes open under the keyboard**: `showForTyping` (keyboard notifications, the cursor's
+  line, room under the page while typing; also for a box opened from the page).
+- **Endless canvas zoom-out**: no hard limit. `ZoomResist`: down to where everything written fits
+  (at most 100%), the fingers' zoom; past it each step out counts for less, never beyond 2.5 times
+  further out (`resisted`; `raw(forShown:)` so a new pinch carries on without a jump). Done in
+  `scrollViewDidZoom` (`resistZoom`) from the fingers' spread against when they landed, keeping the
+  page under their middle. Pages keep their 20% floor. Not in Android yet (a prompt was written).
+- **A page being moved leaves the finger** (pages overview): the carried pages float at the finger
+  (`PagesOverview.floating`) instead of being their grid tiles pushed over.
+- **The notebook's name under the bar**: e9ec94c keeps it beside the tools while it gets 110 pt
+  (`TopBarLayout.nameMin`). On an 11-inch iPad on its side that isn't left, so `topRowScale` draws
+  the row smaller (never under 0.86) just enough to leave it `nameMin`; it does nothing where
+  e9ec94c's rule already works. `ScreenshotTests.testNotebookNameOnTheToolbarRow` shoots it both
+  ways (`-noTopRowScale`) on CI's 11-inch iPad (`ipad11` job).
+- **Lasso makes text far too big**: not found. The iPad uses Android's rule exactly (scale = the
+  corner's distance from the top-left corner, then `TextRow.transformed` = `TextItem.transformed`,
+  font times the scale; same chip offsets). `SelectingTests.testTypedTextInTheLasso` now measures
+  the growth for a 1.15 drag and fails above 1.3. If it passes on CI, the owner's case is something
+  else (handwriting, a box from the phone, several things at once): ask for a recording.
 
 ## Curve with add dots, lines lock within 3° (25 Nov 2026, Windows)
 

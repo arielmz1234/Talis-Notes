@@ -612,6 +612,11 @@ final class SelectingTests: ShotCase {
     drag(app, grip, CGPoint(x: f.minX + (grip.x - f.minX) * 1.15, y: f.minY + (grip.y - f.minY) * 1.15))
     let bigger = selectionFrame(app)
     XCTAssertGreaterThan(bigger.width, f.width * 1.08, "the text grew")
+    // By as much as the chip was dragged (Android's rule: the corner's distance from the top-left
+    // corner, 1.15 times here), not more (the owner saw text grow far too much on the iPad).
+    print("text resize: frame \(f.size) -> \(bigger.size), x\(bigger.width / f.width) for a drag of x1.15")
+    XCTAssertLessThan(bigger.width, f.width * 1.3, "the text grew only as much as the drag")
+    shot("t1b-text-resized")
     f = bigger
     drag(app, moveChip(f), CGPoint(x: moveChip(f).x + 30, y: moveChip(f).y + 60))
     calmShot("t2-bigger-and-moved")
