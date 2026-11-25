@@ -133,7 +133,8 @@ extension NoteCanvas.Coordinator {
   func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
     pageChrome.zoomAtDown = scrollView.zoomScale
     // Only a pull that starts at the end of the notebook can open space for a new page.
-    pageChrome.pull.begin(below: Float(belowLastPage), allowed: paged && !parent.viewOnly)
+    // Not while typing: the room left for the keyboard under the page isn't a pull.
+    pageChrome.pull.begin(below: Float(belowLastPage), allowed: paged && !parent.viewOnly && textEdit.view == nil)
   }
 
   func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {

@@ -805,7 +805,11 @@ struct NoteCanvas: UIViewRepresentable {
       let w = pages.worldSize.width * canvas.zoomScale
       let side = max((canvas.bounds.width - w) / 2, 16)
       // A little room is always left under the last page (Android's `REST_DP`); pulling opens more.
-      canvas.contentInset = UIEdgeInsets(top: parent.topClearance, left: side, bottom: CGFloat(PagePull.rest), right: side)
+      // While a text box is typed in, as much again as the keyboard covers, so a box at the very
+      // end of the notebook can still be scrolled up clear of it.
+      let typing = textEdit.view != nil && textEdit.typing ? keyboardOverlap : 0
+      let insets = UIEdgeInsets(top: parent.topClearance, left: side, bottom: CGFloat(PagePull.rest) + typing, right: side)
+      if canvas.contentInset != insets { canvas.contentInset = insets }
     }
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {

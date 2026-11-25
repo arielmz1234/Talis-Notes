@@ -19,6 +19,8 @@ struct TextEditState {
   /// The dots on its sides and the chips at its corners (see TextBoxHandles.swift), and its dashed frame.
   var handles: [TextBoxHandle] = []
   let frame = CAShapeLayer()
+  /// Where the on-screen keyboard is (screen coordinates), while it's up.
+  var keyboard: CGRect?
 
   /// The editor's own views: a touch on one of them is the editor's, not "done".
   var ownViews: [UIView] { [view].compactMap { $0 } + handles }
@@ -41,6 +43,76 @@ extension NoteCanvas.Coordinator: UITextViewDelegate {
     tap.delegate = self
     v.addGestureRecognizer(tap)
     textEdit.tap = tap
+    // The keyboard's place, so a box being typed in is kept above it.
+    for name in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardWillHideNotification] {
+      NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: name, object: nil)
+    }
+  }
+
+  @objc func keyboardMoved(_ note: Notification) {
+    let hiding = note.name == UIResponder.keyboardWillHideNotification
+    textEdit.keyboard = hiding ? nil : (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+    keyboardRoomChanged()
+  }
+
+  /// How much of the canvas's lower part the keyboard covers (none for a floating or hardware keyboard).
+  var keyboardOverlap: CGFloat {
+    guard let canvas, let window = canvas.window, let keyboard = textEdit.keyboard else { return 0 }
+    let frame = window.convert(keyboard, from: window.screen.coordinateSpace)
+    // Only one docked along the bottom covers the page; a small floating one is moved out of the way by hand.
+    guard frame.maxY >= window.bounds.maxY - 1, frame.width >= window.bounds.width * 0.6 else { return 0 }
+    return min(max(0, canvas.convert(canvas.bounds, to: nil).maxY - frame.minY), canvas.bounds.height * 0.8)
+  }
+
+  /// The keyboard came, went or changed height: while a box is typed in there's room for the
+  /// keyboard under the page (so the page can scroll that far) and the box is kept clear of it;
+  /// once it's gone the page settles back.
+  private func keyboardRoomChanged() {
+    guard let canvas else { return }
+    updateContent()
+    if textEdit.view != nil, textEdit.typing {
+      showForTyping(opening: true)
+      return
+    }
+    let most = max(canvas.contentSize.height - canvas.bounds.height + canvas.contentInset.bottom, -canvas.contentInset.top)
+    if canvas.contentOffset.y > most, !canvas.isDragging, !canvas.isDecelerating {
+      canvas.setContentOffset(CGPoint(x: canvas.contentOffset.x, y: most), animated: true)
+    }
+  }
+
+  /// Keeps the box being typed in where she can see it: comfortably below the toolbars and above
+  /// the keyboard (Android's `showForTyping`). [opening] (the box just opened for typing, or the
+  /// keyboard just came): when its top isn't in view, or the line she's on is under the keyboard,
+  /// the page scrolls so the box starts just under the toolbars. While typing, only the line with
+  /// the cursor is kept in view, so a box she scrolled within stays where she put it.
+  func showForTyping(opening: Bool) {
+    guard let canvas, let v = textEdit.view, textEdit.typing else { return }
+    let clearance = parent.topClearance
+    let overlap = keyboardOverlap
+    let at = canvas.contentOffset.y
+    let top = at + clearance + 36, bottom = at + canvas.bounds.height - overlap - 24
+    // The line with the cursor, in the canvas's coordinates (the box's first line when it has none yet).
+    var line = CGRect(x: v.frame.minX, y: v.frame.minY, width: 1, height: min(v.frame.height, 44))
+    if let end = v.selectedTextRange?.end {
+      let caret = v.caretRect(for: end)
+      if !caret.isNull, !caret.isInfinite, caret.height > 0 { line = v.convert(caret, to: canvas) }
+    }
+    var y = at
+    if opening {
+      // Without a keyboard on screen yet, a box in the lower part of the screen counts as hidden: it's about to be.
+      let low = overlap == 0 && v.frame.minY > at + canvas.bounds.height * 0.4
+      if v.frame.minY < top || line.maxY > bottom || low {
+        y = v.frame.minY - (clearance + 56)
+        // A tall box: the line she's on still above the keyboard.
+        let lowest = y + canvas.bounds.height - overlap - 24
+        if line.maxY > lowest { y += line.maxY - lowest }
+      }
+    } else if line.maxY > bottom {
+      y = at + line.maxY - bottom
+    } else if line.minY < top {
+      y = at - (top - line.minY)
+    }
+    if abs(y - at) > 0.5 { canvas.setContentOffset(CGPoint(x: canvas.contentOffset.x, y: y), animated: true) }
   }
 
   @objc func textTap(_ g: UITapGestureRecognizer) {
@@ -153,11 +225,7 @@ extension NoteCanvas.Coordinator: UITextViewDelegate {
     }
     v.becomeFirstResponder()
     // Comfortably below the toolbars and above the keyboard (Android's `showForTyping`).
-    let clearance = parent.topClearance
-    let want = v.frame.minY - (clearance + 56)
-    if v.frame.minY < canvas.contentOffset.y + clearance + 36 || v.frame.minY > canvas.contentOffset.y + canvas.bounds.height * 0.4 {
-      canvas.setContentOffset(CGPoint(x: canvas.contentOffset.x, y: want), animated: true)
-    }
+    showForTyping(opening: true)
     // Once it's on screen: a text view added and focused in the same moment can miss the keyboard.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak v] in
       if let v, v.superview != nil, !v.isFirstResponder { v.becomeFirstResponder() }
@@ -197,6 +265,8 @@ extension NoteCanvas.Coordinator: UITextViewDelegate {
   func textViewDidChange(_ textView: UITextView) {
     if textView.markedTextRange == nil { TextLook.setDirections(textView.textStorage) }
     layoutTextEditor()
+    // A new line may have grown the box down under the keyboard.
+    showForTyping(opening: false)
   }
 
   /// A− / A+: the text 15% smaller or bigger, between 10 and 160 (Android's limits).
