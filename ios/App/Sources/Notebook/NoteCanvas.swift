@@ -89,7 +89,8 @@ final class PagesLayer: CATiledLayer, @unchecked Sendable {
     }
     // Pictures sit behind everything like paper until they're brought to the front; then they're
     // drawn among the shapes and text by their place in the stack (Android's `drawAll`).
-    for pic in under.pictures where !pic.row.front { draw(pic) }
+    // In their own order in the stack, so Send to back puts one behind another picture too.
+    for pic in under.pictures.filter({ !$0.row.front }).sorted(by: { $0.row.z < $1.row.z }) { draw(pic) }
     for f in under.fills where CGRect(f.row.rect).intersects(rect) { f.draw(in: cg) }
     cg.setLineCap(.round)
     cg.setLineJoin(.round)
@@ -323,6 +324,7 @@ struct NoteCanvas: UIViewRepresentable {
     c.installTextBoxes(on: v)
     c.installOwnInk(on: v)
     c.installPencilGestures(on: v)
+    c.installEndlessPinch(on: v)
     bridge?.coordinator = c
     v.minimumZoomScale = Coordinator.pagesLeastZoom
     v.maximumZoomScale = 6
@@ -379,11 +381,8 @@ struct NoteCanvas: UIViewRepresentable {
     /// being drawn again (see PagePatch.swift).
     weak var underlay: PaperUnderlay?
     var patches: [UIView] = []
-    /// A pinch on an endless canvas: how far apart the fingers were and the zoom when it was last
-    /// measured from, where resistance begins, and how many fingers; and on while the zoom is set
-    /// from here (see Endless.swift).
-    var pinchStart: (spread: CGFloat, zoom: CGFloat, free: CGFloat, touches: Int)?
-    var resisting = false
+    /// The endless canvas's own pinch (see Endless.swift).
+    var endlessPinch = EndlessPinchState()
     /// What's stored, in drawing order, with the key that recognises each stroke in the PKDrawing.
     var stored: [(key: StrokeKey, stroke: InkStroke)] = []
     var pageCount = 1
@@ -513,7 +512,7 @@ struct NoteCanvas: UIViewRepresentable {
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
       loading = false
       restack()
-      canvas.minimumZoomScale = leastZoom
+      applyPinchMode()
       updateContent()
       applyTool()
       reportUndo()
@@ -775,7 +774,6 @@ struct NoteCanvas: UIViewRepresentable {
     var firstPlacing = false
 
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
-      pinchBegan(scrollView)
       if scrollView.isTracking || scrollView.isZoomBouncing || scrollView.pinchGestureRecognizer?.state == .began { zoomedByHand = true }
     }
 
@@ -820,9 +818,6 @@ struct NoteCanvas: UIViewRepresentable {
     }
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
-      // Zooming out on an endless canvas gets harder past what's written: the zoom is set again
-      // from here, and that change comes back through here to update the rest.
-      if resistZoom(scrollView) { return }
       // Pictures of the page were made for the zoom as it was.
       dropPatches()
       zoomEndsPull()
@@ -842,7 +837,6 @@ struct NoteCanvas: UIViewRepresentable {
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
-      pinchStart = nil
       updateContent()
       makeRoom()
     }
