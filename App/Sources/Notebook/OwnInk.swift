@@ -209,6 +209,7 @@ extension NoteCanvas.Coordinator {
       let s = self.stroke(pen, inputs, id: newId())
       // Only what its page shows is kept (Android's split strokes): the rest would come back into
       // view when it's moved.
+      self.growPages(toHold: s.bounds)
       let kept = self.keptToPage(s)
       for piece in kept { self.own.kept.append((piece.id, began)) }
       if self.own.kept.count > 50 { self.own.kept.removeFirst(self.own.kept.count - 50) }

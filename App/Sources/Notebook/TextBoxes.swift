@@ -196,6 +196,7 @@ extension NoteCanvas.Coordinator: UITextViewDelegate {
     // It's drawn by the editor meanwhile, not by the page.
     pages?.pages.under.texts.removeAll { $0.id == t.id }
     pages?.layer.setNeedsDisplay()
+    dropPatches()
     beginEditing(t, typing: false)
   }
 
@@ -330,6 +331,7 @@ extension NoteCanvas.Coordinator: UITextViewDelegate {
       registerTextsChange(from: before, to: after)
     } else {
       pages?.layer.setNeedsDisplay()
+      dropPatches()
     }
   }
 

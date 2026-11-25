@@ -51,6 +51,12 @@ extension NoteCanvas.Coordinator {
     shape.z = topZ + 1
     shapeZ = max(shapeZ, shape.z)
     forgetCircle()
+    // An undo step of its own: the stroke was kept a moment ago in this same turn of the run loop,
+    // and the undo manager would make one step of the two, so Undo took the arrow and the stroke together.
+    if let undo = canvas?.undoManager, undo.groupingLevel > 0 {
+      undo.endUndoGrouping()
+      undo.beginUndoGrouping()
+    }
     commit(remove: drawn, add: [.shape(shape)])
     // The clean arrow is up in the frame the hand-drawn ink leaves: a picture of the page with the
     // arrow on it lies over its tiles until they've drawn it, or failing that the arrow itself is

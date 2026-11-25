@@ -777,6 +777,8 @@ struct NoteCanvas: UIViewRepresentable {
     /// The first page's whole width on screen, from the top of the first page.
     private func fitWidth() {
       guard let canvas, let pages else { return }
+      // Now that the canvas has a size (it had none when the notebook was read).
+      applyLeastZoom()
       // It opens where she left off (Android keeps the view per notebook); the first time, the page's width.
       let saved = parent.notebook.viewport.flatMap { v -> Viewport? in v.zoom > 0.05 ? v : nil }
       let fit = min((canvas.bounds.width - 48) / (paged ? pages.worldSize.width : CGFloat(layout.width)), 1.2)

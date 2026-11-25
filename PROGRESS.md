@@ -14,12 +14,24 @@
 
 ## Auto arrow, and the owner's list of 25 Nov 2026 (a second Mac, without Xcode)
 
-**Nothing in `App/` or `UITests/` from this session has been compiled or run.** This Mac has only
-Apple's command line tools (no Xcode, so no iOS SDK and no simulator), and the Android repository
-is private to this account, so the Kotlin couldn't be read either. What was checked here: the core
-package builds and all 441 core tests pass (`sh scripts/core-test.sh`). Everything else was written
-from the code and read back by hand. It's on the branch `auto-arrow-and-fixes`, one commit per
-item, not pushed. First thing with Xcode or CI: build, then try each item below on the iPad.
+**Nothing from this session has been run, on a simulator or an iPad.** This Mac has only Apple's
+command line tools (no Xcode, so no simulator), and the Android repository is private to this
+account, so the Kotlin couldn't be read either. What was checked here:
+- The core package builds and all 441 core tests pass (`sh scripts/core-test.sh`).
+- The whole app target type-checks in Swift 6 mode with no errors, built for Mac Catalyst (the
+  command line tools' macOS SDK has UIKit, PencilKit, PDFKit and SwiftUI under
+  `System/iOSSupport`): `swiftc -emit-module` of TaliCore for `arm64-apple-ios17.0-macabi`, then
+  `swiftc -emit-sil -wmo -parse-as-library -target arm64-apple-ios17.0-macabi -sdk <MacOSX.sdk>
+  -Fsystem <sdk>/System/iOSSupport/System/Library/Frameworks -swift-version 6 -I <module dir>` over
+  `App/Sources`. Nine older files needed small edits in a scratch copy for this older toolchain
+  (the `@Entry` macro, `glassEffect`, a few slow expressions); none are files changed here.
+- `UITests/` was only read (XCTest's UI part isn't in the command line tools).
+- A second reader went over the diff; what it found is fixed (one undo step for the arrow's swap,
+  the least zoom worked out once the canvas has its size, page pictures dropped at whole-page redraws).
+
+So: it compiles, and how it behaves is unseen. It's on the branch `auto-arrow-and-fixes`, one commit
+per item, not pushed. First thing with Xcode or CI: run the UI suites, then try each item below on
+the iPad.
 
 Auto arrow (Android 1.0.33), from the Android session's written rules:
 - `TaliCore/AutoArrow.swift`: `oneStroke`, `straight`, `twoStrokes`, `headAt`, `headSize`, `shape`;
@@ -42,7 +54,9 @@ The list (one commit each):
   `keptToPage` cuts a stroke to what its page shows when it's kept (`OwnInk.hand`), and before one
   kept whole earlier is carried, copied, cut or duplicated (`asShown`). Not for Mirror. A stroke
   carried half off its page and back later has lost the hidden half (Android keeps it): the price
-  of also fixing strokes written before this.
+  of also fixing strokes written before this. Pages are still added for a stroke that runs past the
+  last one (`growPages` with the whole stroke, before it's cut). With Write between pages on, the
+  cut is at the pages' sides and the last page's bottom.
 - **Carrying things is choppy.** `SelectionChromeView` was as big as the screen and redrawn whole
   at every step of a drag; it's now only as big as what it draws (`SelectionChrome.extent`).
 - **A filled circle flickers or changes opacity when moved.** A tile shows nothing while it's

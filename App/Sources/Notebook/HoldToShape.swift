@@ -365,6 +365,7 @@ extension NoteCanvas.Coordinator {
     do { try parent.db.removeItem(id) } catch { CrashNote.log("removing a shape: \(error)") }
     touch()
     pages.layer.setNeedsDisplay()
+    dropPatches()
     reportUndo()
   }
 
