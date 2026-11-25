@@ -34,6 +34,8 @@ extension NoteCanvas.Coordinator {
   func redrawPage(_ area: CGRect?) {
     guard let pages, let area else { return }
     pages.layer.setNeedsDisplay(area.insetBy(dx: -4, dy: -4))
+    // A picture of how the page was there is out of date now.
+    dropPatches(over: area.insetBy(dx: -4, dy: -4))
   }
 
   /// Takes what's picked up off the page and into the overlay, ready to be carried.
@@ -96,7 +98,8 @@ extension NoteCanvas.Coordinator {
       return l
     }
     if !upInk.isEmpty {
-      let drawing = PKDrawing(strokes: upInk.map { $0.pkStroke(mask: mask(for: $0)) })
+      // Whole while carried, as the rest of the writing (see liftInk).
+      let drawing = PKDrawing(strokes: upInk.map { $0.pkStroke(mask: nil) })
       let box = drawing.bounds.insetBy(dx: -2, dy: -2)
       let l = placed(box)
       canvas.traitCollection.performAsCurrent { l.contents = drawing.image(from: box, scale: z * scale).cgImage }
@@ -117,18 +120,28 @@ extension NoteCanvas.Coordinator {
     CATransaction.commit()
     pages.pages.under = left
     redrawPage(lasso.bounds)
+    // The page without them, at once: its tiles take a moment, and meanwhile showed nothing there.
+    coverPage(lasso.bounds)
   }
 
   /// What was carried is put back where it was. With [redraw] off (a change to it follows at once)
   /// the page and the overlay are left as they are, so nothing shows at the old place in between.
-  func restoreLifted(redraw: Bool = true) {
-    guard let pages, let lifted = lasso.lifted else { return }
+  /// True when the page already shows it again (a picture of it lies over the tiles being drawn),
+  /// so the overlay's copy can go at once (see `dropShapes`).
+  @discardableResult
+  func restoreLifted(redraw: Bool = true) -> Bool {
+    guard let pages, let lifted = lasso.lifted else { return false }
     lasso.lifted = nil
     pages.pages.under = lifted
-    guard redraw else { return }
+    guard redraw else { return false }
     redrawPage(lasso.bounds)
     carryShapes(.identity)
+    return carriesPageItems && coverPage(lasso.bounds)
   }
+
+  /// Whether the overlay carries anything the page draws (shapes, text, pictures, fills, locked
+  /// writing), not only writing, which PencilKit draws.
+  var carriesPageItems: Bool { lasso.shapeLayer.sublayers?.contains { $0.name != Self.carriedInk } ?? false }
 
   private func trace(_ s: ShapeRow, on l: CAShapeLayer, zoom z: CGFloat) {
     let path = CGMutablePath()
@@ -170,9 +183,18 @@ extension NoteCanvas.Coordinator {
 
   /// The overlay goes once what it carried is back on the page: a moment later, when the page has
   /// drawn it and the canvas says it shows it (taken away at once, there was a blink with nothing there).
-  func dropShapes() {
+  /// [pageShows]: the page already shows what it draws of them (see `coverPage`), so that leaves
+  /// the overlay now; left on for the usual moment, anything see-through was seen twice, darker,
+  /// until the overlay went. Carried writing still waits for the canvas.
+  func dropShapes(pageShows: Bool = false) {
     lasso.overlayTicket += 1
     let ticket = lasso.overlayTicket
+    if pageShows {
+      CATransaction.begin()
+      CATransaction.setDisableActions(true)
+      for l in lasso.shapeLayer.sublayers ?? [] where l.name != Self.carriedInk { l.removeFromSuperlayer() }
+      CATransaction.commit()
+    }
     var rendered = false, waited = false
     let clear = { [weak self] in
       guard let self, rendered, waited, self.lasso.overlayTicket == ticket else { return }

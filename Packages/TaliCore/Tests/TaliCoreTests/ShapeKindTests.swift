@@ -12,9 +12,9 @@ struct ShapeKindTests {
   }
 
   @Test func linesKeepToTidyAnglesUnlessTheirEndStuck() {
-    guard case let .line(a, b, _, true, _) = ShapeKind.ARROW.drawn(Pt(0, 0), Pt(200, 8)) else { Issue.record("not an arrow"); return }
+    guard case let .line(a, b, _, true, _, _) = ShapeKind.ARROW.drawn(Pt(0, 0), Pt(200, 8)) else { Issue.record("not an arrow"); return }
     #expect(abs(a.y - b.y) < 0.01)
-    guard case let .line(_, kept, _, _, _) = ShapeKind.LINE.drawn(Pt(0, 0), Pt(200, 8), keepEnd: true) else { Issue.record("not a line"); return }
+    guard case let .line(_, kept, _, _, _, _) = ShapeKind.LINE.drawn(Pt(0, 0), Pt(200, 8), keepEnd: true) else { Issue.record("not a line"); return }
     #expect(kept == Pt(200, 8))
   }
 

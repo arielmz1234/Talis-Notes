@@ -27,7 +27,7 @@ extension NoteCanvas.Coordinator {
       cg.scaleBy(x: scale, y: scale)
       cg.translateBy(x: -r.minX, y: -r.minY)
       cg.clip(to: r)
-      pages.pages.draw(in: cg)
+      pages.pages.paint(in: cg)
       cg.restoreGState()
       canvas.drawing.image(from: r, scale: scale * 2).draw(in: CGRect(origin: .zero, size: size))
     }
@@ -97,6 +97,9 @@ struct PagesOverview: View {
   @State private var frames: [Int: CGRect] = [:]
   @State private var dragAt: CGPoint?
   @State private var grab: CGSize = .zero
+  /// Where the carried pages' tiles were when they were picked up: they're drawn floating under the
+  /// finger from there, apart from the grid (see `floating`).
+  @State private var liftedFrom: [Int: CGRect] = [:]
   /// Pages lifting away on a puff before they're deleted.
   @State private var leaving: Set<Int> = []
   /// Each page's latest picture, so after a move the tiles show the right page while new pictures are made.
@@ -136,8 +139,9 @@ struct PagesOverview: View {
               }
               .puffBox(leaving: leaving.contains(i))
               .background(GeometryReader { g in Color.clear.preference(key: PageFrames.self, value: [i: g.frame(in: .named("pages-grid"))]) })
-              .offset(heldOffset(i))
-              .zIndex(held == i ? 2 : (carried.contains(i) ? 1 : 0))
+              // A carried page's own tile only keeps its place in the grid; it's drawn under the finger (see `floating`).
+              // (Not quite 0: the tile is still the one being held.)
+              .opacity(held != nil && carried.contains(i) ? 0.001 : 1)
               // Holding a page picks it (or, while picking, takes the unbroken run it's in); dragging then moves them.
               .gesture(
                 LongPressGesture(minimumDuration: 0.4)
@@ -153,6 +157,7 @@ struct PagesOverview: View {
             if picked == nil { addTile }
           }
           .padding(4)
+          .overlay(alignment: .topLeading) { floating }
           .coordinateSpace(name: "pages-grid")
           .onPreferenceChange(PageFrames.self) { frames = $0 }
         }
@@ -322,10 +327,11 @@ struct PagesOverview: View {
       withAnimation(Ease.outStrong(duration: 0.2)) { picked = (picked ?? []).union([i]) }
     }
     let run = Pages.carried(with: i, picked: picked)
-    withAnimation(.easeOut(duration: 0.16)) {
-      held = i
-      carried = run.contains(i) ? run : [i]
-    }
+    let all = run.contains(i) ? run : [i]
+    liftedFrom = Dictionary(uniqueKeysWithValues: all.compactMap { page in frames[page].map { (page, $0) } })
+    // At once, not eased in: the floating tiles take over from the grid's in the same frame.
+    held = i
+    carried = all
     order = Array(0..<count)
     let f = frames[i] ?? .zero
     let at = p ?? CGPoint(x: f.midX, y: f.midY)
@@ -358,11 +364,27 @@ struct PagesOverview: View {
     }
   }
 
-  /// The held page sits under the finger, wherever its slot is now; the pages carried with it move
-  /// by as much, so they travel as one block (Android's `lift`).
-  private func heldOffset(_ i: Int) -> CGSize {
-    guard let h = held, h == i || carried.contains(i), let at = dragAt, let f = frames[h] else { return .zero }
-    return CGSize(width: at.x - grab.width - f.midX, height: at.y - grab.height - f.midY)
+  /// The carried pages, drawn over the grid exactly under the finger: the held one where it was
+  /// taken hold of, the pages carried with it as far from it as they were, so they travel as one
+  /// block (Android's `lift`). They used to be the grid's own tiles pushed over by how far the
+  /// finger was from their slot; but as the other pages made way the slot moved, with an animation
+  /// the push knew nothing of, and the page slid out from under the finger and back.
+  @ViewBuilder private var floating: some View {
+    if let h = held, let at = dragAt, let home = liftedFrom[h] {
+      ForEach(carried.filter { liftedFrom[$0] != nil }, id: \.self) { i in
+        let f = liftedFrom[i] ?? home
+        PageTile(
+          index: i, number: (shown.firstIndex(of: i) ?? i) + 1, aspect: aspect, selected: false, picking: picked != nil,
+          picked: picked?.contains(i) == true, lifted: true, picture: thumbs[i], bridge: bridge, version: version, makesPicture: false,
+          onPicture: { _ in }, action: {}
+        )
+        .frame(width: f.width, height: f.height)
+        .position(x: at.x - grab.width + (f.midX - home.midX), y: at.y - grab.height + (f.midY - home.midY))
+        .zIndex(i == h ? 2 : 1)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+      }
+    }
   }
 
   /// Let go: the held pages and everything on them move to where they were dropped.
@@ -396,6 +418,8 @@ private struct PageTile: View {
   var picture: UIImage?
   var bridge: CanvasBridge
   var version: Int
+  /// Off for the copy that floats under the finger while a page is carried: it shows the picture it's given.
+  var makesPicture = true
   var onPicture: (UIImage) -> Void
   var action: () -> Void
   @Environment(\.tali) private var c
@@ -436,7 +460,7 @@ private struct PageTile: View {
     .accessibilityAction { action() }
     .accessibilityLabel(picking ? L("pick_page_n", number) : L("look_at_page_n", number))
     .accessibilityAddTraits(picked ? .isSelected : [])
-    .task(id: version) { if let made = bridge.pageImage(index, width: 240) { onPicture(made) } }
+    .task(id: version) { if makesPicture, let made = bridge.pageImage(index, width: 240) { onPicture(made) } }
   }
 }
 

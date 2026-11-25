@@ -129,6 +129,7 @@ struct ShapesPanel: View {
   @State private var styling = ShapesPanelTab.styling
   @AppStorage(ShapeSettings.Key.starredPacks) private var starredList = ""
   @AppStorage(ShapeSettings.Key.customShapes) private var customJSON = "[]"
+  @AppStorage(ShapeSettings.Key.autoArrow) private var autoArrow = false
 
   var body: some View {
     ScrollingPanel(width: 588) {
@@ -151,7 +152,11 @@ struct ShapesPanel: View {
 
   @ViewBuilder private var choose: some View {
     let starred = ShapeSettings.starred(from: starredList)
-    Spacer().frame(height: 12)
+    Spacer().frame(height: 6)
+    // At the very top of the shapes, above the tiles (as on Android 1.0.33).
+    ToggleRow(label: L("auto_arrow"), on: $autoArrow, detail: L("auto_arrow_detail"))
+      .accessibilityIdentifier("auto-arrow")
+    Spacer().frame(height: 8)
     SectionLabel(text: L("shape_group_basic"))
     Spacer().frame(height: 8)
     ShapeTileGrid {

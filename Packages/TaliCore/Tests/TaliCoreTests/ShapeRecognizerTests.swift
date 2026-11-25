@@ -49,20 +49,20 @@ struct ShapeRecognizerTests {
   }
 
   @Test func straightishStrokeBecomesLine() throws {
-    guard case let .line(a, b, _, _, _)? = ShapeRecognizer.recognize(wobbly(Pt(0, 0), Pt(300, 6))) else { Issue.record("not a line"); return }
+    guard case let .line(a, b, _, _, _, _)? = ShapeRecognizer.recognize(wobbly(Pt(0, 0), Pt(300, 6))) else { Issue.record("not a line"); return }
     #expect(abs(a.y - b.y) < 0.01)
     #expect(abs(a.dist(b) - 300) < 3)
   }
 
   @Test func diagonalLineKeepsAngleWhenNotNearSnap() {
-    guard case let .line(a, b, _, _, _)? = ShapeRecognizer.recognize(wobbly(Pt(0, 0), Pt(300, 120))) else { Issue.record("not a line"); return }
+    guard case let .line(a, b, _, _, _, _)? = ShapeRecognizer.recognize(wobbly(Pt(0, 0), Pt(300, 120))) else { Issue.record("not a line"); return }
     #expect(abs((b - a).angle() * 180 / .pi - 21.8) < 1)
   }
 
   @Test func shaftWithBarbsBecomesArrow() {
     let tip = Pt(300, 0)
     let g = ShapeRecognizer.recognize(wobbly(Pt(0, 0), tip, Pt(260, -30), tip, Pt(260, 30), jitter: 1.5))
-    guard case .line(_, _, _, true, _)? = g else { Issue.record("got \(String(describing: g))"); return }
+    guard case .line(_, _, _, true, _, _)? = g else { Issue.record("got \(String(describing: g))"); return }
   }
 
   @Test func lShapeBecomesOpenPolyline() {

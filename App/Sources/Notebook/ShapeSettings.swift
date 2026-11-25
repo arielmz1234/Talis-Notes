@@ -12,6 +12,7 @@ enum ShapeSettings {
     static let style = "shapeStyle"
     static let followsPen = "shapeFollowsPen"
     static let holdToShape = "holdToShape"
+    static let autoArrow = "autoArrow"
     static let snapShapes = "snapShapes"
     static let fillColor = "fillColor"
     static let fillNone = "fillNone"
@@ -84,6 +85,9 @@ enum ShapeSettings {
   }
 
   static var holdToShape: Bool { store.object(forKey: Key.holdToShape) as? Bool ?? true }
+
+  /// Auto arrow: a hand-drawn arrow becomes an arrow shape as the pen lifts. Off until she turns it on.
+  static var autoArrow: Bool { store.bool(forKey: Key.autoArrow) }
 
   // MARK: The fill tool
 

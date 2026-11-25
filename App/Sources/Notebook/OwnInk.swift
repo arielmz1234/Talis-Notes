@@ -118,12 +118,18 @@ extension NoteCanvas.Coordinator {
     switch mode {
     case .laser: laserEnded()
     case .straight(let pen):
+      forgetArrowLine()
       if cancelled { clearLive() } else { hand(pen, StraightLine.inputs(own.start, own.end), began: own.began) }
     case .trace(let pen):
       let inputs = InkInputs(points: smoothed(pen, own.samples), tool: .stylus)
       let began = own.began
       own.samples = []
-      if cancelled || hold.live != nil { clearLive() } else { hand(pen, inputs, began: began) }
+      if cancelled || hold.live != nil {
+        forgetArrowLine()
+        clearLive()
+      } else {
+        hand(pen, inputs, began: began, traced: true)
+      }
     case nil: break
     }
   }
@@ -181,8 +187,10 @@ extension NoteCanvas.Coordinator {
   /// The stroke is kept: its live picture stays on until the canvas shows it, and the next stroke
   /// is drawn in a new one. Kept a moment later, so a scribble to delete or a stroke that became a
   /// shape (which end on the same lift) can still say it isn't.
-  private func hand(_ pen: PenSlot, _ inputs: InkInputs, began: Date) {
+  /// [traced]: written by hand with a pen (not a straight highlighter line), so it may be an arrow.
+  private func hand(_ pen: PenSlot, _ inputs: InkInputs, began: Date, traced: Bool = false) {
     guard let canvas, !inputs.points.isEmpty else { return clearLive() }
+    let lifted = Date()
     showLive(pen, inputs)
     let shown = own.live
     own.handedIn.append(shown)
@@ -193,6 +201,7 @@ extension NoteCanvas.Coordinator {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       if self.hold.dropSince.map({ began >= $0 }) ?? false {
+        self.forgetArrowLine()
         self.letGo(shown, now: true)
         return
       }
@@ -200,7 +209,13 @@ extension NoteCanvas.Coordinator {
       self.own.kept.append((s.id, began))
       if self.own.kept.count > 50 { self.own.kept.removeFirst() }
       self.commit(remove: [], add: [.ink(s)])
-      self.afterRender { self.letGo(shown, now: false) }
+      if traced, self.autoArrow(after: s, pen: pen, lifted: lifted) {
+        // The clean arrow is already up, in this same frame: the hand-drawn ink goes as it comes.
+        self.letGo(shown, now: true)
+      } else {
+        if !traced { self.forgetArrowLine() }
+        self.afterRender { self.letGo(shown, now: false) }
+      }
     }
   }
 

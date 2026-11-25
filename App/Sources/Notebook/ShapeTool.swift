@@ -99,20 +99,25 @@ extension NoteCanvas.Coordinator {
     endSnap()
     shapeTool.ticket += 1
     if let shape {
-      // The live shape stays over the page until the page's tiles have drawn it (taken away at
-      // once, the shape blinked out and back as they redrew).
       shapeTool.squareHint.path = nil
-      let ticket = shapeTool.ticket
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-        guard let self, self.shapeTool.ticket == ticket, self.shapeTool.preview == nil else { return }
-        self.drawShapePreview()
+      let made = addShape(shape)
+      if hold.pageShows {
+        // The page shows it already: left on, a see-through fill was seen twice, darker, for a moment.
+        drawShapePreview()
+      } else {
+        // The live shape stays over the page until the page's tiles have drawn it (taken away at
+        // once, the shape blinked out and back as they redrew).
+        let ticket = shapeTool.ticket
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+          guard let self, self.shapeTool.ticket == ticket, self.shapeTool.preview == nil else { return }
+          self.drawShapePreview()
+        }
       }
+      pickUpShape(made, soft: true)
     } else {
       drawShapePreview()
     }
-    if let shape {
-      pickUpShape(addShape(shape), soft: true)
-    } else if let tapped {
+    if shape == nil, let tapped {
       if case let .shape(under)? = item(at: tapped, shapesOnly: true) { pickUpShape(under) } else { tipOnce("shape-drag", L("drag_on_the_page_to_draw")) }
     }
   }

@@ -280,4 +280,31 @@ final class ShapesMoreTests: ShotCase {
     settle()
     XCTAssertFalse(app.buttons["custom-\(name)"].exists, "the deleted shape leaves My shapes")
   }
+
+  /// Auto arrow's switch: above the shapes to choose from, off until she turns it on, and it stays
+  /// as set. (A UI test only drags straight, so the arrows themselves are checked in `AutoArrowTests`.)
+  func testAutoArrowSetting() {
+    let app = openNewNotebook()
+    func autoArrow() -> XCUIElement {
+      shapesPanel(app)
+      tab(app, style: false)
+      let toggle = app.switches["auto-arrow"].firstMatch
+      XCTAssertTrue(toggle.waitForExistence(timeout: 3), "Auto arrow is in the Shapes panel")
+      return toggle
+    }
+    var toggle = autoArrow()
+    XCTAssertEqual(toggle.value as? String, "0", "it starts off")
+    XCTAssertLessThanOrEqual(toggle.frame.maxY, app.buttons["shape-LINE"].firstMatch.frame.minY, "it sits above the shapes")
+    toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    settle()
+    XCTAssertEqual(toggle.value as? String, "1", "it turns on")
+    calmShot("v7-auto-arrow-on")
+    // Closed and opened again, it's still on; then off again, as it was found.
+    tool(app, "tool-shapes")
+    toggle = autoArrow()
+    XCTAssertEqual(toggle.value as? String, "1", "it stays on")
+    toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    settle()
+    XCTAssertEqual(toggle.value as? String, "0", "and turns off")
+  }
 }

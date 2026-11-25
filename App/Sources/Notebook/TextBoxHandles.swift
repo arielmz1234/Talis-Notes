@@ -206,6 +206,8 @@ extension NoteCanvas.Coordinator {
     v.isEditable = true
     v.isSelectable = true
     v.becomeFirstResponder()
+    // A box opened from the page may sit where the keyboard is about to come up: it moves clear.
+    showForTyping(opening: true)
   }
 
   @objc func carryTextBox(_ g: UIPanGestureRecognizer) {

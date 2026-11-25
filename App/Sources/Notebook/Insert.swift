@@ -36,6 +36,7 @@ extension NoteCanvas.Coordinator {
       try? parent.db.put(p.itemRow, in: parent.notebook.id)
       touch()
       pages.layer.setNeedsDisplay()
+      dropPatches()
     }
     show(new)
     canvas?.undoManager?.registerUndo(withTarget: self) { c in
@@ -135,6 +136,7 @@ extension NoteCanvas.Coordinator {
     setPageCount(newCount)
     touch()
     pages.layer.setNeedsDisplay()
+    dropPatches()
   }
 
   func hidePictures(_ ids: [String], pageCount newCount: Int) {
@@ -146,6 +148,7 @@ extension NoteCanvas.Coordinator {
     setPageCount(newCount)
     touch()
     pages.layer.setNeedsDisplay()
+    dropPatches()
     reportUndo()
   }
 

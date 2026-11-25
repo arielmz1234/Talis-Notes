@@ -58,12 +58,4 @@ extension NoteCanvas.Coordinator {
     }
     redrawPage(unionOf(wasBuried + buried.map(\.stroke)))
   }
-
-  /// A stroke as PencilKit should show it (for a picture of it): never hidden.
-  func shown(_ pk: PKStroke, at i: Int) -> PKStroke {
-    guard Self.isHidden(pk), i < stored.count else { return pk }
-    var p = pk
-    p.mask = mask(for: stored[i].stroke)
-    return p
-  }
 }

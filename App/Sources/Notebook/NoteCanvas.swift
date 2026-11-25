@@ -58,11 +58,13 @@ final class PagesLayer: CATiledLayer, @unchecked Sendable {
 
   var worldSize: CGSize { endless ?? CGSize(width: CGFloat(layout.width), height: CGFloat(layout.rect(max(count, 1) - 1).bottom)) }
 
-  override func draw(in cg: CGContext) { paint(in: cg) }
+  // A tile: a PDF's page is drawn once as a picture and every tile of it is cut from that.
+  override func draw(in cg: CGContext) { paint(in: cg, pdf: .picture) }
 
   /// Draws what's under [cg]'s clip at [scale] points (or pixels) per world unit; on a tile that's
-  /// read from its transform. [print] draws the paper as printed paper (the PDF).
-  func paint(in cg: CGContext, scale given: CGFloat? = nil, print: Bool = false) {
+  /// read from its transform. [print] draws the paper as printed paper (the PDF). [pdf]: how an
+  /// imported PDF's pages are drawn (see `SharpPage.Way`).
+  func paint(in cg: CGContext, scale given: CGFloat? = nil, print: Bool = false, pdf: SharpPage.Way = .lines) {
     let rect = cg.boundingBoxOfClipPath
     let scale = given ?? max(cg.ctm.a / max(contentsScale, 1), 0.01)
     if drawsPaper, let endless {
@@ -75,7 +77,7 @@ final class PagesLayer: CATiledLayer, @unchecked Sendable {
         PaperPainter.draw(paper, area: page, in: cg, scale: scale, print: print, picture: picture)
       }
     }
-    for p in under.pdfPages where p.rect.intersects(rect) { p.page.draw(in: p.rect, cg) }
+    for p in under.pdfPages where p.rect.intersects(rect) { p.page.draw(in: p.rect, cg, pdf) }
     func draw(_ pic: PlacedPicture) {
       guard pic.rect.intersects(rect) else { return }
       cg.saveGState()
@@ -322,7 +324,7 @@ struct NoteCanvas: UIViewRepresentable {
     c.installOwnInk(on: v)
     c.installPencilGestures(on: v)
     bridge?.coordinator = c
-    v.minimumZoomScale = 0.2
+    v.minimumZoomScale = Coordinator.pagesLeastZoom
     v.maximumZoomScale = 6
     v.showsVerticalScrollIndicator = false
     v.showsHorizontalScrollIndicator = false
@@ -333,8 +335,11 @@ struct NoteCanvas: UIViewRepresentable {
     pages.pages.paper = settings.paper
     pages.pages.picture = settings.paper.picture
     v.insertSubview(pages, at: 0)
+    let paper = PaperUnderlay(frame: .zero)
+    v.insertSubview(paper, at: 0)
     c.canvas = v
     c.pages = pages
+    c.underlay = paper
     c.installPageChrome(on: v, above: pages)
     v.onResize = { [weak c] in
       c?.updateContent()
@@ -370,6 +375,15 @@ struct NoteCanvas: UIViewRepresentable {
     var parent: NoteCanvas
     weak var canvas: PKCanvasView?
     weak var pages: PagesView?
+    /// Plain paper under the tiles, and pictures of parts of the page lying over tiles that are
+    /// being drawn again (see PagePatch.swift).
+    weak var underlay: PaperUnderlay?
+    var patches: [UIView] = []
+    /// A pinch on an endless canvas: how far apart the fingers landed, the zoom they started from
+    /// (as the fingers would ask for it) and where resistance begins; and on while the zoom is set
+    /// from here (see Endless.swift).
+    var pinchStart: (spread: CGFloat, raw: CGFloat, free: CGFloat)?
+    var resisting = false
     /// What's stored, in drawing order, with the key that recognises each stroke in the PKDrawing.
     var stored: [(key: StrokeKey, stroke: InkStroke)] = []
     var pageCount = 1
@@ -492,12 +506,14 @@ struct NoteCanvas: UIViewRepresentable {
       under.fills = fillSlots.compactMap(\.ready)
       pages?.pages.under = under
       pages?.layer.setNeedsDisplay()
+      dropPatches()
       decodeLater(pictureSlots, fillSlots)
       let drawn = Self.highlighterFirst(inks) { $0 }.map { ($0.pkStroke(mask: mask(for: $0)), $0) }
       stored = drawn.map { (StrokeKey($0.0), $0.1) }
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
       loading = false
       restack()
+      canvas.minimumZoomScale = leastZoom
       updateContent()
       applyTool()
       reportUndo()
@@ -566,6 +582,8 @@ struct NoteCanvas: UIViewRepresentable {
     var textEdit = TextEditState()
     /// The laser and the ink the notebook draws itself (see OwnInk.swift).
     var own = OwnInkState()
+    /// Auto arrow: the straight line that may get its head next (see AutoArrow.swift).
+    var arrows = AutoArrowState()
     var lastTool: Tool?
     var lastPenId: String?
 
@@ -581,6 +599,8 @@ struct NoteCanvas: UIViewRepresentable {
         pages.pages.paper = s.paper
         pages.pages.picture = s.paper.picture
         pages.layer.setNeedsDisplay()
+        dropPatches()
+        layoutUnderlay()
         canvas.overrideUserInterfaceStyle = s.dark ? .dark : .light
         updateChrome()
       }
@@ -616,6 +636,7 @@ struct NoteCanvas: UIViewRepresentable {
       if lastTool.map({ $0 != parent.tool }) ?? false || parent.viewOnly, lasso.bounds != nil || !lasso.loop.isEmpty {
         DispatchQueue.main.async { self.clearSelection() }
       }
+      if lastTool.map({ $0 != parent.tool }) ?? false || parent.viewOnly { forgetArrowLine() }
       lastTool = parent.tool
       // Draw with finger: Auto follows iOS's own Apple Pencil setting (fingers write in UI tests, which have no pencil).
       switch parent.settings.fingerDraws {
@@ -724,6 +745,7 @@ struct NoteCanvas: UIViewRepresentable {
       pages.transform = CGAffineTransform(scaleX: z, y: z)
       pages.layer.position = .zero
       if resized { pages.setNeedsDisplay() }
+      layoutUnderlay()
       canvas.contentSize = CGSize(width: world.width * z, height: world.height * z)
       updateChrome()
       // Until she zooms by hand, the page keeps fitting the canvas as its size settles (the screen
@@ -753,6 +775,7 @@ struct NoteCanvas: UIViewRepresentable {
     var firstPlacing = false
 
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
+      pinchBegan(scrollView)
       if scrollView.isTracking || scrollView.isZoomBouncing || scrollView.pinchGestureRecognizer?.state == .began { zoomedByHand = true }
     }
 
@@ -789,10 +812,19 @@ struct NoteCanvas: UIViewRepresentable {
       let w = pages.worldSize.width * canvas.zoomScale
       let side = max((canvas.bounds.width - w) / 2, 16)
       // A little room is always left under the last page (Android's `REST_DP`); pulling opens more.
-      canvas.contentInset = UIEdgeInsets(top: parent.topClearance, left: side, bottom: CGFloat(PagePull.rest), right: side)
+      // While a text box is typed in, as much again as the keyboard covers, so a box at the very
+      // end of the notebook can still be scrolled up clear of it.
+      let typing = textEdit.view != nil && textEdit.typing ? keyboardOverlap : 0
+      let insets = UIEdgeInsets(top: parent.topClearance, left: side, bottom: CGFloat(PagePull.rest) + typing, right: side)
+      if canvas.contentInset != insets { canvas.contentInset = insets }
     }
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
+      // Zooming out on an endless canvas gets harder past what's written: the zoom is set again
+      // from here, and that change comes back through here to update the rest.
+      if resistZoom(scrollView) { return }
+      // Pictures of the page were made for the zoom as it was.
+      dropPatches()
       zoomEndsPull()
       updateContent()
       layoutTextEditor()
@@ -810,6 +842,7 @@ struct NoteCanvas: UIViewRepresentable {
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+      pinchStart = nil
       updateContent()
       makeRoom()
     }
@@ -868,6 +901,7 @@ struct NoteCanvas: UIViewRepresentable {
     /// swaps them back straight after.
     func undoKeepingSwaps(redo: Bool) {
       guard let canvas, let undo = canvas.undoManager else { return }
+      forgetArrowLine()
       if let swap = pkSwaps.last(where: { $0.ours == canvas.drawing }) {
         loading = true
         undo.disableUndoRegistration()
@@ -1083,12 +1117,50 @@ enum CrashNote {
 /// patches at screen resolution; here the tiled page layer simply draws the page as vectors at every
 /// zoom). The picture's name says which PDF and page it is: `pdf-<pdf>-p<page>-<uuid>.jpg`.
 final class SharpPage: @unchecked Sendable {
+  /// How a page is drawn. On screen it's cut into many tiles, and drawing the PDF's own lines for
+  /// each tile meant reading the whole page once per tile, one tile at a time (PDFKit can't draw two
+  /// at once): the page loaded square by square. So for tiles the page is drawn once as a picture at
+  /// the tiles' sharpness, and each tile is cut from it.
+  enum Way: Sendable {
+    /// Its own lines, every time: PDF export, page pictures, anything that isn't a tile.
+    case lines
+    /// A picture of the whole page at the sharpness asked for, made once and kept (tiles). Zoomed in
+    /// so far that the picture would be too big, its lines are drawn after all.
+    case picture
+    /// A picture already kept, at whatever sharpness, else its lines: for drawing now, on the main
+    /// thread, without stopping to make one.
+    case kept
+  }
+
   private let page: PDFPage
+  /// Which PDF and page it is, for the pictures kept of it.
+  private let name: String
   /// PDFKit isn't safe to draw from several tile threads at once.
   private static let lock = NSLock()
   nonisolated(unsafe) private static var docs: [String: PDFDocument] = [:]
+  /// Pages drawn as pictures, by page and size; and each page's latest one. A few screens' worth:
+  /// the least recently used go first, and all of them when memory runs short.
+  nonisolated(unsafe) private static let pictures: NSCache<NSString, CGImage> = {
+    let cache = NSCache<NSString, CGImage>()
+    cache.totalCostLimit = 192 << 20
+    return cache
+  }()
+  private static let latestLock = NSLock()
+  nonisolated(unsafe) private static var latest: [String: NSString] = [:]
+  /// A page's picture is never bigger than this many pixels (an A4 page at twice the screen's sharpness).
+  private static let mostPixels: CGFloat = 12_000_000
 
-  private init(_ page: PDFPage) { self.page = page }
+  private init(_ page: PDFPage, name: String) {
+    self.page = page
+    self.name = name
+  }
+
+  /// Whether a page could be drawn right now without waiting for another to finish.
+  static var free: Bool {
+    guard lock.`try`() else { return false }
+    lock.unlock()
+    return true
+  }
 
   /// The page a picture item shows, when it's an imported PDF page whose PDF is here.
   static func of(_ row: ItemRow) -> (id: String, rect: CGRect, page: SharpPage)? {
@@ -1104,11 +1176,58 @@ final class SharpPage: @unchecked Sendable {
       doc = d
     }
     guard let page = doc.page(at: index) else { return nil }
-    return (row.id, CGRect(p.rect), SharpPage(page))
+    return (row.id, CGRect(p.rect), SharpPage(page, name: "\(id)#\(index)"))
+  }
+
+  /// The whole page as a picture for [rect] at the sharpness [cg] draws at, kept once made. Nil
+  /// when it would be too big, or with [make] off when none is kept.
+  private func picture(for rect: CGRect, in cg: CGContext, make: Bool) -> CGImage? {
+    if !make {
+      Self.latestLock.lock()
+      let key = Self.latest[name]
+      Self.latestLock.unlock()
+      return key.flatMap { Self.pictures.object(forKey: $0) }
+    }
+    let t = cg.ctm
+    let px = (t.a * t.a + t.b * t.b).squareRoot()
+    let w = (rect.width * px).rounded(.up), h = (rect.height * px).rounded(.up)
+    guard w >= 1, h >= 1, w * h <= Self.mostPixels else { return nil }
+    let key = "\(name)@\(Int(w))x\(Int(h))" as NSString
+    if let hit = Self.pictures.object(forKey: key) { return hit }
+    Self.lock.lock()
+    defer { Self.lock.unlock() }
+    // Another tile of this page may have made it while this one waited.
+    if let hit = Self.pictures.object(forKey: key) { return hit }
+    let box = page.bounds(for: .mediaBox)
+    let across = page.rotation % 180 != 0 ? box.height : box.width
+    guard across > 0,
+      let ctx = CGContext(
+        data: nil, width: Int(w), height: Int(h), bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    else { return nil }
+    ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+    ctx.scaleBy(x: w / across, y: w / across)
+    page.draw(with: .mediaBox, to: ctx)
+    guard let image = ctx.makeImage() else { return nil }
+    Self.pictures.setObject(image, forKey: key, cost: Int(w * h) * 4)
+    Self.latestLock.lock()
+    Self.latest[name] = key
+    Self.latestLock.unlock()
+    return image
   }
 
   /// Draws the page filling [rect] (world units, y down) on white.
-  func draw(in rect: CGRect, _ cg: CGContext) {
+  func draw(in rect: CGRect, _ cg: CGContext, _ way: Way = .lines) {
+    if way != .lines, let image = picture(for: rect, in: cg, make: way == .picture) {
+      cg.saveGState()
+      cg.translateBy(x: rect.minX, y: rect.maxY)
+      cg.scaleBy(x: 1, y: -1)
+      cg.interpolationQuality = .high
+      cg.draw(image, in: CGRect(origin: .zero, size: rect.size))
+      cg.restoreGState()
+      return
+    }
     Self.lock.lock()
     defer { Self.lock.unlock() }
     let box = page.bounds(for: .mediaBox)

@@ -1,16 +1,20 @@
 #!/bin/sh
 # One CI shard's UI test runs, after build-for-testing. Each argument is one run:
-#   "<ipad|iphone> <tag> <dark 0/1> <language or -> <Class,Class… or all>"
+#   "<ipad|ipad11|iphone> <tag> <dark 0/1> <language or -> <Class,Class… or all>"
 # Shots land in shots/<tag>-*.png, each run's log in build/<tag>.log. Failing tests are listed but
 # don't fail the job: the shots are what it's for.
 cd "$(dirname "$0")/.."
 mkdir -p shots
 ipad=$(sh scripts/sim.sh "iPad Pro 13" iPad)
 iphone=$(sh scripts/sim.sh "iPhone 16" iPhone)
-xcrun simctl list devices | grep -E "$ipad|$iphone"
+# An 11-inch iPad, where the top row has the least room (the owner's iPad is an Air 11).
+ipad11=$(sh scripts/sim.sh "iPad Air 11" none)
+[ -n "$ipad11" ] || ipad11=$(sh scripts/sim.sh "iPad Pro 11" none)
+[ -n "$ipad11" ] || ipad11=$ipad
+xcrun simctl list devices | grep -E "$ipad|$iphone|$ipad11"
 for run in "$@"; do
   set -- $run
-  dev=$ipad; [ "$1" = iphone ] && dev=$iphone
+  dev=$ipad; [ "$1" = iphone ] && dev=$iphone; [ "$1" = ipad11 ] && dev=$ipad11
   # Boot fully first: a cold boot inside the first test timed out the app's launch.
   xcrun simctl boot "$dev" 2>/dev/null || true
   xcrun simctl bootstatus "$dev" -b > /dev/null

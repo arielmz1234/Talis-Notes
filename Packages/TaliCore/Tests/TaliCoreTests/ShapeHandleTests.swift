@@ -395,7 +395,7 @@ struct ShapeDotTests {
 
   @Test func linesSnapOnlyToFortyFives() {
     func angle(_ g: ShapeGeometry) -> Float {
-      guard case let .line(a, b, _, _, _) = g else { return .nan }
+      guard case let .line(a, b, _, _, _, _) = g else { return .nan }
       return (b - a).angle() * 180 / .pi
     }
     #expect(abs(angle(ShapeRecognizer.snappedLine(Pt(0, 0), Pt.polar(100, 31 * .pi / 180))) - 31) < 0.01)
@@ -423,21 +423,21 @@ struct ShapeDotTests {
   @Test func aLineEndStretchesAlongItsOwnDirection() {
     let line = ShapeGeometry.line(a: Pt(0, 0), b: Pt(100, 0), arrowStart: false, arrowEnd: true, ticks: false)
     // A degree off its direction: its angle stays exact, only its length changes.
-    guard case let .line(a, b, _, true, _) = line.withHandle(1, Pt(200, 3)) else { Issue.record("not a line"); return }
+    guard case let .line(a, b, _, true, _, _) = line.withHandle(1, Pt(200, 3)) else { Issue.record("not a line"); return }
     #expect(a == Pt(0, 0) && b == Pt(200, 0))
     // Well off it: the end goes where it's dragged.
-    guard case let .line(_, free, _, _, _) = line.withHandle(1, Pt(100, 80)) else { Issue.record("not a line"); return }
+    guard case let .line(_, free, _, _, _, _) = line.withHandle(1, Pt(100, 80)) else { Issue.record("not a line"); return }
     #expect(free == Pt(100, 80))
   }
 
   @Test func aDraggedLineEndSettlesOnTidyAngles() {
     let line = ShapeGeometry.line(a: Pt(0, 0), b: Pt(100, 40), arrowStart: false, arrowEnd: false, ticks: false)
     // Nearly level: level. Its other end, and a slope well off the tidy angles, stay as dragged.
-    guard case let .line(a, b, _, _, _) = line.dragging(1, to: Pt(200, 8)) else { Issue.record("not a line"); return }
+    guard case let .line(a, b, _, _, _, _) = line.dragging(1, to: Pt(200, 8)) else { Issue.record("not a line"); return }
     #expect(a == Pt(0, 0) && abs(b.y) < 0.01 && b.x > 199)
-    guard case let .line(_, free, _, _, _) = line.dragging(1, to: Pt(200, 70)) else { Issue.record("not a line"); return }
+    guard case let .line(_, free, _, _, _, _) = line.dragging(1, to: Pt(200, 70)) else { Issue.record("not a line"); return }
     #expect(free == Pt(200, 70))
-    guard case let .line(start, end, _, _, _) = line.dragging(0, to: Pt(96, -100)) else { Issue.record("not a line"); return }
+    guard case let .line(start, end, _, _, _, _) = line.dragging(0, to: Pt(96, -100)) else { Issue.record("not a line"); return }
     #expect(end == Pt(100, 40) && abs(start.x - 100) < 0.01)
     // Other shapes' dots go where they're dragged.
     let curve = ShapeKind.CURVE.create(Pt(0, 0), Pt(300, 0))

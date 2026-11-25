@@ -249,11 +249,14 @@ extension NoteCanvas.Coordinator {
 
   /// The picked-up writing leaves PencilKit's drawing for the overlay while it's carried: moved in
   /// PencilKit every step, it was redrawn late, so it jumped to the end and showed in both places.
+  /// It's carried whole, as Android draws a selection being dragged: what its page hid of it (Write
+  /// between pages off) shows while it moves, and once it's put down it's drawn only as far as the
+  /// page it now starts on (its points are all kept, so moved onto the page it shows in full).
   private func liftInk() {
     guard let canvas, let before = lasso.before else { return }
     var up: [PKStroke] = [], left: [PKStroke] = []
     for (i, s) in before.strokes.enumerated() {
-      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(shown(s, at: i)) } else { left.append(s) }
+      if i < stored.count, lasso.picked.contains(stored[i].stroke.id) { up.append(stored[i].stroke.pkStroke(mask: nil)) } else { left.append(s) }
     }
     guard !up.isEmpty else { return }
     let z = canvas.zoomScale
@@ -261,6 +264,7 @@ extension NoteCanvas.Coordinator {
     let drawing = PKDrawing(strokes: up)
     let box = drawing.bounds.insetBy(dx: -2, dy: -2)
     let l = CALayer()
+    l.name = Self.carriedInk
     l.frame = CGRect(x: box.minX * z, y: box.minY * z, width: box.width * z, height: box.height * z)
     l.contentsScale = scale
     canvas.traitCollection.performAsCurrent { l.contents = drawing.image(from: box, scale: z * scale).cgImage }
@@ -342,7 +346,9 @@ extension NoteCanvas.Coordinator {
         loading = false
       }
     }
-    restoreLifted(redraw: !changes)
+    // Where it was, and whether the page shows it there again already (nothing changed).
+    let from = lasso.bounds
+    var pageShows = restoreLifted(redraw: !changes)
     endSnap()
     // nil leaves the menu as it was; an edit keeps it away for a moment; a tap brings it back.
     var menu: Bool?
@@ -370,7 +376,13 @@ extension NoteCanvas.Coordinator {
     }
     inkBase = nil
     restack()
-    dropShapes()
+    if changes, carriesPageItems {
+      // The page as it is now, where it was and where it is, shown at once (its tiles follow).
+      let to = pickedItems.reduce(nil) { joined($0, CGRect($1.bounds)) }
+      let old = coverPage(from), new = coverPage(to)
+      pageShows = old && new
+    }
+    dropShapes(pageShows: pageShows)
     setSelection(lasso.picked, menu: menu)
   }
 
