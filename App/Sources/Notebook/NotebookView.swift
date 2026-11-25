@@ -188,11 +188,11 @@ struct NotebookView: View {
             }
             if !hidden { mainToolbar(showColors: !PhoneWriting.onPhone, toolsRoom: geo.size.width - 44).bar("tools", 1, bars) }
           } else {
-            // One row, as on Android. An iPad's screen is fewer points across than an Android tablet
-            // the same size is dp, so on an 11-inch iPad the row had no room left for the notebook's
-            // name, which then sat under the bar. Where that would happen the whole row is laid out as
-            // wide as it needs and drawn that much smaller (about nine tenths there, the size it is
-            // on the Android tablet), so the name keeps its place beside the tools.
+            // One row, as on Android. `TopBarLayout` keeps the name beside the tools while it gets at
+            // least `nameMin` (e9ec94c). An iPad's screen is fewer points across than an Android tablet
+            // the same size is dp, and on an 11-inch iPad on its side even that wasn't left, so the
+            // name dropped under the bar. Only then is the whole row laid out as wide as it needs for
+            // that much name and drawn that much smaller (never below 0.86), so the name stays in the row.
             let room = max(geo.size.width - 32, 1)
             let k = topRowScale(room)
             TopBarLayout {
@@ -571,12 +571,15 @@ struct NotebookView: View {
     return scheme == .dark && !dark ? f.mist : (scheme == .dark ? f.dark : f.light)
   }
 
-  /// How much smaller the wide top row is drawn so the notebook's name fits beside the tools: not
-  /// at all where there's room for it, and never below 0.86 (the bars stay easy to hit; with less
-  /// room than that the name goes under the corner, as `TopBarLayout` places it).
+  /// How much smaller the wide top row is drawn so the notebook's name keeps the room
+  /// `TopBarLayout` needs to leave it beside the tools (its `nameMin`): not at all where it has that,
+  /// and never below 0.86 (the bars stay easy to hit; with less room than that the name goes under
+  /// the corner, as `TopBarLayout` places it). A UI test can turn it off (`-noTopRowScale`) to compare.
   private func topRowScale(_ room: CGFloat) -> CGFloat {
-    let name: CGFloat = 140, gaps: CGFloat = 3 * 12
-    return min(1, max(room / (titleWidth + toolsWidth + cornerWidth + gaps + name), 0.86))
+    if TopRowScale.off { return 1 }
+    let layout = TopBarLayout()
+    let need = titleWidth + toolsWidth + cornerWidth + 3 * layout.gap + layout.nameMin
+    return min(1, max(room / need, 0.86))
   }
 
   /// Back on a little cloud of its own, then undo and redo (Android's `TitlePill`).
@@ -769,6 +772,11 @@ enum ViewOnly {
     if on { list.append(id) }
     UserDefaults.standard.set(list, forKey: "viewOnly")
   }
+}
+
+/// The top row drawn at full size whatever the room (a UI test's `-noTopRowScale`, to compare).
+enum TopRowScale {
+  static let off = ProcessInfo.processInfo.arguments.contains("-noTopRowScale")
 }
 
 /// The pens, kept between launches.

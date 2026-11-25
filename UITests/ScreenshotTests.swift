@@ -153,6 +153,33 @@ final class ScreenshotTests: ShotCase {
     shot("s19-text-resized")
   }
 
+  /// The notebook's name on the toolbar row, as on Android (an 11-inch iPad on its side has the
+  /// least room). Shot as the app draws it, then without the row drawn smaller (`-noTopRowScale`),
+  /// to compare the two; only the first must keep the name in the row.
+  func testNotebookNameOnTheToolbarRow() {
+    continueAfterFailure = true
+    guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+    XCUIDevice.shared.orientation = .landscapeLeft
+    for (extra, name) in [([String](), "n1-name-row"), (["-noTopRowScale"], "n2-name-row-unscaled")] {
+      let app = launch(extra)
+      settle()
+      app.buttons["add"].firstMatch.tap()
+      settle()
+      if app.buttons["add-notebook"].firstMatch.waitForExistence(timeout: 3) { app.buttons["add-notebook"].firstMatch.tap() }
+      XCTAssertTrue(app.buttons["create"].firstMatch.waitForExistence(timeout: 4))
+      app.buttons["create"].firstMatch.tap()
+      settle()
+      shot(name)
+      let title = app.descendants(matching: .any)["notebook-title"].firstMatch
+      let pen = app.descendants(matching: .any)["pen-p1"].firstMatch
+      XCTAssertTrue(title.waitForExistence(timeout: 3), "the name shows")
+      let beside = title.frame.midY < pen.frame.maxY && title.frame.minX > pen.frame.maxX
+      print("name row \(name): name \(title.frame) pen \(pen.frame) window \(app.windows.firstMatch.frame) beside \(beside)")
+      if extra.isEmpty { XCTAssertTrue(beside, "the name sits on the toolbar row") }
+      app.terminate()
+    }
+  }
+
   func testLibraryAndNotebook() {
     continueAfterFailure = true
     let device = XCUIDevice.shared
