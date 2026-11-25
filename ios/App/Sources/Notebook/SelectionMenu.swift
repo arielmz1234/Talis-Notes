@@ -118,8 +118,9 @@ struct SelectionMenu: View {
     HStack(spacing: 0) {
       if !info.hasImage || info.count > 1 { toggleIcon("paintpalette", L("colour"), .colour).accessibilityIdentifier("selection-colour") }
       if info.lineSize != nil { toggleIcon("lineweight", L("thickness"), .thickness).accessibilityIdentifier("selection-thickness") }
-      ToolIcon(system: "square.3.layers.3d.top.filled", label: L("bring_to_front")) { onCommand(.arrangeSelection(true)) }.accessibilityIdentifier("selection-front")
-      ToolIcon(system: "square.3.layers.3d.bottom.filled", label: L("send_to_back")) { onCommand(.arrangeSelection(false)) }.accessibilityIdentifier("selection-back")
+      // Material's flip-to-front and flip-to-back, as on Android.
+      materialIcon(.flipToFront, L("bring_to_front")) { onCommand(.arrangeSelection(true)) }.accessibilityIdentifier("selection-front")
+      materialIcon(.flipToBack, L("send_to_back")) { onCommand(.arrangeSelection(false)) }.accessibilityIdentifier("selection-back")
       // Writing and shapes flip; pictures and text keep facing the right way.
       drawnIcon(.mirrorLeftRight, L("mirror_left_to_right")) { onCommand(.mirrorSelection(true)) }.accessibilityIdentifier("selection-mirror-h")
       drawnIcon(.mirrorUpsideDown, L("mirror_upside_down")) { onCommand(.mirrorSelection(false)) }.accessibilityIdentifier("selection-mirror-v")
@@ -194,6 +195,14 @@ struct SelectionMenu: View {
         .frame(width: 44, height: 44)
         .background { if extra == kind { RoundedRectangle(cornerRadius: 14).fill(c.accentSoft) } }
         .contentShape(Rectangle())
+    }
+    .buttonStyle(PressStyle(scale: 0.9))
+    .accessibilityLabel(label)
+  }
+
+  private func materialIcon(_ icon: MaterialIcon, _ label: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      MaterialIconView(icon: icon, color: c.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
     }
     .buttonStyle(PressStyle(scale: 0.9))
     .accessibilityLabel(label)
