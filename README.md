@@ -1,28 +1,40 @@
 # Tali's Notes
 
-A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite and newer), made for a civil-engineering student. It has an endless canvas per notebook, a lilac-and-sky look with cartoon clouds, and it runs entirely on the tablet.
+A handwriting notes app made for a civil-engineering student writing with a stylus. It has paged or endless notebooks, a lilac-and-sky look with cartoon clouds, and everything stays on the device (apart from backups to the user's own Google Drive). It is free on Google Play for Android tablets and phones.
 
-The iPad and iPhone version is in [`ios/`](ios/) (Swift; see [ios/README.md](ios/README.md)).
+## Two apps in one repository
 
-It is sideloaded for now; a free, tablets-only release on the Play Store is planned (see *Release plan* in [CLAUDE.md](CLAUDE.md)).
+| Folder | App | Notes |
+| --- | --- | --- |
+| repo root (`app/`, Gradle) | **Android** (Kotlin, Jetpack Compose, androidx.ink). The reference app: the other one follows its behaviour and numbers. | This README, [CLAUDE.md](CLAUDE.md), [BACKUP_SETUP.md](BACKUP_SETUP.md) |
+| [`ios/`](ios/) | **iPad and iPhone** (Swift, SwiftUI, PencilKit) | [ios/README.md](ios/README.md), [ios/CLAUDE.md](ios/CLAUDE.md), `ios/PROGRESS.md`, `ios/PLAN.md` |
+
+The iPad app had its own repository (`Talis-Notes-iOS`) until 25 Nov 2026; it was joined here with all its history, and the old repository is archived.
+
+- Change one app at a time, each in its own commit; start the message with `iOS:` when a change is for the iPad app and that isn't obvious.
+- **CI** is only for the iPad app (`.github/workflows/ios.yml`, workflow *iOS*). It runs only when something in `ios/` changes: a quick run by default (core tests, a build, iPad screenshots, an unsigned `.ipa`), and the full UI suite on request (*Actions → iOS → Run workflow* with *full*, or a `full-ci` label on the pull request).
+- The Android app is built and tested locally (see *Building* below). A change only outside `ios/` starts no CI.
+- Shared sources: `ios/tools/` reads the Android app's strings, palettes and icon (`tools/icon-source.png`) from the repo root.
+
+The rest of this file is about the Android app.
 
 ## What it does
 
 **Writing**
-- Five pen types: fineliner, fountain pen, pencil, calligraphy and highlighter. She can keep up to 8 pens, and her saved colours are shared by all of them. Changing a pen's type keeps its thickness; sizes have − and + buttons for 0.1 steps (hold to repeat).
+- Five pen types: fineliner, fountain pen, pencil, calligraphy and highlighter. She can keep up to 8 pens, and her saved colours are shared by all of them. Changing a pen's type keeps its thickness; thickness shows as a whole number, with − and + buttons that step by one (hold to repeat).
 - The highlighter draws straight lines by default (level or upright when within 4°), or freehand; its tip can be round or square. Both are set in its pen settings.
 - **Laser:** a pointer in the toolbar that leaves a glowing red trail; it stays lit while she keeps pointing (several strokes too) and fades about a second after she stops. Nothing is saved.
 - **Line styles:** any pen (not the highlighter) can draw Solid, Dotted, Long dash, Short dash, Dot and dash or Mixed dash, chosen in the pen settings. The pattern draws live under the pen, and shapes drawn with that pen use it too (arrow barbs stay solid).
 - **Quick colours:** the first few of her saved colours sit beside the pens (how many, 0-6, is set under the colours in the pen settings, for every notebook). Hold a colour in the pen settings and drag it to change the order.
 - Low-latency inking (androidx.ink), with pressure.
 - The S Pen side button erases while held.
-- **Hold to perfect:** pause at the end of a stroke and it snaps into a clean shape: a line (with 0°, 30°, 45°, 60° and 90° snapping), arrow, circle, ellipse, triangle, rectangle, polygon or star. Keep moving without lifting to resize it (a line follows the pen tip).
+- **Hold to perfect:** pause at the end of a stroke and it snaps into a clean shape: a line (locking onto 45° steps when within 3°), arrow, circle, ellipse, triangle, rectangle, polygon or star. Keep moving without lifting to resize it (a line follows the pen tip).
 - **My shapes:** lasso any drawing and tap *Save as shape*. Holding the pen at the end of a similar one-stroke drawing then snaps to it. Matching uses a point-cloud recognizer, `geometry/ShapeMatcher.kt`.
 - Engineering shapes: pin, roller and fixed supports, point and distributed loads, moment and dimension lines. A dimension line is a line like the others (end dots, angle snapping, its length shown), with arrows and end marks. A distributed load's end dots lengthen it (arrows are added or taken away to keep their spacing) and its middle dot sets the arrows' length.
 - **Shapes tool style:** the Shapes panel has two tabs, *Choose* (the shapes) and *Style*: the tool's own outline colour, thickness, opacity, line style, fill and fill opacity, apart from the pen she writes with.
 - **Snapping:** shapes, pictures and text in view lock onto each other when moved, resized or drawn close: a line's end onto another line or corner (keeping its angle) holds firmly, with a small cross; edges and middles lining up hold more softly, with dashed guides. Pull something out of a lock and that lock lets go until you move well away, so things can sit close without touching. Handwriting picked up with the lasso lines up its middle with shapes; nothing snaps to handwriting (*Snap to other shapes* in the Style tab).
 - Small shapes get smaller dots (none when tiny), and the middle of a shape always moves it. A selection has a resize chip at its bottom-right and a move chip at its bottom-left (handy for shapes that are mostly lines and dots). A tap with the Shapes tool draws nothing; slide to draw.
-- Tap a shape (with a finger, a quick pen tap on its outline, or any tap with the Shapes tool) to get its dots and its menu; drag them with either, and the shape changes live. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length beside the line (not under the pen). Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
+- Tap a shape (with a finger, or any tap with the Shapes tool; a pen tap only writes) to get its dots and its menu; drag them with either, and the shape changes live. Dragging a line's end stretches it without changing its thickness, and shows the angle and printed length beside the line (not under the pen). Dragging a shape's corner dot resizes it from the opposite side and keeps its shape (rectangles stay rectangles, circles stay circles).
 - **Triangle:** one triangle whose corners each move on their own; a dragged corner moves a degree at a time and locks on to right angles, isosceles and the usual angles (30°, 45°, 60°… and lightly every 5°), showing each angle.
 - A shape stays selected right after it's drawn or adjusted, so it can be changed straight away (the pen still writes inside it).
 - **Part circle:** a closed slice of a circle, drawn from the centre outwards (the curve faces the way you drag). It starts as a half; its end dots make it any percent (snapping to quarters and 5% steps) and show "% · °" at the centre. Arc ends can be dragged round either way; going past a full turn starts again from nothing (361° is 1°), and the arc shows its angle.
@@ -44,8 +56,8 @@ It is sideloaded for now; a free, tablets-only release on the Play Store is plan
 - **Lock:** the selection menu's lock keeps things in place; the lasso, taps and the eraser leave them alone. Hold a locked item with a finger to unlock it, or use *Unlock all* in the ⋯ menu.
 - Deleting a page asks first.
 - Undo and redo work with the buttons, or with *Smart undo and redo* (⋯ menu): a two-finger tap undoes, a three-finger tap redoes.
-- The full-screen button beside undo hides the toolbars, leaving the page and a small frosted button to bring them back. A puff of mist plays where the bars were; when a notebook opens, the bars just slide in.
-- *Hide navigation bar* (⋯ menu) hides Android's navigation bar in every notebook; swipe up from the bottom to see it for a moment.
+- The eye button in the top-right corner hides the toolbars, leaving the page and a small frosted button to bring them back. A puff of mist plays where the bars were; when a notebook opens, the bars just slide in.
+- *Full screen* (⋯ menu) hides Android's status and navigation bars in every notebook; swipe from the edge to see them for a moment.
 - Scrolling glides on after a flick.
 
 **Pages and paper**
@@ -65,17 +77,28 @@ It is sideloaded for now; a free, tablets-only release on the Play Store is plan
 **Library**
 - Folders, folders inside folders (a tree in the sidebar, folder tiles and a path back up in the main area), each with its own colour (chosen when it's made; the selected folder's highlight takes that colour), search, cover colours, and a *Recently deleted* area that keeps notebooks for 30 days. New folders arrive, and deleted notebooks, folders and pages go, on a puff of mist that dissipates. Tapping a cloud in the sky bursts it into the same mist; it forms again a few seconds later.
 - Backups: *Back up by itself* into one file she picks once (her Google Drive, OneDrive, Dropbox or the tablet), kept up to date in the background; a backup file with merge-restore; Android's own backup; and optional Google Drive backup. See [BACKUP_SETUP.md](BACKUP_SETUP.md).
-- From other apps: a PDF opened with or shared to Tali's Notes opens in a new notebook (landscape for slides) just for looking, with a Save button to keep it and write on it (or, with *Add them to my notebooks* in Settings, straight into her notebooks); pictures shared to it ask which notebook they go in (or *On its own*, a Picture item); her backup file opened with the app offers to restore; pictures, PDFs and text dragged over from an app side by side land where they're dropped.
+- From other apps: a PDF or pictures opened with or shared to Tali's Notes open as an item of their own (pages shaped like the PDF or picture) just for looking, with a Save button to keep it and write on it (or, with *Add them to my notebooks* in Settings, straight into the library); her backup file opened with the app offers to restore; pictures, PDFs and text dragged over from an app side by side land where they're dropped.
+
+**More**
+- **Scribble to delete** (eraser panel): scrub over writing with the pen to delete it.
+- **Circle to select** (per pen): draw a loop round something, then press and hold on the loop to pick it up.
+- **Auto arrow** (Shapes panel): an arrow written by hand becomes a clean arrow shape when the pen lifts.
+- **Voice memos:** record from the toolbar; memos sit beside the page and play back with a sound wave.
+- **Crop pictures** in place, **a box around a selection**, curves with add dots, starred pens cycled with the S Pen button, quick open of recent notebooks, starred notebooks.
+- **Settings:** light or dark, Cloudy or Minimal style, four colour families (Lilac, Sky, Sage, Peach), and six languages (English, Spanish, French, Portuguese, Arabic, Hebrew; the library mirrors in Arabic and Hebrew, notebooks don't).
+- A first-run tour and *Tips and tricks* in Settings explain the hidden features.
+- Phones get their own layout (library drawer, a smaller toolbar) and open items just for looking until *Write* is tapped.
 
 ## Building
 
 Requirements:
-- Android Studio (it provides the JDK).
-- SDK 37.
+- JDK 17 (Android Studio's bundled one works).
+- Android SDK platform 37 and build-tools; `local.properties` with `sdk.dir=`.
 
 ```
 ./gradlew assembleDebug      # debug build
-./gradlew assembleRelease    # release APK, signed with keystore/ (see BACKUP_SETUP.md)
+./gradlew installPreview     # release-optimised, debug-signed: for trying changes on a device
+./gradlew bundleRelease      # Play Store bundle, signed with keystore/ (run it on its own; see CLAUDE.md)
 ./gradlew testDebugUnitTest  # geometry, shapes, lasso, fill, storage and Robolectric UI/animation tests
 ./gradlew connectedDebugAndroidTest   # touch tests on a device or emulator
 ```
@@ -89,7 +112,9 @@ Requirements:
 | `geometry/` | Points and affine maths, `ShapeRecognizer` (hold-to-shape), `ShapeMatcher` (her own shapes), `Lasso` (what a loop touches), `Snap` (shapes locking onto each other) |
 | `model/` | Canvas items, shape geometry, the engineering shapes and `CustomShape` |
 | `data/` | Plain SQLite (`NotesDb`), `NotesRepository` (single writer thread, trash, merge-restore, PDF import), `ImageStore` (lazy, memory-capped pictures), settings |
-| `backup/` | `BackupArchive` (the .zip), `AutoBackup` (into a file she picked, WorkManager) and `DriveBackup` (Drive REST and WorkManager; switched off until set up) |
+| `backup/` | `BackupArchive` (the .zip), `AutoBackup` (into a file she picked, WorkManager) and `DriveBackup` (one file per notebook in the user's Drive, REST and WorkManager), `RestoreFiles` (restoring many files or a folder) |
 | `export/` | PDF export and thumbnails |
+| `audio/` | `VoiceRecorder` for voice memos |
+| `theme/` | Colours, colour families (`Palettes.kt`), fonts per language |
 | `camera/` | `PageImage` (straightening and the Document, Grey and B&W looks) and `Quad` (crop corners), for the camera screen in `ui/camera/` |
 | `ui/` | Compose screens: library, notebook, panels, dialogs, and the cloud components (`Clouds.kt` with bursting sky clouds, `CloudSurface.kt`, `CloudPuff.kt` for the mist things come and go on, `SlidingSelection.kt` for the gliding highlight) |
