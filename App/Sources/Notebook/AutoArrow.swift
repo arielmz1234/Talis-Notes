@@ -2,18 +2,19 @@ import PencilKit
 import TaliCore
 import UIKit
 
-/// Auto arrow (Android 1.0.33; a switch at the top of the Shapes panel, off unless turned on): an
-/// arrow drawn by hand with a pen becomes a clean arrow shape as the pen lifts, with no hold. One
-/// stroke (the line, then its head without lifting) or two (a straight line, then its head as the
-/// very next stroke, with the same pen and colour, begun within three seconds). The rules are
-/// `TaliCore.AutoArrow`'s. What was drawn is kept first, as its own undo steps; the swap for the
-/// arrow is one more, so one Undo brings back the arrow exactly as drawn.
+/// Auto arrow (Android 1.0.33, `NoteCanvasView.autoArrow`; a switch at the top of the Shapes
+/// panel, off unless turned on): an arrow drawn by hand with a pen becomes a clean arrow shape as
+/// the pen lifts, with no hold. One stroke (the line, then its head without lifting) or two (a
+/// straight line, then its head as the very next stroke, with the same pen and colour, lifted less
+/// than three seconds after the line). The rules are `TaliCore.AutoArrow`'s. What was drawn is kept
+/// first, as its own undo steps; the swap for the arrow is one more, so one Undo brings back the
+/// arrow exactly as drawn. The arrow is then picked up softly, as after hold-to-shape.
 struct AutoArrowState {
   /// The stroke before this one when it was a straight line: its ends, its pen and when the pen lifted.
   var line: (id: String, a: Pt, b: Pt, pen: PenSlot, lifted: Date)?
 }
 
-/// The head length of the last auto arrow, kept while the app runs: arrows drawn alike come out alike.
+/// The head length of the last auto arrow, kept while the app runs (any notebook): arrows drawn alike come out alike.
 @MainActor
 enum AutoArrowMemory {
   static var lastHead: Float?
@@ -23,24 +24,25 @@ extension NoteCanvas.Coordinator {
   /// Any other stroke, an undo or a redo: the line that was waiting for its head isn't any more.
   func forgetArrowLine() { arrows.line = nil }
 
-  /// The stroke [s] was just kept ([raw]: its points as the pen gave them; [began] and [lifted]:
-  /// when the pen came down and went up). True when it, or it and the straight line before it,
-  /// became an arrow.
-  func autoArrow(after s: InkStroke, pen: PenSlot, raw: [Pt], began: Date, lifted: Date) -> Bool {
+  /// The stroke [s] was just kept, and the pen lifted from it at [lifted]. True when it, or it and
+  /// the straight line before it, became an arrow. As on Android, the stroke is looked at as it was
+  /// kept (smoothed), one stroke first, and then with the line before it.
+  func autoArrow(after s: InkStroke, pen: PenSlot, lifted: Date) -> Bool {
     let waiting = arrows.line
     arrows.line = nil
-    guard ShapeSettings.autoArrow, !parent.viewOnly, !pen.type.isHighlighter else { return false }
-    var onLine: AutoArrow.Found?
+    let pts = s.inputs.points.map { Pt($0.x, $0.y) }
+    guard ShapeSettings.autoArrow, !parent.viewOnly, !pen.type.isHighlighter, pts.count >= 2 else { return false }
     var drawn: [PageItem] = [.ink(s)]
-    if let line = waiting, line.pen.id == pen.id, line.pen.type == pen.type, line.pen.color == pen.color,
-      began.timeIntervalSince(line.lifted) <= AutoArrow.wait, let first = stored.first(where: { $0.stroke.id == line.id })?.stroke,
-      let head = AutoArrow.twoStrokes(a: line.a, b: line.b, head: raw)
+    var found = AutoArrow.oneStroke(pts)
+    if found == nil, let line = waiting, line.pen.id == pen.id, line.pen.color == pen.color,
+      lifted.timeIntervalSince(line.lifted) < AutoArrow.wait, let first = stored.first(where: { $0.stroke.id == line.id })?.stroke,
+      let head = AutoArrow.twoStrokes(a: line.a, b: line.b, head: pts)
     {
-      onLine = head
+      found = head
       drawn = [.ink(first), .ink(s)]
     }
-    guard let found = onLine ?? AutoArrow.oneStroke(raw) else {
-      if let ends = AutoArrow.straight(raw) { arrows.line = (s.id, ends.a, ends.b, pen, lifted) }
+    guard let found else {
+      if let ends = AutoArrow.straight(pts) { arrows.line = (s.id, ends.a, ends.b, pen, lifted) }
       return false
     }
     let made = AutoArrow.shape(found, last: AutoArrowMemory.lastHead)
@@ -62,6 +64,9 @@ extension NoteCanvas.Coordinator {
     // arrow on it lies over its tiles until they've drawn it, or failing that the arrow itself is
     // drawn over the page for that moment. Nothing blinks in between.
     if !coverPage(shape.geometry.bounds(shape.size).map { CGRect($0) }) { showArrow(shape) }
+    // Picked up softly, as after hold-to-shape: its dots are there, and the pen writes on through it.
+    pickUpShape(shape, soft: true)
+    UINotificationFeedbackGenerator().notificationOccurred(.success)
     return true
   }
 

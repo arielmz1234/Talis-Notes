@@ -123,14 +123,12 @@ extension NoteCanvas.Coordinator {
     case .trace(let pen):
       let inputs = InkInputs(points: smoothed(pen, own.samples), tool: .stylus)
       let began = own.began
-      // As the pen gave them, before smoothing: what Auto arrow looks at.
-      let raw = own.samples.map { Pt($0.x, $0.y) }
       own.samples = []
       if cancelled || hold.live != nil {
         forgetArrowLine()
         clearLive()
       } else {
-        hand(pen, inputs, began: began, raw: raw)
+        hand(pen, inputs, began: began, traced: true)
       }
     case nil: break
     }
@@ -189,7 +187,8 @@ extension NoteCanvas.Coordinator {
   /// The stroke is kept: its live picture stays on until the canvas shows it, and the next stroke
   /// is drawn in a new one. Kept a moment later, so a scribble to delete or a stroke that became a
   /// shape (which end on the same lift) can still say it isn't.
-  private func hand(_ pen: PenSlot, _ inputs: InkInputs, began: Date, raw: [Pt]? = nil) {
+  /// [traced]: written by hand with a pen (not a straight highlighter line), so it may be an arrow.
+  private func hand(_ pen: PenSlot, _ inputs: InkInputs, began: Date, traced: Bool = false) {
     guard let canvas, !inputs.points.isEmpty else { return clearLive() }
     let lifted = Date()
     showLive(pen, inputs)
@@ -207,20 +206,14 @@ extension NoteCanvas.Coordinator {
         return
       }
       let s = self.stroke(pen, inputs, id: newId())
-      // Only what its page shows is kept (Android's split strokes): the rest would come back into
-      // view when it's moved.
-      self.growPages(toHold: s.bounds)
-      let kept = self.keptToPage(s)
-      for piece in kept { self.own.kept.append((piece.id, began)) }
-      if self.own.kept.count > 50 { self.own.kept.removeFirst(self.own.kept.count - 50) }
-      self.commit(remove: [], add: kept.map(PageItem.ink))
-      // A stroke cut at its page's edge isn't looked at for an arrow: part of what was drawn is gone.
-      let whole = kept.count == 1 && kept[0].inputs.points.count == s.inputs.points.count
-      if let raw, whole, self.autoArrow(after: s, pen: pen, raw: raw, began: began, lifted: lifted) {
+      self.own.kept.append((s.id, began))
+      if self.own.kept.count > 50 { self.own.kept.removeFirst() }
+      self.commit(remove: [], add: [.ink(s)])
+      if traced, self.autoArrow(after: s, pen: pen, lifted: lifted) {
         // The clean arrow is already up, in this same frame: the hand-drawn ink goes as it comes.
         self.letGo(shown, now: true)
       } else {
-        if raw == nil || !whole { self.forgetArrowLine() }
+        if !traced { self.forgetArrowLine() }
         self.afterRender { self.letGo(shown, now: false) }
       }
     }

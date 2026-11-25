@@ -35,11 +35,8 @@ extension Geo {
   }
 
   /// Ramer-Douglas-Peucker simplification of an open polyline.
-  public static func simplify(_ points: [Pt], _ epsilon: Float) -> [Pt] { simplifiedIndices(points, epsilon).map { points[$0] } }
-
-  /// Which of [points] the simplification keeps, in order.
-  public static func simplifiedIndices(_ points: [Pt], _ epsilon: Float) -> [Int] {
-    if points.count < 3 { return Array(points.indices) }
+  public static func simplify(_ points: [Pt], _ epsilon: Float) -> [Pt] {
+    if points.count < 3 { return points }
     var keep = [Bool](repeating: false, count: points.count)
     keep[0] = true
     keep[points.count - 1] = true
@@ -62,7 +59,7 @@ extension Geo {
         stack.append((idx, e))
       }
     }
-    return points.indices.filter { keep[$0] }
+    return points.indices.filter { keep[$0] }.map { points[$0] }
   }
 
   public static func meanDistToPolyline(_ points: [Pt], _ poly: [Pt], closed: Bool) -> Float {

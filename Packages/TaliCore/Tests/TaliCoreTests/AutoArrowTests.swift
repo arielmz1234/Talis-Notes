@@ -201,3 +201,117 @@ struct AutoArrowTests {
     #expect(AutoArrow.straight(stroke([Pt(0, 0), Pt(300, 0), Pt(200, 0)])) == nil)
   }
 }
+
+/// Android's `AutoArrowTest`, ported as it is (same strokes, same wobble, same tolerances).
+struct AndroidAutoArrowTests {
+  /// The path through [corners], sampled every 2 units with a little hand wobble.
+  private func drawn(_ corners: Pt..., wobble: Float = 0.6) -> [Pt] {
+    var out: [Pt] = []
+    var k = 0
+    for i in 0..<(corners.count - 1) {
+      let a = corners[i], b = corners[i + 1]
+      let steps = max(2, Int(a.dist(b) / 2))
+      for s in 0..<steps {
+        let t = Float(s) / Float(steps)
+        out.append(a + (b - a) * t + Pt(0, wobble * sinf(Float(k) * 0.7)))
+        k += 1
+      }
+    }
+    out.append(corners[corners.count - 1])
+    return out
+  }
+
+  private func line(_ f: AutoArrow.Found?) -> (a: Pt, b: Pt, start: Bool, end: Bool, head: Float)? {
+    guard let f, case let .line(a, b, s, e, _, head) = AutoArrow.shape(f, last: nil).geometry else { return nil }
+    return (a, b, s, e, head)
+  }
+
+  private func expectArrow(_ a: Pt, _ b: Pt, _ found: AutoArrow.Found?) {
+    guard let l = line(found) else {
+      Issue.record("not an arrow")
+      return
+    }
+    #expect(l.end && !l.start)
+    #expect(abs(l.a.x - a.x) <= 2 && abs(l.a.y - a.y) <= 2)
+    #expect(abs(l.b.x - b.x) <= 3 && abs(l.b.y - b.y) <= 3)
+  }
+
+  @Test func oneStrokeWithAVHead() {
+    expectArrow(Pt(0, 0), Pt(200, 0), AutoArrow.oneStroke(drawn(Pt(0, 0), Pt(200, 0), Pt(172, -20), Pt(200, 0), Pt(172, 20))))
+  }
+
+  @Test func oneStrokeWithATriangleHead() {
+    expectArrow(Pt(0, 0), Pt(230, 0), AutoArrow.oneStroke(drawn(Pt(0, 0), Pt(200, 0), Pt(200, -16), Pt(230, 0), Pt(200, 16), Pt(200, 0))))
+  }
+
+  @Test func aSlantedOneStrokeArrowKeepsItsAngle() {
+    let ang: Float = 0.5
+    let u = Pt(cosf(ang), sinf(ang)), n = Pt(-u.y, u.x)
+    let tip = u * 180
+    expectArrow(Pt(0, 0), tip, AutoArrow.oneStroke(drawn(Pt(0, 0), tip, tip - u * 26 + n * 18, tip, tip - u * 26 - n * 18)))
+  }
+
+  @Test func aLineThenAHeadAtItsEnd() {
+    guard let (a, b) = AutoArrow.straight(drawn(Pt(0, 0), Pt(200, 0))) else { Issue.record("not straight"); return }
+    expectArrow(Pt(0, 0), Pt(200, 0), AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(175, -18), Pt(201, 0), Pt(175, 18))))
+  }
+
+  @Test func aLineThenATriangleHead() {
+    guard let (a, b) = AutoArrow.straight(drawn(Pt(0, 0), Pt(0, 200))) else { Issue.record("not straight"); return }
+    expectArrow(Pt(0, 0), Pt(0, 228), AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(-15, 200), Pt(0, 228), Pt(15, 200), Pt(-15, 200))))
+  }
+
+  @Test func aHeadAtTheStartPointsTheOtherWay() {
+    guard let (a, b) = AutoArrow.straight(drawn(Pt(0, 0), Pt(200, 0))) else { Issue.record("not straight"); return }
+    expectArrow(Pt(200, 0), Pt(0, 0), AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(25, -18), Pt(0, 0), Pt(25, 18))))
+  }
+
+  @Test func writingStaysWriting() {
+    #expect(AutoArrow.straight(drawn(Pt(0, 0), Pt(25, 0))) == nil)
+    #expect(AutoArrow.oneStroke(drawn(Pt(0, 0), Pt(25, 0), Pt(18, -6), Pt(25, 0), Pt(18, 6))) == nil)
+    #expect(AutoArrow.oneStroke(drawn(Pt(0, 0), Pt(60, 0), Pt(20, 90))) == nil)
+    #expect(AutoArrow.oneStroke(drawn(Pt(0, 0), Pt(200, 0), Pt(175, -20))) == nil)
+    guard let (a, b) = AutoArrow.straight(drawn(Pt(0, 0), Pt(200, 0))) else { Issue.record("not straight"); return }
+    #expect(AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(200, -20), Pt(200, 20))) == nil)
+    #expect(AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(185, 30), Pt(200, 60), Pt(215, 30))) == nil)
+    #expect(AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(200, 0), Pt(200, 180))) == nil)
+    let circle = (0...72).map { i -> Pt in
+      let t = Float(i) * .pi * 2 / 72
+      return Pt(215 - 15 * cosf(t), 15 * sinf(t))
+    }
+    #expect(AutoArrow.twoStrokes(a: a, b: b, head: circle) == nil)
+    #expect(AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(225, -18), Pt(199, 0), Pt(225, 18))) == nil)
+  }
+
+  @Test func aWobblyLineIsNotAShaft() {
+    #expect(AutoArrow.straight(drawn(Pt(0, 0), Pt(60, 30), Pt(120, 0), Pt(200, 30))) == nil)
+  }
+
+  @Test func theCleanHeadIsAStandardHeadAsLongAsTheDrawnOne() {
+    guard let (a, b) = AutoArrow.straight(drawn(Pt(0, 0), Pt(300, 0))) else { Issue.record("not straight"); return }
+    guard let small = line(AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(280, -8), Pt(301, 0), Pt(280, 8)))),
+      let bigFound = AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(255, -40), Pt(301, 0), Pt(255, 40)))
+    else { Issue.record("not arrows"); return }
+    let big = AutoArrow.shape(bigFound, last: nil).geometry
+    #expect(abs(small.head - 20) < 0.01)
+    guard case let .line(_, _, _, _, _, bigHead) = big else { Issue.record("not a line"); return }
+    #expect(abs(bigHead - 60) < 0.01)
+    let barbs = big.paths(2)[1]
+    #expect(abs(barbs[0].dist(barbs[1]) - 60) < 0.5 && abs(barbs[2].dist(barbs[1]) - 60) < 0.5)
+    #expect(abs(abs(barbs[0].y - barbs[1].y) - 30) < 0.5 && abs(abs(barbs[2].y - barbs[1].y) - 30) < 0.5)
+    guard case let .line(_, _, _, _, _, doubled) = big.transformed(.scaleAround(Pt(0, 0), 2)) else { Issue.record("not a line"); return }
+    #expect(abs(doubled - 120) < 0.5)
+    guard let tiny = AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(290, -9), Pt(301, 0), Pt(290, 9))) else { Issue.record("not an arrow"); return }
+    let t = AutoArrow.shape(tiny, last: nil).geometry.paths(2)[1]
+    #expect(t[0].dist(t[1]) >= 19.9)
+  }
+
+  @Test func aHeadDrawnLikeTheLastOneGetsExactlyTheSameHead() {
+    guard let (a, b) = AutoArrow.straight(drawn(Pt(0, 0), Pt(300, 0))),
+      let first = AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(255, -40), Pt(301, 0), Pt(255, 40))),
+      let second = AutoArrow.twoStrokes(a: a, b: b, head: drawn(Pt(250, -42), Pt(301, 0), Pt(250, 42)))
+    else { Issue.record("not arrows"); return }
+    let head = AutoArrow.shape(first, last: nil).head
+    #expect(AutoArrow.shape(second, last: head).head == head)
+  }
+}
