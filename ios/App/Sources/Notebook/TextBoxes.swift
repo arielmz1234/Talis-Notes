@@ -1,0 +1,370 @@
+import PencilKit
+import TaliCore
+import UIKit
+
+/// Typed text (Android's `TextItem`, `startText`, `finishText`, `ui/notebook/TextEditor.kt`): the
+/// keyboard button opens a new box where typing would go on a page (at the left margin, just below
+/// what's already written, as wide as the page between its margins); a finger tap on a box opens it to
+/// type in; a tap anywhere else finishes it. Boxes are stored as Android stores them and drawn by the
+/// page layer as real text.
+struct TextEditState {
+  var view: UITextView?
+  /// The box being edited (its place, width and size), and how it was before (nil for a new one).
+  var editing: TextRow?
+  var original: TextRow?
+  var tap: UITapGestureRecognizer?
+  /// A new box opens for typing; one opened from the page is first just picked up (to move or size
+  /// it), and a tap on it brings the keyboard.
+  var typing = true
+  /// The dots on its sides and the chips at its corners (see TextBoxHandles.swift), and its dashed frame.
+  var handles: [TextBoxHandle] = []
+  let frame = CAShapeLayer()
+  /// Where the on-screen keyboard is (screen coordinates), while it's up.
+  var keyboard: CGRect?
+
+  /// The editor's own views: a touch on one of them is the editor's, not "done".
+  var ownViews: [UIView] { [view].compactMap { $0 } + handles }
+}
+
+/// The text box being typed in, for the small bar above it: where its frame's top-left corner is on
+/// screen (window coordinates), and the text's colour.
+struct TextBarInfo: Equatable {
+  var corner: CGPoint
+  var color: UInt32
+}
+
+extension NoteCanvas.Coordinator: UITextViewDelegate {
+  var texts: [TextRow] { pages?.pages.under.texts ?? [] }
+
+  func installTextBoxes(on v: PKCanvasView) {
+    let tap = UITapGestureRecognizer(target: self, action: #selector(textTap(_:)))
+    tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+    tap.cancelsTouchesInView = false
+    tap.delegate = self
+    v.addGestureRecognizer(tap)
+    textEdit.tap = tap
+    // The keyboard's place, so a box being typed in is kept above it.
+    for name in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardWillHideNotification] {
+      NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: name, object: nil)
+    }
+  }
+
+  @objc func keyboardMoved(_ note: Notification) {
+    let hiding = note.name == UIResponder.keyboardWillHideNotification
+    textEdit.keyboard = hiding ? nil : (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+    keyboardRoomChanged()
+  }
+
+  /// How much of the canvas's lower part the keyboard covers (none for a floating or hardware keyboard).
+  var keyboardOverlap: CGFloat {
+    guard let canvas, let window = canvas.window, let keyboard = textEdit.keyboard else { return 0 }
+    let frame = window.convert(keyboard, from: window.screen.coordinateSpace)
+    // Only one docked along the bottom covers the page; a small floating one is moved out of the way by hand.
+    guard frame.maxY >= window.bounds.maxY - 1, frame.width >= window.bounds.width * 0.6 else { return 0 }
+    return min(max(0, canvas.convert(canvas.bounds, to: nil).maxY - frame.minY), canvas.bounds.height * 0.8)
+  }
+
+  /// The keyboard came, went or changed height: while a box is typed in there's room for the
+  /// keyboard under the page (so the page can scroll that far) and the box is kept clear of it;
+  /// once it's gone the page settles back.
+  private func keyboardRoomChanged() {
+    guard let canvas else { return }
+    updateContent()
+    if textEdit.view != nil, textEdit.typing {
+      showForTyping(opening: true)
+      return
+    }
+    let most = max(canvas.contentSize.height - canvas.bounds.height + canvas.contentInset.bottom, -canvas.contentInset.top)
+    if canvas.contentOffset.y > most, !canvas.isDragging, !canvas.isDecelerating {
+      canvas.setContentOffset(CGPoint(x: canvas.contentOffset.x, y: most), animated: true)
+    }
+  }
+
+  /// Keeps the box being typed in where she can see it: comfortably below the toolbars and above
+  /// the keyboard (Android's `showForTyping`). [opening] (the box just opened for typing, or the
+  /// keyboard just came): when its top isn't in view, or the line she's on is under the keyboard,
+  /// the page scrolls so the box starts just under the toolbars. While typing, only the line with
+  /// the cursor is kept in view, so a box she scrolled within stays where she put it.
+  func showForTyping(opening: Bool) {
+    guard let canvas, let v = textEdit.view, textEdit.typing else { return }
+    let clearance = parent.topClearance
+    let overlap = keyboardOverlap
+    let at = canvas.contentOffset.y
+    let top = at + clearance + 36, bottom = at + canvas.bounds.height - overlap - 24
+    // The line with the cursor, in the canvas's coordinates (the box's first line when it has none yet).
+    var line = CGRect(x: v.frame.minX, y: v.frame.minY, width: 1, height: min(v.frame.height, 44))
+    if let end = v.selectedTextRange?.end {
+      let caret = v.caretRect(for: end)
+      if !caret.isNull, !caret.isInfinite, caret.height > 0 { line = v.convert(caret, to: canvas) }
+    }
+    var y = at
+    if opening {
+      // Without a keyboard on screen yet, a box in the lower part of the screen counts as hidden: it's about to be.
+      let low = overlap == 0 && v.frame.minY > at + canvas.bounds.height * 0.4
+      if v.frame.minY < top || line.maxY > bottom || low {
+        y = v.frame.minY - (clearance + 56)
+        // A tall box: the line she's on still above the keyboard.
+        let lowest = y + canvas.bounds.height - overlap - 24
+        if line.maxY > lowest { y += line.maxY - lowest }
+      }
+    } else if line.maxY > bottom {
+      y = at + line.maxY - bottom
+    } else if line.minY < top {
+      y = at - (top - line.minY)
+    }
+    if abs(y - at) > 0.5 { canvas.setContentOffset(CGPoint(x: canvas.contentOffset.x, y: y), animated: true) }
+  }
+
+  @objc func textTap(_ g: UITapGestureRecognizer) {
+    guard let canvas else { return }
+    if textEdit.view != nil {
+      finishText()
+      // Tapping another text box goes straight on to that one.
+      let q = g.location(in: canvas)
+      let at = CGPoint(x: q.x / canvas.zoomScale, y: q.y / canvas.zoomScale)
+      if !parent.viewOnly, let other = texts.last(where: { !$0.locked && TextLook.frame($0).contains(at) }) { editText(other) }
+      return
+    }
+    // The finger that just unlocked something by holding isn't tapping as it lifts.
+    if let unlocked = lasso.lock.unlockedAt, Date().timeIntervalSince(unlocked) < 0.5 { return }
+    guard !parent.viewOnly, parent.tool != .fill else { return }
+    let q = g.location(in: canvas)
+    let p = CGPoint(x: q.x / canvas.zoomScale, y: q.y / canvas.zoomScale)
+    if parent.tool != .lasso, let t = texts.last(where: { !$0.locked && TextLook.frame($0).insetBy(dx: -6, dy: -6).contains(p) }) {
+      clearSelection()
+      editText(t)
+      return
+    }
+    // A finger that writes taps as the pen does (the lasso's own touch picks up).
+    if fingersDraw { return }
+    // A finger tap only picks something up with the lasso (taps picking things up by accident were
+    // a nuisance); elsewhere it just lets go of what's picked up.
+    if parent.tool == .lasso, !LassoSettings.shot, let item = item(at: Pt(p), anyLock: LassoSettings.pickLocked, filter: LassoSettings.hits) {
+      selectGroup(item)
+    } else if lasso.bounds != nil {
+      clearSelection()
+    }
+  }
+
+  /// Edit text, from the selection menu of a text box picked up.
+  func editPickedText(_ id: String) {
+    guard let t = texts.first(where: { $0.id == id }) else { return }
+    clearSelection()
+    editText(t)
+  }
+
+  /// A new box where typing would go (Android's `startText`).
+  func startNewText() {
+    guard let canvas else { return }
+    finishText()
+    clearSelection()
+    let mm: Float = 160 / 25.4
+    let z = Float(max(canvas.zoomScale, 0.01))
+    let pen = shapePen
+    let color = pen.color | Int32(bitPattern: 0xFF00_0000)
+    var t: TextRow
+    if paged {
+      let midY = Float((canvas.contentOffset.y + canvas.bounds.height / 2) / CGFloat(z))
+      let r = layout.rect(min(max(layout.indexAt(midY), 0), pageCount - 1))
+      var bottoms = stored.compactMap { s -> Float? in
+        let b = s.stroke.bounds
+        return b.center.y > r.top && b.center.y < r.bottom ? b.bottom : nil
+      }
+      bottoms += shapes.compactMap { s -> Float? in
+        guard let b = s.geometry.bounds(s.size), b.center.y > r.top, b.center.y < r.bottom else { return nil }
+        return b.bottom
+      }
+      bottoms += texts.compactMap { t -> Float? in
+        let b = TextLook.frame(t)
+        return Float(b.midY) > r.top && Float(b.midY) < r.bottom ? Float(b.maxY) : nil
+      }
+      let top = min(bottoms.max().map { $0 + 6 * mm } ?? (r.top + 22 * mm), r.bottom - 30 * mm)
+      t = TextRow(text: "", x: r.left + 20 * mm, y: top, width: r.width - 40 * mm, fontSize: TextRow.defaultSize, color: color)
+    } else {
+      let left = Float((canvas.contentOffset.x + 48) / CGFloat(z))
+      let top = Float((canvas.contentOffset.y + parent.topClearance + 32) / CGFloat(z))
+      t = TextRow(text: "", x: left, y: top, width: min(Float(canvas.bounds.width) / z * 0.7, 1100), fontSize: TextRow.defaultSize, color: color)
+    }
+    t.id = newId()
+    textEdit.original = nil
+    beginEditing(t, typing: true)
+  }
+
+  /// Opens an existing box to type in.
+  func editText(_ t: TextRow) {
+    textEdit.original = t
+    // It's drawn by the editor meanwhile, not by the page.
+    pages?.pages.under.texts.removeAll { $0.id == t.id }
+    pages?.layer.setNeedsDisplay()
+    dropPatches()
+    beginEditing(t, typing: false)
+  }
+
+  private func beginEditing(_ t: TextRow, typing: Bool) {
+    guard let canvas else { return }
+    textEdit.editing = t
+    textEdit.typing = typing
+    let v = UITextView()
+    v.backgroundColor = .clear
+    v.textContainerInset = .zero
+    v.textContainer.lineFragmentPadding = 0
+    v.isScrollEnabled = false
+    v.delegate = self
+    v.accessibilityIdentifier = "text-editor"
+    canvas.addSubview(v)
+    textEdit.view = v
+    installTextBoxHandles(on: canvas, around: v)
+    (canvas as? NoteCanvasView)?.typing = textEdit.ownViews
+    layoutTextEditor()
+    v.attributedText = NSAttributedString(string: t.text, attributes: editorAttributes(t))
+    TextLook.setDirections(v.textStorage)
+    guard typing else {
+      // Picked up, not yet typing: the whole box moves when dragged, and a tap starts typing.
+      v.isEditable = false
+      v.isSelectable = false
+      return
+    }
+    v.becomeFirstResponder()
+    // Comfortably below the toolbars and above the keyboard (Android's `showForTyping`).
+    showForTyping(opening: true)
+    // Once it's on screen: a text view added and focused in the same moment can miss the keyboard.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak v] in
+      if let v, v.superview != nil, !v.isFirstResponder { v.becomeFirstResponder() }
+    }
+  }
+
+  /// On dark paper the text shows in the colour it's drawn in there, as on the page.
+  private func editorAttributes(_ t: TextRow) -> [NSAttributedString.Key: Any] {
+    TextLook.attributes(size: CGFloat(t.fontSize) * (canvas?.zoomScale ?? 1), color: parent.settings.dark ? DarkInk.onDarkPaper(t.color) : t.color)
+  }
+
+  /// Keeps the editor over its box as the zoom changes.
+  func layoutTextEditor() {
+    guard let canvas, let v = textEdit.view, let t = textEdit.editing else { return }
+    let z = canvas.zoomScale
+    let w = CGFloat(t.width) * z
+    let fit = v.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height
+    let h = max(fit, CGFloat(max(t.fontSize * TextRow.line, t.height)) * z)
+    v.frame = CGRect(x: CGFloat(t.x) * z, y: CGFloat(t.y) * z, width: w, height: h)
+    layoutTextBoxHandles(around: v.frame)
+    let attrs = editorAttributes(t)
+    v.typingAttributes = attrs
+    if let text = v.attributedText, text.length > 0, (text.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)?.pointSize != (attrs[.font] as? UIFont)?.pointSize {
+      v.attributedText = NSAttributedString(string: text.string, attributes: attrs)
+      TextLook.setDirections(v.textStorage)
+    }
+    reportTextBar()
+  }
+
+  /// Tells the screen where the box being typed in is, for its bar (nil when none is).
+  func reportTextBar() {
+    guard let canvas, let v = textEdit.view, let t = textEdit.editing else { return parent.onTextBar(nil) }
+    let box = v.frame.insetBy(dx: -Self.textPad, dy: -Self.textPad)
+    parent.onTextBar(TextBarInfo(corner: canvas.convert(box.origin, to: nil), color: UInt32(bitPattern: t.color)))
+  }
+
+  func textViewDidChange(_ textView: UITextView) {
+    if textView.markedTextRange == nil { TextLook.setDirections(textView.textStorage) }
+    layoutTextEditor()
+    // A new line may have grown the box down under the keyboard.
+    showForTyping(opening: false)
+  }
+
+  /// A− / A+: the text 15% smaller or bigger, between 10 and 160 (Android's limits).
+  func resizeText(_ grow: Bool) {
+    guard var t = textEdit.editing else { return }
+    t.fontSize = min(max(grow ? t.fontSize * 1.15 : t.fontSize / 1.15, 10), 160)
+    restyleEditor(t)
+  }
+
+  func recolourText(_ color: UInt32) {
+    guard var t = textEdit.editing else { return }
+    t.color = Int32(bitPattern: color | 0xFF00_0000)
+    restyleEditor(t)
+  }
+
+  /// The bar's bin: the box goes, whatever was typed in it.
+  func deleteText() {
+    textEdit.view?.text = ""
+    finishText()
+  }
+
+  /// Shows the box as [t] now is, keeping the cursor where it was.
+  private func restyleEditor(_ t: TextRow) {
+    guard let v = textEdit.view else { return }
+    textEdit.editing = t
+    v.textStorage.setAttributes(editorAttributes(t), range: NSRange(location: 0, length: v.textStorage.length))
+    TextLook.setDirections(v.textStorage)
+    layoutTextEditor()
+  }
+
+  /// Keeps what was typed: a new box with text is added, an emptied one removed, a changed one
+  /// replaced; one undo step.
+  func finishText() {
+    guard let v = textEdit.view, var t = textEdit.editing else { return }
+    // The box keeps the height it grew to while typing (it showed that tall), not only its text's.
+    if let canvas, canvas.zoomScale > 0, v.text != textEdit.original?.text {
+      t.height = min(max(t.height, Float((v.frame.height / canvas.zoomScale).rounded(.up))), TextRow.maxHeight)
+    }
+    textEdit.view = nil
+    textEdit.editing = nil
+    v.resignFirstResponder()
+    v.removeFromSuperview()
+    removeTextBoxHandles()
+    parent.onTextBar(nil)
+    (canvas as? NoteCanvasView)?.typing = []
+    let text = v.text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+    t.text = text
+    let original = textEdit.original
+    textEdit.original = nil
+    var before = texts
+    if let original { before.append(original) }
+    var after = texts
+    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      if t.z == 0 { t.z = max(stored.map(\.stroke.z).max() ?? 0, shapeZ) + 1 }
+      after.append(t)
+    }
+    // The original was only off the page while editing: put the list back as it was before saving.
+    pages?.pages.under.texts = before
+    if before != after {
+      setTexts(after)
+      registerTextsChange(from: before, to: after)
+    } else {
+      pages?.layer.setNeedsDisplay()
+      dropPatches()
+    }
+  }
+
+  /// Makes [new] the notebook's text boxes: what changed is saved, what's gone is removed.
+  func setTexts(_ new: [TextRow]) {
+    guard let pages else { return }
+    let old = pages.pages.under.texts
+    let keep = Set(new.map(\.id))
+    var before: [String: TextRow] = [:]
+    for t in old { before[t.id] = t }
+    do {
+      for t in old where !keep.contains(t.id) { try parent.db.removeItem(t.id) }
+      for t in new where before[t.id] != t { try parent.db.put(t.row(textHeight: TextLook.textHeight(t)), in: parent.notebook.id) }
+    } catch {
+      CrashNote.log("saving text: \(error)")
+    }
+    pages.pages.under.texts = new
+    let after = Dictionary(new.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    var area: CGRect?
+    for t in old.filter({ after[$0.id] != $0 }) + new.filter({ before[$0.id] != $0 }) { area = joined(area, TextLook.frame(t)) }
+    redrawPage(area)
+    touch()
+  }
+
+  func registerTextsChange(from before: [TextRow], to after: [TextRow]) {
+    canvas?.undoManager?.registerUndo(withTarget: self) { c in
+      MainActor.assumeIsolated {
+        c.finishText()
+        c.setTexts(before)
+        c.registerTextsChange(from: after, to: before)
+        c.reportUndo()
+      }
+    }
+    reportUndo()
+  }
+}

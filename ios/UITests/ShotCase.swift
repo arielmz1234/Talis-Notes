@@ -1,0 +1,176 @@
+import XCTest
+
+/// Launches the app with sample notebooks and saves screenshots for review. CI runs the tests once
+/// per device and setting (light/dark, Hebrew), passing SHOT_DIR and SHOT_TAG through the environment.
+/// Each area of the app keeps its own test class on top of this one.
+@MainActor
+class ShotCase: XCTestCase {
+
+  var tag: String { ProcessInfo.processInfo.environment["SHOT_TAG"] ?? "local" }
+
+  func launch(_ extra: [String] = []) -> XCUIApplication {
+    let app = XCUIApplication()
+    var args = ["-uitest", "-seed"]
+    let env = ProcessInfo.processInfo.environment
+    if env["SHOT_DARK"] == "1" { args.append("-dark") } else { args.append("-light") }
+    if let lang = env["SHOT_LANG"], !lang.isEmpty {
+      args += ["-AppleLanguages", "(\(lang))", "-AppleLocale", lang]
+    }
+    app.launchArguments = args + extra
+    app.launch()
+    return app
+  }
+
+  func shot(_ name: String) {
+    // The screenshot's image carries its orientation; draw it upright so landscape shots aren't sideways.
+    let image = XCUIScreen.main.screenshot().image
+    let upright = UIGraphicsImageRenderer(size: image.size, format: { let f = UIGraphicsImageRendererFormat(); f.scale = image.scale; return f }())
+      .image { _ in image.draw(in: CGRect(origin: .zero, size: image.size)) }
+    let png = upright.pngData() ?? XCUIScreen.main.screenshot().pngRepresentation
+    let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+    attachment.name = "\(tag)-\(name)"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    if let dir = ProcessInfo.processInfo.environment["SHOT_DIR"], !dir.isEmpty {
+      try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+      try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(tag)-\(name).png"))
+    }
+  }
+
+  func settle() { Thread.sleep(forTimeInterval: 1.2) }
+
+  /// Taps a tool's button. On a phone the tools are folded behind one button, which opens them and
+  /// closes whatever panel is open: so there, tapping the tool in use to close its panel is that
+  /// button alone, and the tools are folded away again. A phone too narrow for them all (an iPhone 16)
+  /// shows them in pages, with an arrow to the next.
+  func tapTool(_ app: XCUIApplication, _ id: String, file: StaticString = #filePath, line: UInt = #line) {
+    let fold = app.buttons["tools-button"].firstMatch
+    let folded = fold.exists && !app.buttons[id].exists
+    let panelOpen = app.descendants(matching: .any)["tool-panel"].firstMatch.exists
+    if folded {
+      fold.tap()
+      // On a slow machine the tools bar takes a moment to come down.
+      _ = app.buttons[id].waitForExistence(timeout: 2) || app.buttons["tools-page"].waitForExistence(timeout: 1)
+      settle()
+    }
+    let page = app.buttons["tools-page"].firstMatch
+    if !app.buttons[id].exists, page.exists {
+      page.tap()
+      settle()
+    }
+    let tool = app.buttons[id].firstMatch
+    XCTAssertTrue(tool.waitForExistence(timeout: 3), "\(id) is in the toolbar", file: file, line: line)
+    if folded, panelOpen, tool.isSelected {
+      fold.tap()
+      return
+    }
+    tool.tap()
+  }
+
+  /// Every button, switch and slider outside a scrolling area lies wholly on the screen: nothing is
+  /// cut off by an edge. (What scrolls is reached by scrolling; a memo follows its page off the screen.)
+  func assertAllOnScreen(_ app: XCUIApplication, _ where_: String, file: StaticString = #filePath, line: UInt = #line) {
+    guard let tree = try? app.snapshot() else { return XCTFail("no snapshot of the screen", file: file, line: line) }
+    let screen = tree.frame.insetBy(dx: -0.5, dy: -0.5)
+    let controls: Set<XCUIElement.ElementType> = [.button, .switch, .slider, .textField, .secureTextField]
+    var off: [String] = []
+    func walk(_ e: XCUIElementSnapshot, scrolls: Bool) {
+      if controls.contains(e.elementType), !scrolls, e.frame.width > 0, e.frame.height > 0, !e.identifier.hasPrefix("memo-"), !screen.contains(e.frame) {
+        off.append("\(e.identifier.isEmpty ? e.label : e.identifier) at \(e.frame.integral)")
+      }
+      let inside = scrolls || [.scrollView, .table, .collectionView].contains(e.elementType)
+      for child in e.children { walk(child, scrolls: inside) }
+    }
+    // The keyboard is the system's own, in a window of its own.
+    func hasKeyboard(_ e: XCUIElementSnapshot) -> Bool { e.elementType == .keyboard || e.children.contains(where: hasKeyboard) }
+    for window in tree.children where !hasKeyboard(window) { walk(window, scrolls: false) }
+    XCTAssertTrue(off.isEmpty, "\(where_): off the screen: \(off.joined(separator: "; "))", file: file, line: line)
+  }
+}
+
+/// The screen's pixels, upright: the tests check what was drawn, not only that nothing failed.
+struct Pixels {
+  let width: Int
+  let height: Int
+  private let bytes: [UInt8]
+
+  @MainActor init() {
+    let shot = XCUIScreen.main.screenshot().image
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = shot.scale
+    let upright = UIGraphicsImageRenderer(size: shot.size, format: format).image { _ in shot.draw(in: CGRect(origin: .zero, size: shot.size)) }.cgImage!
+    let w = upright.width, h = upright.height
+    var data = [UInt8](repeating: 0, count: w * h * 4)
+    data.withUnsafeMutableBytes { buffer in
+      let space = CGColorSpace(name: CGColorSpace.sRGB)!
+      let ctx = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+      ctx.draw(upright, in: CGRect(x: 0, y: 0, width: w, height: h))
+    }
+    width = w
+    height = h
+    bytes = data
+  }
+
+  typealias Colour = (r: Int, g: Int, b: Int)
+
+  func colour(_ x: Int, _ y: Int) -> Colour {
+    let i = (y * width + x) * 4
+    return (Int(bytes[i]), Int(bytes[i + 1]), Int(bytes[i + 2]))
+  }
+
+  func colour(x: CGFloat, y: CGFloat) -> Colour { colour(Int(x * CGFloat(width)), Int(y * CGFloat(height))) }
+
+  /// Rows and [x] are fractions of the screen. Nil when hardly any pixel in the column matches.
+  func span(x: CGFloat, rows: ClosedRange<CGFloat>, _ match: (Colour) -> Bool) -> ClosedRange<CGFloat>? {
+    let cx = Int(x * CGFloat(width)), half = max(width / 200, 3)
+    var top = Int.max, bottom = Int.min, count = 0
+    for y in Int(rows.lowerBound * CGFloat(height))...Int(rows.upperBound * CGFloat(height)) {
+      for px in (cx - half)...(cx + half) where match(colour(px, y)) {
+        top = min(top, y)
+        bottom = max(bottom, y)
+        count += 1
+      }
+    }
+    guard count > half else { return nil }
+    return (CGFloat(top) / CGFloat(height))...(CGFloat(bottom + 1) / CGFloat(height))
+  }
+
+  /// How many separate stretches of matching pixels there are from [x0] to [x1] along the row
+  /// between [rows] that has the most of them: the pieces of a level dotted or dashed line.
+  /// Breaks narrower than [gap] (a fraction of the screen's width) don't count: a grid line showing through.
+  func runs(rows: ClosedRange<CGFloat>, from x0: CGFloat, to x1: CGFloat, gap: CGFloat = 0, _ match: (Colour) -> Bool) -> Int {
+    let xs = Int(x0 * CGFloat(width))...Int(x1 * CGFloat(width))
+    var best = (count: 0, y: 0)
+    for y in Int(rows.lowerBound * CGFloat(height))...Int(rows.upperBound * CGFloat(height)) {
+      let count = xs.reduce(0) { $0 + (match(colour($1, y)) ? 1 : 0) }
+      if count > best.count { best = (count, y) }
+    }
+    guard best.count > 0 else { return 0 }
+    var runs = 0, off = Int.max
+    for x in xs {
+      if match(colour(x, best.y)) {
+        if off > Int(gap * CGFloat(width)) { runs += 1 }
+        off = 0
+      } else if off != Int.max {
+        off += 1
+      }
+    }
+    return runs
+  }
+
+  func darkest(x: CGFloat, rows: ClosedRange<CGFloat>) -> Colour {
+    let cx = Int(x * CGFloat(width))
+    let top = Int(rows.lowerBound * CGFloat(height)), bottom = Int(rows.upperBound * CGFloat(height))
+    func light(_ c: Colour) -> Int { c.r + c.g + c.b }
+    return (top...bottom).map { colour(cx, $0) }.min { light($0) < light($1) }!
+  }
+
+  /// How many pixels match from [x0] to [x1] between [rows] (fractions of the screen).
+  func count(rows: ClosedRange<CGFloat>, from x0: CGFloat, to x1: CGFloat, _ match: (Colour) -> Bool) -> Int {
+    var n = 0
+    for y in Int(rows.lowerBound * CGFloat(height))...Int(rows.upperBound * CGFloat(height)) {
+      for x in Int(x0 * CGFloat(width))...Int(x1 * CGFloat(width)) where match(colour(x, y)) { n += 1 }
+    }
+    return n
+  }
+}

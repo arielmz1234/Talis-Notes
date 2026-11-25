@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The UI suite takes about an hour on one simulator, so it's split across jobs, each building
+  # for itself. Every iPad class runs in the light; the dark, Hebrew and iPhone runs take the
+  # screenshot set and the classes about the phone.
+  test:
+    name: ${{ matrix.name }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ipad-selecting
+            core: true
+            runs: '["ipad ipad-light 0 - SelectingTests"]'
+          - name: ipad-pens-media
+            runs: '["ipad ipad-light 0 - PenTests,MediaTests,ShapeTipsTests"]'
+          - name: ipad-library-pages-shapes
+            runs: '["ipad ipad-light 0 - LibraryTests,PagesTests,ShapesMoreTests,PhoneTests,ScreenshotTests"]'
+          - name: looks
+            runs: '["ipad ipad-dark 1 - ScreenshotTests", "ipad ipad-he 0 he ScreenshotTests", "iphone iphone-light 0 - ScreenshotTests,PhoneTests", "iphone iphone-dark 1 - ScreenshotTests"]'
+          - name: ipad11
+            runs: '["ipad11 ipad11-light 0 - ScreenshotTests,ShapesMoreTests/testAutoArrowSetting,SelectingTests/testTypedTextInTheLasso"]'
+          - name: iphone-selecting
+            runs: '["iphone iphone-light 0 - SelectingTests"]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Core unit tests (TaliCore)
+        if: matrix.core
+        run: set -o pipefail; swift test --package-path Packages/TaliCore 2>&1 | tail -60
+
+      - name: Generate project
+        run: |
+          brew install xcodegen >/dev/null
+          xcodegen generate
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project TalisNotes.xcodeproj -scheme TalisNotes \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO > build-log.txt 2>&1 || { grep -E "error:|warning: .*(Sources|UITests)/" build-log.txt | sort -u | head -150; tail -30 build-log.txt; exit 1; }
+          tail -5 build-log.txt
+
+      - name: UI tests and screenshots
+        env:
+          RUNS: ${{ matrix.runs }}
+        run: |
+          echo "$RUNS" | jq -r '.[]' > runs.txt
+          set --
+          while IFS= read -r r; do set -- "$@" "$r"; done < runs.txt
+          sh scripts/ci-shots.sh "$@"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ matrix.name }}
+          path: shots/
+          if-no-files-found: warn
+
+  ipa:
+    name: Unsigned .ipa
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate project
+        run: |
+          brew install xcodegen >/dev/null
+          xcodegen generate
+
+      - name: Unsigned .ipa (for sideloading)
+        run: |
+          set -o pipefail
+          xcodebuild archive -project TalisNotes.xcodeproj -scheme TalisNotes -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/TalisNotes.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > archive-log.txt 2>&1 || { grep -E "error:" archive-log.txt | sort -u | head -100; tail -30 archive-log.txt; exit 1; }
+          mkdir -p build/ipa/Payload
+          cp -R build/TalisNotes.xcarchive/Products/Applications/TalisNotes.app build/ipa/Payload/
+          (cd build/ipa && zip -qr ../TalisNotes-unsigned.ipa Payload)
+          ls -la build/TalisNotes-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TalisNotes-unsigned-ipa
+          path: build/TalisNotes-unsigned.ipa

@@ -1,0 +1,415 @@
+import Foundation
+
+private let tau = Float.pi * 2
+private let tick: Float = 8
+
+extension Geo {
+  public static func interiorAngle(_ a: Pt, _ b: Pt, _ c: Pt) -> Float {
+    let u = (a - b).normalized(), v = (c - b).normalized()
+    return acosf(min(max(u.dot(v), -1), 1))
+  }
+
+  /// A Catmull-Rom curve through [points], keeping corners sharper than [cornerDeg] (Android's `Geo.smooth`).
+  public static func smooth(_ points: [Pt], step: Float = 1.5, cornerDeg: Float = 55) -> [Pt] {
+    if points.count < 3 { return points }
+    let corner = cornerDeg * .pi / 180
+    var out: [Pt] = [points[0]]
+    var start = 0
+    for i in 1..<points.count {
+      let isCorner = i < points.count - 1 && Float.pi - interiorAngle(points[i - 1], points[i], points[i + 1]) > corner
+      if isCorner || i == points.count - 1 {
+        let run = Array(points[start...i])
+        for j in 0..<(run.count - 1) {
+          let p0 = run[max(j - 1, 0)], p1 = run[j], p2 = run[j + 1], p3 = run[min(j + 2, run.count - 1)]
+          let n = min(max(Int(ceilf(p1.dist(p2) / step)), 1), 32)
+          for k in 1...n {
+            let t = Float(k) / Float(n), t2 = t * t, t3 = t2 * t
+            func f(_ a: Float, _ b: Float, _ c: Float, _ d: Float) -> Float {
+              0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3)
+            }
+            out.append(Pt(f(p0.x, p1.x, p2.x, p3.x), f(p0.y, p1.y, p2.y, p3.y)))
+          }
+        }
+        start = i
+      }
+    }
+    return out
+  }
+}
+
+public enum Arrow {
+  public static func headLength(_ penSize: Float, _ room: Float) -> Float { min(max(20, penSize * 7), room * 0.4) }
+
+  /// How long each barb is drawn: the usual head, or a hand-drawn head's own length ([drawn], up
+  /// to 0.6 of the line) when that's longer.
+  public static func barbLength(_ penSize: Float, _ room: Float, drawn: Float = 0) -> Float {
+    let usual = headLength(penSize, room)
+    return drawn > 0 ? max(usual, min(drawn, room * 0.6)) : usual
+  }
+
+  /// Two short barbs at [tip], pointing back toward [from].
+  /// [drawn]: the head's own length when it was drawn by hand (Auto arrow), never shorter than
+  /// the usual head nor longer than 0.6 of the line; 0 = the usual head.
+  public static func head(_ from: Pt, _ tip: Pt, _ penSize: Float, room: Float? = nil, drawn: Float = 0) -> [[Pt]] {
+    let dir = (tip - from).normalized()
+    if dir == .zero { return [] }
+    let len = barbLength(penSize, room ?? from.dist(tip), drawn: drawn)
+    let back = dir * -len
+    return [[tip + back.rotated(0.52), tip, tip + back.rotated(-0.52)]]
+  }
+}
+
+public enum PolyForm: String, Sendable {
+  case DIAMOND, PARALLELOGRAM, TRAPEZOID, REGULAR
+}
+
+/// A shape's geometry as the Android app stores it (JSON with a "type" key, `model/Shapes.kt`).
+public indirect enum ShapeGeometry: Sendable, Equatable {
+  /// [head]: how long an arrowhead's barbs are when it was drawn by hand (Auto arrow); 0 = the usual head.
+  case line(a: Pt, b: Pt, arrowStart: Bool, arrowEnd: Bool, ticks: Bool, head: Float = 0)
+  case poly(points: [Pt], closed: Bool, smooth: Bool = false, rotation: Float = 0, form: PolyForm? = nil)
+  /// [stretchable]: drawn with the Ellipse tool, so it keeps its four dots even while perfectly round.
+  case ellipse(center: Pt, rx: Float, ry: Float, rotation: Float, stretchable: Bool = false)
+  case arc(center: Pt, radius: Float, start: Float, sweep: Float, arrowEnd: Bool)
+  case curve(points: [Pt])
+  case sector(center: Pt, radius: Float, start: Float, sweep: Float)
+  /// [turn]: how far it has been turned on the page (for the angle shown while turning it).
+  case triangle(a: Pt, b: Pt, c: Pt, turn: Float = 0)
+  case load(a: Pt, b: Pt, depth: Float, count: Int)
+  case group([ShapeGeometry], turn: Float = 0)
+  /// A subject shape with joints, rebuilt from its template (ParamShape.swift).
+  case param(ParamShape)
+
+  /// Polylines to ink, each one continuous stroke. [penSize] sizes arrowheads.
+  public func paths(_ penSize: Float) -> [[Pt]] {
+    switch self {
+    case let .line(a, b, arrowStart, arrowEnd, ticks, head):
+      var out = [[a, b]]
+      if arrowEnd { out += Arrow.head(a, b, penSize, drawn: head) }
+      if arrowStart { out += Arrow.head(b, a, penSize, drawn: head) }
+      if ticks {
+        let dir = (b - a).normalized()
+        if dir != .zero {
+          let n = Pt(-dir.y, dir.x) * max(tick, penSize * 2.5)
+          out += [[a - n, a + n], [b - n, b + n]]
+        }
+      }
+      return out
+    case let .poly(points, closed, smooth, _, _):
+      guard let first = points.first else { return [] }
+      return [closed ? points + [first] : (smooth ? Geo.smooth(points) : points)]
+    case let .ellipse(center, rx, ry, rotation, _):
+      let n = min(max(Int(max(rx, ry) / 3), 48), 180)
+      return [(0...n).map { i in
+        let t = tau * Float(i) / Float(n)
+        return center + Pt(rx * cosf(t), ry * sinf(t)).rotated(rotation)
+      }]
+    case let .arc(center, radius, start, sweep, arrowEnd):
+      let n = min(max(Int(abs(sweep) * radius / 3), 16), 160)
+      let arc = (0...n).map { center + Pt.polar(radius, start + sweep * Float($0) / Float(n)) }
+      if !arrowEnd { return [arc] }
+      let room = min(abs(sweep), 1.5) * radius
+      let back = Arrow.headLength(penSize, room) / radius
+      let from = center + Pt.polar(radius, start + sweep - (sweep < 0 ? -back : back))
+      return [arc] + Arrow.head(from, arc.last!, penSize, room: room)
+    case let .curve(points):
+      return [Geo.smooth(points, cornerDeg: 180)]
+    case let .sector(center, radius, start, sweep):
+      let n = min(max(Int(abs(sweep) * radius / 3), 12), 200)
+      let arc = (0...n).map { center + Pt.polar(radius, start + sweep * Float($0) / Float(n)) }
+      return min(max(abs(sweep) / tau, 0), 1) >= 0.999 ? [arc] : [[center] + arc + [center]]
+    case let .triangle(a, b, c, _):
+      return [[a, b, c, a]]
+    case let .load(a, b, depth, count):
+      let d = (b - a).normalized()
+      let across = Pt(-d.y, d.x)
+      var out = [[a, b]]
+      for i in 0...max(count, 1) {
+        let p = a + (b - a) * (Float(i) / Float(max(count, 1)))
+        let t = p + across * depth
+        out.append([p, t])
+        out += Arrow.head(p, t, penSize)
+      }
+      return out
+    case let .group(parts, _):
+      return parts.flatMap { $0.paths(penSize) }
+    case let .param(p):
+      return p.paths(penSize)
+    }
+  }
+
+  /// Whether it encloses an area that takes a fill.
+  public var closed: Bool {
+    switch self {
+    case .ellipse, .sector, .triangle: true
+    case .poly(_, let closed, _, _, _): closed
+    default: false
+    }
+  }
+
+  // MARK: JSON
+
+  public static func decode(_ json: Any) -> ShapeGeometry? {
+    guard let o = json as? [String: Any], let type = o["type"] as? String else { return nil }
+    func pt(_ k: String) -> Pt? {
+      guard let p = o[k] as? [String: Any] else { return nil }
+      return Pt(num(p["x"]), num(p["y"]))
+    }
+    func pts(_ k: String) -> [Pt] {
+      ((o[k] as? [[String: Any]]) ?? []).map { Pt(num($0["x"]), num($0["y"])) }
+    }
+    func f(_ k: String, _ d: Float = 0) -> Float { o[k] == nil ? d : num(o[k]) }
+    func b(_ k: String) -> Bool { (o[k] as? Bool) ?? false }
+    switch type {
+    case "line":
+      guard let a = pt("a"), let bb = pt("b") else { return nil }
+      return .line(a: a, b: bb, arrowStart: b("arrowStart"), arrowEnd: b("arrowEnd"), ticks: b("ticks"), head: max(f("head"), 0))
+    case "poly":
+      return .poly(points: pts("points"), closed: b("closed"), smooth: b("smooth"), rotation: f("rotation"), form: (o["form"] as? String).flatMap(PolyForm.init))
+    case "ellipse":
+      guard let c = pt("center") else { return nil }
+      return .ellipse(center: c, rx: f("rx"), ry: f("ry"), rotation: f("rotation"), stretchable: b("stretchable"))
+    case "arc":
+      guard let c = pt("center") else { return nil }
+      return .arc(center: c, radius: f("radius"), start: f("start"), sweep: f("sweep"), arrowEnd: b("arrowEnd"))
+    case "curve": return .curve(points: pts("points"))
+    case "sector":
+      guard let c = pt("center") else { return nil }
+      return .sector(center: c, radius: f("radius"), start: f("start"), sweep: f("sweep"))
+    case "triangle":
+      guard let a = pt("a"), let bb = pt("b"), let c = pt("c") else { return nil }
+      return .triangle(a: a, b: bb, c: c, turn: f("turn"))
+    case "load":
+      guard let a = pt("a"), let bb = pt("b") else { return nil }
+      return .load(a: a, b: bb, depth: f("depth"), count: Int(f("count", 2)))
+    case "group": return .group(((o["parts"] as? [Any]) ?? []).compactMap(decode), turn: f("turn"))
+    case "param": return ParamShape(json: o).map(ShapeGeometry.param)
+    default: return nil
+    }
+  }
+
+  private static func num(_ v: Any?) -> Float {
+    if let n = v as? NSNumber { return n.floatValue }
+    if let d = v as? Double { return Float(d) }
+    return 0
+  }
+}
+
+/// A shape item row (kind 1) read for drawing: its geometry, pen, colour, size, fill and line style.
+public struct ShapeRow: Sendable, Equatable {
+  /// The item's id ("" until it's stored) and its place in the drawing order.
+  public var id: String = ""
+  public var z: Int64 = 0
+  public var geometry: ShapeGeometry
+  public var pen: String
+  public var color: Int32
+  public var size: Float
+  public var fill: Int32?
+  public var line: String
+  public var locked: Bool
+
+  public init?(_ row: ItemRow) {
+    guard row.kind == 1, let obj = try? JSONSerialization.jsonObject(with: row.payload) as? [String: Any],
+      let g = ShapeGeometry.decode(obj)
+    else { return nil }
+    id = row.id
+    z = row.z
+    geometry = g
+    pen = row.pen ?? "FINELINER"
+    color = row.color
+    size = row.size
+    fill = (obj["fill"] as? NSNumber).map { Int32(truncatingIfNeeded: $0.int64Value) }
+    line = (obj["line"] as? String) ?? "SOLID"
+    locked = (obj["locked"] as? Bool) ?? false
+  }
+}
+
+// MARK: Writing shapes the Android way
+
+extension ShapeGeometry {
+  /// The JSON object Android's kotlinx.serialization writes for this geometry (class discriminator
+  /// "type", default values left out), so a shape made here reads back the same on Android.
+  public var json: [String: Any] {
+    func pt(_ p: Pt) -> [String: Any] { ["x": num(p.x), "y": num(p.y)] }
+    var o: [String: Any]
+    switch self {
+    case let .line(a, b, arrowStart, arrowEnd, ticks, head):
+      o = ["type": "line", "a": pt(a), "b": pt(b)]
+      if arrowStart { o["arrowStart"] = true }
+      if arrowEnd { o["arrowEnd"] = true }
+      if ticks { o["ticks"] = true }
+      if head != 0 { o["head"] = num(head) }
+    case let .poly(points, closed, smooth, rotation, form):
+      o = ["type": "poly", "points": points.map(pt), "closed": closed]
+      if rotation != 0 { o["rotation"] = num(rotation) }
+      if smooth { o["smooth"] = true }
+      if let form { o["form"] = form.rawValue }
+    case let .ellipse(center, rx, ry, rotation, stretchable):
+      o = ["type": "ellipse", "center": pt(center), "rx": num(rx), "ry": num(ry)]
+      if rotation != 0 { o["rotation"] = num(rotation) }
+      if stretchable { o["stretchable"] = true }
+    case let .arc(center, radius, start, sweep, arrowEnd):
+      o = ["type": "arc", "center": pt(center), "radius": num(radius), "start": num(start), "sweep": num(sweep)]
+      if arrowEnd { o["arrowEnd"] = true }
+    case let .curve(points):
+      o = ["type": "curve", "points": points.map(pt)]
+    case let .sector(center, radius, start, sweep):
+      o = ["type": "sector", "center": pt(center), "radius": num(radius), "start": num(start), "sweep": num(sweep)]
+    case let .triangle(a, b, c, turn):
+      o = ["type": "triangle", "a": pt(a), "b": pt(b), "c": pt(c)]
+      if turn != 0 { o["turn"] = num(turn) }
+    case let .load(a, b, depth, count):
+      o = ["type": "load", "a": pt(a), "b": pt(b), "depth": num(depth), "count": count]
+    case let .group(parts, turn):
+      o = ["type": "group", "parts": parts.map(\.json)]
+      if turn != 0 { o["turn"] = num(turn) }
+    case let .param(p):
+      o = p.json
+    }
+    return o
+  }
+
+  /// A Float as the shortest decimal that reads back as the same Float (as Kotlin prints it).
+  private func num(_ f: Float) -> Double { Double("\(f)") ?? Double(f) }
+
+  /// The box its lines cover, widened by half the pen.
+  public func bounds(_ penSize: Float) -> Rect? {
+    guard let r = Rect.around(paths(penSize).joined()) else { return nil }
+    return r.outset(max(penSize, 0.5) / 2)
+  }
+
+  /// Moved, scaled or turned by [m] (Android's `transformed`).
+  public func transformed(_ m: Affine) -> ShapeGeometry {
+    let s = m.scaleFactor
+    switch self {
+    // A hand-drawn head grows and shrinks with its arrow.
+    case let .line(a, b, s1, e1, t, head): return .line(a: m.apply(a), b: m.apply(b), arrowStart: s1, arrowEnd: e1, ticks: t, head: head * s)
+    case let .poly(points, closed, smooth, rotation, form):
+      return .poly(points: points.map(m.apply), closed: closed, smooth: smooth, rotation: m.mapAngle(rotation), form: form)
+    case let .ellipse(center, rx, ry, rotation, stretchable):
+      let ax = Pt(m.a, m.b).length(), ay = Pt(m.c, m.d).length()
+      return .ellipse(center: m.apply(center), rx: rx * ax, ry: ry * ay, rotation: m.mapAngle(rotation), stretchable: stretchable)
+    case let .arc(center, radius, start, sweep, arrowEnd):
+      return .arc(center: m.apply(center), radius: radius * s, start: m.mapAngle(start), sweep: m.mirrors ? -sweep : sweep, arrowEnd: arrowEnd)
+    case let .curve(points): return .curve(points: points.map(m.apply))
+    case let .sector(center, radius, start, sweep):
+      return .sector(center: m.apply(center), radius: radius * s, start: m.mapAngle(start), sweep: m.mirrors ? -sweep : sweep)
+    case let .triangle(a, b, c, turn): return .triangle(a: m.apply(a), b: m.apply(b), c: m.apply(c), turn: m.mapAngle(turn))
+    case let .load(a, b, depth, count): return .load(a: m.apply(a), b: m.apply(b), depth: depth * s * (m.mirrors ? -1 : 1), count: count)
+    case let .group(parts, turn): return .group(parts.map { $0.transformed(m) }, turn: m.mapAngle(turn))
+    case let .param(p): return .param(p.transformed(m))
+    }
+  }
+}
+
+extension ShapeRow {
+  public init(id: String = "", geometry: ShapeGeometry, pen: String, color: Int32, size: Float, fill: Int32? = nil, line: String = "SOLID", locked: Bool = false) {
+    self.id = id
+    self.geometry = geometry
+    self.pen = pen
+    self.color = color
+    self.size = size
+    self.fill = fill
+    self.line = line
+    self.locked = locked
+  }
+
+  /// The item row Android's `ItemCodec.encode` writes for a shape (kind 1): the geometry's JSON plus
+  /// "fill", "locked" and "line" when they aren't the defaults.
+  public func row(id: String, z: Int64) -> ItemRow {
+    var o = geometry.json
+    if let fill { o["fill"] = Int(fill) }
+    if locked { o["locked"] = true }
+    if line != "SOLID" { o["line"] = line }
+    let data = (try? JSONSerialization.data(withJSONObject: o)) ?? Data("{}".utf8)
+    let b = geometry.bounds(size) ?? Rect(0, 0, 0, 0)
+    return ItemRow(id: id, z: z, kind: 1, pen: pen, color: color, size: size, payload: data, l: b.left, t: b.top, r: b.right, b: b.bottom)
+  }
+}
+
+extension ShapeRow {
+  /// Its item row, with its own id and z.
+  public var itemRow: ItemRow { row(id: id, z: z) }
+
+  /// The lines to draw (Android's `StrokeFactory.shapeStrokes`): a dotted or dashed shape is cut
+  /// into its pieces, to be drawn with round ends.
+  public var strokes: [[Pt]] {
+    let paths = geometry.paths(size).filter { $0.count >= 2 }
+    guard let style = LineStyle(rawValue: line), style != .SOLID else { return paths }
+    return paths.flatMap { Dashes.cut($0, size: size, line: style) }
+  }
+
+  /// The colour it's drawn in (Android's `Brushes.shapeInk`): a highlighter's shape is see-through
+  /// like its ink, other shapes keep the opacity they were given, and a colour saved without any is opaque.
+  public var inkColor: Int32 {
+    if pen == PenType.HIGHLIGHTER.rawValue { return PenSlot.inkColor(.HIGHLIGHTER, color) }
+    let c = UInt32(bitPattern: color)
+    return c >> 24 == 0 ? Int32(bitPattern: c | 0xFF00_0000) : color
+  }
+}
+
+/// A typed text box (Android's `TextItem`, item kind 3): its text, top-left, width it wraps in, its
+/// own height (0 = the text's), font size (the row's size) and colour.
+public struct TextRow: Sendable, Equatable {
+  public var id: String = ""
+  public var z: Int64 = 0
+  public var text: String
+  public var x: Float
+  public var y: Float
+  public var width: Float
+  public var height: Float = 0
+  public var fontSize: Float
+  public var color: Int32
+  public var locked = false
+
+  /// Line height as a multiple of the font size (Android's `TextItem.LINE`).
+  public static let line: Float = 1.3
+  /// The size new text boxes start at (Android's `TEXT_SIZE`).
+  public static let defaultSize: Float = 26
+
+  public init(id: String = "", z: Int64 = 0, text: String, x: Float, y: Float, width: Float, height: Float = 0, fontSize: Float, color: Int32, locked: Bool = false) {
+    self.id = id
+    self.z = z
+    self.text = text
+    self.x = x
+    self.y = y
+    self.width = width
+    self.height = height
+    self.fontSize = fontSize
+    self.color = color
+    self.locked = locked
+  }
+
+  public init?(_ row: ItemRow) {
+    guard row.kind == 3, let o = try? JSONSerialization.jsonObject(with: row.payload) as? [String: Any], let text = o["text"] as? String else { return nil }
+    func f(_ k: String) -> Float { (o[k] as? NSNumber)?.floatValue ?? 0 }
+    self.init(
+      id: row.id, z: row.z, text: text, x: f("x"), y: f("y"), width: max(f("width"), 1), height: f("height"), fontSize: row.size > 0 ? row.size : TextRow.defaultSize,
+      color: row.color, locked: (o["locked"] as? Bool) ?? false)
+  }
+
+  public func transformed(_ m: Affine) -> TextRow {
+    let s = m.scaleFactor
+    let at = m.apply(Pt(x, y))
+    var t = self
+    t.x = at.x
+    t.y = at.y
+    t.width = max(width * s, 40)
+    t.fontSize = min(max(fontSize * s, 6), 400)
+    t.height = height * s
+    // Moved or resized it comes out unlocked, as Android's `TextItem.transformed` does.
+    t.locked = false
+    return t
+  }
+
+  /// The row Android's `ItemCodec` writes ([textHeight]: how tall the laid-out text is, for its bounds).
+  public func row(textHeight: Float) -> ItemRow {
+    func n(_ v: Float) -> Double { Double("\(v)") ?? Double(v) }
+    var o: [String: Any] = ["text": text, "x": n(x), "y": n(y), "width": n(width)]
+    if locked { o["locked"] = true }
+    if height != 0 { o["height"] = n(height) }
+    let data = (try? JSONSerialization.data(withJSONObject: o)) ?? Data()
+    let h = max(textHeight, fontSize * TextRow.line, height)
+    return ItemRow(id: id, z: z, kind: 3, pen: nil, color: color, size: fontSize, payload: data, l: x, t: y, r: x + width, b: y + h)
+  }
+}
