@@ -28,6 +28,10 @@ struct NotebookView: View {
   @State private var tool: Tool = .pen(PenStore.activePen)
   @State private var pens: [PenSlot] = PenStore.load()
   @State private var panel: PanelKind?
+  /// How wide the wide top row's bars are (what they were on an 11-inch iPad until they're measured).
+  @State private var titleWidth: CGFloat = 232
+  @State private var toolsWidth: CGFloat = 784
+  @State private var cornerWidth: CGFloat = 100
   /// What the Shapes tool draws (Android's `lastShape`), and the standard shape last chosen.
   @AppStorage(ShapeSettings.Key.lastShape) private var lastShape = ShapeKind.LINE.rawValue
   @State private var lastKind = ShapeChoice.kind(UserDefaults.standard.string(forKey: ShapeSettings.Key.lastShape) ?? "")
@@ -184,13 +188,29 @@ struct NotebookView: View {
             }
             if !hidden { mainToolbar(showColors: !PhoneWriting.onPhone, toolsRoom: geo.size.width - 44).bar("tools", 1, bars) }
           } else {
+            // One row, as on Android. An iPad's screen is fewer points across than an Android tablet
+            // the same size is dp, so on an 11-inch iPad the row had no room left for the notebook's
+            // name, which then sat under the bar. Where that would happen the whole row is laid out as
+            // wide as it needs and drawn that much smaller (about nine tenths there, the size it is
+            // on the Android tablet), so the name keeps its place beside the tools.
+            let room = max(geo.size.width - 32, 1)
+            let k = topRowScale(room)
             TopBarLayout {
-              if !hidden { leftBars.bar("title", 0, bars).topBarRole(.title) }
-              if !hidden { mainToolbar(showColors: true).bar("tools", 1, bars).topBarRole(.tools).zIndex(1) }
+              if !hidden { leftBars.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { titleWidth = $0 }.bar("title", 0, bars).topBarRole(.title) }
+              if !hidden {
+                mainToolbar(showColors: true).onGeometryChange(for: CGFloat.self) { $0.size.width } action: { toolsWidth = $0 }
+                  .bar("tools", 1, bars).topBarRole(.tools).zIndex(1)
+              }
               if !hidden { nameBar.bar("undo", 2, bars).topBarRole(.name) }
-              if !hidden { rightBars(showName: false).bar("undo", 2, bars).topBarRole(.corner) }
+              if !hidden {
+                rightBars(showName: false).onGeometryChange(for: CGFloat.self) { $0.size.width } action: { cornerWidth = $0 }
+                  .bar("undo", 2, bars).topBarRole(.corner)
+              }
             }
+            .frame(width: room / k, alignment: .top)
             .frame(minHeight: 60, alignment: .top)
+            .scaleEffect(k, anchor: .top)
+            .frame(width: room, alignment: .top)
           }
           if !hidden, !viewing, let shown = panel {
             Spacer().frame(height: 10)
@@ -549,6 +569,14 @@ struct NotebookView: View {
   private var barColors: TaliColors {
     let f = ColorTheme.current
     return scheme == .dark && !dark ? f.mist : (scheme == .dark ? f.dark : f.light)
+  }
+
+  /// How much smaller the wide top row is drawn so the notebook's name fits beside the tools: not
+  /// at all where there's room for it, and never below 0.86 (the bars stay easy to hit; with less
+  /// room than that the name goes under the corner, as `TopBarLayout` places it).
+  private func topRowScale(_ room: CGFloat) -> CGFloat {
+    let name: CGFloat = 140, gaps: CGFloat = 3 * 12
+    return min(1, max(room / (titleWidth + toolsWidth + cornerWidth + gaps + name), 0.86))
   }
 
   /// Back on a little cloud of its own, then undo and redo (Android's `TitlePill`).
