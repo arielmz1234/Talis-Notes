@@ -138,4 +138,42 @@ class AutoArrowTest {
     val second = AutoArrow.twoStrokes(a, b, drawn(Pt(250f, -42f), Pt(301f, 0f), Pt(250f, 42f)), lastHead = first.head)!!
     assertEquals(first.head, second.head, 0f)
   }
+  /** A V with its point rounded off: from [l] round a curve of [round] radius near [tip] to [r]. */
+  private fun roundedV(l: Pt, tip: Pt, r: Pt, round: Float): List<Pt> {
+    val out = ArrayList<Pt>()
+    val inL = tip + (l - tip).normalized() * round
+    val inR = tip + (r - tip).normalized() * round
+    out += drawn(l, inL)
+    for (k in 1..12) { val t = k / 12f; val a = inL * ((1 - t) * (1 - t)) + tip * (2 * t * (1 - t)) + inR * (t * t); out += a }
+    out += drawn(inR, r)
+    return out
+  }
+
+  @Test fun roundedAndNearlyUHeadsCount() {
+    // Her pointing-down arrows: a line, then a V with a round bottom.
+    val (a, b) = AutoArrow.straight(drawn(Pt(0f, 0f), Pt(0f, 60f)))!!
+    assertNotNull(AutoArrow.twoStrokes(a, b, roundedV(Pt(-9f, 44f), Pt(0f, 62f), Pt(9f, 44f), round = 6f)))
+    // Nearly a U: arms almost upright, a round bottom.
+    val u = drawn(Pt(-7f, 40f), Pt(-6f, 54f)) + (0..12).map { k -> val t = Math.PI.toFloat() * k / 12; Pt(-6f * cos(t), 54f + 6f * sin(t)) } + drawn(Pt(6f, 54f), Pt(7f, 40f))
+    val arrow = AutoArrow.twoStrokes(a, b, u)
+    assertNotNull(arrow)
+    assertTrue(arrow!!.b.y > 55f)
+  }
+
+  @Test fun aSlightlyBowedShaftCounts() {
+    // Her → with a shaft that bows a little, then a head.
+    val bowed = (0..30).map { k -> val t = k / 30f; Pt(80f * t, -4f * sin(Math.PI.toFloat() * t)) }
+    val arrow = AutoArrow.pair(bowed, drawn(Pt(66f, -10f), Pt(81f, 0f), Pt(66f, 10f)))
+    assertArrow(Pt(0f, 0f), Pt(81f, 0f), arrow)
+  }
+
+  @Test fun theHeadCanComeFirst() {
+    // A ^ first, then the line up into it.
+    val head = drawn(Pt(-10f, 14f), Pt(0f, 0f), Pt(10f, 14f))
+    val line = drawn(Pt(1f, 60f), Pt(0f, 1f))
+    val arrow = AutoArrow.pair(head, line)
+    assertArrow(Pt(1f, 60f), Pt(0f, 0f), arrow?.let { LineShape(it.a, it.b, arrowEnd = true) })
+    // And a Y written as a V then its stem stays writing.
+    assertNull(AutoArrow.pair(drawn(Pt(-12f, -20f), Pt(0f, 0f), Pt(12f, -20f)), drawn(Pt(0f, 0f), Pt(0f, 45f))))
+  }
 }

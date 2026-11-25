@@ -16,6 +16,9 @@ class Camera(private val density: Float) {
   var zoom = 1f
     private set
 
+  /** The farthest out it goes: [MIN_ZOOM] for pages; an endless canvas, which resists pinches instead ([ZoomResist]), keeps [ENDLESS_MIN_ZOOM] only as a safety net. */
+  var minZoom = MIN_ZOOM
+
   val scale: Float
     get() = zoom * density
 
@@ -29,7 +32,7 @@ class Camera(private val density: Float) {
   fun set(v: Viewport) {
     x = v.x
     y = v.y
-    zoom = v.zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
+    zoom = v.zoom.coerceIn(minZoom, MAX_ZOOM)
     sync()
   }
 
@@ -44,7 +47,7 @@ class Camera(private val density: Float) {
   /** Zooms by [factor] keeping the world point under the focus fixed on screen. */
   fun zoomAround(focusX: Float, focusY: Float, factor: Float) {
     val before = toWorld(focusX, focusY)
-    zoom = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+    zoom = (zoom * factor).coerceIn(minZoom, MAX_ZOOM)
     x = before.x - focusX / scale
     y = before.y - focusY / scale
     sync()
@@ -70,6 +73,7 @@ class Camera(private val density: Float) {
 
   companion object {
     const val MIN_ZOOM = 0.2f
+    const val ENDLESS_MIN_ZOOM = 0.05f
     const val MAX_ZOOM = 8f
   }
 }

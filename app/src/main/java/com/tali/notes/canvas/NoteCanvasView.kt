@@ -164,7 +164,8 @@ data class SelectionInfo(
 @SuppressLint("ViewConstructor")
 class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayout(context), InProgressStrokesFinishedListener {
   private val density = resources.displayMetrics.density
-  val camera = Camera(density)
+  // Starts endless (no pages yet): see [pageCount].
+  val camera = Camera(density).apply { minZoom = Camera.ENDLESS_MIN_ZOOM }
   private val inProgress = InProgressStrokesView(context)
   private val images = context.talisApp.repository.images
   private val itemRenderer = ItemRenderer(Brushes.renderer(), images)
@@ -285,6 +286,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     set(value) {
       if (field == value) return
       field = value
+      camera.minZoom = if (value == null) Camera.ENDLESS_MIN_ZOOM else Camera.MIN_ZOOM
       refreshPages()
       clampCamera()
       invalidate()
@@ -2915,8 +2917,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           // A scribble over writing: it took what it covered, and leaves nothing itself.
         } else {
           noteLoop()
-          val shaft = lastShaft
-          lastShaft = null
+          val shaft = lastStroke
+          lastStroke = null
           val g = gesture
           // Undo lights up now, not when Ink hands the stroke over (a quick tap on it was lost).
           if (g != null) host.onInkWaiting()
@@ -4478,43 +4480,42 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   // ---- Auto arrow ----
   //
-  // With *Auto arrow* on (the Shapes panel's Style tab, `AppSettings.autoArrow`, off at first; the
-  // owner's request, 25 Nov 2026), an arrow written by hand becomes a clean arrow shape the moment
-  // the pen lifts, as hold-to-shape would make it, with no hold: one stroke (shaft, then the head
-  // without lifting) or a straight line followed straight away by its head. What counts is in
+  // With *Auto arrow* on (the switch at the top of the Shapes panel, `AppSettings.autoArrow`, off at
+  // first; the owner's request, 25 Nov 2026), an arrow written by hand becomes a clean arrow shape
+  // the moment the pen lifts, with no hold: one stroke (shaft, then the head without lifting), or
+  // the line and its head one straight after the other, in either order. What counts is in
   // geometry/AutoArrow.kt (shared with the iPad app). Both strokes go into the page first, so one
-  // Undo brings back the arrow as she drew it.
+  // Undo brings back the arrow as she drew it. It isn't picked up afterwards (no dots popping up):
+  // it stays on the page as if she'd just drawn it, to be picked up like anything else.
 
-  /** A straight stroke just written with [slot] in [color]: a head drawn next can make it an arrow. */
-  private class ShaftStroke(val a: Pt, val b: Pt, val bounds: Rect, val slot: String, val color: Int, val at: Long)
+  /** The stroke just written with [slot] in [color]: with the next one, it may be a line and its head. */
+  private class LastStroke(val points: List<Pt>, val bounds: Rect, val slot: String, val color: Int, val at: Long)
 
-  private var lastShaft: ShaftStroke? = null
+  private var lastStroke: LastStroke? = null
 
-  /** The stroke just lifted ([pts], in the world): an arrow, alone or with [shaft] before it, becomes an arrow shape. */
-  private fun autoArrow(pts: List<Pt>, shaft: ShaftStroke?) {
+  /** The stroke just lifted ([pts], in the world): an arrow, alone or with [prev] just before it, becomes an arrow shape. */
+  private fun autoArrow(pts: List<Pt>, prev: LastStroke?) {
     val slot = settings.activeSlot
     if (!settings.autoArrow || viewOnly || slot.type.isHighlighter || pts.size < 2) return
     val d = doc ?: return
     val now = SystemClock.uptimeMillis()
     val one = AutoArrow.oneStroke(pts, lastArrowHead)
-    val prev = shaft?.takeIf { one == null && it.slot == slot.id && it.color == slot.color && now - it.at < AUTO_ARROW_GAP_MS }
-    val arrow = one ?: prev?.let { AutoArrow.twoStrokes(it.a, it.b, pts, lastArrowHead) }
+    val before = prev?.takeIf { one == null && it.slot == slot.id && it.color == slot.color && now - it.at < AUTO_ARROW_GAP_MS }
+    val arrow = one ?: before?.let { AutoArrow.pair(it.points, pts, lastArrowHead) }
     if (arrow == null) {
-      lastShaft = AutoArrow.straight(pts)?.let { (a, b) -> Rect.around(pts)?.let { ShaftStroke(a, b, it, slot.id, slot.color, now) } }
+      // Kept for the next stroke (short strokes only: a line or a head, never a page of writing).
+      lastStroke = Rect.around(pts)?.takeIf { pts.size <= MAX_ARROW_POINTS }?.let { LastStroke(pts, it, slot.id, slot.color, now) }
       return
     }
     // Strokes still waiting for Ink go in now, so they can be swapped for the arrow.
     mode = Mode.NONE
     commitWaitingInk()
-    val drawn = listOfNotNull(newestInkAt(d, Rect.around(pts) ?: return, slot.size), if (one == null) newestInkAt(d, prev!!.bounds, slot.size) else null)
+    val drawn = listOfNotNull(newestInkAt(d, Rect.around(pts) ?: return, slot.size), if (one == null) newestInkAt(d, before!!.bounds, slot.size) else null)
     if (drawn.size != (if (one == null) 2 else 1) || drawn.distinctBy { it.id }.size != drawn.size) return
     val shape = ShapeItem(d.newId(), d.nextZ(), slot.type, slot.color, slot.size, arrow, line = slot.lineStyle)
     d.commit(Change(drawn, listOf(shape)))
     lastArrowHead = arrow.head
     lastLoop = null
-    // Picked up softly, as after hold-to-shape: its dots are there, and the pen writes on through it.
-    selectShape(shape, soft = true)
-    performHapticFeedback(HapticFeedbackConstants.CONFIRM)
     invalidate()
   }
 
@@ -5606,7 +5607,29 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     lastSpan = span
     tapStartFocus = Pt(fx, fy)
     tapStartSpan = span
+    // On an endless canvas, zooming out past where everything written fits gets harder and harder.
+    resist = null
+    if (pageCount == null) {
+      val room = ZoomResist.free(doc?.contentBounds(), width / density - ZoomResist.SIDE_ROOM, height / density - (topClearance + ZoomResist.TOP_ROOM_EXTRA))
+      resist = PinchResist(ZoomResist.freeAt(room, camera.zoom)).also { it.anchor(camera.zoom, span) }
+    }
   }
+
+  /** A pinch on an endless canvas ([ZoomResist.pinched]); [free] is fixed for the pinch. */
+  private class PinchResist(val free: Float) {
+    private var startZoom = 1f
+    private var startSpan = 1f
+
+    /** Carries on from the zoom shown now with the fingers [span] apart, with no jump. */
+    fun anchor(zoomNow: Float, span: Float) {
+      startZoom = zoomNow
+      startSpan = span
+    }
+
+    fun shownFor(span: Float) = ZoomResist.pinched(startZoom, free, span / startSpan)
+  }
+
+  private var resist: PinchResist? = null
 
   private fun focusAndSpan(e: MotionEvent, skipIndex: Int): Triple<Float, Float, Float> {
     var sx = 0f
@@ -5653,7 +5676,13 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         // Measured from where the fingers landed, so a slow drag still counts as moving.
         if (hypot(fx - tapStartFocus.x, fy - tapStartFocus.y) > touchSlop || kotlin.math.abs(span - tapStartSpan) > touchSlop) multiTapMoved = true
         camera.pan(fx - lastFocusX, resisted(fy - lastFocusY))
-        if (lastSpan > 10f && span > 10f) camera.zoomAround(fx, fy, span / lastSpan)
+        val r = resist
+        if (r != null && span > 10f) {
+          val want = r.shownFor(span)
+          camera.zoomAround(fx, fy, want / camera.zoom)
+          // Held at the closest zoom (or the floor): carry on from there, so pinching back acts at once.
+          if (kotlin.math.abs(camera.zoom - want) > want * 1e-3f) r.anchor(camera.zoom, span)
+        } else if (lastSpan > 10f && span > 10f) camera.zoomAround(fx, fy, span / lastSpan)
         // Zooming out shows more below the last page, which isn't pulling: once the fingers zoom, this
         // gesture can't show the add-page sign or add a page (only sliding does).
         if (pulling && kotlin.math.abs(camera.zoom - zoomAtDown) > zoomAtDown * 0.04f) {
@@ -5681,6 +5710,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
         lastFocusX = fx
         lastFocusY = fy
         lastSpan = span
+        if (span > 10f) resist?.anchor(camera.zoom, span)
         if (e.pointerCount - 1 == 1 && mode == Mode.PINCH) {
           mode = Mode.PAN
         }
@@ -5734,7 +5764,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   fun undo() {
     lastLoop = null
-    lastShaft = null
+    lastStroke = null
     finishCrop(false)
     commitWaitingInk()
 
@@ -5744,7 +5774,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   fun redo() {
     lastLoop = null
-    lastShaft = null
+    lastStroke = null
     finishCrop(false)
 
     commitWaitingInk()
@@ -6068,6 +6098,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** Auto arrow: a head drawn within this long after a straight line makes the two an arrow. */
     private const val AUTO_ARROW_GAP_MS = 3000L
+
+    /** A stroke with more samples than this is writing, not half of an arrow. */
+    private const val MAX_ARROW_POINTS = 2000
 
     /** The last auto arrow's head length (any notebook, while the app runs): one drawn near it gets exactly it. */
     private var lastArrowHead = 0f
