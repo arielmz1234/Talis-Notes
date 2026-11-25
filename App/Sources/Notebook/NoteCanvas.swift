@@ -379,10 +379,10 @@ struct NoteCanvas: UIViewRepresentable {
     /// being drawn again (see PagePatch.swift).
     weak var underlay: PaperUnderlay?
     var patches: [UIView] = []
-    /// A pinch on an endless canvas: how far apart the fingers landed, the zoom they started from
-    /// (as the fingers would ask for it) and where resistance begins; and on while the zoom is set
+    /// A pinch on an endless canvas: how far apart the fingers were and the zoom when it was last
+    /// measured from, where resistance begins, and how many fingers; and on while the zoom is set
     /// from here (see Endless.swift).
-    var pinchStart: (spread: CGFloat, raw: CGFloat, free: CGFloat)?
+    var pinchStart: (spread: CGFloat, zoom: CGFloat, free: CGFloat, touches: Int)?
     var resisting = false
     /// What's stored, in drawing order, with the key that recognises each stroke in the PKDrawing.
     var stored: [(key: StrokeKey, stroke: InkStroke)] = []

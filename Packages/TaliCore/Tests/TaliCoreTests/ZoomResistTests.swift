@@ -41,6 +41,24 @@ struct ZoomResistTests {
     #expect(ZoomResist.raw(forShown: 0.8, free: 0.5) == 0.8)
   }
 
+  @Test func aPinchStartingBeyondTheReachIsMeasuredFromThere() {
+    #expect(abs(ZoomResist.freeAt(0.5, zoomNow: 0.1) - 0.1 * 2.5 / 1.01) < 1e-5)
+    #expect(ZoomResist.freeAt(0.5, zoomNow: 0.3) == 0.5)
+  }
+
+  /// Android 1.0.34: pinching in follows the fingers from where the pinch began.
+  @Test func pinchingInFollowsTheFingers() {
+    let free: Float = 0.5
+    let limit = free / ZoomResist.reach
+    #expect(abs(ZoomResist.pinched(startZoom: limit, free: free, ratio: 2) - limit * 2) < 1e-5)
+    #expect(ZoomResist.pinched(startZoom: limit, free: free, ratio: 0.1) >= limit * 0.999)
+    #expect(abs(ZoomResist.pinched(startZoom: 0.3, free: free, ratio: 1) - 0.3) < 1e-4)
+    #expect(abs(ZoomResist.pinched(startZoom: 0.8, free: free, ratio: 0.7) - 0.56) < 1e-5)
+    // The cases the Android session gave: from 0.2, twice as wide shows 0.4; closing never goes below 0.2.
+    #expect(abs(ZoomResist.pinched(startZoom: 0.2, free: free, ratio: 2) - 0.4) < 1e-5)
+    #expect(ZoomResist.pinched(startZoom: 0.2, free: free, ratio: 0.1) >= 0.2 * 0.999)
+  }
+
   @Test func whereItBegins() {
     #expect(ZoomResist.free(content: nil, room: (1000, 700)) == 1)
     #expect(ZoomResist.free(content: Rect(0, 0, 100, 100), room: (1000, 700)) == 1)

@@ -32,6 +32,8 @@ struct NotebookView: View {
   @State private var titleWidth: CGFloat = 232
   @State private var toolsWidth: CGFloat = 784
   @State private var cornerWidth: CGFloat = 100
+  /// How wide the notebook's name bar would be with the whole name.
+  @State private var nameWidth: CGFloat = 150
   /// What the Shapes tool draws (Android's `lastShape`), and the standard shape last chosen.
   @AppStorage(ShapeSettings.Key.lastShape) private var lastShape = ShapeKind.LINE.rawValue
   @State private var lastKind = ShapeChoice.kind(UserDefaults.standard.string(forKey: ShapeSettings.Key.lastShape) ?? "")
@@ -188,11 +190,13 @@ struct NotebookView: View {
             }
             if !hidden { mainToolbar(showColors: !PhoneWriting.onPhone, toolsRoom: geo.size.width - 44).bar("tools", 1, bars) }
           } else {
-            // One row, as on Android. `TopBarLayout` keeps the name beside the tools while it gets at
-            // least `nameMin` (e9ec94c). An iPad's screen is fewer points across than an Android tablet
-            // the same size is dp, and on an 11-inch iPad on its side even that wasn't left, so the
-            // name dropped under the bar. Only then is the whole row laid out as wide as it needs for
-            // that much name and drawn that much smaller (never below 0.86), so the name stays in the row.
+            // One row, as on Android, with the notebook's whole name beside the tools (the owner's
+            // Android pictures, 25 Nov 2026). `TopBarLayout` keeps the name beside the tools while it
+            // gets at least `nameMin` (e9ec94c), shortened when it must. An iPad's screen is fewer
+            // points across than an Android tablet the same size is dp: on an 11-inch iPad on its side
+            // the name dropped under the bar, then (at `nameMin`) showed as "New n…". So where the
+            // whole name doesn't fit, the row is laid out as wide as it needs for it and drawn that
+            // much smaller (never below 0.86; past that the name shortens, then goes under).
             let room = max(geo.size.width - 32, 1)
             let k = topRowScale(room)
             TopBarLayout {
@@ -201,7 +205,13 @@ struct NotebookView: View {
                 mainToolbar(showColors: true).onGeometryChange(for: CGFloat.self) { $0.size.width } action: { toolsWidth = $0 }
                   .bar("tools", 1, bars).topBarRole(.tools).zIndex(1)
               }
-              if !hidden { nameBar.bar("undo", 2, bars).topBarRole(.name) }
+              if !hidden {
+                nameBar.background(
+                  // The whole name's width, measured apart from the room the row gives it.
+                  nameBar.fixedSize().hidden().onGeometryChange(for: CGFloat.self) { $0.size.width } action: { nameWidth = $0 }
+                )
+                .bar("undo", 2, bars).topBarRole(.name)
+              }
               if !hidden {
                 rightBars(showName: false).onGeometryChange(for: CGFloat.self) { $0.size.width } action: { cornerWidth = $0 }
                   .bar("undo", 2, bars).topBarRole(.corner)
@@ -571,14 +581,14 @@ struct NotebookView: View {
     return scheme == .dark && !dark ? f.mist : (scheme == .dark ? f.dark : f.light)
   }
 
-  /// How much smaller the wide top row is drawn so the notebook's name keeps the room
-  /// `TopBarLayout` needs to leave it beside the tools (its `nameMin`): not at all where it has that,
-  /// and never below 0.86 (the bars stay easy to hit; with less room than that the name goes under
-  /// the corner, as `TopBarLayout` places it). A UI test can turn it off (`-noTopRowScale`) to compare.
+  /// How much smaller the wide top row is drawn so the notebook's whole name fits beside the tools:
+  /// not at all where it does, and never below 0.86 (the bars stay easy to hit; with less room than
+  /// that `TopBarLayout` shortens the name, then puts it under the corner). A UI test can turn it
+  /// off (`-noTopRowScale`) to compare.
   private func topRowScale(_ room: CGFloat) -> CGFloat {
     if TopRowScale.off { return 1 }
     let layout = TopBarLayout()
-    let need = titleWidth + toolsWidth + cornerWidth + 3 * layout.gap + layout.nameMin
+    let need = titleWidth + toolsWidth + cornerWidth + 3 * layout.gap + max(nameWidth, layout.nameMin)
     return min(1, max(room / need, 0.86))
   }
 

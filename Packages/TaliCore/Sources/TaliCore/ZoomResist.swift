@@ -32,6 +32,21 @@ public enum ZoomResist {
     return free / expf(-l * logf(1 - y / l))
   }
 
+  /// The zoom for a pinch that started at [startZoom] with the fingers now [ratio] times as far
+  /// apart (Android 1.0.34's `ZoomResist.pinched`). Out (ratio < 1) it carries on along the
+  /// resistance with no jump; in, it follows the fingers from where it started. (Following the
+  /// curve back in too, a pinch started near the farthest zoom barely moved: the fingers first had
+  /// to undo all the resisted distance; spreading them five times wider still showed 40%.)
+  public static func pinched(startZoom: Float, free: Float, ratio: Float) -> Float {
+    ratio >= 1 ? startZoom * ratio : resisted(raw(forShown: startZoom, free: free) * ratio, free: free)
+  }
+
+  /// [free] for a pinch starting at [zoomNow]: when that's already beyond its reach (the writing
+  /// grew, the screen turned), measured from there (Android's `freeAt`).
+  public static func freeAt(_ free: Float, zoomNow: Float) -> Float {
+    zoomNow < free / reach ? zoomNow * reach / 1.01 : free
+  }
+
   /// Where resistance begins: the zoom that fits [content] (world units, with a margin) into
   /// [room] (screen points), never more than 1; with nothing written, 1.
   public static func free(content: Rect?, room: (width: Float, height: Float)) -> Float {
