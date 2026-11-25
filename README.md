@@ -2,6 +2,8 @@
 
 A handwriting notes app for Android tablets with an S Pen (Galaxy Tab S6 Lite and newer), made for a civil-engineering student. It has an endless canvas per notebook, a lilac-and-sky look with cartoon clouds, and it runs entirely on the tablet.
 
+The iPad and iPhone version is in [`ios/`](ios/) (Swift; see [ios/README.md](ios/README.md)).
+
 It is sideloaded for now; a free, tablets-only release on the Play Store is planned (see *Release plan* in [CLAUDE.md](CLAUDE.md)).
 
 ## What it does
