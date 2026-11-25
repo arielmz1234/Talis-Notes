@@ -4,7 +4,7 @@ The source is a violet rounded square on white. iOS masks its own rounded shape,
 square's inside, cropped in from its edges so neither the white margin nor the source's own rounded
 corners ever show.
 
-    python tools/make_icon.py C:/dev/Talis-Notes/tools/icon-source.png
+    python tools/make_icon.py   (reads ../tools/icon-source.png, the Android app's icon source)
 """
 import sys
 from pathlib import Path
@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-src = Image.open(sys.argv[1] if len(sys.argv) > 1 else "C:/dev/Talis-Notes/tools/icon-source.png").convert("RGB")
+src = Image.open(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parents[2] / "tools/icon-source.png").convert("RGB")
 a = np.asarray(src).astype(int)
 violet = a.min(2) < 235
 ys, xs = np.where(violet)

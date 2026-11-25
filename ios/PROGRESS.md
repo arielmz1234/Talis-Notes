@@ -3,14 +3,29 @@
 ## How to pick this up
 
 1. Read `BRIEF.md`, `PLAN.md`, this file, `OWNER_TODO.md`.
-2. `gh run list -L 3` (GitHub CLI at `C:\Program Files\GitHub CLI\gh.exe`), then look at the last run's
-   screenshots: `gh run download <id> -n screenshots -D <scratch dir>`. Landscape iPad screenshots
-   come out sideways (rotate them when reviewing; the test's attempt to upright them may not work).
-3. There is no Swift on the Windows PC; every compile happens in CI (about 15–20 minutes with
-   screenshots, macOS runners sometimes queue). Batch changes, and read compile errors with
-   `gh run view <id> --log-failed | grep error:`.
+2. **Since 25 Nov 2026 this app lives in `ios/` of `arielmz1234/Talis-Notes`** (the Android repo,
+   branch `master`), with all its history; `Talis-Notes-iOS` is archived. See `ios/CLAUDE.md` and
+   the top of `../CLAUDE.md`. Look at the last run of the *iOS* workflow and its screenshots
+   (`gh run list -w iOS -L 3`, `gh run download <id> -D <scratch dir>`, where the GitHub CLI is
+   installed; otherwise the public API and links, see `ios/CLAUDE.md`). Landscape iPad screenshots
+   come out sideways (rotate them when reviewing).
+3. There is no Swift on the Windows PC; every compile happens in CI. The quick run takes about 15
+   minutes; the full UI suite runs only when asked (see `ios/CLAUDE.md`). Batch changes, and read
+   compile errors with `gh run view <id> --log-failed | grep error:`.
 4. **Rule: never change what a basic tap, hold or touch does without the owner asking.** (A Pencil
    tap that picked shapes up was added unasked and had to be taken out; see 24 Nov below.)
+
+## Joined into the Android repo; shorter CI (25 Nov 2026, Windows)
+
+The owner merged the two repos: this app is now `ios/` in `arielmz1234/Talis-Notes` (Android at
+the root, branch `master`). Done by one commit moving every file into `ios/` and a merge with
+unrelated histories, so every old commit and id is kept (`git log --follow` traces files back).
+The Android files are unchanged. CI moved to `../.github/workflows/ios.yml` and only runs when
+`ios/` changes. It is quick by default (core tests, a build of the app and the UI tests, the iPad
+screenshot set, the `.ipa`); the full UI suite, unchanged, runs only on request (*Run workflow*
+with *full*, or a `full-ci` label), since the owner tries the rest on a real iPad. The tools that
+read the Android app (`import_strings`, `import_palettes`, `make_icon`, `check_shape_port`) default
+to `../`. Whoever pushes from the Mac (`idanlo`) needs write access to `Talis-Notes` now.
 
 ## Auto arrow, and the owner's list of 25 Nov 2026 (a second Mac, without Xcode)
 

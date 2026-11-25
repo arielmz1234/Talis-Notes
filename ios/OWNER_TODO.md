@@ -12,7 +12,7 @@ Nothing here is blocking the work right now. Each item says when it starts to ma
 
 Every green CI run makes an unsigned app file.
 
-1. Open https://github.com/arielmz1234/Talis-Notes-iOS/actions, click the newest green run, and download
+1. Open https://github.com/arielmz1234/Talis-Notes/actions/workflows/ios.yml, click the newest green run, and download
    **TalisNotes-unsigned-ipa** at the bottom (a zip holding `TalisNotes-unsigned.ipa`; unzip it).
 2. Install **Sideloadly** (sideloadly.io) on the PC, and iTunes from Apple's site (not the Microsoft Store version) so Windows sees the iPad.
 3. Plug in the iPad, trust the computer on the iPad, open Sideloadly, drop the `.ipa` in, enter your

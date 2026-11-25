@@ -1,13 +1,13 @@
 """Writes App/Sources/Theme/Palettes.swift from the Android app's theme/Palettes.kt (the Sky, Sage
 and Peach colour families). Run again if the Android palettes change.
 
-    python tools/import_palettes.py C:/dev/Talis-Notes/app/src/main/java/com/tali/notes/theme/Palettes.kt
+    python tools/import_palettes.py   (reads ../app/src/main/java/com/tali/notes/theme/Palettes.kt, the Android app beside it)
 """
 import re
 import sys
 from pathlib import Path
 
-src = Path(sys.argv[1] if len(sys.argv) > 1 else "C:/dev/Talis-Notes/app/src/main/java/com/tali/notes/theme/Palettes.kt").read_text(encoding="utf-8")
+src = Path(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parents[2] / "app/src/main/java/com/tali/notes/theme/Palettes.kt").read_text(encoding="utf-8")
 blocks = re.findall(r"internal val (\w+) =\s*\n\s*([\w.]+)\(\s*\n(.*?)\n\s*\)\n", src, re.S)
 
 

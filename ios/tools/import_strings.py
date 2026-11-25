@@ -5,7 +5,7 @@ Placeholders: %1$s -> %1$@, %1$d -> %1$lld, %s -> %@, %d -> %lld.
 Strings only the Apple app has (Apple Pencil, where Android speaks of the S Pen) come from
 tools/ios_strings.json, one entry per key with all six languages.
 
-    python tools/import_strings.py C:/dev/Talis-Notes/app/src/main/res
+    python tools/import_strings.py   (reads ../app/src/main/res, the Android app beside it)
 """
 import json
 import re
@@ -74,4 +74,4 @@ def main(res):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "C:/dev/Talis-Notes/app/src/main/res")
+    main(sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).resolve().parents[2] / "app/src/main/res"))

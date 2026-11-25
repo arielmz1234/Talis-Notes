@@ -1,5 +1,9 @@
 # First prompt for the iOS / iPadOS port
 
+> **Since 25 Nov 2026** the Apple app is in `ios/` of the Android repo (`arielmz1234/Talis-Notes`,
+> branch `master`), not in its own repository. Where this brief says `C:\dev\Talis-Notes-iOS` or
+> `Talis-Notes-iOS`, read `ios/`; see `ios/CLAUDE.md`. The rest still holds.
+
 You are building the Apple version of Tali's Notes, a handwriting notes app that already ships on
 Android (Kotlin and Jetpack Compose, in `C:\dev\Talis-Notes`, the reference: read it, pull its
 `master` to stay current, never change or commit to it). The Apple app lives in its own repository,

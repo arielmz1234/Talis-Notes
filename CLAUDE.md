@@ -7,6 +7,16 @@ A handwriting notes app for Android tablets, made first for Tali, a civil-engine
 
 [README.md](README.md) lists the features and has a code map, so read it first. [BACKUP_SETUP.md](BACKUP_SETUP.md) covers signing and Google Drive.
 
+## This repository: two apps (since 25 Nov 2026)
+
+- **The Android app** is the repo root (`app/`, Gradle). Everything else in this file is about it.
+- **The iPad / iPhone app** (Swift, SwiftUI, PencilKit) is in [`ios/`](ios/). It was its own repo, `arielmz1234/Talis-Notes-iOS`, until 25 Nov 2026; it was joined here with all its history (old commit ids still work), and the old repo is archived. Its notes are [`ios/CLAUDE.md`](ios/CLAUDE.md) and `ios/PROGRESS.md`.
+- **Touch only the app you were asked about.** Read the other one freely, to match how it behaves, but don't change it unless the owner asks for both. When a change is wanted in both, do it one app at a time, each in its own commit, and say in the message which app it's for when that isn't obvious ("iOS: ...").
+- **Android is the reference.** The iPad app follows its behaviour and its numbers. A change made on Android that the iPad should get is written up as a prompt for an iOS session (and the other way round), as before.
+- **Rule for both apps: never change what a basic tap, hold or touch does without the owner asking.** (A pen tap that picked shapes up was added unasked and had to be taken out, 24 Nov 2026.)
+- The owner's preferences below (*Working with the owner*, *Look and feel*) are for both apps.
+- **CI:** only the iPad app has CI (`.github/workflows/ios.yml`). It runs only when something in `ios/` changes, and is quick by default (about 15 min): core tests, a build, one set of iPad screenshots and the `.ipa`. The full UI suite (about 45 min, six Mac jobs) runs only when asked: *Actions → iOS → Run workflow* with *full* ticked, or a `full-ci` label on the pull request. Android is built and tested locally (*Building* below); a change only outside `ios/` starts no CI.
+
 ## Working with the owner
 
 - The owner (Ariel) is often away from the computer and asks for long, unattended runs. When asked to keep going, keep going:

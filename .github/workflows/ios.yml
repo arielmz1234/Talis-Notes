@@ -1,50 +1,52 @@
-name: CI
+name: iOS
 
+# The iPad / iPhone app in ios/. Runs only when something in ios/ (or this file) changes, so
+# Android-only work never starts a Mac.
+#
+# Quick by default (about 15 minutes): the core tests, a build of the app and of every UI test (so
+# nothing that doesn't compile gets in), one screenshot pass on an iPad, and the .ipa. The owner
+# tries the rest on a real iPad.
+#
+# The full UI suite (about 3½ hours of tapping, split across six jobs) runs only when asked:
+#   - Actions → iOS → Run workflow, with "full" ticked; or
+#   - a `full-ci` label on the pull request.
 on:
   push:
-    branches: [main]
+    branches: [master]
+    paths: ['ios/**', '.github/workflows/ios.yml']
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths: ['ios/**', '.github/workflows/ios.yml']
   workflow_dispatch:
+    inputs:
+      full:
+        description: Run the full UI suite (all six jobs, about 45 minutes each)
+        type: boolean
+        default: false
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ios-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    working-directory: ios
+
+env:
+  FULL: ${{ inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+
 jobs:
-  # The UI suite takes about an hour on one simulator, so it's split across jobs, each building
-  # for itself. Every iPad class runs in the light; the dark, Hebrew and iPhone runs take the
-  # screenshot set and the classes about the phone.
-  test:
-    name: ${{ matrix.name }}
+  check:
+    name: Core tests, build, iPad screenshots
     runs-on: macos-26
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: ipad-selecting
-            core: true
-            runs: '["ipad ipad-light 0 - SelectingTests"]'
-          - name: ipad-pens-media
-            runs: '["ipad ipad-light 0 - PenTests,MediaTests,ShapeTipsTests"]'
-          - name: ipad-library-pages-shapes
-            runs: '["ipad ipad-light 0 - LibraryTests,PagesTests,ShapesMoreTests,PhoneTests,ScreenshotTests"]'
-          - name: looks
-            runs: '["ipad ipad-dark 1 - ScreenshotTests", "ipad ipad-he 0 he ScreenshotTests", "iphone iphone-light 0 - ScreenshotTests,PhoneTests", "iphone iphone-dark 1 - ScreenshotTests"]'
-          - name: ipad11
-            runs: '["ipad11 ipad11-light 0 - ScreenshotTests,ShapesMoreTests/testAutoArrowSetting,SelectingTests/testTypedTextInTheLasso"]'
-          - name: iphone-selecting
-            runs: '["iphone iphone-light 0 - SelectingTests"]'
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
       - name: Xcode
-        run: |
-          xcodebuild -version
-          xcrun simctl list runtimes
+        run: xcodebuild -version
 
       - name: Core unit tests (TaliCore)
-        if: matrix.core
         run: set -o pipefail; swift test --package-path Packages/TaliCore 2>&1 | tail -60
 
       - name: Generate project
@@ -52,7 +54,7 @@ jobs:
           brew install xcodegen >/dev/null
           xcodegen generate
 
-      - name: Build for testing
+      - name: Build the app and every UI test
         run: |
           set -o pipefail
           xcodebuild build-for-testing -project TalisNotes.xcodeproj -scheme TalisNotes \
@@ -60,20 +62,16 @@ jobs:
             CODE_SIGNING_ALLOWED=NO > build-log.txt 2>&1 || { grep -E "error:|warning: .*(Sources|UITests)/" build-log.txt | sort -u | head -150; tail -30 build-log.txt; exit 1; }
           tail -5 build-log.txt
 
-      - name: UI tests and screenshots
-        env:
-          RUNS: ${{ matrix.runs }}
-        run: |
-          echo "$RUNS" | jq -r '.[]' > runs.txt
-          set --
-          while IFS= read -r r; do set -- "$@" "$r"; done < runs.txt
-          sh scripts/ci-shots.sh "$@"
+      # The full suite takes these screenshots too, so they're skipped then.
+      - name: iPad screenshots
+        if: env.FULL != 'true'
+        run: sh scripts/ci-shots.sh "ipad ipad-light 0 - ScreenshotTests"
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && env.FULL != 'true'
         with:
-          name: screenshots-${{ matrix.name }}
-          path: shots/
+          name: screenshots-ipad
+          path: ios/shots/
           if-no-files-found: warn
 
   ipa:
@@ -102,4 +100,61 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: TalisNotes-unsigned-ipa
-          path: build/TalisNotes-unsigned.ipa
+          path: ios/build/TalisNotes-unsigned.ipa
+
+  # The full UI suite, only when asked (see the top). It's split across jobs, each building for
+  # itself. Every iPad class runs in the light; the dark, Hebrew and iPhone runs take the
+  # screenshot set and the classes about the phone. A failing UI test doesn't fail its job (the
+  # shots are what it's for): read the job's log for "failed".
+  full:
+    name: ${{ matrix.name }}
+    if: inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci')
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ipad-selecting
+            runs: '["ipad ipad-light 0 - SelectingTests"]'
+          - name: ipad-pens-media
+            runs: '["ipad ipad-light 0 - PenTests,MediaTests,ShapeTipsTests"]'
+          - name: ipad-library-pages-shapes
+            runs: '["ipad ipad-light 0 - LibraryTests,PagesTests,ShapesMoreTests,PhoneTests,ScreenshotTests"]'
+          - name: looks
+            runs: '["ipad ipad-dark 1 - ScreenshotTests", "ipad ipad-he 0 he ScreenshotTests", "iphone iphone-light 0 - ScreenshotTests,PhoneTests", "iphone iphone-dark 1 - ScreenshotTests"]'
+          - name: ipad11
+            runs: '["ipad11 ipad11-light 0 - ScreenshotTests,ShapesMoreTests/testAutoArrowSetting,SelectingTests/testTypedTextInTheLasso"]'
+          - name: iphone-selecting
+            runs: '["iphone iphone-light 0 - SelectingTests"]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate project
+        run: |
+          brew install xcodegen >/dev/null
+          xcodegen generate
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project TalisNotes.xcodeproj -scheme TalisNotes \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO > build-log.txt 2>&1 || { grep -E "error:|warning: .*(Sources|UITests)/" build-log.txt | sort -u | head -150; tail -30 build-log.txt; exit 1; }
+          tail -5 build-log.txt
+
+      - name: UI tests and screenshots
+        env:
+          RUNS: ${{ matrix.runs }}
+        run: |
+          echo "$RUNS" | jq -r '.[]' > runs.txt
+          set --
+          while IFS= read -r r; do set -- "$@" "$r"; done < runs.txt
+          sh scripts/ci-shots.sh "$@"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ matrix.name }}
+          path: ios/shots/
+          if-no-files-found: warn

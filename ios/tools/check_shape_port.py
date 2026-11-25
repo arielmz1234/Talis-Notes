@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks the subject shapes here against the Android app's, number for number.
 
-  python3 tools/check_shape_port.py ../Talis-Notes
+  python3 tools/check_shape_port.py ..   (the Android app is the repo root, beside ios/)
 
 Reads Android's model/ShapeTemplates.kt and model/ShapePacks.kt and this repo's ShapeTemplates*.swift
 and ShapePacks.swift, and compares: the shapes with joints and their order, the numbers each is

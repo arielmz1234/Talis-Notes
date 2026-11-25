@@ -1,6 +1,6 @@
 # Tali's Notes for iPad and iPhone
 
-The Apple version of [Tali's Notes](https://github.com/arielmz1234/Talis-Notes), a handwriting notes app.
+The Apple version of Tali's Notes, a handwriting notes app; the Android app it follows is the rest of this repository.
 Work in progress: see `PLAN.md` and `PROGRESS.md`.
 
 - `project.yml`: run `xcodegen generate` to make `TalisNotes.xcodeproj` (not in git).
@@ -9,4 +9,4 @@ Work in progress: see `PLAN.md` and `PROGRESS.md`.
 - `tools/import_strings.py`: the string catalog from the Android app's strings.
 - `tools/make_icon.py`: the app icon from the Android app's `tools/icon-source.png`.
 - `scripts/local-shots.sh`: the screenshot test on a local simulator (see PROGRESS.md).
-- CI (`.github/workflows/ci.yml`) builds, tests, saves screenshots and an unsigned `.ipa`.
+- CI (`../.github/workflows/ios.yml`, runs when `ios/` changes) builds, runs the core tests, saves iPad screenshots and an unsigned `.ipa`; the full UI suite runs on request. See `CLAUDE.md`.
