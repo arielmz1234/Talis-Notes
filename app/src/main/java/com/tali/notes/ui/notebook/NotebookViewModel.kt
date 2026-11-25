@@ -608,6 +608,8 @@ class NotebookViewModel(app: Application, val notebookId: String) : AndroidViewM
 
   fun setHoldToShape(on: Boolean) = store.update { it.copy(holdToShape = on) }
 
+  fun setAutoArrow(on: Boolean) = store.update { it.copy(autoArrow = on) }
+
   fun setSnapShapes(on: Boolean) = store.update { it.copy(snapShapes = on) }
 
   /** Changes the Shapes tool's own style (colour, thickness, line, fill). */

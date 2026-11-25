@@ -821,4 +821,6 @@
     <string name="scribble_to_delete_detail">Avec un stylo, gribouillez d\'avant en arrière sur l\'écriture pour l\'effacer</string>
     <string name="feat_scribble_title">Gribouiller pour effacer</string>
     <string name="feat_scribble_body">Activez Gribouiller pour effacer dans le panneau de la gomme. Gribouillez ensuite d\'avant en arrière sur l\'écriture avec le stylo : elle s\'efface avec le gribouillis. Annuler la fait revenir.</string>
+    <string name="auto_arrow">Flèche automatique</string>
+    <string name="auto_arrow_detail">Tracez un trait, puis sa pointe.</string>
 </resources>

@@ -641,6 +641,7 @@ private fun ShapeStylePicker(settings: AppSettings, vm: NotebookViewModel) {
       Spacer(Modifier.height(8.dp))
       ToggleRow(stringResource(R.string.snap_to_other_shapes), settings.snapShapes, vm::setSnapShapes, detail = stringResource(R.string.ends_and_edges_lock_on_shapes))
       ToggleRow(stringResource(R.string.hold_to_perfect_shapes), settings.holdToShape, vm::setHoldToShape, detail = stringResource(R.string.pause_at_the_end_of_a))
+      ToggleRow(stringResource(R.string.auto_arrow), settings.autoArrow, vm::setAutoArrow, detail = stringResource(R.string.auto_arrow_detail))
     }
   }
 }

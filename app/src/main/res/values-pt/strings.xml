@@ -821,4 +821,6 @@
     <string name="scribble_to_delete_detail">Com uma caneta, rabisque de um lado para o outro sobre a escrita para apagá-la</string>
     <string name="feat_scribble_title">Rabiscar para apagar</string>
     <string name="feat_scribble_body">Ative Rabiscar para apagar no painel da borracha. Depois rabisque de um lado para o outro sobre a escrita com a caneta, e ela some junto com o rabisco. Desfazer traz de volta.</string>
+    <string name="auto_arrow">Seta automática</string>
+    <string name="auto_arrow_detail">Desenhe uma linha e depois a ponta.</string>
 </resources>

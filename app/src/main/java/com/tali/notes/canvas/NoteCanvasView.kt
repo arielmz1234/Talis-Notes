@@ -36,6 +36,7 @@ import androidx.input.motionprediction.MotionEventPredictor
 import com.tali.notes.data.AppSettings
 import com.tali.notes.data.Viewport
 import com.tali.notes.geometry.Affine
+import com.tali.notes.geometry.AutoArrow
 import com.tali.notes.geometry.Geo
 import com.tali.notes.geometry.Pt
 import com.tali.notes.geometry.Rect
@@ -2914,6 +2915,8 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           // A scribble over writing: it took what it covered, and leaves nothing itself.
         } else {
           noteLoop()
+          val shaft = lastShaft
+          lastShaft = null
           val g = gesture
           // Undo lights up now, not when Ink hands the stroke over (a quick tap on it was lost).
           if (g != null) host.onInkWaiting()
@@ -2935,6 +2938,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
           }
           strokeId = null
           gesture = null
+          val input = androidx.ink.strokes.StrokeInput()
+          val pts = g?.full?.inputs?.let { all -> List(all.size) { i -> all.populate(i, input); Pt(input.x, input.y) } }?.takeIf { it.size >= strokePoints.size } ?: strokePoints.toList()
+          autoArrow(pts, shaft)
         }
       }
       Mode.LIVE_SHAPE -> {
@@ -4470,6 +4476,55 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
   }
 
 
+  // ---- Auto arrow ----
+  //
+  // With *Auto arrow* on (the Shapes panel's Style tab, `AppSettings.autoArrow`, off at first; the
+  // owner's request, 25 Nov 2026), an arrow written by hand becomes a clean arrow shape the moment
+  // the pen lifts, as hold-to-shape would make it, with no hold: one stroke (shaft, then the head
+  // without lifting) or a straight line followed straight away by its head. What counts is in
+  // geometry/AutoArrow.kt (shared with the iPad app). Both strokes go into the page first, so one
+  // Undo brings back the arrow as she drew it.
+
+  /** A straight stroke just written with [slot] in [color]: a head drawn next can make it an arrow. */
+  private class ShaftStroke(val a: Pt, val b: Pt, val bounds: Rect, val slot: String, val color: Int, val at: Long)
+
+  private var lastShaft: ShaftStroke? = null
+
+  /** The stroke just lifted ([pts], in the world): an arrow, alone or with [shaft] before it, becomes an arrow shape. */
+  private fun autoArrow(pts: List<Pt>, shaft: ShaftStroke?) {
+    val slot = settings.activeSlot
+    if (!settings.autoArrow || viewOnly || slot.type.isHighlighter || pts.size < 2) return
+    val d = doc ?: return
+    val now = SystemClock.uptimeMillis()
+    val one = AutoArrow.oneStroke(pts)
+    val prev = shaft?.takeIf { one == null && it.slot == slot.id && it.color == slot.color && now - it.at < AUTO_ARROW_GAP_MS }
+    val arrow = one ?: prev?.let { AutoArrow.twoStrokes(it.a, it.b, pts) }
+    if (arrow == null) {
+      lastShaft = AutoArrow.straight(pts)?.let { (a, b) -> Rect.around(pts)?.let { ShaftStroke(a, b, it, slot.id, slot.color, now) } }
+      return
+    }
+    // Strokes still waiting for Ink go in now, so they can be swapped for the arrow.
+    mode = Mode.NONE
+    commitWaitingInk()
+    val drawn = listOfNotNull(newestInkAt(d, Rect.around(pts) ?: return, slot.size), if (one == null) newestInkAt(d, prev!!.bounds, slot.size) else null)
+    if (drawn.size != (if (one == null) 2 else 1) || drawn.distinctBy { it.id }.size != drawn.size) return
+    val shape = ShapeItem(d.newId(), d.nextZ(), slot.type, slot.color, slot.size, arrow, line = slot.lineStyle)
+    d.commit(Change(drawn, listOf(shape)))
+    lastLoop = null
+    // Picked up softly, as after hold-to-shape: its dots are there, and the pen writes on through it.
+    selectShape(shape, soft = true)
+    performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+    invalidate()
+  }
+
+  /** The newest stroke of writing drawn over [area] (its points' box) with a pen [size] wide. */
+  private fun newestInkAt(d: Document, area: Rect, size: Float): InkItem? {
+    val tol = max(4f, 0.05f * max(area.width, area.height)) + size
+    return d.intersecting(area).filterIsInstance<InkItem>()
+      .filter { !it.locked && it.bounds.center.dist(area.center) < tol && abs(it.bounds.width - area.width) < tol * 2 && abs(it.bounds.height - area.height) < tol * 2 }
+      .maxByOrNull { it.z }
+  }
+
   /** A stroke is being finished: remember it if it's a loop round something (with a pen that circles to select). */
   private fun noteLoop() {
     val slot = settings.activeSlot
@@ -5678,6 +5733,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   fun undo() {
     lastLoop = null
+    lastShaft = null
     finishCrop(false)
     commitWaitingInk()
 
@@ -5687,6 +5743,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
   fun redo() {
     lastLoop = null
+    lastShaft = null
     finishCrop(false)
 
     commitWaitingInk()
@@ -6007,6 +6064,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
 
     /** ...and how long it's held there to pick up what the loop goes round (before hold-to-paste's 600 ms). */
     private const val CIRCLE_HOLD_MS = 350L
+
+    /** Auto arrow: a head drawn within this long after a straight line makes the two an arrow. */
+    private const val AUTO_ARROW_GAP_MS = 3000L
 
     /** How near the loop's line (on screen) a press counts as on it. */
     private const val LOOP_REACH_DP = 14f

@@ -83,6 +83,8 @@ data class AppSettings(
   /** Scribbling back and forth over writing with a pen deletes it (`canvas/ScratchOut.kt`). Off at first. */
   val scribbleDelete: Boolean = false,
   val holdToShape: Boolean = true,
+  /** A hand-drawn arrow (a line and its head, in one stroke or two) becomes a clean arrow on lifting, with no hold. Off at first. */
+  val autoArrow: Boolean = false,
   /** Shapes, pictures and text lock onto each other when moved or drawn close (ends, edges, lining up). */
   val snapShapes: Boolean = true,
   /** The Shapes tool's own colour, thickness, line and fill; null until she first sets it (then it starts from her pen). */
