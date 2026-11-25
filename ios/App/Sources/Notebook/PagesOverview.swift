@@ -96,7 +96,9 @@ struct PagesOverview: View {
   /// Where each page's tile is in the grid, where the finger is while holding one, and where on the tile it took hold.
   @State private var frames: [Int: CGRect] = [:]
   @State private var dragAt: CGPoint?
-  @State private var grab: CGSize = .zero
+  /// Where on the held page the finger is; nil until the finger's place is known (the hold can end
+  /// before the drag reports one), so the page never jumps to put its middle under the finger.
+  @State private var grab: CGSize?
   /// Where the carried pages' tiles were when they were picked up: they're drawn floating under the
   /// finger from there, apart from the grid (see `floating`).
   @State private var liftedFrom: [Int: CGRect] = [:]
@@ -334,13 +336,14 @@ struct PagesOverview: View {
     carried = all
     order = Array(0..<count)
     let f = frames[i] ?? .zero
-    let at = p ?? CGPoint(x: f.midX, y: f.midY)
-    grab = CGSize(width: at.x - f.midX, height: at.y - f.midY)
-    dragAt = at
+    grab = p.map { CGSize(width: $0.x - f.midX, height: $0.y - f.midY) }
+    dragAt = p ?? CGPoint(x: f.midX, y: f.midY)
   }
 
   /// The held page follows the finger; passing over another page, the carried ones take its place.
   private func follow(_ p: CGPoint) {
+    // The first place the finger is reported: that's where it holds the page.
+    if grab == nil, let h = held, let f = liftedFrom[h] { grab = CGSize(width: p.x - f.midX, height: p.y - f.midY) }
     dragAt = p
     guard let o = order else { return }
     guard let target = frames.first(where: { !carried.contains($0.key) && $0.value.contains(p) })?.key else { return }
@@ -371,6 +374,7 @@ struct PagesOverview: View {
   /// the push knew nothing of, and the page slid out from under the finger and back.
   @ViewBuilder private var floating: some View {
     if let h = held, let at = dragAt, let home = liftedFrom[h] {
+      let grab = grab ?? CGSize(width: at.x - home.midX, height: at.y - home.midY)
       ForEach(carried.filter { liftedFrom[$0] != nil }, id: \.self) { i in
         let f = liftedFrom[i] ?? home
         PageTile(
