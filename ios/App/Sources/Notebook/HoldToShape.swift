@@ -22,6 +22,7 @@ final class StrokeWatcher: UIGestureRecognizer {
   }
 
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    if touches.contains(where: { $0.type == .pencil }) { PencilSeen.note() }
     if tracked == nil, let t = touches.first, (event.allTouches?.count ?? 1) == 1 {
       guard accepts(t) else {
         state = .failed
@@ -373,5 +374,22 @@ extension NoteCanvas.Coordinator {
   /// of a tap that picked a shape up, or one begun by a touch that was editing the selection.
   func isSnappedStroke(_ pk: PKStroke) -> Bool {
     [hold.dropSince, lasso.editSince].contains { since in since.map { pk.path.creationDate >= $0 } ?? false }
+  }
+}
+
+/// Whether an Apple Pencil has ever touched the screen on this iPad (kept between launches): Draw
+/// with finger's Auto then stops fingers writing, as Android's does on a tablet with a pen.
+@MainActor
+enum PencilSeen {
+  private static let key = "pencilSeen"
+  /// Told when it first happens, so the canvas can stop fingers writing at once.
+  static var changed: () -> Void = {}
+
+  static var yes: Bool { UserDefaults.standard.bool(forKey: key) }
+
+  static func note() {
+    guard !yes else { return }
+    UserDefaults.standard.set(true, forKey: key)
+    changed()
   }
 }

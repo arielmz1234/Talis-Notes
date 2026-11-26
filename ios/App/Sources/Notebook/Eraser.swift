@@ -109,7 +109,7 @@ extension NoteCanvas.Coordinator {
       for inputs in pieces {
         for kept in onItsPage(inputs, of: stroke) {
           let piece = InkStroke(id: newId(), z: stroke.z, pen: stroke.pen, tags: stroke.tags, color: stroke.color, size: stroke.size, inputs: kept)
-          ink.append(EraserSweep.Ink(pk: piece.pkStroke(mask: mask(for: piece)), stroke: piece, box: piece.bounds, cutFrom: root))
+          ink.append(EraserSweep.Ink(pk: canvasStroke(piece), stroke: piece, box: piece.bounds, cutFrom: root))
         }
       }
     }

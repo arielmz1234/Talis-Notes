@@ -71,6 +71,19 @@ struct HoldMenuColours: View {
   }
 }
 
+/// Whether the press that's ending was a hold: the tap that can still fire as the finger lifts after
+/// a hold asks, and is dropped (it opened the notebook that was held, now and then).
+@MainActor
+enum HoldTracker {
+  static var held = false
+
+  /// True once after a hold, for the tap at the end of the same press.
+  static func takeHold() -> Bool {
+    defer { held = false }
+    return held
+  }
+}
+
 /// Pressing and holding a card (or a page): it sinks a touch while held and comes back up as its
 /// menu opens; nothing else on the screen moves or darkens.
 struct HoldPress: ViewModifier {
@@ -85,7 +98,10 @@ struct HoldPress: ViewModifier {
       .simultaneousGesture(
         LongPressGesture(minimumDuration: 0.45)
           .updating($pressing) { value, state, _ in state = value }
+          // A new press: whatever an earlier hold left is forgotten.
+          .onChanged { _ in HoldTracker.held = false }
           .onEnded { _ in
+            HoldTracker.held = true
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             onHold()
           },

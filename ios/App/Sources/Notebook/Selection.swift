@@ -85,6 +85,7 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
     hold.delegate = self
     v.addGestureRecognizer(hold)
     lasso.hold = hold
+    (v as? NoteCanvasView)?.ownHolds.append(hold)
     lasso.loopLayer.lineWidth = 1.5
     lasso.loopLayer.lineDashPattern = [5, 5]
     lasso.loopLayer.zPosition = 10
@@ -535,7 +536,7 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
       guard i < stored.count, lasso.picked.contains(stored[i].stroke.id) else { return pk }
       var s = stored[i].stroke
       s.size = size
-      return s.pkStroke(mask: mask(for: s))
+      return canvasStroke(s)
     }))
     loading = false
     showThickness(size)

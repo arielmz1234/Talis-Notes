@@ -51,9 +51,11 @@ extension NoteCanvas.Coordinator {
   /// Which pinch zooms: the scroll view's for pages, this one for an endless canvas.
   func applyPinchMode() {
     guard let canvas else { return }
+    // The limit first: setting it turns the scroll view's pinch back on.
+    canvas.minimumZoomScale = leastZoom
     canvas.pinchGestureRecognizer?.isEnabled = paged
     endlessPinch.recognizer?.isEnabled = !paged
-    canvas.minimumZoomScale = leastZoom
+    (canvas as? NoteCanvasView)?.ownPinchAllowed = { [weak self] in self?.paged ?? true }
   }
 
   /// The pinch on an endless canvas (Android's `PinchResist` with its own camera). Out, the zoom

@@ -94,8 +94,11 @@ struct Pixels {
   let height: Int
   private let bytes: [UInt8]
 
-  @MainActor init() {
-    let shot = XCUIScreen.main.screenshot().image
+  @MainActor init() { self.init(XCUIScreen.main.screenshot()) }
+
+  /// From a screenshot taken earlier (one taken off the main thread while a gesture is still going).
+  @MainActor init(_ screenshot: XCUIScreenshot) {
+    let shot = screenshot.image
     let format = UIGraphicsImageRendererFormat()
     format.scale = shot.scale
     let upright = UIGraphicsImageRenderer(size: shot.size, format: format).image { _ in shot.draw(in: CGRect(origin: .zero, size: shot.size)) }.cgImage!

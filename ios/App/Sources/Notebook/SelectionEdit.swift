@@ -253,22 +253,28 @@ extension NoteCanvas.Coordinator {
   /// between pages off) shows while it moves, and once it's put down it's drawn only as far as the
   /// page it now starts on (its points are all kept, so moved onto the page it shows in full).
   ///
-  /// See-through ink (the highlighter) shows in the overlay only once the canvas has drawn the page
-  /// without it: until then the canvas still shows it where it was, and the two copies on top of each
-  /// other looked darker for a moment, so the highlighter flashed at every pick-up (the owner's video,
-  /// 25 Nov 2026). Solid ink shows at once: two copies of it look like one.
+  /// The highlighter is drawn by the notebook (HighlightInk.swift): it leaves the page and shows in
+  /// the overlay in the same frame. Other see-through ink, which PencilKit draws, shows in the
+  /// overlay only once the canvas has drawn the page without it: until then the two copies on top of
+  /// each other looked darker for a moment. Solid ink shows at once: two copies of it look like one.
   private func liftInk() {
     guard let canvas, let before = lasso.before else { return }
-    var solid: [PKStroke] = [], seeThrough: [PKStroke] = [], left: [PKStroke] = []
+    var solid: [PKStroke] = [], marks: [PKStroke] = [], seeThrough: [PKStroke] = [], left: [PKStroke] = []
     for (i, s) in before.strokes.enumerated() {
       guard i < stored.count, lasso.picked.contains(stored[i].stroke.id) else {
         left.append(s)
         continue
       }
       let ink = stored[i].stroke
-      if ink.seeThrough { seeThrough.append(ink.pkStroke(mask: nil)) } else { solid.append(ink.pkStroke(mask: nil)) }
+      if Self.drawnByNotebook(ink) {
+        marks.append(ink.pkStroke(mask: nil))
+      } else if ink.seeThrough {
+        seeThrough.append(ink.pkStroke(mask: nil))
+      } else {
+        solid.append(ink.pkStroke(mask: nil))
+      }
     }
-    guard !solid.isEmpty || !seeThrough.isEmpty else { return }
+    guard !solid.isEmpty || !seeThrough.isEmpty || !marks.isEmpty else { return }
     let z = canvas.zoomScale
     let scale = canvas.traitCollection.displayScale
     func layer(_ strokes: [PKStroke]) -> CALayer? {
@@ -283,11 +289,12 @@ extension NoteCanvas.Coordinator {
       return l
     }
     // The highlighter goes under the writing in the overlay too, as it does on the page.
-    let behind = layer(seeThrough), front = layer(solid)
+    let under = layer(marks), behind = layer(seeThrough), front = layer(solid)
+    under?.name = Self.carriedMarks
     behind?.opacity = 0
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    for l in [behind, front].compactMap({ $0 }) { lasso.shapeLayer.addSublayer(l) }
+    for l in [under, behind, front].compactMap({ $0 }) { lasso.shapeLayer.addSublayer(l) }
     CATransaction.commit()
     lasso.overlayTicket += 1
     loading = true

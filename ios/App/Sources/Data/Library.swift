@@ -160,6 +160,9 @@ final class Library {
       r.id = newId()
       try? db.put(r, in: n.id)
     }
+    // The copy shows its preview straight away: the original's picture, under the copy's id.
+    let thumbs = AppFiles.folders.thumbs
+    try? FileManager.default.copyItem(at: thumbs.appendingPathComponent("\(id).png"), to: thumbs.appendingPathComponent("\(n.id).png"))
     reload()
   }
 

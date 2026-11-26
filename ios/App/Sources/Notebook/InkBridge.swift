@@ -115,15 +115,21 @@ struct InkStroke {
     pen.pressureSensitive ? max(pressure * 2, 0.4) : 1
   }
 
+  /// The points it's drawn through: handwriting as Android's ink models it (`InkModel`: its path
+  /// averaged over 20 ms and filled in at 360 a second), so strokes are as even as on Android.
+  /// What's stored stays the pen's samples.
+  var drawnPoints: [InkInput] { InkModel.slidingWindow(inputs.points) }
+
   /// The PencilKit stroke that draws it, kept to [mask] (its page) when given.
   func pkStroke(mask: UIBezierPath?) -> PKStroke {
+    let drawn = drawnPoints
     if let look = InkLook(pen: pen, line: line, square: square) {
-      let at = inputs.points.map { CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)) }
+      let at = drawn.map { CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)) }
       var shape = look.outline(size: CGFloat(size), points: at)
       if let mask, !mask.bounds.contains(shape.boundingBoxOfPath) { shape = shape.intersection(mask.cgPath) }
       let cover = CGFloat(size) * InkLook.coverPerSize + InkLook.coverExtra
       let under = PKStrokePath(
-        controlPoints: zip(at, inputs.points).map { p, i in
+        controlPoints: zip(at, drawn).map { p, i in
           PKStrokePoint(location: p, timeOffset: TimeInterval(i.t), size: CGSize(width: cover, height: cover), opacity: 1, force: 1, azimuth: 0, altitude: .pi / 2, secondaryScale: 1)
         }, creationDate: Date())
       return PKStroke(ink: PKInk(.monoline, color: UIColor(argb: color)), path: under, transform: .identity, mask: UIBezierPath(cgPath: shape))
@@ -131,7 +137,7 @@ struct InkStroke {
     let ink = PKInk(pen.ink, color: UIColor(argb: color))
     let start = Date(timeIntervalSinceReferenceDate: 0)
     let style = InkWidth.pointStyle(pen.ink)
-    let points = inputs.points.map { p -> PKStrokePoint in
+    let points = drawn.map { p -> PKStrokePoint in
       let pressure = CGFloat(p.pressure ?? 0.5)
       // Each point given the size that makes PencilKit draw it as wide as the pen (Android's brush
       // size), so a stroke made bigger or smaller is drawn in proportion (see InkWidth.pointSize).

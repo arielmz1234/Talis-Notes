@@ -45,6 +45,9 @@ final class PaperUnderlay: UIView {
 extension NoteCanvas.Coordinator {
   /// The overlay layer that carries picked-up writing (PencilKit draws that; the page draws the rest).
   static let carriedInk = "carried-ink"
+  /// The overlay layer that carries picked-up highlighter, which the notebook draws on the page too
+  /// (HighlightInk.swift): it goes the moment the page shows it again.
+  static let carriedMarks = "carried-marks"
   /// A picture of part of the page is never bigger than this many pixels: drawing more at once would stall the touch.
   private static let patchPixels: CGFloat = 6_000_000
   /// How long a picture of part of the page stays over its tiles: they're drawn again well within this.

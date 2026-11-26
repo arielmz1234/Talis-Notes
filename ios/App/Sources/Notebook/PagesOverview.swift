@@ -29,7 +29,7 @@ extension NoteCanvas.Coordinator {
       cg.clip(to: r)
       pages.pages.paint(in: cg)
       cg.restoreGState()
-      canvas.drawing.image(from: r, scale: scale * 2).draw(in: CGRect(origin: .zero, size: size))
+      visibleDrawing(canvas.drawing).image(from: r, scale: scale * 2).draw(in: CGRect(origin: .zero, size: size))
     }
   }
 

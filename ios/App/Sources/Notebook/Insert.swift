@@ -79,9 +79,10 @@ extension NoteCanvas.Coordinator {
 
   /// Everything on the canvas as one box: the writing, and the shapes, pictures and text under it.
   var contentBounds: Rect? {
-    var boxes = stored.compactMap { $0.stroke.inputs.bounds }
+    // As Android's `contentBounds`: each item as far as it's drawn (a stroke grown by half its pen).
+    var boxes = stored.compactMap { $0.stroke.inputs.bounds == nil ? nil : $0.stroke.bounds }
     if let under = pages?.pages.under {
-      boxes += under.lockedInk.compactMap(\.inputs.bounds)
+      boxes += under.lockedInk.compactMap { $0.inputs.bounds == nil ? nil : $0.bounds }
       boxes += under.shapes.compactMap { $0.geometry.bounds($0.size) }
       boxes += under.texts.map { let f = TextLook.frame($0); return Rect(Float(f.minX), Float(f.minY), Float(f.maxX), Float(f.maxY)) }
       boxes += under.pictures.map(\.row.rect)

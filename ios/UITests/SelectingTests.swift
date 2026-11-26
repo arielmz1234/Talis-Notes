@@ -421,6 +421,45 @@ final class SelectingTests: ShotCase {
     lasso(app)
   }
 
+  /// The highlighter picked up, carried and put down with the lasso keeps its strength the whole
+  /// time: never darker (two copies on top of each other) and never gone (the owner's video of
+  /// 25 Nov 2026: it flickered and changed its opacity when picked up, moved, or just drawn).
+  func testHighlighterKeepsItsStrengthWhenMoved() {
+    let app = openNewNotebook()
+    app.buttons["pen-p5"].firstMatch.tap()
+    settle()
+    drag(app, (0.30, 0.40), (0.62, 0.40))
+    drag(app, (0.30, 0.62), (0.62, 0.62))
+    let yellow: (Pixels.Colour) -> Bool = { $0.r > 215 && $0.g > 195 && $0.b < 205 && $0.r - $0.b > 45 }
+    /// How strongly the highlighter shows around [y] (how much blue it takes out), nil when it isn't there.
+    func strength(_ px: Pixels, near y: CGFloat) -> Int? {
+      let found = [0.40, 0.46, 0.52].compactMap { x -> Int? in
+        guard let band = px.span(x: x, rows: (y - 0.05)...(y + 0.05), yellow) else { return nil }
+        return 255 - px.colour(x: x, y: (band.lowerBound + band.upperBound) / 2).b
+      }.sorted()
+      return found.isEmpty ? nil : found[found.count / 2]
+    }
+    guard let usual = strength(Pixels(), near: 0.62) else { return XCTFail("the highlighter writes") }
+    // Just written: as strong as the one before it.
+    XCTAssertEqual(strength(Pixels(), near: 0.40) ?? -1, usual, accuracy: 25, "a stroke just written has the usual strength")
+    lasso(app)
+    drag(app, (0.25, 0.34), (0.67, 0.46))
+    XCTAssertEqual(strength(Pixels(), near: 0.40) ?? -1, usual, accuracy: 25, "picked up, it keeps its strength")
+    // Carried: shot while the drag is held at its end.
+    final class Seen: @unchecked Sendable { var shot: XCUIScreenshot? }
+    let seen = Seen()
+    DispatchQueue.global().asyncAfter(deadline: .now() + 1.4) { seen.shot = XCUIScreen.main.screenshot() }
+    at(app, 0.46, 0.40).press(forDuration: 0.1, thenDragTo: at(app, 0.46, 0.50), withVelocity: .slow, thenHoldForDuration: 1.6)
+    // Put down: looked at straight away, then once everything has settled.
+    let dropped = Pixels()
+    if let carried = seen.shot.map({ Pixels($0) }) { XCTAssertEqual(strength(carried, near: 0.50) ?? -1, usual, accuracy: 25, "carried, it keeps its strength") }
+    XCTAssertEqual(strength(dropped, near: 0.50) ?? -1, usual, accuracy: 25, "just put down, it keeps its strength")
+    settle()
+    calmShot("hl-moved")
+    XCTAssertEqual(strength(Pixels(), near: 0.50) ?? -1, usual, accuracy: 25, "put down, it keeps its strength")
+    XCTAssertNil(strength(Pixels(), near: 0.36), "nothing is left where it was")
+  }
+
   func testPicturesInTheLasso() {
     let app = openNewNotebook(["-fakePickers"])
     let window = app.windows.firstMatch.frame
@@ -616,6 +655,23 @@ final class SelectingTests: ShotCase {
     tool(app, "tool-eraser")
   }
 
+  /// The middle (in points) of the line of dark writing between [x0] and [x1] nearest to [y].
+  private func textLine(_ app: XCUIApplication, near y: CGFloat, from x0: CGFloat, to x1: CGFloat) -> CGFloat {
+    let px = Pixels(), w = app.frame.width, h = app.frame.height
+    var bands: [ClosedRange<CGFloat>] = []
+    var start: CGFloat?
+    for row in stride(from: CGFloat(0.12), through: 0.95, by: 0.003) {
+      var dark = 0
+      for col in stride(from: x0 / w, through: x1 / w, by: 0.002) {
+        let c = px.colour(x: col, y: row)
+        if c.r < 90 && c.g < 90 && c.b < 110 { dark += 1 }
+      }
+      if dark > 2 { start = start ?? row } else if let s = start { bands.append(s...row); start = nil }
+    }
+    let mids = bands.filter { $0.upperBound - $0.lowerBound > 0.008 }.map { ($0.lowerBound + $0.upperBound) / 2 * h }
+    return mids.min { abs($0 - y) < abs($1 - y) } ?? y
+  }
+
   func testTypedTextInTheLasso() {
     let app = openNewNotebook()
     tool(app, "tool-keyboard")
@@ -624,7 +680,9 @@ final class SelectingTests: ShotCase {
     app.typeText("Reaction R = 12 kN")
     let box = app.textViews["text-editor"].firstMatch.frame
     lasso(app)
-    point(app, CGPoint(x: box.minX + 40, y: box.midY)).press(forDuration: 0.05)
+    // The page may scroll back as the keyboard goes (on an 11-inch iPad, with the tools on their own
+    // line, the box had been lifted above it): the text is found where it's drawn now.
+    point(app, CGPoint(x: box.minX + 40, y: textLine(app, near: box.midY, from: box.minX, to: box.minX + 220))).press(forDuration: 0.05)
     var f = selectionFrame(app)
     shot("t1-text-picked")
     // Resized from the corner the text grows; moved by its chip.

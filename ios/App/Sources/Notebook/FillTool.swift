@@ -199,7 +199,7 @@ extension NoteCanvas.Coordinator {
     fillTool.filling = true
     let page = paged ? layout.rect(min(max(layout.indexAt(p.y), 0), pageCount - 1)) : nil
     let window = AreaFill.window(around: p, page: page)
-    let strokes = canvas.drawing.strokes
+    let strokes = visibleDrawing(canvas.drawing).strokes
     let inWindow = stored.indices.filter { $0 < strokes.count && stored[$0].stroke.bounds.intersects(window) }
     let wallShapes = all.filter { $0.geometry.bounds($0.size)?.intersects(window) ?? false }
     let frame = CGRect(window)

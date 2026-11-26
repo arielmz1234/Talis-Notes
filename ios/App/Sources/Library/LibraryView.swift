@@ -497,6 +497,8 @@ struct LibraryView: View {
                 picked: picked?.contains(n.id) == true
               )
               .onTapGesture {
+                // The finger lifting after a hold isn't a tap: it opened the notebook.
+                if HoldTracker.takeHold() { return }
                 if let chosen = picked {
                   togglePick(n.id, in: chosen)
                 } else if lib.shelf == .trash {
@@ -649,7 +651,16 @@ struct PickBar: View {
     HStack(spacing: 0) {
       Text(count == 1 ? L("t_1_selected") : L("n_selected", count)).font(TaliType.titleMedium).foregroundStyle(c.ink).lineLimit(1).fixedSize()
       Spacer().frame(width: 12)
-      Button(allPicked ? L("select_none") : L("select_all"), action: onAll).buttonStyle(QuietButtonStyle())
+      // As wide as the longer of its two words, so the bar keeps its shape (and its one line) when
+      // Select all turns into Select none.
+      Button(action: onAll) {
+        ZStack {
+          Text(L("select_all")).hidden()
+          Text(L("select_none")).hidden()
+          Text(allPicked ? L("select_none") : L("select_all"))
+        }
+      }
+      .buttonStyle(QuietButtonStyle())
     }
   }
 

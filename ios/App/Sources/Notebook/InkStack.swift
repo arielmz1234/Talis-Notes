@@ -40,13 +40,15 @@ extension NoteCanvas.Coordinator {
     var next = strokes
     var changed: [TaliCore.Rect] = []
     for i in strokes.indices {
-      let hide = covered.contains(i)
+      // The highlighter is always hidden from PencilKit: the notebook draws it (HighlightInk.swift).
+      let hide = covered.contains(i) || Self.drawnByNotebook(stored[i].stroke)
       guard hide != Self.isHidden(strokes[i]) else { continue }
       next[i].mask = hide ? Self.hidden : mask(for: stored[i].stroke)
       changed.append(stored[i].stroke.bounds)
     }
     let buried = covered.sorted().map { i in (stroke: stored[i].stroke, pk: stored[i].stroke.pkStroke(mask: mask(for: stored[i].stroke))) }
     let wasBuried = under.buried.map(\.stroke)
+    defer { refreshHighlights() }
     guard !changed.isEmpty || wasBuried.map(\.id) != buried.map(\.stroke.id) || zip(wasBuried, buried).contains(where: { $0 != $1.stroke }) else { return }
     pages.pages.under.buried = buried
     if !changed.isEmpty {
