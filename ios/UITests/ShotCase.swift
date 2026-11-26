@@ -39,6 +39,23 @@ class ShotCase: XCTestCase {
 
   func settle() { Thread.sleep(forTimeInterval: 1.2) }
 
+  /// The middle (in points) of the line of dark writing between [x0] and [x1] nearest to [y].
+  func textLine(_ app: XCUIApplication, near y: CGFloat, from x0: CGFloat, to x1: CGFloat) -> CGFloat {
+    let px = Pixels(), w = app.frame.width, h = app.frame.height
+    var bands: [ClosedRange<CGFloat>] = []
+    var start: CGFloat?
+    for row in stride(from: CGFloat(0.12), through: 0.95, by: 0.003) {
+      var dark = 0
+      for col in stride(from: x0 / w, through: x1 / w, by: 0.002) {
+        let c = px.colour(x: col, y: row)
+        if c.r < 90 && c.g < 90 && c.b < 110 { dark += 1 }
+      }
+      if dark > 2 { start = start ?? row } else if let s = start { bands.append(s...row); start = nil }
+    }
+    let mids = bands.filter { $0.upperBound - $0.lowerBound > 0.008 }.map { ($0.lowerBound + $0.upperBound) / 2 * h }
+    return mids.min { abs($0 - y) < abs($1 - y) } ?? y
+  }
+
   /// Taps a tool's button. On a phone the tools are folded behind one button, which opens them and
   /// closes whatever panel is open: so there, tapping the tool in use to close its panel is that
   /// button alone, and the tools are folded away again. A phone too narrow for them all (an iPhone 16)
