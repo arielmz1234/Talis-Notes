@@ -67,8 +67,16 @@ each iPad's size in points) to see what Android does.
 - **Library**: the select bar keeps one width for Select all / Select none (it wrapped); a duplicate
   copies the preview; a hold that picks a notebook up isn't also taken as a tap (`HoldTracker`).
 - **Back, undo, redo** use Android's Material icons.
-- **Bring to front / Send to back on pictures**: not reproduced without a simulator; the full UI
-  suite's `testPicturesInTheLasso` checks it with pixels.
+- **Bring to front / Send to back on pictures**: not reproduced. The full UI suite's
+  `testPicturesInTheLasso` (a line over a picture covered by Bring to front, shown again by Send to
+  back, checked with pixels) passes on the iPad Pro 13 simulator; it had never run before (the full
+  run of 25 Nov was cancelled).
+- **Full UI suite on this branch (26 Nov)**: everything passes except `PenTests.testEraser`'s check
+  that the precise eraser cuts a shape (made by holding the pen) into two pieces of ink: it stays
+  whole. The same test fails the same way on master without this branch's changes (checked with a
+  one-test run), so it's older than this work and still open. `testTypedTextInTheLasso` failed on the
+  11-inch iPad only because the page scrolls back as the keyboard goes now the tools are on their own
+  line; the test now finds the text where it's drawn, and passes.
 
 ## The owner's videos of 25 Nov 2026, evening (Mac without Xcode)
 
