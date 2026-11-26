@@ -215,6 +215,15 @@ final class NoteCanvasView: PKCanvasView {
   /// The canvas got a new size (it appeared, the notebook slid in, the device turned).
   var onResize: () -> Void = {}
   private var laidOutSize: CGSize = .zero
+  /// Whether the scroll view's own pinch may zoom (pages); an endless canvas zooms with its own
+  /// pinch (Endless.swift). Turning the scroll view's pinch off isn't enough: the scroll view turns it
+  /// back on whenever its zoom limits are set, and then it zoomed straight past the resistance.
+  var ownPinchAllowed: () -> Bool = { true }
+
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    if g === pinchGestureRecognizer, !ownPinchAllowed() { return false }
+    return super.gestureRecognizerShouldBegin(g)
+  }
 
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -222,7 +231,25 @@ final class NoteCanvasView: PKCanvasView {
       laidOutSize = bounds.size
       onResize()
     }
+    quietSystemMenus()
   }
+
+  /// The notebook's own hold (Paste) and menus only. PencilKit's canvas has a hold of its own that
+  /// brings up the system's "Select All" and "Insert Space" menu, which covered the app's Paste
+  /// bubble and couldn't be used (the owner, 25 Nov 2026). Its holds and menus are switched off,
+  /// here and in its own views, as they come.
+  var ownHolds: [UIGestureRecognizer] = []
+
+  private func quietSystemMenus() {
+    func quiet(_ v: UIView) {
+      for i in v.interactions where i is UIEditMenuInteraction || i is UIContextMenuInteraction { v.removeInteraction(i) }
+      for g in v.gestureRecognizers ?? [] where g is UILongPressGestureRecognizer && g.isEnabled && !ownHolds.contains(where: { $0 === g }) { g.isEnabled = false }
+    }
+    quiet(self)
+    for v in subviews where !(v is UITextView) { quiet(v) }
+  }
+
+  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool { false }
 
   var typing: [UIView] = [] {
     didSet { UIAccessibility.post(notification: .layoutChanged, argument: typing.first) }
@@ -325,6 +352,7 @@ struct NoteCanvas: UIViewRepresentable {
     c.installOwnInk(on: v)
     c.installPencilGestures(on: v)
     c.installEndlessPinch(on: v)
+    PencilSeen.changed = { [weak c] in c?.applyTool() }
     bridge?.coordinator = c
     v.minimumZoomScale = Coordinator.pagesLeastZoom
     v.maximumZoomScale = 6
@@ -343,6 +371,9 @@ struct NoteCanvas: UIViewRepresentable {
     c.pages = pages
     c.underlay = paper
     c.installPageChrome(on: v, above: pages)
+    let marks = HighlightView(frame: .zero)
+    v.insertSubview(marks, aboveSubview: pages)
+    c.highlights = marks
     v.onResize = { [weak c] in
       c?.updateContent()
       c?.drawChrome()
@@ -377,6 +408,9 @@ struct NoteCanvas: UIViewRepresentable {
     var parent: NoteCanvas
     weak var canvas: PKCanvasView?
     weak var pages: PagesView?
+    /// The highlighter, drawn here rather than by PencilKit (see HighlightInk.swift).
+    weak var highlights: HighlightView?
+    var highlightInk = HighlightInk()
     /// Plain paper under the tiles, and pictures of parts of the page lying over tiles that are
     /// being drawn again (see PagePatch.swift).
     weak var underlay: PaperUnderlay?
@@ -401,6 +435,7 @@ struct NoteCanvas: UIViewRepresentable {
       guard let canvas else { return }
       canvas.drawing = d
       ownDrawing = canvas.drawing
+      refreshHighlights(d)
     }
     /// The window's undo manager outlives this screen, so its steps are dropped on leaving: kept,
     /// Undo stayed lit after reopening with nothing real behind it (Android starts each visit fresh).
@@ -507,7 +542,7 @@ struct NoteCanvas: UIViewRepresentable {
       pages?.layer.setNeedsDisplay()
       dropPatches()
       decodeLater(pictureSlots, fillSlots)
-      let drawn = Self.highlighterFirst(inks) { $0 }.map { ($0.pkStroke(mask: mask(for: $0)), $0) }
+      let drawn = Self.highlighterFirst(inks) { $0 }.map { (canvasStroke($0), $0) }
       stored = drawn.map { (StrokeKey($0.0), $0.1) }
       setDrawing(PKDrawing(strokes: drawn.map(\.0)))
       loading = false
@@ -602,6 +637,7 @@ struct NoteCanvas: UIViewRepresentable {
         layoutUnderlay()
         canvas.overrideUserInterfaceStyle = s.dark ? .dark : .light
         updateChrome()
+        refreshHighlights()
       }
       if old?.pageGuides != s.pageGuides { updateChrome() }
       if old?.between != s.between, old != nil {
@@ -637,9 +673,16 @@ struct NoteCanvas: UIViewRepresentable {
       }
       if lastTool.map({ $0 != parent.tool }) ?? false || parent.viewOnly { forgetArrowLine() }
       lastTool = parent.tool
-      // Draw with finger: Auto follows iOS's own Apple Pencil setting (fingers write in UI tests, which have no pencil).
+      // Draw with finger: Auto lets fingers write only on an iPad without a pen, as Android's Auto
+      // (`!deviceHasStylus`). An iPad can't tell a paired Apple Pencil is there until it touches the
+      // screen, so fingers write until the first Pencil touch ever seen here (`PencilSeen`), or
+      // never when iOS's own "Only Draw with Apple Pencil" is on. (`.default` followed only that
+      // setting, which is off unless she turns it on, so with a first-generation Pencil fingers wrote.)
+      // Fingers write in UI tests, which have no pencil.
       switch parent.settings.fingerDraws {
-      case nil: canvas.drawingPolicy = ProcessInfo.processInfo.arguments.contains("-uitest") ? .anyInput : .default
+      case nil:
+        let pen = PencilSeen.yes || UIPencilInteraction.prefersPencilOnlyDrawing
+        canvas.drawingPolicy = ProcessInfo.processInfo.arguments.contains("-uitest") || !pen ? .anyInput : .pencilOnly
       case true?: canvas.drawingPolicy = .anyInput
       case false?: canvas.drawingPolicy = .pencilOnly
       }
@@ -743,6 +786,11 @@ struct NoteCanvas: UIViewRepresentable {
       pages.bounds = CGRect(origin: .zero, size: world)
       pages.transform = CGAffineTransform(scaleX: z, y: z)
       pages.layer.position = .zero
+      if let marks = highlights {
+        marks.bounds = CGRect(origin: .zero, size: world)
+        marks.transform = CGAffineTransform(scaleX: z, y: z)
+        marks.layer.position = .zero
+      }
       if resized { pages.setNeedsDisplay() }
       layoutUnderlay()
       canvas.contentSize = CGSize(width: world.width * z, height: world.height * z)
@@ -932,11 +980,15 @@ struct NoteCanvas: UIViewRepresentable {
           used.insert(i)
           var s = stored[i].stroke
           if pk.transform != .identity {
-            // Moved or resized with the lasso: store the moved points, and draw it untransformed.
-            s = InkStroke.from(pk, pen: PenSlot(id: "", type: s.pen, color: s.color, size: s.size), id: s.id, z: s.z, tags: s.tags)
-            s.size = Float(CGFloat(s.size) * sqrt(abs(pk.transform.a * pk.transform.d - pk.transform.b * pk.transform.c)))
+            // Moved or resized with the lasso: store the moved samples, and draw it untransformed.
+            // The stored samples are carried (not read back from PencilKit, whose points are the
+            // drawn ones, filled in by InkModel), so moving a stroke never smooths it again.
+            let t = pk.transform
+            let locked = s.locked
+            s = s.transformed(Affine(a: Float(t.a), b: Float(t.b), c: Float(t.c), d: Float(t.d), tx: Float(t.tx), ty: Float(t.ty)))
+            s.locked = locked
             changed.append(s)
-            let fresh = s.pkStroke(mask: mask(for: s))
+            let fresh = canvasStroke(s)
             rebuilt.append(fresh)
             next.append((StrokeKey(fresh), s))
             needsRebuild = true
@@ -1012,6 +1064,8 @@ struct NoteCanvas: UIViewRepresentable {
         }
       }
       restack()
+      // PencilKit's own undo changes its drawing without it being set from here.
+      refreshHighlights()
     }
 
     /// Whether two forms of one stroke (same key) are drawn the same: both kept to a page or not,
@@ -1073,7 +1127,7 @@ struct NoteCanvas: UIViewRepresentable {
         let h = w / Thumbnail.cardAspect
         region = CGRect(x: around.midX - w / 2, y: around.midY - h / 2, width: w, height: h)
       }
-      Thumbnail.save(id: parent.notebook.id, region: region, pages: pages.pages, drawing: canvas.drawing, db: parent.db)
+      Thumbnail.save(id: parent.notebook.id, region: region, pages: pages.pages, drawing: visibleDrawing(canvas.drawing), db: parent.db)
     }
   }
 }

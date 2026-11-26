@@ -172,7 +172,14 @@ final class ScreenshotTests: ShotCase {
     let pen = app.descendants(matching: .any)["pen-p1"].firstMatch
     XCTAssertTrue(title.waitForExistence(timeout: 3), "the name shows")
     print("name row: name \(title.frame) pen \(pen.frame) window \(app.windows.firstMatch.frame)")
-    XCTAssertTrue(title.frame.midY < pen.frame.maxY && title.frame.minX > pen.frame.maxX, "the name sits on the toolbar row")
+    // One row when the name gets the room it has on the owner's Android tablet; else the name goes
+    // on the line above the tools (RowWidths). Either way it's readable, never just "…".
+    if title.frame.maxY <= pen.frame.minY {
+      XCTAssertGreaterThan(app.windows.firstMatch.frame.width, 0, "two rows: the name is on the line above the tools")
+    } else {
+      XCTAssertTrue(title.frame.midY < pen.frame.maxY && title.frame.minX > pen.frame.maxX, "the name sits on the toolbar row")
+    }
+    XCTAssertGreaterThan(title.frame.width, 90, "the name has room to show, not only \"…\"")
     // With another tool the pen's colours leave the toolbar, and the name gets their room.
     tapTool(app, "tool-lasso")
     settle()

@@ -97,9 +97,12 @@ struct NotebookView: View {
   @AppStorage("inkBetweenPages") private var between = false
   @AppStorage("hideNavBar") private var fullScreen = false
 
+  /// How wide the top row's parts are, to tell whether they fit on one line (see `oneRow`).
+  @State private var rowWidths = RowWidths()
+
   var body: some View {
     GeometryReader { geo in
-      let narrow = geo.size.width < 900
+      let narrow = !rowWidths.fitOneRow(geo.size.width)
       ZStack(alignment: .top) {
         // An endless canvas is paper all the way to the screen's edges; pages lie on the desk.
         Color(uiColor: endless ? paperSpec.paperColor : dark ? UIColor(argb: Int32(bitPattern: 0xFF0E_0C13)) : UIColor(c.desk)).ignoresSafeArea()
@@ -178,17 +181,17 @@ struct NotebookView: View {
             }
           } else if narrow {
             HStack(spacing: 10) {
-              if !hidden { leftBars.bar("title", 0, bars) }
+              if !hidden { leftBars.bar("title", 0, bars).measured { rowWidths.title = $0 } }
               Spacer(minLength: 10)
               if !hidden { rightBars(showName: !PhoneWriting.onPhone).bar("undo", 2, bars) }
             }
-            if !hidden { mainToolbar(showColors: !PhoneWriting.onPhone, toolsRoom: geo.size.width - 44).bar("tools", 1, bars) }
+            if !hidden { mainToolbar(showColors: !PhoneWriting.onPhone, toolsRoom: geo.size.width - 44).bar("tools", 1, bars).measured { rowWidths.tools = $0 } }
           } else {
             // One row, as on Android: the name and the eye and ⋯ share the corner, and the name
             // shortens when the tools need the room (see TopBarLayout).
             TopBarLayout {
-              if !hidden { leftBars.bar("title", 0, bars).topBarRole(.title) }
-              if !hidden { mainToolbar(showColors: true).bar("tools", 1, bars).topBarRole(.tools).zIndex(1) }
+              if !hidden { leftBars.bar("title", 0, bars).measured { rowWidths.title = $0 }.topBarRole(.title) }
+              if !hidden { mainToolbar(showColors: true).bar("tools", 1, bars).measured { rowWidths.tools = $0 }.topBarRole(.tools).zIndex(1) }
               if !hidden { rightBars(showName: true).bar("undo", 2, bars).topBarRole(.corner) }
             }
             .frame(minHeight: 60, alignment: .top)
@@ -223,6 +226,11 @@ struct NotebookView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
+        // The name as wide as it would be, measured out of sight (on one row it may be shortened).
+        .background(alignment: .topLeading) {
+          nameBar.fixedSize().hidden().allowsHitTesting(false).accessibilityHidden(true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidths.name = $0 }
+        }
         // Over the toolbars, as on Android: the box may be scrolled up under them.
         if let bar = textBar, !viewing {
           TextBarLayer(
@@ -556,15 +564,15 @@ struct NotebookView: View {
   private var leftBars: some View {
     HStack(spacing: 10) {
       FloatingBar(crown: .little) {
-        ToolIcon(system: "arrow.backward", label: L("back"), action: onBack).accessibilityIdentifier("back")
+        ToolIcon(material: .back, label: L("back"), action: onBack).accessibilityIdentifier("back")
       }
       if !PhoneWriting.onPhone || !viewing {
         QuickOpen(current: notebook.id, onOpen: onSwitch)
       }
       if !viewing {
         FloatingBar(crown: .softEdge) {
-          ToolIcon(system: "arrow.uturn.backward", label: L("undo"), enabled: canUndo) { command = .undo }.accessibilityIdentifier("undo")
-          ToolIcon(system: "arrow.uturn.forward", label: L("redo"), enabled: canRedo) { command = .redo }.accessibilityIdentifier("redo")
+          ToolIcon(material: .undo, label: L("undo"), enabled: canUndo) { command = .undo }.accessibilityIdentifier("undo")
+          ToolIcon(material: .redo, label: L("redo"), enabled: canRedo) { command = .redo }.accessibilityIdentifier("redo")
         }
       }
     }
@@ -575,7 +583,7 @@ struct NotebookView: View {
     HStack(spacing: 10) {
       if showName { nameBar }
       // Only the name gives way when the row is short (Android's `NamePill` shortens first).
-      cornerBar.fixedSize()
+      cornerBar.fixedSize().measured { rowWidths.corner = $0 }
     }
   }
 
@@ -676,7 +684,9 @@ struct FloatingBar<Content: View>: View {
 
 /// A 44 pt icon button with 14 pt corners and a 22 pt icon (Android's `ToolButton`).
 struct ToolIcon: View {
-  var system: String
+  var system: String = ""
+  /// Android's own icon (Material's), drawn 22 pt as its `ToolButton` draws it, instead of [system].
+  var material: MaterialIcon? = nil
   var label: String
   var enabled = true
   var action: () -> Void
@@ -686,8 +696,14 @@ struct ToolIcon: View {
     Button(action: action) {
       // A plain rectangle: with a rounded one, taps on the right half of the button before this one
       // came here instead (seen on iOS 27: half of Undo fired Redo).
-      Image(systemName: system).font(.system(size: 19)).foregroundStyle(enabled ? c.ink : c.inkFaint.opacity(0.5))
-        .frame(width: 44, height: 44).contentShape(Rectangle())
+      Group {
+        if let material {
+          MaterialIconView(icon: material, color: enabled ? c.ink : c.inkFaint.opacity(0.5), size: 22)
+        } else {
+          Image(systemName: system).font(.system(size: 19)).foregroundStyle(enabled ? c.ink : c.inkFaint.opacity(0.5))
+        }
+      }
+      .frame(width: 44, height: 44).contentShape(Rectangle())
     }
     .buttonStyle(PressStyle(scale: 0.9))
     .disabled(!enabled)
@@ -795,6 +811,38 @@ enum PaperCard: Equatable {
 
 /// Where each toolbar last sat on screen (Android's plain map: written while bars move, so it
 /// mustn't redraw anything).
+/// The widths of the top row's parts, and whether they fit on one line. Android puts everything on
+/// one row on a screen 900 dp wide or more, the name in the corner taking what room is left; on the
+/// owner's Android tablet (1333 dp across) that's about 190 dp, "Microeconomics Lec…". An 11-inch
+/// iPad is 140 points narrower, and the same rule left the name as "…" (Android does the same at
+/// that width: checked in the emulator, 26 Nov 2026), and on a 13-inch iPad upright there was no room
+/// for it at all. So one row is used only when it leaves the name as much room as Android's tablet
+/// does (or all it needs); otherwise the row is laid out as Android lays out an upright tablet: the
+/// title, name, eye and ⋯ on the first line and the tools on their own. Nothing changes size.
+struct RowWidths: Equatable {
+  /// Back, quick open and undo; the toolbar; the eye and ⋯; the name as wide as it would be.
+  var title: CGFloat = 230
+  var tools: CGFloat = 760
+  var corner: CGFloat = 100
+  var name: CGFloat = 0
+  /// The name's room on one row (its bar, pencil included), as on the owner's Android tablet.
+  static let nameRoom: CGFloat = 190
+  /// TopBarLayout's gap, the corner's own spacing, and the row's margins.
+  static let gaps: CGFloat = 2 * 12 + 10 + 2 * 16
+
+  func fitOneRow(_ width: CGFloat) -> Bool {
+    guard width >= 900 else { return false }
+    return title + tools + corner + min(name, Self.nameRoom) + Self.gaps <= width
+  }
+}
+
+extension View {
+  /// Reports this view's width when it changes (and isn't zero: a bar hiding keeps its last width).
+  fileprivate func measured(_ width: @escaping (CGFloat) -> Void) -> some View {
+    onGeometryChange(for: CGFloat.self) { $0.size.width } action: { w in if w > 0 { width(w) } }
+  }
+}
+
 final class BarFrames {
   var frames: [String: CGRect] = [:]
 }

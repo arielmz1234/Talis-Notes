@@ -277,7 +277,7 @@ extension NoteCanvas.Coordinator {
     let strokes = (inkBase ?? canvas.drawing).strokes
     let live = stored.enumerated().compactMap { i, entry in i < strokes.count ? (pk: strokes[i], key: entry.key, stroke: entry.stroke) : nil }
     let fresh = ink.map { s -> (pk: PKStroke, key: StrokeKey, stroke: InkStroke) in
-      let pk = s.pkStroke(mask: mask(for: s))
+      let pk = canvasStroke(s)
       return (pk, StrokeKey(pk), s)
     }
     if !fresh.isEmpty || inkBase != nil || live.contains(where: { gone.contains($0.stroke.id) }) {

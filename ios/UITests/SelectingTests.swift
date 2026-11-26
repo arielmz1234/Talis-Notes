@@ -421,6 +421,45 @@ final class SelectingTests: ShotCase {
     lasso(app)
   }
 
+  /// The highlighter picked up, carried and put down with the lasso keeps its strength the whole
+  /// time: never darker (two copies on top of each other) and never gone (the owner's video of
+  /// 25 Nov 2026: it flickered and changed its opacity when picked up, moved, or just drawn).
+  func testHighlighterKeepsItsStrengthWhenMoved() {
+    let app = openNewNotebook()
+    app.buttons["pen-p5"].firstMatch.tap()
+    settle()
+    drag(app, (0.30, 0.40), (0.62, 0.40))
+    drag(app, (0.30, 0.62), (0.62, 0.62))
+    let yellow: (Pixels.Colour) -> Bool = { $0.r > 215 && $0.g > 195 && $0.b < 205 && $0.r - $0.b > 45 }
+    /// How strongly the highlighter shows around [y] (how much blue it takes out), nil when it isn't there.
+    func strength(_ px: Pixels, near y: CGFloat) -> Int? {
+      let found = [0.40, 0.46, 0.52].compactMap { x -> Int? in
+        guard let band = px.span(x: x, rows: (y - 0.05)...(y + 0.05), yellow) else { return nil }
+        return 255 - px.colour(x: x, y: (band.lowerBound + band.upperBound) / 2).b
+      }.sorted()
+      return found.isEmpty ? nil : found[found.count / 2]
+    }
+    guard let usual = strength(Pixels(), near: 0.62) else { return XCTFail("the highlighter writes") }
+    // Just written: as strong as the one before it.
+    XCTAssertEqual(strength(Pixels(), near: 0.40) ?? -1, usual, accuracy: 25, "a stroke just written has the usual strength")
+    lasso(app)
+    drag(app, (0.25, 0.34), (0.67, 0.46))
+    XCTAssertEqual(strength(Pixels(), near: 0.40) ?? -1, usual, accuracy: 25, "picked up, it keeps its strength")
+    // Carried: shot while the drag is held at its end.
+    final class Seen: @unchecked Sendable { var shot: XCUIScreenshot? }
+    let seen = Seen()
+    DispatchQueue.global().asyncAfter(deadline: .now() + 1.4) { seen.shot = XCUIScreen.main.screenshot() }
+    at(app, 0.46, 0.40).press(forDuration: 0.1, thenDragTo: at(app, 0.46, 0.50), withVelocity: .slow, thenHoldForDuration: 1.6)
+    // Put down: looked at straight away, then once everything has settled.
+    let dropped = Pixels()
+    if let carried = seen.shot.map({ Pixels($0) }) { XCTAssertEqual(strength(carried, near: 0.50) ?? -1, usual, accuracy: 25, "carried, it keeps its strength") }
+    XCTAssertEqual(strength(dropped, near: 0.50) ?? -1, usual, accuracy: 25, "just put down, it keeps its strength")
+    settle()
+    calmShot("hl-moved")
+    XCTAssertEqual(strength(Pixels(), near: 0.50) ?? -1, usual, accuracy: 25, "put down, it keeps its strength")
+    XCTAssertNil(strength(Pixels(), near: 0.36), "nothing is left where it was")
+  }
+
   func testPicturesInTheLasso() {
     let app = openNewNotebook(["-fakePickers"])
     let window = app.windows.firstMatch.frame

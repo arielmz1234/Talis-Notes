@@ -36,7 +36,7 @@ extension NoteCanvas.Coordinator {
     let world = CGRect(area)
     let px = CGFloat(ScreenshotLasso.pixelsPerUnit(area, zoom: zoom, screenScale: Float(canvas.traitCollection.displayScale)))
     let layer = pages.pages
-    let drawing = canvas.drawing
+    let drawing = visibleDrawing(canvas.drawing)
     let theme = ColorTheme.current
     let desk = parent.settings.dark ? UIColor(argb: Int32(bitPattern: 0xFF0E_0C13)) : UIColor(canvas.traitCollection.userInterfaceStyle == .dark ? theme.dark.desk : theme.light.desk)
     let style: UIUserInterfaceStyle = parent.settings.dark ? .dark : .light

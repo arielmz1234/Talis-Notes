@@ -212,6 +212,11 @@ extension NoteCanvas.Coordinator {
       if traced, self.autoArrow(after: s, pen: pen, lifted: lifted) {
         // The clean arrow is already up, in this same frame: the hand-drawn ink goes as it comes.
         self.letGo(shown, now: true)
+      } else if Self.drawnByNotebook(s) {
+        // The highlighter is on the page already, drawn by the notebook in this same frame
+        // (HighlightInk.swift): left on, the live copy showed over it, darker, until the canvas drew.
+        if !traced { self.forgetArrowLine() }
+        self.letGo(shown, now: true)
       } else {
         if !traced { self.forgetArrowLine() }
         self.afterRender { self.letGo(shown, now: false) }

@@ -27,6 +27,49 @@ with *full*, or a `full-ci` label), since the owner tries the rest on a real iPa
 read the Android app (`import_strings`, `import_palettes`, `make_icon`, `check_shape_port`) default
 to `../`. Whoever pushes from the Mac (`idanlo`) needs write access to `Talis-Notes` now.
 
+## The owner's second round of 25 Nov 2026 (26 Nov, Mac without Xcode, with the Android emulator)
+
+Written on the Mac with only the command line tools (Xcode isn't installed): the core tests pass
+and the app type-checks for Mac Catalyst; the full UI suite runs in CI on this branch. The Android
+app was built and run in an emulator (a Pixel Tablet image, resized with `adb shell wm size` to
+each iPad's size in points) to see what Android does.
+
+- **Stroke smoothness**: Android's handwriting goes through two stages, PenSmoother (the same One
+  Euro filter) and then Ink's `SlidingWindowModel(20 ms, 360 Hz)` (`Brushes.WRITING_MODEL`): the
+  path averaged over a sliding 20 ms window and filled in at 360 points a second. The iPad only had
+  the first. `TaliCore/InkModel.swift` is the second, applied when a stroke is drawn
+  (`InkStroke.drawnPoints`, used by `pkStroke`, the highlighter layer and the PDF), never to what's
+  stored. Sparse samples (shapes, a sample every 37 ms) are left as they are, as Android keeps the
+  default model for shapes. PenSmoother now also eases pressure (Android's 18 ms) and no longer
+  pulls the stroke's last samples back onto the pen (Android doesn't; it brought the jitter back at
+  the end). A lasso move now carries the stored samples (`InkStroke.transformed`) instead of
+  reading PencilKit's points back, which are the drawn ones.
+- **The highlighter still flickered** (video v4: gone mid-drag, darker after drawing). PencilKit
+  never says exactly when it has drawn, so any hand-over between it and an overlay showed the
+  see-through ink twice or not at all. The highlighter is now drawn by the notebook
+  (`HighlightInk.swift`: a vector layer over the page, under PencilKit's writing), changed in the
+  same frame as everything else; PencilKit keeps the strokes hidden (the buried-ink mask) so the
+  lasso, eraser and undo are unchanged. Pictures of the page (thumbnails, overview, screenshot
+  lasso, the fill's walls) use `visibleDrawing`. New test: `SelectingTests.testHighlighterKeepsItsStrengthWhenMoved`.
+- **The name showed as "…"** on the one-row toolbar. In the emulator, Android does the same at an
+  11-inch iPad's width (1194 points): only the owner's tablet (1333 dp) leaves the name ~190 dp,
+  "Microeconomics Lec…"; at 13 inches upright Android shows no name at all. So the row is one line
+  only when the name gets that much room (or all it needs), else two lines as Android lays out an
+  upright tablet (`RowWidths` in NotebookView.swift). Nothing changes size.
+- **Endless zoom didn't slow down**: the scroll view turns its own pinch back on when its zoom limits
+  are set, and that pinch zooms straight past the resistance; `NoteCanvasView` now refuses it on an
+  endless canvas (`ownPinchAllowed`). What's written is measured as Android does (with the pen's width).
+- **Auto finger drawing** with an older Apple Pencil: Android's Auto is "no stylus on this device".
+  The iPad can't list a Pencil, so a Pencil touch is remembered (`PencilSeen`) and from then on Auto
+  means Pencil only.
+- **The iOS edit menu** (Select All / Insert Space) that came up on a held touch is removed from the
+  canvas (`quietSystemMenus`).
+- **Library**: the select bar keeps one width for Select all / Select none (it wrapped); a duplicate
+  copies the preview; a hold that picks a notebook up isn't also taken as a tap (`HoldTracker`).
+- **Back, undo, redo** use Android's Material icons.
+- **Bring to front / Send to back on pictures**: not reproduced without a simulator; the full UI
+  suite's `testPicturesInTheLasso` checks it with pixels.
+
 ## The owner's videos of 25 Nov 2026, evening (Mac without Xcode)
 
 Written on a Mac with only the command line tools: the core tests pass and the whole app

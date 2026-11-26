@@ -141,7 +141,7 @@ extension NoteCanvas.Coordinator {
 
   /// Whether the overlay carries anything the page draws (shapes, text, pictures, fills, locked
   /// writing), not only writing, which PencilKit draws.
-  var carriesPageItems: Bool { lasso.shapeLayer.sublayers?.contains { $0.name != Self.carriedInk } ?? false }
+  var carriesPageItems: Bool { lasso.shapeLayer.sublayers?.contains { $0.name != Self.carriedInk && $0.name != Self.carriedMarks } ?? false }
 
   private func trace(_ s: ShapeRow, on l: CAShapeLayer, zoom z: CGFloat) {
     let path = CGMutablePath()
@@ -189,12 +189,11 @@ extension NoteCanvas.Coordinator {
   func dropShapes(pageShows: Bool = false) {
     lasso.overlayTicket += 1
     let ticket = lasso.overlayTicket
-    if pageShows {
-      CATransaction.begin()
-      CATransaction.setDisableActions(true)
-      for l in lasso.shapeLayer.sublayers ?? [] where l.name != Self.carriedInk { l.removeFromSuperlayer() }
-      CATransaction.commit()
-    }
+    // The carried highlighter is already back on the page, in this frame (HighlightInk.swift).
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    for l in lasso.shapeLayer.sublayers ?? [] where l.name == Self.carriedMarks || (pageShows && l.name != Self.carriedInk) { l.removeFromSuperlayer() }
+    CATransaction.commit()
     var rendered = false, waited = false
     let clear = { [weak self] in
       guard let self, rendered, waited, self.lasso.overlayTicket == ticket else { return }
@@ -211,7 +210,7 @@ extension NoteCanvas.Coordinator {
       if let self, self.lasso.overlayTicket == ticket {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for l in self.lasso.shapeLayer.sublayers ?? [] where l.name == Self.carriedInk { l.removeFromSuperlayer() }
+        for l in self.lasso.shapeLayer.sublayers ?? [] where l.name == Self.carriedInk || l.name == Self.carriedMarks { l.removeFromSuperlayer() }
         CATransaction.commit()
       }
       clear()
