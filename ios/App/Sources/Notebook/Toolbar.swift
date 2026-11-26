@@ -124,6 +124,8 @@ struct MainToolbar: View {
   var toolsRoom: CGFloat = .infinity
   /// On dark paper the pens and their colours show as they write there (Android's `onDarkPaper`).
   var darkPaper = false
+  /// Reports how wide the tools strip is shown, so the row can tell how much room it takes.
+  var onStripWidth: (CGFloat) -> Void = { _ in }
   @State private var toolsOpen = false
   @Environment(\.tali) private var c
   @Namespace private var toolGlide
@@ -245,7 +247,9 @@ struct MainToolbar: View {
         .accessibilityIdentifier("tools-button")
         .padding(.trailing, 2)
       } else {
-        HStack(spacing: 0) { ForEach(toolItems) { $0.view } }.padding(.trailing, 2)
+        // In pages with an arrow when the row is short (Android's ToolStrip), all in a row otherwise.
+        ToolStrip(items: toolItems, selected: toolKey, room: toolsRoom)
+          .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { onStripWidth($0) }
       }
     }
     .padding(.horizontal, 6).padding(.vertical, 4)

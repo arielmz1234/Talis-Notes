@@ -102,13 +102,16 @@ struct NotebookView: View {
 
   var body: some View {
     GeometryReader { geo in
-      let narrow = !rowWidths.fitOneRow(geo.size.width)
+      // The bars are laid out at the notebook's own scale (NotebookScale): w × h of its units.
+      let k = NotebookScale.factor
+      let w = geo.size.width / k, h = geo.size.height / k
+      let narrow = NotebookScale.twoRows(width: geo.size.width)
       ZStack(alignment: .top) {
         // An endless canvas is paper all the way to the screen's edges; pages lie on the desk.
         Color(uiColor: endless ? paperSpec.paperColor : dark ? UIColor(argb: Int32(bitPattern: 0xFF0E_0C13)) : UIColor(c.desk)).ignoresSafeArea()
         NoteCanvas(
           notebook: canvasNotebook, db: lib.db, tool: tool, pens: pens, viewOnly: viewing,
-          topClearance: narrow ? 164 : 104,
+          topClearance: (narrow ? 164 : 104) * k,
           settings: CanvasSettings(
             paper: paperSpec, fingerDraws: fingerDraws, smartUndo: smartUndo, between: between, pageGuides: PaperSettings.shared.pageGuides),
           bridge: bridge,
@@ -185,13 +188,14 @@ struct NotebookView: View {
               Spacer(minLength: 10)
               if !hidden { rightBars(showName: !PhoneWriting.onPhone).bar("undo", 2, bars) }
             }
-            if !hidden { mainToolbar(showColors: !PhoneWriting.onPhone, toolsRoom: geo.size.width - 44).bar("tools", 1, bars).measured { rowWidths.tools = $0 } }
+            if !hidden { mainToolbar(showColors: !PhoneWriting.onPhone, toolsRoom: PhoneWriting.onPhone ? w - 44 : rowWidths.stripRoomAlone(w)).bar("tools", 1, bars).measured { rowWidths.tools = $0 } }
           } else {
             // One row, as on Android: the name and the eye and ⋯ share the corner, and the name
             // shortens when the tools need the room (see TopBarLayout).
             TopBarLayout {
               if !hidden { leftBars.bar("title", 0, bars).measured { rowWidths.title = $0 }.topBarRole(.title) }
-              if !hidden { mainToolbar(showColors: true).bar("tools", 1, bars).measured { rowWidths.tools = $0 }.topBarRole(.tools).zIndex(1) }
+              // The tools fold into pages (the arrow) rather than leave the name less than its room.
+              if !hidden { mainToolbar(showColors: true, toolsRoom: rowWidths.stripRoom(w)).bar("tools", 1, bars).measured { rowWidths.tools = $0 }.topBarRole(.tools).zIndex(1) }
               if !hidden { rightBars(showName: true).bar("undo", 2, bars).topBarRole(.corner) }
             }
             .frame(minHeight: 60, alignment: .top)
@@ -206,7 +210,7 @@ struct NotebookView: View {
                 EraserPanel(precise: $eraserPrecise, size: Binding(get: { Float(eraserSize) }, set: { eraserSize = Double($0) }), affects: $eraserAffects,
                   scribbleDelete: $scribbleDelete)
               case .shapes:
-                ShapesPanel(picker: shapePicker, pen: shapePen, compact: geo.size.width < 660) {
+                ShapesPanel(picker: shapePicker, pen: shapePen, compact: w < 660) {
                   withAnimation(Ease.outStrong(duration: 0.24)) { browsingShapes = true }
                 }
               case .fill:
@@ -215,7 +219,7 @@ struct NotebookView: View {
                 LassoPanel()
               }
             }
-            .environment(\.panelRoom, geo.size.height - (narrow ? 292 : 196))
+            .environment(\.panelRoom, h - (narrow ? 292 : 196))
             .transition(
               .asymmetric(
                 insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .top)).combined(with: .offset(y: -6)),
@@ -231,10 +235,14 @@ struct NotebookView: View {
           nameBar.fixedSize().hidden().allowsHitTesting(false).accessibilityHidden(true)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidths.name = $0 }
         }
+        // Drawn at the notebook's scale: as wide as the screen, everything in it k times its size.
+        .frame(width: w)
+        .scaleEffect(k, anchor: .top)
+        .frame(width: geo.size.width)
         // Over the toolbars, as on Android: the box may be scrolled up under them.
         if let bar = textBar, !viewing {
           TextBarLayer(
-            info: bar, topLimit: (narrow ? 164 : 104) - 10,
+            info: bar, topLimit: (narrow ? 164 : 104) * k - 10,
             onSize: { bridge.coordinator?.resizeText($0) }, onColour: { bridge.coordinator?.recolourText($0) },
             onDelete: { bridge.coordinator?.deleteText() }, onDone: { bridge.coordinator?.finishText() })
         }
@@ -525,7 +533,7 @@ struct NotebookView: View {
       pens: $pens, tool: $tool, panel: $panel, shape: shapeSource, lasso: lassoShot ? .screenshot : lassoFree ? .freeForm : .lasso,
       onKeyboard: { panel = nil; command = .newText }, onInsert: { panel = nil; inserting = $0 }, memos: memos,
       onVoice: { panel = nil; memos.mic(hint: show) }, showColors: showColors, compactTools: PhoneWriting.onPhone,
-      toolsRoom: PhoneWriting.narrowerForTests ?? toolsRoom, darkPaper: dark)
+      toolsRoom: PhoneWriting.narrowerForTests ?? toolsRoom, darkPaper: dark, onStripWidth: { rowWidths.strip = $0 })
   }
 
   private func saveShape() {
@@ -811,29 +819,56 @@ enum PaperCard: Equatable {
 
 /// Where each toolbar last sat on screen (Android's plain map: written while bars move, so it
 /// mustn't redraw anything).
-/// The widths of the top row's parts, and whether they fit on one line. Android puts everything on
-/// one row on a screen 900 dp wide or more, the name in the corner taking what room is left; on the
-/// owner's Android tablet (1333 dp across) that's about 190 dp, "Microeconomics Lec…". An 11-inch
-/// iPad is 140 points narrower, and the same rule left the name as "…" (Android does the same at
-/// that width: checked in the emulator, 26 Nov 2026), and on a 13-inch iPad upright there was no room
-/// for it at all. So one row is used only when it leaves the name as much room as Android's tablet
-/// does (or all it needs); otherwise the row is laid out as Android lays out an upright tablet: the
-/// title, name, eye and ⋯ on the first line and the tools on their own. Nothing changes size.
+/// The notebook's bars at the size they are on the owner's Android tablet. Its screen (a Galaxy
+/// Tab S6 Lite: 1333 dp across, about 149 dp an inch) is as wide as an 11-inch iPad's (1180 points,
+/// 132 an inch: both about 22.6 cm), but an iPad point is 13% bigger than a dp there, so the same
+/// bars at the same numbers took 13% more of the screen, and the name was left only "…" (in the
+/// emulator Android does the same at 1180 dp). On an iPad the bars are drawn at 132/149 of their
+/// size, so they're as big as on the tablet and the row has the room it has there. A phone keeps
+/// its size. Fixed for the device: nothing is resized for the name or the tools.
+@MainActor
+enum NotebookScale {
+  static let factor: CGFloat = {
+    guard UIDevice.current.userInterfaceIdiom == .pad else { return 1 }
+    // An iPad mini's points are smaller (163 an inch): its bars need less taking in.
+    let native = max(UIScreen.main.nativeBounds.width, UIScreen.main.nativeBounds.height)
+    return native == 2266 ? 0.95 : 132.0 / 149.0
+  }()
+
+  /// One row from this many units across (any iPad held sideways, a 13-inch one upright; an
+  /// 11-inch one upright has 925 and lays the row out as Android's upright tablet does, in two
+  /// lines). Decided by the screen alone, so the bars' height never changes as she works.
+  static let oneRowFrom: CGFloat = 1140
+
+  static func twoRows(width: CGFloat) -> Bool { width / factor < oneRowFrom }
+}
+
+/// The widths of the one-row toolbar's parts (in the notebook's units), to give the name its room.
+/// Android's rule, the name taking what the tools leave, gave "…" on a narrower screen; here the
+/// name keeps at least what it shows on the owner's tablet ("Microeconomics Lec…") and the tools
+/// fold into pages with the arrow (Android's ToolStrip) when the row is short. Nothing changes size.
 struct RowWidths: Equatable {
-  /// Back, quick open and undo; the toolbar; the eye and ⋯; the name as wide as it would be.
+  /// Back, quick open and undo; the whole toolbar; its tools strip as shown; the eye and ⋯; the
+  /// name as wide as it would be.
   var title: CGFloat = 230
   var tools: CGFloat = 760
+  var strip: CGFloat = 0
   var corner: CGFloat = 100
   var name: CGFloat = 0
-  /// The name's room on one row (its bar, pencil included), as on the owner's Android tablet.
-  static let nameRoom: CGFloat = 190
-  /// TopBarLayout's gap, the corner's own spacing, and the row's margins.
+  /// The name's bar (pencil included) is never shortened below this: about 130 of text,
+  /// "Microeconomics L…" (Android's bar holds at most 200 of it).
+  static let nameRoom: CGFloat = 170
+  /// TopBarLayout's two gaps, the corner's own spacing, and the row's margins.
   static let gaps: CGFloat = 2 * 12 + 10 + 2 * 16
 
-  func fitOneRow(_ width: CGFloat) -> Bool {
-    guard width >= 900 else { return false }
-    return title + tools + corner + min(name, Self.nameRoom) + Self.gaps <= width
+  /// How wide the tools strip may be on a row [width] across.
+  func stripRoom(_ width: CGFloat) -> CGFloat {
+    let fixed = max(tools - strip, 0)
+    return max(width - Self.gaps - title - corner - min(name, Self.nameRoom) - fixed, 0)
   }
+
+  /// How wide the tools strip may be when the toolbar has a line of its own.
+  func stripRoomAlone(_ width: CGFloat) -> CGFloat { max(width - 2 * 16 - max(tools - strip, 0), 0) }
 }
 
 extension View {

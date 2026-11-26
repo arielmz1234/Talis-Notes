@@ -51,11 +51,17 @@ each iPad's size in points) to see what Android does.
   same frame as everything else; PencilKit keeps the strokes hidden (the buried-ink mask) so the
   lasso, eraser and undo are unchanged. Pictures of the page (thumbnails, overview, screenshot
   lasso, the fill's walls) use `visibleDrawing`. New test: `SelectingTests.testHighlighterKeepsItsStrengthWhenMoved`.
-- **The name showed as "…"** on the one-row toolbar. In the emulator, Android does the same at an
-  11-inch iPad's width (1194 points): only the owner's tablet (1333 dp) leaves the name ~190 dp,
-  "Microeconomics Lec…"; at 13 inches upright Android shows no name at all. So the row is one line
-  only when the name gets that much room (or all it needs), else two lines as Android lays out an
-  upright tablet (`RowWidths` in NotebookView.swift). Nothing changes size.
+- **The name showed as "…"** on the one-row toolbar, and the two-line fallback tried next made
+  the bars' height change. The owner's tablet (Tab S6 Lite) is 1333 dp across at ~149 dp an inch;
+  an 11-inch iPad is 1180 points at 132 an inch: the same width (~22.6 cm), but a point is 13%
+  bigger than a dp there, so the same bars took 13% more of the screen (the emulator showed Android
+  giving "…" too at 1180 dp). Now on an iPad the notebook's bars and panels are drawn at 132/149 of
+  their size (`NotebookScale`, 0.95 on an iPad mini), as big as on his tablet. Any iPad held
+  sideways (and a 13-inch upright) has one line; an 11-inch upright uses Android's upright layout.
+  Decided by the screen only, so the height never changes. The name keeps at least 170 units
+  ("Microeconomics L…", Android's bar holds at most 200 of text): when the row is short the tools
+  fold into pages with the arrow (Android's ToolStrip) instead (`RowWidths.stripRoom`).
+  `ScreenshotTests.testNotebookNameOnTheToolbarRow` checks one line and a long name's start.
 - **Endless zoom didn't slow down**: the scroll view turns its own pinch back on when its zoom limits
   are set, and that pinch zooms straight past the resistance; `NoteCanvasView` now refuses it on an
   endless canvas (`ownPinchAllowed`). What's written is measured as Android does (with the pen's width).
