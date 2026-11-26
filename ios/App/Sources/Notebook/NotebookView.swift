@@ -236,9 +236,6 @@ struct NotebookView: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidths.name = $0 }
         }
         // Drawn at the notebook's scale: as wide as the screen, everything in it k times its size.
-        .frame(width: w)
-        .scaleEffect(k, anchor: .top)
-        .frame(width: geo.size.width)
         // Over the toolbars, as on Android: the box may be scrolled up under them.
         if let bar = textBar, !viewing {
           TextBarLayer(
