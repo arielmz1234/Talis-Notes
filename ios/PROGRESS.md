@@ -62,6 +62,9 @@ each iPad's size in points) to see what Android does.
   ("Microeconomics L…", Android's bar holds at most 200 of text): when the row is short the tools
   fold into pages with the arrow (Android's ToolStrip) instead (`RowWidths.stripRoom`).
   `ScreenshotTests.testNotebookNameOnTheToolbarRow` checks one line and a long name's start.
+  The scaling wrapper is applied only on an iPad (`NotebookScaled`): on a phone the wrapper alone,
+  at scale 1, stopped a lasso tap on typed text from picking it up (`PhoneTests.testMemosAndText`
+  failed with it and passed without it, run in CI on the same machine image).
 - **Endless zoom didn't slow down**: the scroll view turns its own pinch back on when its zoom limits
   are set, and that pinch zooms straight past the resistance; `NoteCanvasView` now refuses it on an
   endless canvas (`ownPinchAllowed`). What's written is measured as Android does (with the pen's width).

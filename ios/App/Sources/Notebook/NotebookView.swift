@@ -236,9 +236,7 @@ struct NotebookView: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidths.name = $0 }
         }
         // Drawn at the notebook's scale: as wide as the screen, everything in it k times its size.
-        .frame(width: w)
-        .scaleEffect(k, anchor: .top)
-        .frame(width: geo.size.width)
+        .modifier(NotebookScaled(scale: k, width: geo.size.width))
         // Over the toolbars, as on Android: the box may be scrolled up under them.
         if let bar = textBar, !viewing {
           TextBarLayer(
@@ -841,6 +839,26 @@ enum NotebookScale {
   static let oneRowFrom: CGFloat = 1140
 
   static func twoRows(width: CGFloat) -> Bool { width / factor < oneRowFrom }
+}
+
+/// Lays the bars out [scale] times wider than the screen and draws them [scale] times their size, so
+/// they fill it. Only where there's a scale (an iPad): on a phone the wrapper alone stopped a tap on
+/// typed text with the lasso from picking it up (PhoneTests.testMemosAndText, 26 Nov 2026), so the
+/// phone's bars are laid out exactly as before.
+struct NotebookScaled: ViewModifier {
+  let scale: CGFloat
+  let width: CGFloat
+
+  func body(content: Content) -> some View {
+    if scale == 1 {
+      content
+    } else {
+      content
+        .frame(width: width / scale)
+        .scaleEffect(scale, anchor: .top)
+        .frame(width: width)
+    }
+  }
 }
 
 /// The widths of the one-row toolbar's parts (in the notebook's units), to give the name its room.
