@@ -108,7 +108,7 @@ Requirements:
 | Folder | What's there |
 | --- | --- |
 | `canvas/` | `NoteCanvasView` (input, tools, selection, fill), `TileCache` (GPU display-list tiles), `Camera`, `Document` (items and undo), `PaperRenderer`, `ItemRenderer`, `Pages` (portrait/landscape A4 layout), `AreaFill` (flood fill of hand-drawn areas) |
-| `ink/` | Brushes and helpers that build strokes from geometry |
+| `ink/` | Brushes and helpers that build strokes from geometry; `PackedMeshFix` corrects Ink 1.0.0's finished-stroke shader (strokes torn or cut off on some tablets' chips) |
 | `geometry/` | Points and affine maths, `ShapeRecognizer` (hold-to-shape), `ShapeMatcher` (her own shapes), `Lasso` (what a loop touches), `Snap` (shapes locking onto each other) |
 | `model/` | Canvas items, shape geometry, the engineering shapes and `CustomShape` |
 | `data/` | Plain SQLite (`NotesDb`), `NotesRepository` (single writer thread, trash, merge-restore, PDF import), `ImageStore` (lazy, memory-capped pictures), settings |

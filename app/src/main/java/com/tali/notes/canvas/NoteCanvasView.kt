@@ -617,7 +617,7 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
     val d = doc
     if (d != null && selection.isNotEmpty()) {
       val live = selection.mapNotNull { d[it.id] }
-      if (live.size != selection.size) setSelection(live) else if (change.tidy) selection = live
+      if (live.size != selection.size) setSelection(live)
     }
     if (activeShapeId != null && d?.get(activeShapeId!!) == null) activeShapeId = null
     invalidate()
@@ -1096,9 +1096,9 @@ class NoteCanvasView(context: Context, private val host: CanvasHost) : FrameLayo
    * [s] built again from its own inputs. The stroke Ink hands over was built bit by bit while it was
    * written and its outline can come out a little different from the same inputs built at once
    * (seen on the emulator: 148 outline points against 150), which is what a move, an undo or opening
-   * the notebook again draws. On Tali's tablet that difference was a flat-cut start or a small gap
-   * mid-stroke that only went away when the stroke was moved. Kept strokes are built at once, so
-   * what she sees is what's stored.
+   * the notebook again draws. Kept strokes are built at once, every way they're made (here, from
+   * recorded inputs, moved, erased in pieces), so the stroke, and the bounds saved with it, are
+   * exactly what opening the notebook builds again.
    */
   private fun rebuilt(s: Stroke): Stroke = runCatching { Stroke(s.brush, s.inputs) }.getOrDefault(s)
 

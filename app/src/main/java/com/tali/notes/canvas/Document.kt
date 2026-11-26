@@ -5,12 +5,8 @@ import com.tali.notes.model.AudioItem
 import com.tali.notes.model.CanvasItem
 import java.util.UUID
 
-/**
- * One undoable edit: items removed and items added (a move or edit is both). A [tidy] change only
- * corrects how items are stored (the same items, nothing she did): it isn't undone, and the
- * notebook doesn't count as edited.
- */
-class Change(val removed: List<CanvasItem>, val added: List<CanvasItem>, val tidy: Boolean = false) {
+/** One undoable edit: items removed and items added (a move or edit is both). */
+class Change(val removed: List<CanvasItem>, val added: List<CanvasItem>) {
   fun inverse() = Change(added, removed)
 
   val isEmpty: Boolean
@@ -66,13 +62,6 @@ class Document(initial: List<CanvasItem>) {
     if (undoStack.size > 200) undoStack.removeFirst()
     redoStack.clear()
     notifyHistory()
-  }
-
-  /** Puts [items] in place of the items with their ids, as a [Change.tidy] change (not undoable). */
-  fun tidy(items: List<CanvasItem>) {
-    val old = items.mapNotNull { this.items[it.id] }
-    if (items.isEmpty() || old.size != items.size) return
-    applyRaw(Change(old, items, tidy = true))
   }
 
   fun undo() {

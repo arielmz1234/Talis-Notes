@@ -71,28 +71,11 @@ private constructor(
 
   companion object {
     fun deferred(id: String, z: Long, pen: PenType, bounds: Rect, color: Int, locked: Boolean = false, build: () -> Stroke) = InkItem(id, z, pen, lazy(build), bounds, color, locked)
-
-    /** Below a hundredth of a unit (far under a pixel) bounds count as holding the stroke. */
-    private const val BOUNDS_SLACK = 0.01f
   }
 
   override fun transformed(m: Affine, newId: String, newZ: Long) = InkItem(newId, newZ, pen, StrokeFactory.transform(stroke, m))
 
   override fun withZ(newZ: Long) = InkItem(id, newZ, pen, built, bounds, knownColor, locked)
-
-  /**
-   * This stroke (built now if it wasn't) with bounds that hold all of it, or null when they already do.
-   * Bounds saved before version 1.0.28 came from Ink's stroke as it was written, whose outline can
-   * fall a little short of the same stroke built again from its points (what's drawn after
-   * reopening): the canvas tiles beyond the saved bounds left that bit out, slicing a stroke's end
-   * flat until it was moved.
-   */
-  fun withTrueBounds(): InkItem? {
-    val real = StrokeFactory.bounds(stroke)
-    val b = bounds
-    if (real.left >= b.left - BOUNDS_SLACK && real.top >= b.top - BOUNDS_SLACK && real.right <= b.right + BOUNDS_SLACK && real.bottom <= b.bottom + BOUNDS_SLACK) return null
-    return InkItem(id, z, pen, built, real.union(b), knownColor, locked)
-  }
 
   override fun withLocked(on: Boolean) = InkItem(id, z, pen, built, bounds, knownColor, on)
 
