@@ -21,12 +21,22 @@ struct PenSmootherTests {
     #expect(wobble(Array(smooth.dropLast(8))) < wobble(raw) * 0.5)
   }
 
-  @Test func itStartsAndEndsWhereThePenDid() {
+  @Test func itStartsWhereThePenDidAndKeepsEverySample() {
+    // As Android's: the end is filtered like the rest (no pulling back onto the pen's jitter).
     let raw = shaky(speed: 300)
     let smooth = PenSmoother.smooth(raw, zoom: 1.5)
     #expect(smooth.first == raw.first)
-    #expect(smooth.last?.x == raw.last?.x && smooth.last?.y == raw.last?.y)
     #expect(smooth.count == raw.count)
+    #expect(abs((smooth.last?.x ?? 0) - (raw.last?.x ?? 0)) < 6)
+  }
+
+  @Test func aJumpInPressureBecomesAShortTaper() {
+    // Android's PRESSURE_TAU_MS: a step from 0.3 to 0.7 is eased in over a few samples.
+    let raw = (0..<40).map { i in InkInput(x: Float(i) * 3, y: 0, t: Float(i) / 240, pressure: i < 20 ? 0.3 : 0.7) }
+    let smooth = PenSmoother.smooth(raw, zoom: 1)
+    let p = smooth.map { $0.pressure ?? 0 }
+    #expect(p[20] > 0.3 && p[20] < 0.6)
+    #expect(p[39] > 0.69)
   }
 
   @Test func fastWritingKeepsUp() {
