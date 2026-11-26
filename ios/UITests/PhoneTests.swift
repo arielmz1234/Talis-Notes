@@ -315,8 +315,7 @@ final class PhoneTests: ShotCase {
     stop(app, "ph-f4-typing")
     let box = app.textViews["text-editor"].firstMatch.frame
     tool(app, "tool-lasso")
-    // Found where it's drawn: the page may scroll back as the keyboard goes.
-    app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: box.minX + 30, dy: textLine(app, near: box.midY, from: box.minX, to: box.minX + 200))).press(forDuration: 0.05)
+    app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: box.minX + 30, dy: box.midY)).press(forDuration: 0.05)
     settle()
     XCTAssertTrue(app.buttons["selection-delete"].waitForExistence(timeout: 3), "the text is picked up")
     stop(app, "ph-f5-text-picked")
