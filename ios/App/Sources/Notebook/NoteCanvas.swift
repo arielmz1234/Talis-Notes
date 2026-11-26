@@ -790,6 +790,7 @@ struct NoteCanvas: UIViewRepresentable {
         marks.bounds = CGRect(origin: .zero, size: world)
         marks.transform = CGAffineTransform(scaleX: z, y: z)
         marks.layer.position = .zero
+        marks.setZoom(z, screen: canvas.traitCollection.displayScale)
       }
       if resized { pages.setNeedsDisplay() }
       layoutUnderlay()

@@ -17,6 +17,10 @@ final class HighlightView: UIView {
     var layer: CAShapeLayer
   }
   private var entries: [String: Entry] = [:]
+  /// Pixels per world unit the shapes are drawn at. A shape layer is drawn at its own scale and then
+  /// magnified with the page, so it's drawn again, sharper, as the zoom grows (in steps, so a pinch
+  /// doesn't redraw it every frame; capped, as a long stroke drawn very finely takes a lot of memory).
+  private var drawnAt: CGFloat = 2
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -44,6 +48,18 @@ final class HighlightView: UIView {
     return (dark ? PKInkingTool.convertColor(c, from: .light, to: .dark) : c).cgColor
   }
 
+  /// The canvas is at [zoom] on a screen of [screen] pixels per point: the shapes are drawn sharp for it.
+  func setZoom(_ zoom: CGFloat, screen: CGFloat) {
+    let wanted = min(screen * max(zoom, 0.25), 12)
+    let step = pow(2, (log2(wanted) * 2).rounded(.up) / 2)
+    guard step != drawnAt else { return }
+    drawnAt = step
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    for e in entries.values { e.layer.contentsScale = step }
+    CATransaction.commit()
+  }
+
   /// Shows [strokes], bottom first, changing only what changed (in this frame, with no animation).
   func show(_ strokes: [InkStroke], dark: Bool, mask: (InkStroke) -> UIBezierPath?) {
     CATransaction.begin()
@@ -64,7 +80,7 @@ final class HighlightView: UIView {
         let l = entries[key]?.layer ?? CAShapeLayer()
         l.path = Self.outline(s, mask: mask(s))
         l.fillColor = Self.colour(s, dark: dark)
-        l.contentsScale = window?.screen.scale ?? traitCollection.displayScale
+        l.contentsScale = drawnAt
         e = Entry(stroke: s, dark: dark, layer: l)
       }
       e.stroke = s
