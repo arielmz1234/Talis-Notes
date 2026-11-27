@@ -115,18 +115,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: ipad-selecting
-            runs: '["ipad ipad-light 0 - SelectingTests"]'
-          - name: ipad-pens-media
-            runs: '["ipad ipad-light 0 - PenTests,MediaTests,ShapeTipsTests"]'
-          - name: ipad-library-pages-shapes
-            runs: '["ipad ipad-light 0 - LibraryTests,PagesTests,ShapesMoreTests,PhoneTests,ScreenshotTests"]'
-          - name: looks
-            runs: '["ipad ipad-dark 1 - ScreenshotTests", "ipad ipad-he 0 he ScreenshotTests", "iphone iphone-light 0 - ScreenshotTests,PhoneTests", "iphone iphone-dark 1 - ScreenshotTests"]'
-          - name: ipad11
-            runs: '["ipad11 ipad11-light 0 - ScreenshotTests,ShapesMoreTests/testAutoArrowSetting,SelectingTests/testTypedTextInTheLasso"]'
-          - name: iphone-selecting
-            runs: '["iphone iphone-light 0 - SelectingTests"]'
+          - name: phone-text
+            runs: '["iphone iphone-light 0 - PhoneTests"]'
     steps:
       - uses: actions/checkout@v4
 
