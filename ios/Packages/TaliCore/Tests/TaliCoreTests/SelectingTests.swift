@@ -159,6 +159,30 @@ struct ArrangeTests {
     let forward = Arrange.Item(id: "p", z: 0, picture: true, front: true)
     #expect(try #require(Arrange.plan([forward], others: [ink("a", 1)], toFront: false, top: 1))[0].front == false)
   }
+
+  @Test func writingSentBackGoesUnderThePictureItLiesOnEvenOneBehindTheWriting() throws {
+    // The owner's case: a picture sent to the back, a line written over it, then the line sent back.
+    let picture = Arrange.Item(id: "p", z: 1, picture: true, box: Rect(0, 0, 100, 100))
+    let far = Arrange.Item(id: "q", z: 2, picture: true, box: Rect(500, 500, 600, 600))
+    let other = Arrange.Item(id: "b", z: 3, box: Rect(10, 10, 20, 20))
+    let line = Arrange.Item(id: "a", z: 4, box: Rect(20, 20, 80, 30))
+    let plan = try #require(Arrange.plan([line], others: [picture, far, other], toFront: false, top: 4))
+    let place = Dictionary(uniqueKeysWithValues: plan.map { ($0.id, $0) })
+    // The picture it lies on comes forward, just above the line and below everything else.
+    let p = try #require(place["p"]), a = try #require(place["a"])
+    #expect(p.front && !a.front && a.z < p.z && p.z < other.z)
+    // A picture somewhere else is left behind the writing.
+    #expect(place["q"] == nil)
+    // Pressed again, it's already there.
+    let line2 = Arrange.Item(id: "a", z: a.z, box: line.box)
+    let picture2 = Arrange.Item(id: "p", z: p.z, picture: true, front: true, box: picture.box)
+    #expect(Arrange.plan([line2], others: [picture2, far, other], toFront: false, top: 4) == nil)
+  }
+
+  @Test func anImportedPagesPlaceDoesNotCount() {
+    let page = Arrange.Item(id: "pdf", z: 0, picture: true, box: Rect(0, 0, 100, 100), page: true)
+    #expect(Arrange.plan([ink("a", 1)], others: [page, ink("b", 2)], toFront: false, top: 2) == nil)
+  }
 }
 
 struct FreeFormLoopTests {

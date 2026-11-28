@@ -599,7 +599,9 @@ struct NotebookView: View {
   private var nameBar: some View {
         FloatingBar(crown: .none, height: 44) {
           HStack(spacing: 8) {
-            Text(title).font(TaliType.titleSmall).foregroundStyle(barColors.ink).lineLimit(1).frame(maxWidth: 200, alignment: .leading)
+            // As wide as the name and no wider (at most 200), shortened only when the row is short:
+            // with room to spare the bar hugs it and the gaps between the bars grow, as on Android.
+            UpTo(200) { Text(title).font(TaliType.titleSmall).foregroundStyle(barColors.ink).lineLimit(1) }
             Image(systemName: "pencil").font(.system(size: 14)).foregroundStyle(barColors.inkFaint).fixedSize()
           }
           .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 6)
@@ -677,6 +679,25 @@ struct NotebookView: View {
 }
 
 /// A floating bar (Android's `FloatingBar`): a cloud surface with 22 pt corners, 52 pt tall.
+/// Its content as wide as it wants up to [limit], or the room offered when that's less (a plain
+/// `.frame(maxWidth:)` fills whatever room it's offered, leaving blank space beside a short name).
+struct UpTo: SwiftUI.Layout {
+  var limit: CGFloat
+
+  init(_ limit: CGFloat) { self.limit = limit }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let v = subviews.first else { return .zero }
+    let ideal = v.sizeThatFits(.unspecified)
+    let w = min(ideal.width, limit, proposal.width ?? .infinity)
+    return CGSize(width: w, height: v.sizeThatFits(ProposedViewSize(width: w, height: proposal.height)).height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    subviews.first?.place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+  }
+}
+
 struct FloatingBar<Content: View>: View {
   var crown: CloudCrown = .none
   var height: CGFloat = 52

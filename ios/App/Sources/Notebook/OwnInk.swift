@@ -106,8 +106,14 @@ extension NoteCanvas.Coordinator {
         return
       }
       // Where the pen is about to be, so the line keeps up with it; only what it really did is kept.
+      // The guess is drawn after the stroke as it would be kept if the pen lifted now, never mixed
+      // into it (averaged in, it bent the stroke's end, which then moved back on lifting), and only
+      // where the pen is really heading (PredictionGuard: not past a turn, not far, not as it lifts).
       let ahead = (e.predictedTouches(for: t) ?? []).map(sample)
-      showLive(pen, InkInputs(points: smoothed(pen, own.samples + ahead), tool: .stylus))
+      let real = smoothed(pen, own.samples)
+      let tail = ahead.isEmpty ? [] : PredictionGuard.tame(
+        Array(smoothed(pen, own.samples + ahead).suffix(ahead.count)), after: real, raw: own.samples, zoom: Float(canvas?.zoomScale ?? 1))
+      showLive(pen, InkInputs(points: real, tool: .stylus), tail: tail)
     case nil: break
     }
   }
@@ -154,23 +160,40 @@ extension NoteCanvas.Coordinator {
 
   /// The stroke in hand drawn as the canvas will draw it once kept (its page's edge included), over
   /// the part of it on screen.
-  private func showLive(_ pen: PenSlot, _ inputs: InkInputs) {
+  /// [tail]: the pen's guessed next samples (already tamed), drawn on from the stroke's end.
+  private func showLive(_ pen: PenSlot, _ inputs: InkInputs, tail: [InkInput] = []) {
     guard let canvas, !inputs.points.isEmpty else { return }
     let s = stroke(pen, inputs)
-    let pk = s.pkStroke(mask: mask(for: s))
+    var drawn: [InkInput]?
+    if !tail.isEmpty {
+      let modelled = s.drawnPoints
+      if let end = modelled.last {
+        // As wide and leaning as the stroke's end, so the guess never changes its width.
+        drawn = modelled + tail.filter { $0.t > end.t }.map { InkInput(x: $0.x, y: $0.y, t: $0.t, pressure: end.pressure, tilt: end.tilt, orientation: end.orientation) }
+      }
+    }
+    let pk = s.pkStroke(mask: mask(for: s), drawn: drawn)
     let z = canvas.zoomScale
+    let scale = canvas.traitCollection.displayScale
     let seen = CGRect(x: canvas.bounds.minX / z, y: canvas.bounds.minY / z, width: canvas.bounds.width / z, height: canvas.bounds.height / z)
-    var box = pk.renderBounds.intersection(seen).integral
+    var box = pk.renderBounds.intersection(seen)
     if let m = pk.mask { box = box.intersection(m.bounds.insetBy(dx: -1, dy: -1)) }
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     if box.isNull || box.isEmpty {
       own.live.contents = nil
     } else {
-      let scale = canvas.traitCollection.displayScale
+      // Whole device pixels of the page, so the picture lies pixel for pixel where the canvas will
+      // draw the kept stroke: placed between pixels it was resampled, a touch softer, and the stroke
+      // seemed to sharpen when the canvas took over.
+      let px = z * scale
+      let onScreen = CGRect(x: floor(box.minX * px), y: floor(box.minY * px), width: 0, height: 0)
+      let far = CGPoint(x: ceil(box.maxX * px), y: ceil(box.maxY * px))
+      let pixels = CGRect(x: onScreen.minX, y: onScreen.minY, width: far.x - onScreen.minX, height: far.y - onScreen.minY)
+      let world = CGRect(x: pixels.minX / px, y: pixels.minY / px, width: pixels.width / px, height: pixels.height / px)
       var image: UIImage?
-      canvas.traitCollection.performAsCurrent { image = PKDrawing(strokes: [pk]).image(from: box, scale: z * scale) }
-      own.live.frame = CGRect(x: box.minX * z, y: box.minY * z, width: box.width * z, height: box.height * z)
+      canvas.traitCollection.performAsCurrent { image = PKDrawing(strokes: [pk]).image(from: world, scale: px) }
+      own.live.frame = CGRect(x: pixels.minX / scale, y: pixels.minY / scale, width: pixels.width / scale, height: pixels.height / scale)
       own.live.contentsScale = scale
       own.live.contents = image?.cgImage
     }
