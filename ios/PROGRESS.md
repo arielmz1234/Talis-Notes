@@ -15,6 +15,40 @@
 4. **Rule: never change what a basic tap, hold or touch does without the owner asking.** (A Pencil
    tap that picked shapes up was added unasked and had to be taken out; see 24 Nov below.)
 
+## The owner's list of 28 Nov 2026 (Windows, no Swift: compiled and checked in CI only)
+
+Nothing here was run on an iPad: the owner tries the `.ipa`. The core tests (new ones included) and
+the quick CI's iPad screenshot pass are what checked it.
+
+- **Bring to front / Send to back redrew the whole page**: setting PencilKit's drawing (the covered
+  writing moving between PencilKit and the page) makes it draw all its writing again, and the page's
+  tiles take a moment too. `holdTheLook` (Selection.swift) keeps a picture of the canvas as it was
+  over it while the change is drawn (until PencilKit says it has rendered and the tiles have had
+  0.16 s), then fades over to it in 0.1 s, so a press is one clean switch.
+- **Writing sent back didn't go under a picture sent back earlier** (pictures behind the writing are
+  drawn under everything, so a line over one could never go under it, and a second press said
+  "already at the back"). `Arrange.plan`: sent to the back, writing, shapes and text go under the
+  pictures they lie on too: those pictures come forward into the stack (`front`), just above what
+  was sent back and below everything else, so nothing else changes. Area fills and an imported PDF's
+  pages are paper and never count (a PDF page at z 0 used to make every Send to back "work").
+  `ArrangeTests` has the owner's case. (Android has the same rule as the iPad had; not changed there.)
+- **The name bar filled its room with blank space**: `.frame(maxWidth: 200)` takes all the room
+  it's offered. `UpTo(200)` (NotebookView.swift) is as wide as the name, at most 200, shortened only
+  when the row is short, so with room to spare the gaps between the bars grow, as on Android.
+- **A fast stroke showed a tail past its end for a moment after lifting**: the live stroke was drawn
+  through the system's predicted touches as they came. `PredictionGuard` (TaliCore, Android's, with
+  its tests ported) only draws a guess that carries on the pen's way (within 50°), at most 1.2 times
+  the distance of the last five samples and 2.5 mm on screen, none when the pen is nearly still, and
+  none while the pen is lifting (its pressure under 75% of its firmest of the last eight samples
+  and still falling; iOS only, Android's Ink ends the stroke on the lift event itself).
+- **The stroke changed as the pen lifted**: the predicted samples were smoothed and modelled
+  (`InkModel`'s 20 ms window) together with the real ones, so the stroke's last few millimetres were
+  bent toward the guess, and moved back once it was kept without it. Now the live stroke is the
+  stroke exactly as it would be kept if the pen lifted now, with the tamed guess drawn on from its
+  end at the end's width (`showLive(tail:)`, `pkStroke(mask:drawn:)`). And the live picture is placed
+  on whole device pixels of the page (it was on whole world units, between pixels at most zooms, so
+  it was resampled a touch soft and seemed to sharpen when the canvas took over).
+
 ## Joined into the Android repo; shorter CI (25 Nov 2026, Windows)
 
 The owner merged the two repos: this app is now `ios/` in `arielmz1234/Talis-Notes` (Android at

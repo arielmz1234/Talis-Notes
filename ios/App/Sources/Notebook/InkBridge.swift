@@ -120,9 +120,10 @@ struct InkStroke {
   /// What's stored stays the pen's samples.
   var drawnPoints: [InkInput] { InkModel.slidingWindow(inputs.points) }
 
-  /// The PencilKit stroke that draws it, kept to [mask] (its page) when given.
-  func pkStroke(mask: UIBezierPath?) -> PKStroke {
-    let drawn = drawnPoints
+  /// The PencilKit stroke that draws it, kept to [mask] (its page) when given. [drawn] replaces the
+  /// points it's drawn through (the live stroke: its modelled points, then the pen's guessed tail).
+  func pkStroke(mask: UIBezierPath?, drawn given: [InkInput]? = nil) -> PKStroke {
+    let drawn = given ?? drawnPoints
     if let look = InkLook(pen: pen, line: line, square: square) {
       let at = drawn.map { CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)) }
       var shape = look.outline(size: CGFloat(size), points: at)

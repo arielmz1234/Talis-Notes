@@ -164,31 +164,49 @@ public enum Arrange {
     /// A picture is behind all writing until it's brought forward ([front]).
     public var picture: Bool
     public var front: Bool
+    /// Where it lies on the page (needed to know which pictures something sent back goes under).
+    public var box: Rect?
+    /// An imported PDF's page: it is the paper, nothing ever goes under it.
+    public var page: Bool
 
-    public init(id: String, z: Int64, picture: Bool = false, front: Bool = false) {
+    public init(id: String, z: Int64, picture: Bool = false, front: Bool = false, box: Rect? = nil, page: Bool = false) {
       self.id = id
       self.z = z
       self.picture = picture
       self.front = front
+      self.box = box
+      self.page = page
     }
 
     var behind: Bool { picture && !front }
   }
 
-  /// Where each of [picked] goes in the stack (keeping their own order), or nil when they're there
-  /// already. [others] is everything else on the page; [top] the highest place in use.
+  /// Where each item that moves goes in the stack, or nil when the picked items are there already.
+  /// The picked items keep their own order. [others] is everything else on the page; [top] the
+  /// highest place in use.
+  ///
+  /// Sent to the back, writing, shapes and text go under the pictures they lie on too, even ones
+  /// sent behind the writing before: those pictures come forward into the stack, just above what
+  /// was sent back and below everything else, so they look the same except that they now cover it.
   public static func plan(_ picked: [Item], others: [Item], toFront: Bool, top: Int64) -> [(id: String, z: Int64, front: Bool)]? {
     let sel = picked.sorted { $0.z < $1.z }
     guard let lowest = sel.first, let highest = sel.last else { return nil }
-    let already =
-      toFront
-      ? !sel.contains(where: \.behind) && !others.contains { $0.z > lowest.z && !$0.behind }
-      : !sel.contains { $0.picture && $0.front } && !others.contains { $0.z < highest.z }
-    if already { return nil }
-    let bottom = (picked + others).map(\.z).min() ?? 0
-    return sel.enumerated().map { i, item in
-      (item.id, toFront ? top + 1 + Int64(i) : bottom - Int64(sel.count) + Int64(i), toFront)
+    if toFront {
+      if !sel.contains(where: \.behind) && !others.contains(where: { $0.z > lowest.z && !$0.behind }) { return nil }
+      return sel.enumerated().map { i, item in (item.id, top + 1 + Int64(i), true) }
     }
+    // Pictures behind the writing that what's sent back (other than pictures) lies on.
+    let boxes = sel.filter { !$0.picture }.compactMap(\.box)
+    let risers = others.filter { o in
+      o.behind && !o.page && o.box.map { b in boxes.contains { $0.intersects(b) } } == true
+    }.sorted { $0.z < $1.z }
+    if risers.isEmpty && !sel.contains(where: { $0.picture && $0.front }) && !others.contains(where: { $0.z < highest.z && !$0.page }) {
+      return nil
+    }
+    let bottom = (picked + others).filter { !$0.page }.map(\.z).min() ?? 0
+    let lifted = risers.enumerated().map { i, item in (item.id, bottom - Int64(risers.count) + Int64(i), true) }
+    let base = bottom - Int64(risers.count) - Int64(sel.count)
+    return sel.enumerated().map { i, item in (item.id, base + Int64(i), false) } + lifted
   }
 }
 

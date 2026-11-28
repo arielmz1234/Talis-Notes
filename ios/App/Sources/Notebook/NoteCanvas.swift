@@ -913,6 +913,9 @@ struct NoteCanvas: UIViewRepresentable {
     /// Waiting for the canvas to show what was just set (see `afterRender`).
     var renderWaiters: [(ticket: Int, run: () -> Void)] = []
     var renderTicket = 0
+    /// A picture of the canvas held over it while a change is drawn (`holdTheLook`).
+    var heldLook: UIView?
+    var lookTicket = 0
 
     /// Runs [f] once the canvas has drawn its drawing as it is now (or after half a second at most),
     /// so a live picture of something just kept can stay over it until then without a blink.

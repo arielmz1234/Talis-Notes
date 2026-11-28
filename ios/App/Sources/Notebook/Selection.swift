@@ -499,25 +499,77 @@ extension NoteCanvas.Coordinator: UIGestureRecognizerDelegate {
 
   /// Brings what's picked up in front of everything or sends it behind everything, keeping its own
   /// order. Pictures brought forward can cover shapes and text; sent back, they sit behind like paper.
+  /// Writing, shapes and text sent back go under the pictures they lie on too, even pictures sent
+  /// behind the writing earlier (`Arrange.plan`).
   func arrangeSelection(toFront: Bool) {
     let items = pickedItems
     guard !items.isEmpty else { return }
-    func entry(_ item: PageItem) -> Arrange.Item { Arrange.Item(id: item.id, z: item.z, picture: item.picture != nil, front: item.picture?.front ?? false) }
-    let others = pageItems.filter { !lasso.picked.contains($0.id) }.map(entry)
-      + (pages?.pages.under.pdfPages.map { Arrange.Item(id: $0.id, z: 0, picture: true) } ?? [])
+    func entry(_ item: PageItem) -> Arrange.Item {
+      // Area fills lie with the paper (drawn under every shape), so nothing is sent under them.
+      Arrange.Item(id: item.id, z: item.z, picture: item.picture != nil, front: item.picture?.front ?? false, box: item.bounds, page: item.isFill)
+    }
+    let othersNow = pageItems.filter { !lasso.picked.contains($0.id) }
+    let others = othersNow.map(entry)
+      + (pages?.pages.under.pdfPages.map { Arrange.Item(id: $0.id, z: 0, picture: true, box: TaliCore.Rect($0.rect), page: true) } ?? [])
     guard let plan = Arrange.plan(items.map(entry), others: others, toFront: toFront, top: topZ) else {
       parent.onHint(toFront ? L("already_in_front") : L("already_at_the_back"))
       return
     }
     var places: [String: (z: Int64, front: Bool)] = [:]
     for p in plan { places[p.id] = (p.z, p.front) }
-    change { item in
+    func placed(_ item: PageItem) -> PageItem {
       guard let place = places[item.id] else { return item }
       if case .picture(let p) = item { return .picture(p.inFront(place.front, z: place.z)) }
       return item.withZ(place.z)
     }
+    let moving = items + othersNow.filter { places[$0.id] != nil }
+    // The page changes in one go: what it looked like stays on screen until the new look is drawn
+    // (PencilKit draws all of its writing again when the drawing is set, and the page's tiles take a
+    // moment), then fades over to it.
+    holdTheLook {
+      commit(remove: moving, add: moving.map(placed))
+      select(items.map(placed))
+    }
     shapeZ = max(shapeZ, topZ)
     parent.onHint(toFront ? L("brought_to_the_front") : L("sent_to_the_back"))
+  }
+
+  /// Does [work] behind a picture of the canvas as it looked just before, taken away once the canvas
+  /// shows the result (PencilKit has drawn it and the page's tiles have had their moment), with a
+  /// quick fade. A change that redraws the whole canvas is then seen as one clean switch, never as
+  /// the writing and the page being drawn again bit by bit.
+  func holdTheLook(_ work: () -> Void) {
+    guard let canvas, let host = canvas.superview else { return work() }
+    lookTicket += 1
+    let ticket = lookTicket
+    if heldLook == nil, let snap = canvas.snapshotView(afterScreenUpdates: false) {
+      snap.frame = canvas.frame
+      snap.isUserInteractionEnabled = false
+      host.insertSubview(snap, aboveSubview: canvas)
+      heldLook = snap
+    }
+    let before = canvas.drawing
+    work()
+    var rendered = canvas.drawing == before, waited = false
+    let done = { [weak self] in
+      guard let self, rendered, waited, self.lookTicket == ticket, let snap = self.heldLook else { return }
+      self.heldLook = nil
+      UIView.animate(withDuration: 0.1, delay: 0, options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]) {
+        snap.alpha = 0
+      } completion: { _ in
+        snap.removeFromSuperview()
+      }
+    }
+    if !rendered {
+      afterRender {
+        rendered = true
+        done()
+      }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+      waited = true
+      done()
+    }
   }
 
   // MARK: Thickness, shown while the slider moves
